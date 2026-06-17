@@ -1,0 +1,28 @@
+{
+  "name": "realtime-server",
+  "version": "1.0.0",
+  "description": "Secret Base realtime multiplayer server",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "check": "node --check src/index.js",
+    "test": "node --test"
+  },
+  "keywords": [
+    "socket.io",
+    "realtime",
+    "secret-base"
+  ],
+  "author": "Secret Base",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "ioredis": "^5.11.1",
+    "socket.io": "^4.8.3",
+    "zod": "^4.4.3"
+  }
+}
