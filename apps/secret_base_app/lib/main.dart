@@ -58,6 +58,23 @@ class _RealtimeLobbyPageState extends State<RealtimeLobbyPage> {
   String? _telepathyResult;
   int? _pirateSlot;
 
+  // Phase 2 게임 상태
+  String? _yutGameId;
+  String? _yutTurn;
+  List<dynamic>? _yutP1Pieces;
+  List<dynamic>? _yutP2Pieces;
+  
+  String? _unoGameId;
+  String? _unoTurn;
+  int? _unoP1Count;
+  int? _unoP2Count;
+  List<dynamic>? _unoHand;
+  String? _unoTopCard;
+  
+  String? _bombGameId;
+  String? _bombHolder;
+  int? _bombTimer;
+
   @override
   void dispose() {
     _socket?.dispose();
@@ -205,6 +222,114 @@ class _RealtimeLobbyPageState extends State<RealtimeLobbyPage> {
       }
     });
 
+    // Phase 2 게임 리스너
+    socket.on('game:yut:created', (data) {
+      final map = _asMap(data);
+      setState(() {
+        _yutGameId = map['gameId'] as String?;
+        _yutTurn = map['turn'] as String?;
+      });
+      _appendLog('윷놀이 시작! 턴: $_yutTurn');
+    });
+
+    socket.on('game:yut:threw', (data) {
+      final map = _asMap(data);
+      final player = map['player'];
+      final result = map['result'];
+      _appendLog('$player 윷 던짐: $result');
+    });
+
+    socket.on('game:yut:moved', (data) {
+      final map = _asMap(data);
+      setState(() {
+        _yutP1Pieces = map['p1Pieces'] as List<dynamic>?;
+        _yutP2Pieces = map['p2Pieces'] as List<dynamic>?;
+        _yutTurn = map['turn'] as String?;
+      });
+      _appendLog('말 이동 완료, 다음 턴: $_yutTurn');
+    });
+
+    socket.on('game:yut:won', (data) {
+      final map = _asMap(data);
+      final winner = map['winner'];
+      _appendLog('🎉 윷놀이 승리: $winner');
+      setState(() {
+        _yutGameId = null;
+      });
+    });
+
+    socket.on('game:uno:created', (data) {
+      final map = _asMap(data);
+      setState(() {
+        _unoGameId = map['gameId'] as String?;
+        _unoTurn = map['turn'] as String?;
+        _unoHand = map['hand'] as List<dynamic>?;
+        _unoTopCard = map['topCard'] as String?;
+      });
+      _appendLog('UNO 시작! 핸드: ${_unoHand?.length}장');
+    });
+
+    socket.on('game:uno:played', (data) {
+      final map = _asMap(data);
+      setState(() {
+        _unoTurn = map['turn'] as String?;
+        _unoP1Count = map['p1Count'] as int?;
+        _unoP2Count = map['p2Count'] as int?;
+        _unoTopCard = map['topCard'] as String?;
+      });
+      _appendLog('카드 플레이: ${map['player']} → $_unoTopCard');
+    });
+
+    socket.on('game:uno:drew', (data) {
+      final map = _asMap(data);
+      setState(() {
+        _unoHand = map['newHand'] as List<dynamic>?;
+      });
+      _appendLog('카드 뽑기: +${map['count']}장');
+    });
+
+    socket.on('game:uno:won', (data) {
+      final map = _asMap(data);
+      final winner = map['winner'];
+      _appendLog('🎉 UNO 승리: $winner');
+      setState(() {
+        _unoGameId = null;
+      });
+    });
+
+    socket.on('game:bomb:created', (data) {
+      final map = _asMap(data);
+      setState(() {
+        _bombGameId = map['gameId'] as String?;
+        _bombHolder = map['holder'] as String?;
+        _bombTimer = map['timer'] as int?;
+      });
+      _appendLog('폭탄 돌리기 시작! 홀더: $_bombHolder');
+    });
+
+    socket.on('game:bomb:question', (data) {
+      final map = _asMap(data);
+      final question = map['question'];
+      _appendLog('❓ $question');
+    });
+
+    socket.on('game:bomb:passed', (data) {
+      final map = _asMap(data);
+      setState(() {
+        _bombHolder = map['newHolder'] as String?;
+      });
+      _appendLog('폭탄 패스! 새 홀더: $_bombHolder');
+    });
+
+    socket.on('game:bomb:exploded', (data) {
+      final map = _asMap(data);
+      final loser = map['loser'];
+      _appendLog('💣 폭탄 터짐! 패배: $loser');
+      setState(() {
+        _bombGameId = null;
+      });
+    });
+
     socket.connect();
     _socket = socket;
   }
@@ -301,6 +426,72 @@ class _RealtimeLobbyPageState extends State<RealtimeLobbyPage> {
         final map = _asMap(response);
         if (map['ok'] != true) {
           _appendLog('해적 룰렛 실패: ${map['reason'] ?? "unknown"}');
+        }
+      },
+    );
+  }
+
+  // Phase 2 게임 핸들러
+  void _newYutGame() {
+    _socket?.emitWithAck(
+      'game:yut:new',
+      {},
+      ack: (response) {
+        final map = _asMap(response);
+        if (map['ok'] != true) {
+          _appendLog('윷놀이 시작 실패: ${map['reason'] ?? "unknown"}');
+        }
+      },
+    );
+  }
+
+  void _throwYut() {
+    _socket?.emitWithAck(
+      'game:yut:throw',
+      {},
+      ack: (response) {
+        final map = _asMap(response);
+        if (map['ok'] != true) {
+          _appendLog('윷 던지기 실패: ${map['reason'] ?? "unknown"}');
+        }
+      },
+    );
+  }
+
+  void _newUnoGame() {
+    _socket?.emitWithAck(
+      'game:uno:new',
+      {},
+      ack: (response) {
+        final map = _asMap(response);
+        if (map['ok'] != true) {
+          _appendLog('UNO 시작 실패: ${map['reason'] ?? "unknown"}');
+        }
+      },
+    );
+  }
+
+  void _drawUnoCard() {
+    _socket?.emitWithAck(
+      'game:uno:draw',
+      {},
+      ack: (response) {
+        final map = _asMap(response);
+        if (map['ok'] != true) {
+          _appendLog('카드 뽑기 실패: ${map['reason'] ?? "unknown"}');
+        }
+      },
+    );
+  }
+
+  void _newBombGame() {
+    _socket?.emitWithAck(
+      'game:bomb:new',
+      {'category': 'general'},
+      ack: (response) {
+        final map = _asMap(response);
+        if (map['ok'] != true) {
+          _appendLog('폭탄 게임 시작 실패: ${map['reason'] ?? "unknown"}');
         }
       },
     );
@@ -421,6 +612,59 @@ class _RealtimeLobbyPageState extends State<RealtimeLobbyPage> {
               child: const Text('해적 룰렛'),
             ),
             if (_pirateSlot != null) Text('폭탄 위치: $_pirateSlot'),
+            const SizedBox(height: 8),
+            const Divider(),
+            
+            // Phase 2: 윷놀이
+            const Text('윷놀이', style: TextStyle(fontWeight: FontWeight.bold)),
+            Wrap(
+              spacing: 8,
+              children: [
+                FilledButton.tonal(
+                  onPressed: _isConnected && _yutGameId == null ? _newYutGame : null,
+                  child: const Text('새 게임'),
+                ),
+                FilledButton.tonal(
+                  onPressed: _isConnected && _yutGameId != null && _yutTurn == _selectedUser 
+                    ? _throwYut : null,
+                  child: const Text('윷 던지기'),
+                ),
+              ],
+            ),
+            if (_yutGameId != null) Text('게임 ID: $_yutGameId, 턴: $_yutTurn'),
+            const SizedBox(height: 8),
+            const Divider(),
+            
+            // Phase 2: UNO
+            const Text('UNO', style: TextStyle(fontWeight: FontWeight.bold)),
+            Wrap(
+              spacing: 8,
+              children: [
+                FilledButton.tonal(
+                  onPressed: _isConnected && _unoGameId == null ? _newUnoGame : null,
+                  child: const Text('새 게임'),
+                ),
+                FilledButton.tonal(
+                  onPressed: _isConnected && _unoGameId != null && _unoTurn == _selectedUser 
+                    ? _drawUnoCard : null,
+                  child: const Text('카드 뽑기'),
+                ),
+              ],
+            ),
+            if (_unoGameId != null) 
+              Text('핸드: ${_unoHand?.length ?? 0}장, 탑카드: $_unoTopCard'),
+            const SizedBox(height: 8),
+            const Divider(),
+            
+            // Phase 2: 폭탄 돌리기
+            const Text('폭탄 돌리기', style: TextStyle(fontWeight: FontWeight.bold)),
+            FilledButton.tonal(
+              onPressed: _isConnected && _bombGameId == null ? _newBombGame : null,
+              child: const Text('새 게임'),
+            ),
+            if (_bombGameId != null) 
+              Text('폭탄 홀더: $_bombHolder, 타이머: ${_bombTimer ?? 0}초'),
+            
             const SizedBox(height: 12),
             Card(
               child: ListTile(
