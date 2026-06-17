@@ -35,6 +35,7 @@ class SocketService extends ChangeNotifier {
   String? yutLastThrow;
   String? yutWinner;
   List<Map<String, dynamic>> yutPendingMoves = [];
+  Map<String, List<int>> yutPieces = {}; // userId -> piece positions (0-20)
 
   // uno
   bool unoActive = false;
@@ -186,6 +187,11 @@ class SocketService extends ChangeNotifier {
       yutLastThrow = null;
       yutWinner = null;
       yutPendingMoves = [];
+      // initialize pieces for all players (4 pieces each at position 0)
+      final players = map['players'];
+      if (players is List) {
+        yutPieces = { for (final p in players) '$p': [0, 0, 0, 0] };
+      }
       _log('윷놀이 시작 - 턴: $yutCurrentTurn');
       notifyListeners();
     });
@@ -205,6 +211,17 @@ class SocketService extends ChangeNotifier {
 
     socket.on('game:yut:move_result', (data) {
       final map = _m(data);
+      final by = map['by'] as String?;
+      final pieceId = map['pieceId'];
+      final newPos = map['newPosition'];
+      if (by != null && pieceId is int && newPos is int) {
+        final pieces = yutPieces[by] ?? [0, 0, 0, 0];
+        pieces[pieceId] = newPos;
+        yutPieces = Map.from(yutPieces)..[by] = pieces;
+      }
+      if (yutPendingMoves.isNotEmpty) {
+        yutPendingMoves = yutPendingMoves.sublist(1);
+      }
       if (map['winner'] != null) {
         yutWinner = map['winner'] as String?;
         yutActive = false;
@@ -227,10 +244,24 @@ class SocketService extends ChangeNotifier {
       final topCardRaw = map['topCard'];
       unoTopCard = topCardRaw is Map ? '${topCardRaw['color']} ${topCardRaw['value']}' : topCardRaw?.toString();
       final handCount = _m(map['handCount'] ?? {});
-      unoP1Count = handCount.values.isNotEmpty ? handCount.values.first as int? : null;
+      unoP1Count = (handCount[userId] ?? handCount.values.firstOrNull) as int?;
+      final opponentCounts = handCount.entries.where((e) => e.key != userId);
+      unoP2Count = opponentCounts.isNotEmpty ? opponentCounts.first.value as int? : null;
+      unoHand = [];
       unoWinner = null;
       _log('UNO 시작 - 첫 턴: $unoCurrentPlayer');
       notifyListeners();
+    });
+
+    socket.on('game:uno:hand_update', (data) {
+      final map = _m(data);
+      final hand = map['hand'];
+      if (hand is List) {
+        unoHand = hand;
+        unoP1Count = unoHand.length;
+        _log('UNO 손패 업데이트: ${unoHand.length}장');
+        notifyListeners();
+      }
     });
 
     socket.on('game:uno:played', (data) {
@@ -375,6 +406,8 @@ class SocketService extends ChangeNotifier {
       final yut = _m(games['yut']);
       yutActive = true;
       yutCurrentTurn = yut['turn'] as String?;
+      yutPieces = {};
+      yutPendingMoves = [];
       _log('윷놀이 복원');
     }
     if (games.containsKey('uno')) {
@@ -382,6 +415,7 @@ class SocketService extends ChangeNotifier {
       unoActive = true;
       unoCurrentPlayer = uno['turn'] as String?;
       unoTopCard = uno['topCard']?.toString();
+      unoHand = [];
       _log('UNO 복원');
     }
     if (games.containsKey('bomb')) {

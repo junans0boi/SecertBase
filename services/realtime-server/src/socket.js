@@ -147,25 +147,29 @@ export const registerSocketHandlers = (io) => {
         
         if (yutGame) {
           const game = JSON.parse(yutGame);
-          activeGames.yut = {
-            gameId: game.gameId,
-            turn: game.turn,
-            p1Pieces: game.p1.pieces,
-            p2Pieces: game.p2.pieces,
-          };
+          if (game.p1 && game.p2) {
+            activeGames.yut = {
+              gameId: game.gameId,
+              turn: game.turn,
+              p1Pieces: game.p1.pieces ?? [],
+              p2Pieces: game.p2.pieces ?? [],
+            };
+          }
         }
 
         if (unoGame) {
           const game = JSON.parse(unoGame);
           const userId = socket.data.userId;
-          activeGames.uno = {
-            gameId: game.gameId,
-            turn: game.turn,
-            topCard: game.topCard,
-            p1Count: game.p1.hand.length,
-            p2Count: game.p2.hand.length,
-            hand: userId === "p1" ? game.p1.hand : game.p2.hand,
-          };
+          if (game.p1 && game.p2) {
+            activeGames.uno = {
+              gameId: game.gameId,
+              turn: game.turn,
+              topCard: game.topCard,
+              p1Count: game.p1.hand?.length ?? 0,
+              p2Count: game.p2.hand?.length ?? 0,
+              hand: userId === "p1" ? (game.p1.hand ?? []) : (game.p2.hand ?? []),
+            };
+          }
         }
 
         if (bombGame) {
@@ -183,7 +187,7 @@ export const registerSocketHandlers = (io) => {
 
         ack({ ok: true, activeGames });
       } catch (err) {
-        log.error(`session:restore error: ${err.message}`);
+        console.error(`session:restore error: ${err.message}`);
         ack({ ok: false, reason: "internal_error" });
       }
     });
@@ -560,26 +564,26 @@ export const registerSocketHandlers = (io) => {
       const gameState = createUnoGameState(presence);
       await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
 
-      // Send game state to each player separately (hide opponent's hand)
-      presence.forEach((player) => {
-        const playerView = {
-          ...gameState,
-          hands: {
-            [player]: gameState.hands[player],
-            opponent: gameState.hands[presence.find((p) => p !== player)].map(() => "hidden"),
-          },
-        };
-        io.to(roomCode).emit("game:uno:started", {
-          topCard: gameState.discardPile[gameState.discardPile.length - 1],
-          currentPlayer: gameState.currentPlayer,
-          handCount: {
-            [player]: gameState.hands[player].length,
-            opponent: gameState.hands[presence.find((p) => p !== player)].length,
-          },
-        });
+      // Broadcast common info to room
+      io.to(roomCode).emit("game:uno:started", {
+        topCard: gameState.discardPile[gameState.discardPile.length - 1],
+        currentPlayer: gameState.currentPlayer,
+        handCount: {
+          [presence[0]]: gameState.hands[presence[0]].length,
+          [presence[1]]: gameState.hands[presence[1]].length,
+        },
       });
 
-      ack({ ok: true, hand: gameState.hands[userId] });
+      // Send each player their private hand separately
+      const sockets = await io.in(roomCode).fetchSockets();
+      for (const sock of sockets) {
+        const pid = sock.data.userId;
+        if (gameState.hands[pid]) {
+          sock.emit("game:uno:hand_update", { hand: gameState.hands[pid] });
+        }
+      }
+
+      ack({ ok: true });
     });
 
     socket.on("game:uno:play", async (payload, ackRaw) => {
@@ -657,6 +661,8 @@ export const registerSocketHandlers = (io) => {
       };
 
       io.to(roomCode).emit("game:uno:played", event);
+      // Send updated hand privately to the player who played
+      socket.emit("game:uno:hand_update", { hand: gameState.hands[userId] });
       ack({ ok: true, event });
 
       if (gameState.winner) {
@@ -703,7 +709,9 @@ export const registerSocketHandlers = (io) => {
       };
 
       io.to(roomCode).emit("game:uno:drawn", event);
-      ack({ ok: true, drawnCards, event });
+      // Send updated hand privately to the player who drew
+      socket.emit("game:uno:hand_update", { hand: gameState.hands[userId] });
+      ack({ ok: true, event });
     });
 
     socket.on("game:bomb:new", async (payload, ackRaw) => {
