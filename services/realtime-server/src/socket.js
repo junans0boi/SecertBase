@@ -1,7 +1,16 @@
 import { z } from "zod";
 import { config } from "./config.js";
 import { redis } from "./redis.js";
-import { throwYut, movePiece, createYutGameState, checkWin } from "./yut-engine.js";
+import {
+  throwYut,
+  movePiece,
+  createYutGameState,
+  checkWin,
+  checkCatch,
+  getCarriedPieces,
+  getNextPlayer as getNextYutPlayer,
+  serializeYutGame,
+} from "./yut-engine.js";
 import {
   createUnoGameState,
   canPlayCard,
@@ -46,7 +55,10 @@ const yutMoveSchema = z.object({
 
 const unoPlaySchema = z.object({
   cardId: z.string().min(1),
-  declaredColor: z.enum(["red", "yellow", "green", "blue"]).optional(),
+  declaredColor: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    z.enum(["red", "yellow", "green", "blue"]).optional(),
+  ),
 });
 
 const bombAnswerSchema = z.object({
@@ -80,6 +92,24 @@ const getPresence = (io, roomCode) => {
   }
   return [...room].map((socketId) => io.sockets.sockets.get(socketId)?.data?.userId).filter(Boolean);
 };
+
+const getOrderedPlayers = (presence) =>
+  config.ALLOWED_USERS.filter((user) => presence.includes(user));
+
+const emitYutState = (io, roomCode, eventName, gameState, extra = {}) => {
+  io.to(roomCode).emit(eventName, {
+    ...serializeYutGame(gameState),
+    ...extra,
+  });
+};
+
+const getUnoHandCount = (gameState) =>
+  Object.fromEntries(
+    gameState.players.map((player) => [
+      player,
+      gameState.hands[player]?.length ?? 0,
+    ]),
+  );
 
 export const registerSocketHandlers = (io) => {
   io.on("connection", (socket) => {
@@ -420,15 +450,59 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const [player1, player2] = presence;
+      const [player1, player2] = getOrderedPlayers(presence);
       const gameState = createYutGameState(player1, player2);
       await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
 
-      io.to(roomCode).emit("game:yut:started", {
-        players: presence,
-        currentTurn: gameState.currentTurn,
-      });
-      ack({ ok: true, gameState });
+      emitYutState(io, roomCode, "game:yut:started", gameState);
+      ack({ ok: true, gameState: serializeYutGame(gameState) });
+    });
+
+    socket.on("game:yut:roll_start", async (_, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+
+      const gameText = await redis.get(yutGameKey(roomCode));
+      if (!gameText) {
+        ack({ ok: false, reason: "no_game" });
+        return;
+      }
+
+      const gameState = JSON.parse(gameText);
+      if (gameState.phase !== "roll_order") {
+        ack({ ok: false, reason: "invalid_phase" });
+        return;
+      }
+      if (gameState.startRolls?.[userId] != null) {
+        ack({ ok: false, reason: "already_rolled" });
+        return;
+      }
+
+      gameState.startRolls = {
+        ...(gameState.startRolls ?? {}),
+        [userId]: Math.floor(Math.random() * 6) + 1,
+      };
+
+      const [player1, player2] = gameState.playersOrder;
+      const p1Roll = gameState.startRolls[player1];
+      const p2Roll = gameState.startRolls[player2];
+      if (p1Roll != null && p2Roll != null) {
+        if (p1Roll === p2Roll) {
+          gameState.startRolls = {};
+        } else {
+          gameState.currentTurn = p1Roll > p2Roll ? player1 : player2;
+          gameState.phase = "throwing";
+        }
+      }
+
+      await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
+      emitYutState(io, roomCode, "game:yut:start_roll", gameState, { by: userId });
+      ack({ ok: true, gameState: serializeYutGame(gameState) });
     });
 
     socket.on("game:yut:throw", async (_, ackRaw) => {
@@ -451,26 +525,25 @@ export const registerSocketHandlers = (io) => {
         ack({ ok: false, reason: "not_your_turn" });
         return;
       }
+      if (gameState.phase !== "throwing") {
+        ack({ ok: false, reason: "must_move_first" });
+        return;
+      }
 
       const throwResult = throwYut();
       gameState.lastThrow = throwResult;
       gameState.pendingMoves.push(throwResult.result);
-
       if (!throwResult.bonusThrow) {
-        // No bonus, next player's turn
-        const presence = getPresence(io, roomCode);
-        gameState.currentTurn = presence.find((p) => p !== userId);
+        gameState.phase = "moving";
       }
 
       await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
 
-      io.to(roomCode).emit("game:yut:throw_result", {
+      emitYutState(io, roomCode, "game:yut:throw_result", gameState, {
         by: userId,
         throwResult,
-        pendingMoves: gameState.pendingMoves,
-        currentTurn: gameState.currentTurn,
       });
-      ack({ ok: true, throwResult, pendingMoves: gameState.pendingMoves });
+      ack({ ok: true, throwResult, gameState: serializeYutGame(gameState) });
     });
 
     socket.on("game:yut:move", async (payload, ackRaw) => {
@@ -499,6 +572,10 @@ export const registerSocketHandlers = (io) => {
         ack({ ok: false, reason: "no_pending_moves" });
         return;
       }
+      if (gameState.currentTurn !== userId) {
+        ack({ ok: false, reason: "not_your_turn" });
+        return;
+      }
 
       const { pieceId } = parsed.data;
       const piece = gameState.players[userId].pieces[pieceId];
@@ -508,24 +585,46 @@ export const registerSocketHandlers = (io) => {
       }
 
       const steps = gameState.pendingMoves.shift();
-      const newPosition = movePiece(piece.position, steps);
+      const moveResult = movePiece(piece, steps);
 
-      if (newPosition === null) {
+      if (moveResult === null) {
         ack({ ok: false, reason: "invalid_move" });
         return;
       }
 
-      if (newPosition >= 20) {
-        piece.finished = true;
-        piece.position = 20;
+      const carriedPieces = getCarriedPieces(piece, gameState.players[userId].pieces);
+      if (moveResult.position >= 20) {
+        for (const carriedPiece of carriedPieces) {
+          carriedPiece.lastPos = moveResult.lastPos;
+          carriedPiece.finished = true;
+          carriedPiece.position = 20;
+        }
       } else {
-        piece.position = newPosition;
+        for (const carriedPiece of carriedPieces) {
+          carriedPiece.lastPos = moveResult.lastPos;
+          carriedPiece.position = moveResult.position;
+        }
+        const opponentId = getNextYutPlayer(gameState, userId);
+        const capturedPieces = checkCatch(piece.position, gameState.players[opponentId].pieces);
+        for (const capturedPiece of capturedPieces) {
+          capturedPiece.position = 0;
+          capturedPiece.lastPos = 0;
+          capturedPiece.finished = false;
+        }
+        gameState.lastCaptureCount = capturedPieces.length;
       }
 
       const won = checkWin(gameState.players[userId]);
       if (won) {
         gameState.winner = userId;
+      } else if (gameState.pendingMoves.length === 0) {
+        const caughtOpponent = (gameState.lastCaptureCount ?? 0) > 0;
+        gameState.currentTurn = caughtOpponent ? userId : getNextYutPlayer(gameState, userId);
+        gameState.phase = "throwing";
+      } else {
+        gameState.phase = "moving";
       }
+      gameState.lastCaptureCount = 0;
 
       await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
 
@@ -534,7 +633,9 @@ export const registerSocketHandlers = (io) => {
         pieceId,
         newPosition: piece.position,
         finished: piece.finished,
+        movedPieceIds: carriedPieces.map((carriedPiece) => carriedPiece.id),
         winner: gameState.winner,
+        ...serializeYutGame(gameState),
       };
 
       io.to(roomCode).emit("game:yut:move_result", event);
@@ -568,10 +669,8 @@ export const registerSocketHandlers = (io) => {
       io.to(roomCode).emit("game:uno:started", {
         topCard: gameState.discardPile[gameState.discardPile.length - 1],
         currentPlayer: gameState.currentPlayer,
-        handCount: {
-          [presence[0]]: gameState.hands[presence[0]].length,
-          [presence[1]]: gameState.hands[presence[1]].length,
-        },
+        declaredColor: gameState.declaredColor,
+        handCount: getUnoHandCount(gameState),
       });
 
       // Send each player their private hand separately
@@ -649,6 +748,15 @@ export const registerSocketHandlers = (io) => {
         gameState.currentPlayer = getNextPlayer(gameState);
       }
 
+      // UNO call window: previous window from opponent is now expired
+      if (gameState.unoCallNeeded && gameState.unoCallNeeded !== userId) {
+        gameState.unoCallNeeded = null;
+      }
+      // Open new window if this player now has exactly 1 card
+      if (!won && hand.length === 1) {
+        gameState.unoCallNeeded = userId;
+      }
+
       await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
 
       const event = {
@@ -657,7 +765,9 @@ export const registerSocketHandlers = (io) => {
         declaredColor: gameState.declaredColor,
         nextPlayer: gameState.currentPlayer,
         drawStack: gameState.drawStack,
+        handCount: getUnoHandCount(gameState),
         winner: gameState.winner,
+        unoCallNeeded: gameState.unoCallNeeded ?? null,
       };
 
       io.to(roomCode).emit("game:uno:played", event);
@@ -669,6 +779,70 @@ export const registerSocketHandlers = (io) => {
         io.to(roomCode).emit("game:uno:ended", { winner: gameState.winner });
         await redis.del(unoGameKey(roomCode));
       }
+    });
+
+    socket.on("game:uno:call", async (_, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) { ack({ ok: false, reason: "not_joined" }); return; }
+
+      const gameText = await redis.get(unoGameKey(roomCode));
+      if (!gameText) { ack({ ok: false, reason: "no_game" }); return; }
+
+      const gameState = JSON.parse(gameText);
+      if (gameState.unoCallNeeded !== userId) {
+        ack({ ok: false, reason: "not_needed" });
+        return;
+      }
+
+      gameState.unoCallNeeded = null;
+      await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
+
+      io.to(roomCode).emit("game:uno:called", { by: userId });
+      ack({ ok: true });
+    });
+
+    socket.on("game:uno:catch", async (_, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) { ack({ ok: false, reason: "not_joined" }); return; }
+
+      const gameText = await redis.get(unoGameKey(roomCode));
+      if (!gameText) { ack({ ok: false, reason: "no_game" }); return; }
+
+      const gameState = JSON.parse(gameText);
+      const target = gameState.unoCallNeeded;
+      if (!target || target === userId) {
+        ack({ ok: false, reason: "no_target" });
+        return;
+      }
+
+      // Penalty: draw 2 cards for target
+      const drawnCards = drawCards(gameState, 2);
+      gameState.hands[target].push(...drawnCards);
+      gameState.unoCallNeeded = null;
+
+      await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
+
+      io.to(roomCode).emit("game:uno:penalty", {
+        target,
+        caughtBy: userId,
+        count: 2,
+        handCount: getUnoHandCount(gameState),
+      });
+
+      // Send updated hand to penalty target
+      const sockets = await io.in(roomCode).fetchSockets();
+      for (const sock of sockets) {
+        if (sock.data.userId === target) {
+          sock.emit("game:uno:hand_update", { hand: gameState.hands[target] });
+          break;
+        }
+      }
+
+      ack({ ok: true });
     });
 
     socket.on("game:uno:draw", async (_, ackRaw) => {
@@ -700,12 +874,20 @@ export const registerSocketHandlers = (io) => {
       // Next turn
       gameState.currentPlayer = getNextPlayer(gameState);
 
+      // UNO window expires when opponent takes their turn
+      if (gameState.unoCallNeeded && gameState.unoCallNeeded !== userId) {
+        gameState.unoCallNeeded = null;
+      }
+
       await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
 
       const event = {
         by: userId,
         count: drawCount,
         nextPlayer: gameState.currentPlayer,
+        declaredColor: gameState.declaredColor,
+        handCount: getUnoHandCount(gameState),
+        unoCallNeeded: gameState.unoCallNeeded ?? null,
       };
 
       io.to(roomCode).emit("game:uno:drawn", event);
