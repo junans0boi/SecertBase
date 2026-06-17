@@ -129,3 +129,43 @@
   "at": 1730000000000
 }
 ```
+
+### `session:restore`
+
+재접속 시 활성 게임 세션 복원
+
+**Client → Server:**
+```json
+{}
+```
+
+**Server → Client (Ack):**
+```json
+{
+  "ok": true,
+  "activeGames": {
+    "yut": {
+      "gameId": "yut-1730000000000",
+      "turn": "p1",
+      "p1Pieces": [0, 0, 0, 0],
+      "p2Pieces": [0, 0, 0, 0]
+    },
+    "uno": {
+      "gameId": "uno-1730000000000",
+      "turn": "p2",
+      "topCard": "Red-5",
+      "p1Count": 7,
+      "p2Count": 5,
+      "hand": ["Blue-3", "Green-7", "Wild"]
+    },
+    "bomb": {
+      "gameId": "bomb-1730000000000",
+      "holder": "p1",
+      "timer": 25,
+      "category": "general"
+    }
+  }
+}
+```
+
+**Note:** `activeGames` 객체는 현재 진행 중인 게임만 포함. 게임이 없으면 빈 객체 `{}`

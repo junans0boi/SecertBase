@@ -126,6 +126,21 @@ class _RealtimeLobbyPageState extends State<RealtimeLobbyPage> {
               _status = '입장 완료';
             });
             _appendLog('방 입장 완료');
+            
+            // 재접속 시 게임 세션 복원
+            socket.emitWithAck(
+              'session:restore',
+              {},
+              ack: (restoreResponse) {
+                final restoreMap = _asMap(restoreResponse);
+                if (restoreMap['ok'] == true) {
+                  final activeGames = restoreMap['activeGames'];
+                  if (activeGames is Map) {
+                    _restoreGameState(_asMap(activeGames));
+                  }
+                }
+              },
+            );
             return;
           }
           final reason = map['reason'] ?? 'unknown';
@@ -332,6 +347,41 @@ class _RealtimeLobbyPageState extends State<RealtimeLobbyPage> {
 
     socket.connect();
     _socket = socket;
+  }
+
+  void _restoreGameState(Map<String, dynamic> activeGames) {
+    setState(() {
+      // 윷놀이 복원
+      if (activeGames.containsKey('yut')) {
+        final yut = _asMap(activeGames['yut']);
+        _yutGameId = yut['gameId'] as String?;
+        _yutTurn = yut['turn'] as String?;
+        _yutP1Pieces = yut['p1Pieces'] as List<dynamic>?;
+        _yutP2Pieces = yut['p2Pieces'] as List<dynamic>?;
+        _appendLog('✅ 윷놀이 게임 복원: $_yutGameId, 턴: $_yutTurn');
+      }
+
+      // UNO 복원
+      if (activeGames.containsKey('uno')) {
+        final uno = _asMap(activeGames['uno']);
+        _unoGameId = uno['gameId'] as String?;
+        _unoTurn = uno['turn'] as String?;
+        _unoTopCard = uno['topCard'] as String?;
+        _unoP1Count = uno['p1Count'] as int?;
+        _unoP2Count = uno['p2Count'] as int?;
+        _unoHand = uno['hand'] as List<dynamic>?;
+        _appendLog('✅ UNO 게임 복원: $_unoGameId, 핸드: ${_unoHand?.length}장');
+      }
+
+      // 폭탄 복원
+      if (activeGames.containsKey('bomb')) {
+        final bomb = _asMap(activeGames['bomb']);
+        _bombGameId = bomb['gameId'] as String?;
+        _bombHolder = bomb['holder'] as String?;
+        _bombTimer = bomb['timer'] as int?;
+        _appendLog('✅ 폭탄 게임 복원: $_bombGameId, 홀더: $_bombHolder');
+      }
+    });
   }
 
   void _sendPing() {

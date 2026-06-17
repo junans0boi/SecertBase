@@ -122,6 +122,72 @@ export const registerSocketHandlers = (io) => {
       ack({ ok: true, state });
     });
 
+    // 재접속 시 게임 세션 복원
+    socket.on("session:restore", async (_, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      if (!roomCode) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+
+      try {
+        // 활성 게임 세션 확인
+        const yutKey = `yut:${roomCode}:game`;
+        const unoKey = `uno:${roomCode}:game`;
+        const bombKey = `bomb:${roomCode}:game`;
+
+        const [yutGame, unoGame, bombGame] = await Promise.all([
+          redis.get(yutKey),
+          redis.get(unoKey),
+          redis.get(bombKey),
+        ]);
+
+        const activeGames = {};
+        
+        if (yutGame) {
+          const game = JSON.parse(yutGame);
+          activeGames.yut = {
+            gameId: game.gameId,
+            turn: game.turn,
+            p1Pieces: game.p1.pieces,
+            p2Pieces: game.p2.pieces,
+          };
+        }
+
+        if (unoGame) {
+          const game = JSON.parse(unoGame);
+          const userId = socket.data.userId;
+          activeGames.uno = {
+            gameId: game.gameId,
+            turn: game.turn,
+            topCard: game.topCard,
+            p1Count: game.p1.hand.length,
+            p2Count: game.p2.hand.length,
+            hand: userId === "p1" ? game.p1.hand : game.p2.hand,
+          };
+        }
+
+        if (bombGame) {
+          const game = JSON.parse(bombGame);
+          const elapsed = Math.floor((Date.now() - game.startTime) / 1000);
+          const remaining = Math.max(0, game.duration - elapsed);
+          
+          activeGames.bomb = {
+            gameId: game.gameId,
+            holder: game.holder,
+            timer: remaining,
+            category: game.category,
+          };
+        }
+
+        ack({ ok: true, activeGames });
+      } catch (err) {
+        log.error(`session:restore error: ${err.message}`);
+        ack({ ok: false, reason: "internal_error" });
+      }
+    });
+
     socket.on("sync:ping", (payload, ackRaw) => {
       const ack = normalizeAck(ackRaw);
       ack({
