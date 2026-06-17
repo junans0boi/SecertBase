@@ -1,66 +1,87 @@
-# Secret Base Development Log
+# Secret Base Development Summary
 
-## 진행 상황 요약 (2026-06-17 16:00-16:30)
+작업 일자: **2026-06-17 16:00-16:45**
 
-### ✅ 완료한 작업
+---
 
-1. **프로젝트 초기화 완료**
-   - Monorepo 구조 생성 (`apps/`, `services/`, `docs/`)
-   - Flutter 앱 프로젝트 생성 (Android + Web)
-   - Node.js Socket.IO 서버 프로젝트 생성
+## 🎯 완료된 작업
 
-2. **백엔드 실시간 서버 구현**
-   - Socket.IO + Redis 연동 완료
-   - 2인 전용 방 입장 제어 (ALLOWED_USERS 검증)
-   - Zod 기반 페이로드 검증
-   - 5개 게임 이벤트 핸들러 구현:
-     * `game:dice:roll` - 주사위 (1-6)
-     * `game:roulette:spin` - 룰렛 (커스텀 옵션)
-     * `game:rps:select` - 가위바위보 (동시 선택 + 승자 판정)
-     * `game:telepathy:select` - 텔레파시 (일치 확인)
-     * `game:pirate:spin` - 해적 룰렛 (폭탄 슬롯)
-   - Redis 세션 관리 (대기/결과 처리)
-   - Room presence 실시간 동기화
+### Phase 0: 프로젝트 초기화
+- ✅ Monorepo 구조 생성 (`apps/`, `services/`, `docs/`)
+- ✅ Flutter 앱 생성 (Android + Web 지원)
+- ✅ Node.js Socket.IO 서버 생성
+- ✅ Redis 연동 완료
 
-3. **프론트엔드 Flutter 앱 구현**
-   - socket_io_client 연동
-   - 연결/재연결 UI
-   - Ping/Pong RTT 측정
-   - 5개 게임 버튼 + 결과 표시
-   - 실시간 로그 뷰어
-   - 접속자 표시
-
-4. **인프라 구축**
-   - Redis 8.4.0 로컬 실행 (port 6379)
-   - Node.js 서버 실행 (port 4100)
-   - Health check 엔드포인트 테스트 완료
-   - Git 저장소 초기화 및 첫 커밋
-
-5. **문서화 완료**
-   - `README.md` - 프로젝트 개요, 실행 방법
-   - `docs/PRODUCT_SPEC.md` - 기획 요약
-   - `docs/ROADMAP.md` - Phase별 로드맵
-   - `docs/SOCKET_EVENTS.md` - v1 이벤트 계약서
-   - `docs/WORKLOG.md` - 작업 로그
-   - `.gitignore` 생성
-
-### 📊 현재 상태
-
-**Phase 1 MVP 완료**
-- ✅ 실시간 양방향 통신 동작
-- ✅ 2인 제한 방 입장
+### Phase 1: 실시간 MVP + 간단한 게임
+- ✅ 2인 전용 방 입장 제어
+- ✅ Socket.IO 실시간 통신
 - ✅ Presence 동기화
-- ✅ 5개 게임 플레이 가능
-- ✅ Redis 상태 영속화
+- ✅ **5개 게임 구현**:
+  1. 주사위 (랜덤 1-6)
+  2. 룰렛 (커스텀 옵션)
+  3. 가위바위보 (동시 선택 승자 판정)
+  4. 텔레파시 (일치 확인)
+  5. 해적 룰렛 (폭탄 슬롯)
 
-### 🔧 기술 스택
+### Phase 2: 코어 턴제 게임 (백엔드 완성)
+- ✅ **윷놀이 (Yut)**
+  - 4개 윷가락 물리 시뮬레이션
+  - 도(1), 개(2), 걸(3), 윷(4), 모(5), 백도(-1)
+  - 말 이동 및 도착 판정
+  - 보너스 턴 (윷/모)
+  
+- ✅ **UNO 카드게임**
+  - 108장 덱 생성 및 셔플
+  - 카드 play/draw 로직
+  - 특수 카드 (Skip, Reverse, Draw2, Wild 등)
+  - 승리 조건 처리
+  
+- ✅ **폭탄 돌리기**
+  - 타이머 기반 게임
+  - 퀴즈 카테고리별 문제
+  - 정답 시 패스, 타임아웃 시 패배
+
+---
+
+## 📂 프로젝트 구조
+
+```
+SecertBase/
+├── apps/
+│   └── secret_base_app/              # Flutter (Web/Android)
+│       └── lib/main.dart             # UI + Socket 로직
+├── services/
+│   └── realtime-server/              # Node.js Socket 서버
+│       ├── src/
+│       │   ├── index.js              # 서버 엔트리포인트
+│       │   ├── config.js             # 환경 변수 검증
+│       │   ├── redis.js              # Redis 클라이언트
+│       │   ├── socket.js             # 모든 게임 핸들러 (750+ 라인)
+│       │   ├── yut-engine.js         # 윷놀이 엔진
+│       │   ├── uno-engine.js         # UNO 엔진
+│       │   └── bomb-engine.js        # 폭탄 돌리기 엔진
+│       ├── .env
+│       └── package.json
+├── docs/
+│   ├── PRODUCT_SPEC.md
+│   ├── ROADMAP.md
+│   ├── SOCKET_EVENTS.md
+│   └── WORKLOG.md
+├── README.md
+├── DEVELOPMENT_LOG.md                # 이 파일
+└── .gitignore
+```
+
+---
+
+## 🛠 기술 스택
 
 **Backend**
 - Node.js 25.2.1
 - Socket.IO 4.8.3
 - Redis 8.4.0
 - Express 5.2.1
-- Zod 4.4.3
+- Zod 4.4.3 (검증)
 
 **Frontend**
 - Flutter 3.38.6
@@ -69,81 +90,87 @@
 
 **Infrastructure**
 - Redis (Homebrew)
-- macOS 로컬 개발 환경
+- macOS 로컬 환경
 
-### 🚧 다음 단계 (Phase 2)
+---
 
-1. **코어 게임 구현**
-   - 모바일 윷놀이 (물리 엔진 + 턴제)
-   - UNO 카드게임 (턴 관리 + 룰 엔진)
-   - 폭탄 돌리기 (타이머 + 퀴즈)
+## 🎮 구현된 게임 (8종)
 
-2. **재접속 강화**
-   - 게임 세션 복구 로직
-   - Heartbeat 메커니즘
-   - 백그라운드 전환 처리
+### 즉시 플레이 가능 (Flutter UI 완성)
+1. ✅ 주사위
+2. ✅ 룰렛
+3. ✅ 가위바위보
+4. ✅ 텔레파시
+5. ✅ 해적 룰렛
 
-3. **UX 개선**
-   - 게임별 전용 화면
-   - 애니메이션 효과
-   - Haptic 피드백
+### 서버 로직 완성 (Flutter UI 미완)
+6. ⚠️ 윷놀이 - 백엔드만 완성, UI 작업 필요
+7. ⚠️ UNO - 백엔드만 완성, UI 작업 필요
+8. ⚠️ 폭탄 돌리기 - 백엔드만 완성, UI 작업 필요
 
-### ⚠️ 알려진 이슈
+---
 
-- Flutter 경고: `_rpsChoice`, `_telepathyChoice` 필드 미사용 (UI 표시 추가 예정)
-- Reconnect 시 게임 세션 복구 미구현
-- 서버 로그에 구조화 필요 (Pino/Winston 도입 검토)
-
-### 📁 프로젝트 구조
-
-```
-SecertBase/
-├── apps/
-│   └── secret_base_app/          # Flutter 앱 (Web/Android)
-│       ├── lib/main.dart          # 메인 UI + Socket 로직
-│       └── test/widget_test.dart
-├── services/
-│   └── realtime-server/           # Node.js Socket 서버
-│       ├── src/
-│       │   ├── index.js           # 서버 엔트리포인트
-│       │   ├── config.js          # 환경 변수 검증
-│       │   ├── redis.js           # Redis 클라이언트
-│       │   └── socket.js          # Socket 핸들러 (5개 게임)
-│       ├── .env.example
-│       └── package.json
-├── docs/
-│   ├── PRODUCT_SPEC.md
-│   ├── ROADMAP.md
-│   ├── SOCKET_EVENTS.md
-│   └── WORKLOG.md
-├── README.md
-└── .gitignore
-```
-
-### 🎯 현재 실행 방법
+## 🔧 실행 방법
 
 ```bash
-# 1. Redis 시작 (이미 실행 중)
-redis-cli ping  # PONG 응답 확인
+# 1. Redis 시작
+redis-cli ping  # PONG 확인
 
-# 2. 서버 실행
+# 2. 서버 실행 (백그라운드)
 cd services/realtime-server
-npm run dev  # Port 4100에서 실행 중
+npm run dev  # Port 4100
 
 # 3. Flutter 앱 실행
 cd apps/secret_base_app
 flutter run -d chrome --dart-define=SOCKET_URL=http://localhost:4100
 ```
 
-### 💡 참고사항
-
-- 모든 코드는 Git으로 커밋됨
-- 서버는 detached 모드로 백그라운드 실행 중
-- Health check: `http://localhost:4100/health`
-- 개발 중 코드 변경 시 서버 자동 재시작 (`--watch` 모드)
+**Health Check**: `http://localhost:4100/health`
 
 ---
 
-**작성 시각**: 2026-06-17 16:30  
+## 📊 현재 상태
+
+**완료도**
+- Phase 0: ✅ 100%
+- Phase 1: ✅ 100%
+- Phase 2 (백엔드): ✅ 100%
+- Phase 2 (프론트): ⚠️ 30% (5/8 게임 UI 완성)
+
+**다음 우선순위**
+1. 윷놀이/UNO/폭탄 Flutter UI 구현
+2. 게임별 애니메이션 추가
+3. 재접속 복구 로직
+4. Phase 3 아카이빙 기능
+
+---
+
+## 📝 Git 커밋 (3회)
+
+1. `feat: initial Secret Base implementation` - Phase 0+1 초기
+2. `feat: add 3 new games (rps, telepathy, pirate)` - 게임 3종
+3. `feat: implement Phase 2 core games (Yut, UNO, Bomb)` - 코어 엔진
+
+---
+
+## ⚠️ 알려진 이슈
+
+- Flutter 경고: `_rpsChoice`, `_telepathyChoice` 필드 미사용
+- 새 게임(윷/UNO/폭탄) Flutter UI 미연결
+- Reconnect 시 게임 세션 복구 미구현
+- 서버 로그 구조화 필요
+
+---
+
+## 💡 특이사항
+
+- 모든 작업은 AI가 자율적으로 수행
+- 사용자 개입 없이 Phase 2 백엔드 완성
+- 문서화 자동 업데이트
+- Git 커밋 자동 작성
+
+---
+
+**작성 시각**: 2026-06-17 16:45  
 **개발자**: AI Copilot (자율 개발 모드)  
-**진행 상태**: Phase 1 완료, Phase 2 준비 중
+**진행 상태**: Phase 2 백엔드 완료, Flutter UI 작업 대기 중
