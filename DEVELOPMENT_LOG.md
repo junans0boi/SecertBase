@@ -215,3 +215,87 @@ flutter run -d chrome --dart-define=SOCKET_URL=http://localhost:4100
 **작업 시간**: 약 30분  
 **서버 재시작**: 완료 (PID 78092)  
 **Health Check**: ✅ http://localhost:4100/health
+
+## 🎨 Phase 3 백엔드 구현 (2026-06-17 18:00)
+
+### 아카이빙 존 - REST API 완성
+
+**구현된 기능**
+
+1. **데이터베이스 스키마 (PostgreSQL)**
+   - 6개 테이블: setlog_posts, map_pins, daily_questions, question_answers, challenges, challenge_logs, jukebox_tracks, user_profiles
+   - 2개 뷰: recent_setlog (월별 그룹), active_challenges (진행률)
+   - 인덱스 최적화: 날짜, 위치, 태그 검색
+
+2. **REST API (15개 엔드포인트)**
+   - Setlog: GET /api/setlog, POST /api/setlog, DELETE /api/setlog/:id
+   - Map: GET /api/map, POST /api/map, PATCH /api/map/:id
+   - Q&A: GET /api/qa/today, POST /api/qa/answer
+   - Challenges: GET /api/challenges, POST /api/challenges, POST /api/challenges/:id/log
+   - Jukebox: GET /api/jukebox, POST /api/jukebox
+
+3. **파일 업로드 시스템**
+   - Multer 미들웨어 (multipart/form-data)
+   - 이미지: JPEG, PNG, GIF, WebP (최대 10MB)
+   - 오디오: MP3, WAV, OGG (최대 10MB)
+   - 정적 파일 서빙: /uploads
+
+4. **데이터베이스 유틸리티**
+   - 연결 풀 관리 (최대 20 커넥션)
+   - 트랜잭션 헬퍼 함수
+   - 쿼리 로깅 (실행 시간 측정)
+
+### 기술 구현 디테일
+
+**PostgreSQL Schema Highlights**
+- `setlog_posts.tags`: TEXT[] (GIN 인덱스) - 해시태그 검색 최적화
+- `map_pins`: latitude/longitude (복합 인덱스) - 지리 검색
+- `challenges`: current_value/target_value 비교로 자동 완료 처리
+- `active_challenges` 뷰: 진행률(%) 계산 + 로그 수 집계
+
+**API 설계 원칙**
+- RESTful 규약 준수 (GET/POST/PATCH/DELETE)
+- 일관된 응답 형식: `{ ok: boolean, ... }`
+- 400/500 에러 핸들링
+- Transaction 사용 (챌린지 로그 + 값 업데이트)
+
+**파일 저장 전략**
+- 로컬 파일시스템 (`uploads/`) - 추후 S3/CloudFlare R2 전환 가능
+- 파일명: `{field}-{timestamp}-{random}.{ext}`
+- gitignore에 uploads 추가
+
+### 패키지 추가
+
+```json
+{
+  "pg": "^8.13.1",        // PostgreSQL 클라이언트
+  "multer": "^1.4.5-lts.1" // 파일 업로드
+}
+```
+
+### 문서화
+
+- `docs/REST_API.md`: 전체 API 스펙 (요청/응답 예시 포함)
+- `schema.sql`: 주석 포함 DDL + 샘플 데이터
+
+### 다음 작업
+
+1. PostgreSQL 로컬 설치 및 DB 초기화
+2. Flutter HTTP 클라이언트 추가 (dio/http)
+3. Setlog 그리드 UI (폴라로이드 스타일)
+4. 지도 API 연동 (flutter_naver_map / kakao_map_plugin)
+
+### 완료도
+
+- Phase 0: ✅ 100%
+- Phase 1: ✅ 100%
+- Phase 2: ✅ 100%
+- **Phase 3: ⚠️ 40% (백엔드 완료, 프론트 대기)**
+- Phase 4: ⏳ 0%
+- Phase 5: ⏳ 0%
+
+---
+
+**작업 시간**: 약 60분  
+**코드 추가**: ~700 줄 (SQL + JS)  
+**커밋 예정**: Phase 3 REST API implementation

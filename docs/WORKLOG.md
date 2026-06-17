@@ -200,3 +200,82 @@
 
 **작업 시간**: 약 60분  
 **커밋 예정**: Phase 2 Flutter UI 완성
+
+## 2026-06-17 (오후 18:00)
+
+### 완료 항목
+
+**Phase 3: 아카이빙 존 - 백엔드 구현 완료**
+
+1. **PostgreSQL 스키마 설계**
+   - `setlog_posts`: OOTD/데이트 사진 저장
+   - `map_pins`: 데이트 장소 위치 + 별점/메모
+   - `daily_questions` + `question_answers`: 10시 Q&A
+   - `challenges` + `challenge_logs`: 목표 챌린지 추적
+   - `jukebox_tracks`: 음원 메타데이터
+   - `user_profiles`: 사용자 프로필 및 푸시 토큰
+
+2. **REST API 구현**
+   - `/api/setlog`: 사진 업로드 (POST with multipart), 목록 조회 (GET), 삭제 (DELETE)
+   - `/api/map`: 핀 생성/조회/업데이트
+   - `/api/qa`: 오늘의 질문 조회 (`/today`), 답변 제출
+   - `/api/challenges`: 챌린지 생성/목록/진행 기록
+   - `/api/jukebox`: 트랙 업로드/목록
+
+3. **파일 업로드 처리**
+   - Multer 미들웨어로 이미지/오디오 업로드
+   - 최대 10MB 제한
+   - `/uploads` 정적 폴더 서빙
+
+4. **데이터베이스 연결**
+   - PostgreSQL 연결 풀 (`db.js`)
+   - 트랜잭션 헬퍼 함수
+   - 쿼리 로깅
+
+### 기술 스택 추가
+
+- **PostgreSQL**: 영구 데이터 저장
+- **pg (node-postgres)**: PostgreSQL 클라이언트
+- **Multer**: 파일 업로드 처리
+
+### 파일 생성
+
+- `services/realtime-server/schema.sql`: 전체 DB 스키마 (6개 테이블 + 2개 뷰)
+- `services/realtime-server/src/db.js`: PostgreSQL 연결 모듈
+- `services/realtime-server/src/routes.js`: REST API 라우터 (350+ 줄)
+- `docs/REST_API.md`: API 문서 (전체 엔드포인트 + 예시)
+- `.env`: DATABASE_URL 추가
+
+### 다음 단계
+
+1. **PostgreSQL 데이터베이스 생성**
+   ```bash
+   createdb secretbase
+   psql secretbase < schema.sql
+   ```
+
+2. **Flutter UI 구현**
+   - Setlog 그리드 뷰 (달력 형태)
+   - 지도 연동 (Naver/Kakao Maps)
+   - Q&A 화면
+   - 챌린지 대시보드
+   - 음악 플레이어
+
+3. **푸시 알림 설정**
+   - Firebase Cloud Messaging (FCM)
+   - 매일 밤 10시 Q&A 푸시
+
+### 현재 상태
+
+**Phase 3 진행도: 40%**
+- ✅ 데이터베이스 스키마
+- ✅ REST API 백엔드
+- ⏳ 데이터베이스 초기화
+- ⏳ Flutter UI
+- ⏳ 푸시 알림
+
+---
+
+**작업 시간**: 약 60분  
+**작성 파일**: 4개 (schema.sql, db.js, routes.js, REST_API.md)  
+**총 코드 라인**: ~700 줄

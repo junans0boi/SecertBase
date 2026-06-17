@@ -7,6 +7,7 @@ const schema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(4100),
   CORS_ORIGIN: z.string().url(),
   REDIS_URL: z.string().url(),
+  DATABASE_URL: z.string().optional().default('postgresql://localhost/secretbase'),
   ROOM_SECRET: z.string().min(4),
   ALLOWED_USERS: z
     .string()
