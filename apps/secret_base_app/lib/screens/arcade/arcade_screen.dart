@@ -33,22 +33,20 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     super.dispose();
   }
 
-  void _rebuild() {
-    if (mounted) setState(() {});
-  }
+  void _rebuild() { if (mounted) setState(() {}); }
 
   static const _games = [
-    _GameInfo('🎲', '주사위', '1~6 랜덤', [Color(0xFF7C5CFC), Color(0xFF5B3FD4)]),
-    _GameInfo('🎡', '룰렛', '운명의 선택', [Color(0xFFFF6B9D), Color(0xFFD94F7E)]),
-    _GameInfo('✊', '가위바위보', '동시 선택', [Color(0xFF06D6A0), Color(0xFF049E77)]),
-    _GameInfo('🧠', '텔레파시', '마음이 통할까', [Color(0xFFFFD166), Color(0xFFE0A800)]),
-    _GameInfo('🏴‍☠️', '해적 룰렛', '폭탄을 피해라', [Color(0xFFFF6348), Color(0xFFCC4F3A)]),
-    _GameInfo('🀄', '윷놀이', '턴제 보드게임', [Color(0xFF5DADE2), Color(0xFF2E86C1)]),
-    _GameInfo('🃏', 'UNO', '108장 카드 대결', [Color(0xFFA29BFE), Color(0xFF6C5CE7)]),
-    _GameInfo('💣', '폭탄 돌리기', '퀴즈 + 타이머', [Color(0xFFFF9F43), Color(0xFFE17B2F)]),
+    _GameInfo('🎲', '주사위', '1~6 랜덤', Color(0xFF7C5CFC), Color(0xFFEDE7FF)),
+    _GameInfo('🎡', '룰렛', '운명의 선택', Color(0xFFD63384), Color(0xFFFFE4F0)),
+    _GameInfo('✊', '가위바위보', '동시 선택', Color(0xFF00897B), Color(0xFFE0F2F1)),
+    _GameInfo('🧠', '텔레파시', '마음이 통할까', Color(0xFFFF8F00), Color(0xFFFFF8E1)),
+    _GameInfo('🏴‍☠️', '해적 룰렛', '폭탄을 피해라', Color(0xFFE53935), Color(0xFFFFEBEE)),
+    _GameInfo('🀄', '윷놀이', '턴제 보드게임', Color(0xFF1976D2), Color(0xFFE3F2FD)),
+    _GameInfo('🃏', 'UNO', '카드 대결', Color(0xFF7B1FA2), Color(0xFFF3E5F5)),
+    _GameInfo('💣', '폭탄 돌리기', '퀴즈 + 타이머', Color(0xFFEF6C00), Color(0xFFFFF3E0)),
   ];
 
-  Widget _buildScreen(int i) {
+  Widget _screen(int i) {
     switch (i) {
       case 0: return const DiceScreen();
       case 1: return const RouletteScreen();
@@ -57,80 +55,82 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       case 4: return const PirateScreen();
       case 5: return const YutScreen();
       case 6: return const UnoScreen();
-      case 7: return const BombScreen();
-      default: return const SizedBox();
+      default: return const BombScreen();
     }
   }
 
-  void _openGame(int i) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => _buildScreen(i)),
-    );
-  }
+  void _open(int i) => Navigator.push(context, MaterialPageRoute(builder: (_) => _screen(i)));
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: kBg,
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(),
-            Expanded(
-              child: GridView.builder(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: _gridColumns(context),
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 1.05,
-                ),
-                itemCount: _games.length,
-                itemBuilder: (ctx, i) => _GameCard(
-                  info: _games[i],
-                  onTap: () => _openGame(i),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  int _gridColumns(BuildContext context) {
-    final w = MediaQuery.of(context).size.width;
+  int _cols(BuildContext ctx) {
+    final w = MediaQuery.of(ctx).size.width;
     if (w >= 900) return 4;
     if (w >= 600) return 3;
     return 2;
   }
 
-  Widget _buildHeader() {
+  @override
+  Widget build(BuildContext context) {
     final users = _socket.presenceUsers;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+    final cols = _cols(context);
+    return Container(
+      color: kBg,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildHeader(users),
+          Expanded(
+            child: GridView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: cols,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 1.0,
+              ),
+              itemCount: _games.length,
+              itemBuilder: (_, i) => _GameCard(info: _games[i], onTap: () => _open(i)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader(List<String> users) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFFFFE4F0), Color(0xFFFFF5F8)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                '🕹️ 아케이드',
-                style: GoogleFonts.notoSans(
-                  fontSize: 26,
-                  fontWeight: FontWeight.w800,
-                  color: kText,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '🕹️ 같이 놀자!',
+                      style: GoogleFonts.notoSans(
+                        fontSize: 22, fontWeight: FontWeight.w800, color: kText,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '오늘 어떤 게임 할까요?',
+                      style: GoogleFonts.notoSans(fontSize: 13, color: kTextSub),
+                    ),
+                  ],
                 ),
               ),
               _PresenceChip(users: users),
             ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '오늘 어떤 게임 할까요?',
-            style: GoogleFonts.notoSans(fontSize: 14, color: kTextMuted),
           ),
         ],
       ),
@@ -142,8 +142,9 @@ class _GameInfo {
   final String emoji;
   final String name;
   final String desc;
-  final List<Color> gradient;
-  const _GameInfo(this.emoji, this.name, this.desc, this.gradient);
+  final Color color;
+  final Color bgColor;
+  const _GameInfo(this.emoji, this.name, this.desc, this.color, this.bgColor);
 }
 
 class _GameCard extends StatelessWidget {
@@ -158,54 +159,43 @@ class _GameCard extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: kCard,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(18),
           border: Border.all(color: kBorder),
+          boxShadow: [
+            BoxShadow(
+              color: info.color.withAlpha(30),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: Stack(
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Positioned(
-                top: -10,
-                right: -10,
-                child: Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: info.gradient.map((c) => c.withOpacity(0.25)).toList(),
-                    ),
-                  ),
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: info.bgColor,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Center(
+                  child: Text(info.emoji, style: const TextStyle(fontSize: 26)),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(info.emoji, style: const TextStyle(fontSize: 36)),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          info.name,
-                          style: GoogleFonts.notoSans(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: kText,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          info.desc,
-                          style: GoogleFonts.notoSans(fontSize: 11, color: kTextMuted),
-                        ),
-                      ],
-                    ),
-                  ],
+              const Spacer(),
+              Text(
+                info.name,
+                style: GoogleFonts.notoSans(
+                  fontSize: 15, fontWeight: FontWeight.w700, color: kText,
                 ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                info.desc,
+                style: GoogleFonts.notoSans(fontSize: 11, color: kTextMuted),
               ),
             ],
           ),
@@ -229,36 +219,26 @@ class _PresenceChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: kBorder),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 8, height: 8,
-              decoration: const BoxDecoration(shape: BoxShape.circle, color: kTextMuted),
-            ),
-            const SizedBox(width: 6),
-            Text('혼자', style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 12)),
-          ],
-        ),
+        child: Text('혼자', style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 12)),
       );
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: kSuccess.withOpacity(0.1),
+        color: kSuccess.withAlpha(25),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: kSuccess.withOpacity(0.4)),
+        border: Border.all(color: kSuccess.withAlpha(80)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 8, height: 8,
+            width: 7, height: 7,
             decoration: const BoxDecoration(shape: BoxShape.circle, color: kSuccess),
           ),
           const SizedBox(width: 6),
           Text(
-            users.join(' · '),
+            users.join(' 💕 '),
             style: GoogleFonts.notoSans(color: kSuccess, fontSize: 12, fontWeight: FontWeight.w600),
           ),
         ],

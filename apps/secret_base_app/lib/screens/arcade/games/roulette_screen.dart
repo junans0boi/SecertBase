@@ -216,10 +216,10 @@ class _SpinButton extends StatelessWidget {
       height: 54,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          gradient: spinning ? null : kAccentGrad,
+          gradient: spinning ? null : kPrimaryGrad,
           color: spinning ? kCard : null,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: spinning ? null : [BoxShadow(color: kAccent.withOpacity(0.3), blurRadius: 16)],
+          boxShadow: spinning ? null : [BoxShadow(color: kPrimary.withAlpha(80), blurRadius: 16)],
         ),
         child: MaterialButton(
           onPressed: spinning ? null : onTap,

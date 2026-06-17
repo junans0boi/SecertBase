@@ -19,30 +19,26 @@ class GameScaffold extends StatelessWidget {
     return Scaffold(
       backgroundColor: kBg,
       appBar: AppBar(
-        backgroundColor: kBg,
+        backgroundColor: kSurface,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, size: 18, color: kText),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text(
-          title,
-          style: GoogleFonts.notoSans(
-            color: kText,
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
+        title: Text(title, style: GoogleFonts.notoSans(color: kText, fontSize: 18, fontWeight: FontWeight.w700)),
         centerTitle: true,
         actions: actions,
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
+          preferredSize: const Size.fromHeight(0.5),
           child: Container(height: 0.5, color: kBorder),
         ),
       ),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 500),
+            constraints: const BoxConstraints(maxWidth: 540),
             child: child,
           ),
         ),

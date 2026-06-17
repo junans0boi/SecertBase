@@ -42,10 +42,7 @@ class _PirateScreenState extends State<PirateScreen> {
   }
 
   void _reset() {
-    setState(() {
-      _pickedSlot = null;
-      _spinning = false;
-    });
+    setState(() => _spinning = false);
     _socket.pirateSlot = null;
   }
 
