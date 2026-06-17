@@ -1,6 +1,21 @@
 import { z } from "zod";
 import { config } from "./config.js";
 import { redis } from "./redis.js";
+import { throwYut, movePiece, createYutGameState, checkWin } from "./yut-engine.js";
+import {
+  createUnoGameState,
+  canPlayCard,
+  drawCards,
+  applyCardEffect,
+  getNextPlayer,
+  checkWin as checkUnoWin,
+} from "./uno-engine.js";
+import {
+  createBombGameState,
+  checkAnswer,
+  isTimeUp,
+  passBomb,
+} from "./bomb-engine.js";
 
 const joinSchema = z.object({
   userId: z.string().min(1),
@@ -25,7 +40,27 @@ const pirateSchema = z.object({
   slots: z.number().int().min(4).max(12),
 });
 
+const yutMoveSchema = z.object({
+  pieceId: z.number().int().min(0).max(3),
+});
+
+const unoPlaySchema = z.object({
+  cardId: z.string().min(1),
+  declaredColor: z.enum(["red", "yellow", "green", "blue"]).optional(),
+});
+
+const bombAnswerSchema = z.object({
+  answer: z.string().min(1),
+});
+
+const bombNewSchema = z.object({
+  duration: z.number().int().min(10).max(120).optional().default(30),
+});
+
 const roomKey = (roomCode) => `room:${roomCode}:state`;
+const yutGameKey = (roomCode) => `yut:${roomCode}:game`;
+const unoGameKey = (roomCode) => `uno:${roomCode}:game`;
+const bombGameKey = (roomCode) => `bomb:${roomCode}:game`;
 
 const defaultState = {
   lastDice: null,
@@ -298,6 +333,413 @@ export const registerSocketHandlers = (io) => {
 
       io.to(roomCode).emit("game:pirate:result", event);
       ack({ ok: true, event });
+    });
+
+    socket.on("game:yut:new", async (_, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+
+      const presence = getPresence(io, roomCode);
+      if (presence.length !== 2) {
+        ack({ ok: false, reason: "need_two_players" });
+        return;
+      }
+
+      const [player1, player2] = presence;
+      const gameState = createYutGameState(player1, player2);
+      await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
+
+      io.to(roomCode).emit("game:yut:started", {
+        players: presence,
+        currentTurn: gameState.currentTurn,
+      });
+      ack({ ok: true, gameState });
+    });
+
+    socket.on("game:yut:throw", async (_, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+
+      const gameText = await redis.get(yutGameKey(roomCode));
+      if (!gameText) {
+        ack({ ok: false, reason: "no_game" });
+        return;
+      }
+
+      const gameState = JSON.parse(gameText);
+      if (gameState.currentTurn !== userId) {
+        ack({ ok: false, reason: "not_your_turn" });
+        return;
+      }
+
+      const throwResult = throwYut();
+      gameState.lastThrow = throwResult;
+      gameState.pendingMoves.push(throwResult.result);
+
+      if (!throwResult.bonusThrow) {
+        // No bonus, next player's turn
+        const presence = getPresence(io, roomCode);
+        gameState.currentTurn = presence.find((p) => p !== userId);
+      }
+
+      await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
+
+      io.to(roomCode).emit("game:yut:throw_result", {
+        by: userId,
+        throwResult,
+        pendingMoves: gameState.pendingMoves,
+        currentTurn: gameState.currentTurn,
+      });
+      ack({ ok: true, throwResult, pendingMoves: gameState.pendingMoves });
+    });
+
+    socket.on("game:yut:move", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+
+      const parsed = yutMoveSchema.safeParse(payload);
+      if (!parsed.success) {
+        ack({ ok: false, reason: "invalid_payload" });
+        return;
+      }
+
+      const gameText = await redis.get(yutGameKey(roomCode));
+      if (!gameText) {
+        ack({ ok: false, reason: "no_game" });
+        return;
+      }
+
+      const gameState = JSON.parse(gameText);
+      if (gameState.pendingMoves.length === 0) {
+        ack({ ok: false, reason: "no_pending_moves" });
+        return;
+      }
+
+      const { pieceId } = parsed.data;
+      const piece = gameState.players[userId].pieces[pieceId];
+      if (!piece || piece.finished) {
+        ack({ ok: false, reason: "invalid_piece" });
+        return;
+      }
+
+      const steps = gameState.pendingMoves.shift();
+      const newPosition = movePiece(piece.position, steps);
+
+      if (newPosition === null) {
+        ack({ ok: false, reason: "invalid_move" });
+        return;
+      }
+
+      if (newPosition >= 20) {
+        piece.finished = true;
+        piece.position = 20;
+      } else {
+        piece.position = newPosition;
+      }
+
+      const won = checkWin(gameState.players[userId]);
+      if (won) {
+        gameState.winner = userId;
+      }
+
+      await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
+
+      const event = {
+        by: userId,
+        pieceId,
+        newPosition: piece.position,
+        finished: piece.finished,
+        winner: gameState.winner,
+      };
+
+      io.to(roomCode).emit("game:yut:move_result", event);
+      ack({ ok: true, event });
+
+      if (gameState.winner) {
+        io.to(roomCode).emit("game:yut:ended", { winner: gameState.winner });
+        await redis.del(yutGameKey(roomCode));
+      }
+    });
+
+    socket.on("game:uno:new", async (_, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+
+      const presence = getPresence(io, roomCode);
+      if (presence.length !== 2) {
+        ack({ ok: false, reason: "need_two_players" });
+        return;
+      }
+
+      const gameState = createUnoGameState(presence);
+      await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
+
+      // Send game state to each player separately (hide opponent's hand)
+      presence.forEach((player) => {
+        const playerView = {
+          ...gameState,
+          hands: {
+            [player]: gameState.hands[player],
+            opponent: gameState.hands[presence.find((p) => p !== player)].map(() => "hidden"),
+          },
+        };
+        io.to(roomCode).emit("game:uno:started", {
+          topCard: gameState.discardPile[gameState.discardPile.length - 1],
+          currentPlayer: gameState.currentPlayer,
+          handCount: {
+            [player]: gameState.hands[player].length,
+            opponent: gameState.hands[presence.find((p) => p !== player)].length,
+          },
+        });
+      });
+
+      ack({ ok: true, hand: gameState.hands[userId] });
+    });
+
+    socket.on("game:uno:play", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+
+      const parsed = unoPlaySchema.safeParse(payload);
+      if (!parsed.success) {
+        ack({ ok: false, reason: "invalid_payload" });
+        return;
+      }
+
+      const gameText = await redis.get(unoGameKey(roomCode));
+      if (!gameText) {
+        ack({ ok: false, reason: "no_game" });
+        return;
+      }
+
+      const gameState = JSON.parse(gameText);
+      if (gameState.currentPlayer !== userId) {
+        ack({ ok: false, reason: "not_your_turn" });
+        return;
+      }
+
+      const { cardId, declaredColor } = parsed.data;
+      const hand = gameState.hands[userId];
+      const cardIndex = hand.findIndex((c) => c.id === cardId);
+
+      if (cardIndex === -1) {
+        ack({ ok: false, reason: "card_not_found" });
+        return;
+      }
+
+      const card = hand[cardIndex];
+      const topCard = gameState.discardPile[gameState.discardPile.length - 1];
+
+      if (!canPlayCard(card, topCard, gameState.declaredColor)) {
+        ack({ ok: false, reason: "cannot_play_card" });
+        return;
+      }
+
+      // Remove card from hand
+      hand.splice(cardIndex, 1);
+      gameState.discardPile.push(card);
+      gameState.declaredColor = declaredColor || null;
+
+      // Apply card effect
+      applyCardEffect(gameState, card);
+
+      // Check win
+      const won = checkUnoWin(gameState, userId);
+      if (won) {
+        gameState.winner = userId;
+      }
+
+      // Next turn
+      if (!won) {
+        gameState.currentPlayer = getNextPlayer(gameState);
+      }
+
+      await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
+
+      const event = {
+        by: userId,
+        card,
+        declaredColor: gameState.declaredColor,
+        nextPlayer: gameState.currentPlayer,
+        drawStack: gameState.drawStack,
+        winner: gameState.winner,
+      };
+
+      io.to(roomCode).emit("game:uno:played", event);
+      ack({ ok: true, event });
+
+      if (gameState.winner) {
+        io.to(roomCode).emit("game:uno:ended", { winner: gameState.winner });
+        await redis.del(unoGameKey(roomCode));
+      }
+    });
+
+    socket.on("game:uno:draw", async (_, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+
+      const gameText = await redis.get(unoGameKey(roomCode));
+      if (!gameText) {
+        ack({ ok: false, reason: "no_game" });
+        return;
+      }
+
+      const gameState = JSON.parse(gameText);
+      if (gameState.currentPlayer !== userId) {
+        ack({ ok: false, reason: "not_your_turn" });
+        return;
+      }
+
+      const drawCount = gameState.drawStack > 0 ? gameState.drawStack : 1;
+      const drawnCards = drawCards(gameState, drawCount);
+      gameState.hands[userId].push(...drawnCards);
+      gameState.drawStack = 0;
+
+      // Next turn
+      gameState.currentPlayer = getNextPlayer(gameState);
+
+      await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
+
+      const event = {
+        by: userId,
+        count: drawCount,
+        nextPlayer: gameState.currentPlayer,
+      };
+
+      io.to(roomCode).emit("game:uno:drawn", event);
+      ack({ ok: true, drawnCards, event });
+    });
+
+    socket.on("game:bomb:new", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+
+      const parsed = bombNewSchema.safeParse(payload || {});
+      if (!parsed.success) {
+        ack({ ok: false, reason: "invalid_payload" });
+        return;
+      }
+
+      const presence = getPresence(io, roomCode);
+      if (presence.length !== 2) {
+        ack({ ok: false, reason: "need_two_players" });
+        return;
+      }
+
+      const gameState = createBombGameState(presence, parsed.data.duration);
+      await redis.set(bombGameKey(roomCode), JSON.stringify(gameState), "EX", 300);
+
+      io.to(roomCode).emit("game:bomb:started", {
+        currentPlayer: gameState.currentPlayer,
+        duration: gameState.duration,
+        startTime: gameState.startTime,
+        quiz: {
+          category: gameState.currentQuiz.category,
+          question: gameState.currentQuiz.question,
+        },
+      });
+      ack({ ok: true, gameState });
+    });
+
+    socket.on("game:bomb:answer", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+
+      const parsed = bombAnswerSchema.safeParse(payload);
+      if (!parsed.success) {
+        ack({ ok: false, reason: "invalid_payload" });
+        return;
+      }
+
+      const gameText = await redis.get(bombGameKey(roomCode));
+      if (!gameText) {
+        ack({ ok: false, reason: "no_game" });
+        return;
+      }
+
+      const gameState = JSON.parse(gameText);
+      if (gameState.currentPlayer !== userId) {
+        ack({ ok: false, reason: "not_your_turn" });
+        return;
+      }
+
+      if (isTimeUp(gameState)) {
+        gameState.loser = userId;
+        await redis.del(bombGameKey(roomCode));
+
+        io.to(roomCode).emit("game:bomb:exploded", {
+          loser: userId,
+          correctAnswer: gameState.currentQuiz.answer,
+        });
+        ack({ ok: false, reason: "time_up", loser: userId });
+        return;
+      }
+
+      const { answer } = parsed.data;
+      const correct = checkAnswer(answer, gameState.currentQuiz.alternatives);
+
+      if (!correct) {
+        io.to(roomCode).emit("game:bomb:wrong_answer", {
+          by: userId,
+          answer,
+        });
+        ack({ ok: false, reason: "wrong_answer" });
+        return;
+      }
+
+      passBomb(gameState);
+      await redis.set(bombGameKey(roomCode), JSON.stringify(gameState), "EX", 300);
+
+      io.to(roomCode).emit("game:bomb:passed", {
+        from: userId,
+        to: gameState.currentPlayer,
+        quiz: {
+          category: gameState.currentQuiz.category,
+          question: gameState.currentQuiz.question,
+        },
+        passCount: gameState.passCount,
+      });
+      ack({ ok: true, nextPlayer: gameState.currentPlayer });
     });
 
     socket.on("disconnect", () => {
