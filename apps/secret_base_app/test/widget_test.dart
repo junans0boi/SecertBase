@@ -5,6 +5,7 @@ void main() {
   testWidgets('renders lobby title', (tester) async {
     await tester.pumpWidget(const SecretBaseApp());
 
-    expect(find.text('Secret Base · Realtime MVP'), findsOneWidget);
+    expect(find.text('비밀기지'), findsOneWidget);
+    expect(find.text('우리 둘만의 공간 💕'), findsOneWidget);
   });
 }

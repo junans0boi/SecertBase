@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/socket_service.dart';
 import '../../../widgets/game_scaffold.dart';
+import '../../../widgets/game_menu.dart';
 
 class RpsScreen extends StatefulWidget {
   const RpsScreen({super.key});
@@ -73,6 +74,7 @@ class _RpsScreenState extends State<RpsScreen> {
 
     return GameScaffold(
       title: '✊ 가위바위보',
+      actions: [const GameMenuButton()],
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(

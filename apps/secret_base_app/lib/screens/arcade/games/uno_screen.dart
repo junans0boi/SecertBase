@@ -4,6 +4,7 @@ import '../../../core/app_theme.dart';
 import '../../../core/socket_service.dart';
 import '../../../ui/uno_board.dart';
 import '../../../widgets/game_scaffold.dart';
+import '../../../widgets/game_menu.dart';
 
 class UnoScreen extends StatefulWidget {
   const UnoScreen({super.key});
@@ -38,7 +39,16 @@ class _UnoScreenState extends State<UnoScreen> {
 
     return GameScaffold(
       title: '🃏 UNO',
-      child: ListView(
+      actions: [
+        GameMenuButton(
+          hasRestart: sock.unoActive,
+          restartWaiting: sock.restartWaiting,
+          onRequestRestart: () => sock.requestRestart('uno'),
+        ),
+      ],
+      child: GameMenuListener(
+        gameType: 'uno',
+        child: ListView(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
         children: [
           _UnoStatus(sock: sock),
@@ -66,6 +76,7 @@ class _UnoScreenState extends State<UnoScreen> {
             _WinCard(winner: sock.unoWinner!, userId: sock.userId),
           ],
         ],
+        ),
       ),
     );
   }

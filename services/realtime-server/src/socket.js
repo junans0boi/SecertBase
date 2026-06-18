@@ -998,6 +998,70 @@ export const registerSocketHandlers = (io) => {
       ack({ ok: true, nextPlayer: gameState.currentPlayer });
     });
 
+    socket.on("game:restart:request", async (_, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) { ack({ ok: false }); return; }
+
+      socket.to(roomCode).emit("game:restart:requested", { by: userId });
+      ack({ ok: true });
+    });
+
+    socket.on("game:restart:respond", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) { ack({ ok: false }); return; }
+
+      const { accept, gameType } = payload || {};
+
+      if (!accept) {
+        socket.to(roomCode).emit("game:restart:declined", { by: userId });
+        ack({ ok: true, accepted: false });
+        return;
+      }
+
+      const presence = getPresence(io, roomCode);
+      if (presence.length !== 2) {
+        ack({ ok: false, reason: "need_two_players" });
+        return;
+      }
+
+      const [p1, p2] = getOrderedPlayers(presence);
+
+      if (gameType === "yut") {
+        const gameState = createYutGameState(p1, p2);
+        await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
+        emitYutState(io, roomCode, "game:yut:started", gameState);
+      } else if (gameType === "uno") {
+        const gameState = createUnoGameState(presence);
+        await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
+        io.to(roomCode).emit("game:uno:started", {
+          topCard: gameState.discardPile[gameState.discardPile.length - 1],
+          currentPlayer: gameState.currentPlayer,
+          declaredColor: gameState.declaredColor,
+          handCount: getUnoHandCount(gameState),
+        });
+        const sockets = await io.in(roomCode).fetchSockets();
+        for (const sock of sockets) {
+          const pid = sock.data.userId;
+          if (gameState.hands[pid]) sock.emit("game:uno:hand_update", { hand: gameState.hands[pid] });
+        }
+      } else if (gameType === "bomb") {
+        const gameState = createBombGameState(presence, 30);
+        await redis.set(bombGameKey(roomCode), JSON.stringify(gameState), "EX", 300);
+        io.to(roomCode).emit("game:bomb:started", {
+          currentPlayer: gameState.currentPlayer,
+          duration: gameState.duration,
+          startTime: gameState.startTime,
+          quiz: { category: gameState.currentQuiz.category, question: gameState.currentQuiz.question },
+        });
+      }
+
+      ack({ ok: true, accepted: true });
+    });
+
     socket.on("disconnect", () => {
       const roomCode = socket.data.roomCode;
       if (!roomCode) {

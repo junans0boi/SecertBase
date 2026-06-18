@@ -56,6 +56,12 @@ class SocketService extends ChangeNotifier {
   bool unoPendingCall = false;  // I played to 1 card, need to press UNO
   bool unoCatchable = false;    // Opponent has 1 card and hasn't called UNO
 
+  // menu / reconnect state
+  bool restartPending = false;  // received opponent's restart request
+  bool restartWaiting = false;  // sent my restart request, awaiting response
+  bool opponentOnline = false;
+  bool opponentJustLeft = false; // true once when opponent leaves during active game
+
   // bomb
   bool bombActive = false;
   String? bombCurrentPlayer;
@@ -139,7 +145,15 @@ class SocketService extends ChangeNotifier {
     socket.on('room:presence', (data) {
       final users = _m(data)['users'];
       if (users is List) {
+        final prevOnline = opponentOnline;
         presenceUsers = users.map((e) => '$e').toList();
+        opponentOnline = presenceUsers.length == 2;
+        if (prevOnline && !opponentOnline && (yutActive || unoActive || bombActive)) {
+          opponentJustLeft = true;
+        }
+        if (!prevOnline && opponentOnline) {
+          opponentJustLeft = false;
+        }
         _log('접속자: ${presenceUsers.join(', ')}');
         notifyListeners();
       }
@@ -197,6 +211,7 @@ class SocketService extends ChangeNotifier {
     socket.on('game:yut:started', (data) {
       _applyYutState(_m(data));
       yutWinner = null;
+      restartWaiting = false;
       _log('윷놀이 시작 - 턴: $yutCurrentTurn');
       notifyListeners();
     });
@@ -237,6 +252,7 @@ class SocketService extends ChangeNotifier {
     socket.on('game:uno:started', (data) {
       final map = _m(data);
       unoActive = true;
+      restartWaiting = false;
       unoCurrentPlayer = map['currentPlayer'] as String?;
       final topCardRaw = map['topCard'];
       unoTopCardMap = _cardMap(topCardRaw);
@@ -311,6 +327,7 @@ class SocketService extends ChangeNotifier {
     socket.on('game:bomb:started', (data) {
       final map = _m(data);
       bombActive = true;
+      restartWaiting = false;
       bombCurrentPlayer = map['currentPlayer'] as String?;
       bombDuration = map['duration'] as int?;
       bombStartTime = map['startTime'] as int?;
@@ -348,8 +365,38 @@ class SocketService extends ChangeNotifier {
       notifyListeners();
     });
 
+    socket.on('game:restart:requested', (data) {
+      restartPending = true;
+      restartWaiting = false;
+      _log('다시 시작 요청 받음: ${_m(data)['by']}');
+      notifyListeners();
+    });
+
+    socket.on('game:restart:declined', (_) {
+      restartWaiting = false;
+      _log('다시 시작 거절됨');
+      notifyListeners();
+    });
+
     socket.connect();
     _socket = socket;
+  }
+
+  void requestRestart(String gameType) {
+    restartWaiting = true;
+    notifyListeners();
+    _socket?.emit('game:restart:request', {'gameType': gameType});
+  }
+
+  void respondToRestart(bool accept, String gameType) {
+    restartPending = false;
+    notifyListeners();
+    _socket?.emit('game:restart:respond', {'accept': accept, 'gameType': gameType});
+  }
+
+  void clearOpponentLeft() {
+    opponentJustLeft = false;
+    notifyListeners();
   }
 
   void disconnect() {
@@ -365,6 +412,10 @@ class SocketService extends ChangeNotifier {
     unoPendingCall = false;
     unoCatchable = false;
     bombActive = false;
+    restartPending = false;
+    restartWaiting = false;
+    opponentOnline = false;
+    opponentJustLeft = false;
     _logs.clear();
     notifyListeners();
   }

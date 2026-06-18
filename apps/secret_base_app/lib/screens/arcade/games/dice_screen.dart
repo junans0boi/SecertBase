@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/socket_service.dart';
 import '../../../widgets/game_scaffold.dart';
+import '../../../widgets/game_menu.dart';
 
 class DiceScreen extends StatefulWidget {
   const DiceScreen({super.key});
@@ -54,6 +55,7 @@ class _DiceScreenState extends State<DiceScreen> with SingleTickerProviderStateM
     final result = _socket.lastDice;
     return GameScaffold(
       title: '🎲 주사위',
+      actions: [const GameMenuButton()],
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [

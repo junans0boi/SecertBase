@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/socket_service.dart';
 import '../../../widgets/game_scaffold.dart';
+import '../../../widgets/game_menu.dart';
 
 class RouletteScreen extends StatefulWidget {
   const RouletteScreen({super.key});
@@ -65,6 +66,7 @@ class _RouletteScreenState extends State<RouletteScreen> with SingleTickerProvid
     final result = _socket.lastRoulette;
     return GameScaffold(
       title: '🎡 룰렛',
+      actions: [const GameMenuButton()],
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(

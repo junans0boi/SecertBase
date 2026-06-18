@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/socket_service.dart';
 import '../../../widgets/game_scaffold.dart';
+import '../../../widgets/game_menu.dart';
 
 class BombScreen extends StatefulWidget {
   const BombScreen({super.key});
@@ -80,7 +81,16 @@ class _BombScreenState extends State<BombScreen> with SingleTickerProviderStateM
 
     return GameScaffold(
       title: '💣 폭탄 돌리기',
-      child: Padding(
+      actions: [
+        GameMenuButton(
+          hasRestart: sock.bombActive,
+          restartWaiting: sock.restartWaiting,
+          onRequestRestart: () => sock.requestRestart('bomb'),
+        ),
+      ],
+      child: GameMenuListener(
+        gameType: 'bomb',
+        child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
@@ -93,6 +103,7 @@ class _BombScreenState extends State<BombScreen> with SingleTickerProviderStateM
               Expanded(child: _buildGameUI(sock, isMyTurn)),
           ],
         ),
+      ),
       ),
     );
   }

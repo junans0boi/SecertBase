@@ -5,12 +5,18 @@ import 'core/socket_service.dart';
 import 'screens/entry_screen.dart';
 import 'screens/home_shell.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
-  ));
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+    ),
+  );
   runApp(const SecretBaseApp());
 }
 
@@ -46,7 +52,8 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
       theme: buildAppTheme(),
       home: AnimatedSwitcher(
         duration: const Duration(milliseconds: 400),
-        transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
+        transitionBuilder: (child, anim) =>
+            FadeTransition(opacity: anim, child: child),
         child: _socket.isConnected
             ? const HomeShell(key: ValueKey('home'))
             : const EntryScreen(key: ValueKey('entry')),

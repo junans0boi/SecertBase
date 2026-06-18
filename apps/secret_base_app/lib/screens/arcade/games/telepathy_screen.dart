@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/socket_service.dart';
 import '../../../widgets/game_scaffold.dart';
+import '../../../widgets/game_menu.dart';
 
 class TelepathyScreen extends StatefulWidget {
   const TelepathyScreen({super.key});
@@ -64,6 +65,7 @@ class _TelepathyScreenState extends State<TelepathyScreen> {
 
     return GameScaffold(
       title: '🧠 텔레파시',
+      actions: [const GameMenuButton()],
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
