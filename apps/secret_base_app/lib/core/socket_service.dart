@@ -1,11 +1,27 @@
 import 'dart:developer';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 
 class SocketService extends ChangeNotifier {
   static final SocketService _i = SocketService._internal();
   factory SocketService() => _i;
-  SocketService._internal();
+  SocketService._internal() {
+    _loadProfileEmoji();
+  }
+
+  static const defaultProfileEmoji = '🙂';
+  static const profileEmojiOptions = [
+    '🙂',
+    '😊',
+    '🐻',
+    '🐰',
+    '🐶',
+    '🐱',
+    '🍀',
+    '⭐',
+  ];
+  static const _profileEmojiKey = 'secret_base_profile_emoji';
 
   io.Socket? _socket;
 
@@ -16,7 +32,15 @@ class SocketService extends ChangeNotifier {
   String? roomCode;
   String? serverUrl;
   List<String> presenceUsers = [];
+  Map<String, String> profileEmojis = {};
+  String profileEmoji = defaultProfileEmoji;
   int? lastPingMs;
+
+  // game lobby
+  String? lobbyGameType;
+  String? lobbyHost;
+  List<String> lobbyPlayers = [];
+  String? lobbyStartedGameType;
 
   // simple game results
   int? lastDice;
@@ -36,6 +60,7 @@ class SocketService extends ChangeNotifier {
   String? yutCurrentTurn;
   String? yutLastThrow;
   String? yutWinner;
+  int? yutOrderCountdownUntil;
   List<dynamic> yutPendingMoves = [];
   Map<String, dynamic> yutStartRolls = {};
   List<String> yutPlayers = [];
@@ -53,14 +78,15 @@ class SocketService extends ChangeNotifier {
   List<String> unoPlayers = [];
   List<dynamic> unoHand = [];
   String? unoWinner;
-  bool unoPendingCall = false;  // I played to 1 card, need to press UNO
-  bool unoCatchable = false;    // Opponent has 1 card and hasn't called UNO
+  bool unoPendingCall = false; // I played to 1 card, need to press UNO
+  bool unoCatchable = false; // Opponent has 1 card and hasn't called UNO
 
   // menu / reconnect state
-  bool restartPending = false;  // received opponent's restart request
-  bool restartWaiting = false;  // sent my restart request, awaiting response
+  bool restartPending = false; // received opponent's restart request
+  bool restartWaiting = false; // sent my restart request, awaiting response
   bool opponentOnline = false;
-  bool opponentJustLeft = false; // true once when opponent leaves during active game
+  bool opponentJustLeft =
+      false; // true once when opponent leaves during active game
 
   // bomb
   bool bombActive = false;
@@ -100,7 +126,12 @@ class SocketService extends ChangeNotifier {
       _log('소켓 연결됨');
       socket.emitWithAck(
         'session:join',
-        {'userId': user, 'roomCode': room, 'roomSecret': secret},
+        {
+          'userId': user,
+          'roomCode': room,
+          'roomSecret': secret,
+          'profileEmoji': profileEmoji,
+        },
         ack: (r) {
           final map = _m(r);
           if (map['ok'] == true) {
@@ -143,12 +174,16 @@ class SocketService extends ChangeNotifier {
     });
 
     socket.on('room:presence', (data) {
-      final users = _m(data)['users'];
+      final map = _m(data);
+      final users = map['users'];
       if (users is List) {
         final prevOnline = opponentOnline;
         presenceUsers = users.map((e) => '$e').toList();
+        profileEmojis = _stringMap(map['profileEmojis']);
         opponentOnline = presenceUsers.length == 2;
-        if (prevOnline && !opponentOnline && (yutActive || unoActive || bombActive)) {
+        if (prevOnline &&
+            !opponentOnline &&
+            (yutActive || unoActive || bombActive)) {
           opponentJustLeft = true;
         }
         if (!prevOnline && opponentOnline) {
@@ -157,6 +192,29 @@ class SocketService extends ChangeNotifier {
         _log('접속자: ${presenceUsers.join(', ')}');
         notifyListeners();
       }
+    });
+
+    socket.on('game:lobby:updated', (data) {
+      final map = _m(data);
+      final gameType = map['gameType'] as String?;
+      if (lobbyGameType != null && gameType != lobbyGameType) return;
+      lobbyGameType = gameType ?? lobbyGameType;
+      lobbyHost = map['host'] as String?;
+      final players = map['players'];
+      lobbyPlayers = players is List ? players.map((e) => '$e').toList() : [];
+      final emojis = _stringMap(map['profileEmojis']);
+      if (emojis.isNotEmpty) profileEmojis = emojis;
+      _log('대기방 업데이트: $lobbyGameType / ${lobbyPlayers.join(', ')}');
+      notifyListeners();
+    });
+
+    socket.on('game:lobby:started', (data) {
+      final map = _m(data);
+      lobbyStartedGameType = map['gameType'] as String?;
+      final emojis = _stringMap(map['profileEmojis']);
+      if (emojis.isNotEmpty) profileEmojis = emojis;
+      _log('대기방 게임 시작: $lobbyStartedGameType');
+      notifyListeners();
     });
 
     socket.on('game:dice:result', (data) {
@@ -391,7 +449,10 @@ class SocketService extends ChangeNotifier {
   void respondToRestart(bool accept, String gameType) {
     restartPending = false;
     notifyListeners();
-    _socket?.emit('game:restart:respond', {'accept': accept, 'gameType': gameType});
+    _socket?.emit('game:restart:respond', {
+      'accept': accept,
+      'gameType': gameType,
+    });
   }
 
   void clearOpponentLeft() {
@@ -407,6 +468,11 @@ class SocketService extends ChangeNotifier {
     userId = null;
     roomCode = null;
     presenceUsers = [];
+    profileEmojis = {};
+    lobbyGameType = null;
+    lobbyHost = null;
+    lobbyPlayers = [];
+    lobbyStartedGameType = null;
     yutActive = false;
     unoActive = false;
     unoPendingCall = false;
@@ -432,6 +498,77 @@ class SocketService extends ChangeNotifier {
         }
       },
     );
+  }
+
+  Future<void> setProfileEmoji(String emoji) async {
+    profileEmoji = emoji;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_profileEmojiKey, emoji);
+    notifyListeners();
+    _socket?.emitWithAck('profile:update', {
+      'profileEmoji': emoji,
+    }, ack: (_) {});
+  }
+
+  void joinGameLobby(String gameType) {
+    final me = userId;
+    lobbyGameType = gameType;
+    lobbyHost = me;
+    lobbyPlayers = me == null ? [] : [me];
+    lobbyStartedGameType = null;
+    if (me != null) {
+      profileEmojis = {...profileEmojis, me: profileEmoji};
+    }
+    notifyListeners();
+    _socket?.emitWithAck(
+      'game:lobby:join',
+      {'gameType': gameType},
+      ack: (r) {
+        final map = _m(r);
+        if (map['ok'] == true) {
+          final lobby = _m(map['lobby']);
+          lobbyHost = lobby['host'] as String?;
+          final players = lobby['players'];
+          lobbyPlayers = players is List
+              ? players.map((e) => '$e').toList()
+              : [];
+          final emojis = _stringMap(lobby['profileEmojis']);
+          if (emojis.isNotEmpty) profileEmojis = emojis;
+          notifyListeners();
+        } else {
+          _log('대기방 입장 실패: ${map['reason']}');
+        }
+      },
+    );
+  }
+
+  void leaveGameLobby(String gameType) {
+    _socket?.emit('game:lobby:leave', {'gameType': gameType});
+    if (lobbyGameType == gameType) {
+      lobbyGameType = null;
+      lobbyHost = null;
+      lobbyPlayers = [];
+      lobbyStartedGameType = null;
+      notifyListeners();
+    }
+  }
+
+  void startGameLobby(String gameType) {
+    _socket?.emitWithAck(
+      'game:lobby:start',
+      {'gameType': gameType},
+      ack: (r) {
+        final map = _m(r);
+        if (map['ok'] != true) {
+          _log('게임 시작 실패: ${map['reason']}');
+        }
+      },
+    );
+  }
+
+  void clearLobbyStart() {
+    lobbyStartedGameType = null;
+    notifyListeners();
   }
 
   void rollDice() => _socket?.emit('game:dice:roll');
@@ -521,11 +658,18 @@ class SocketService extends ChangeNotifier {
     log('[SocketService] $msg');
   }
 
+  Future<void> _loadProfileEmoji() async {
+    final prefs = await SharedPreferences.getInstance();
+    profileEmoji = prefs.getString(_profileEmojiKey) ?? defaultProfileEmoji;
+    notifyListeners();
+  }
+
   void _applyYutState(Map<String, dynamic> map) {
     yutActive = true;
     yutGameId = map['id'] as String? ?? yutGameId ?? 'active';
     yutPhase = map['phase'] as String? ?? yutPhase ?? 'throwing';
     yutCurrentTurn = map['currentTurn'] as String?;
+    yutOrderCountdownUntil = map['orderCountdownUntil'] as int?;
     yutStartRolls = _m(map['startRolls'] ?? yutStartRolls);
     final pending = map['pendingMoves'];
     yutPendingMoves = pending is List ? List<dynamic>.from(pending) : [];
@@ -588,5 +732,10 @@ class SocketService extends ChangeNotifier {
     if (v is Map<String, dynamic>) return v;
     if (v is Map) return v.map((k, val) => MapEntry('$k', val));
     return {};
+  }
+
+  static Map<String, String> _stringMap(dynamic v) {
+    final map = _m(v);
+    return map.map((key, value) => MapEntry(key, '$value'));
   }
 }

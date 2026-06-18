@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 class YutBoard extends StatefulWidget {
@@ -9,6 +10,7 @@ class YutBoard extends StatefulWidget {
   final List<dynamic>? p2Pieces;
   final List<dynamic>? pendingMoves;
   final Map<String, dynamic>? startRolls;
+  final int? orderCountdownUntil;
   final VoidCallback onNewGame;
   final VoidCallback onRollStartDice;
   final VoidCallback onThrow;
@@ -26,6 +28,7 @@ class YutBoard extends StatefulWidget {
     this.p2Pieces,
     this.pendingMoves,
     this.startRolls,
+    this.orderCountdownUntil,
     required this.onNewGame,
     required this.onRollStartDice,
     required this.onThrow,
@@ -49,6 +52,8 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
   late AnimationController _stickThrowCtrl;
   bool _showThrowAnim = false;
   String? _animResult;
+  Timer? _countdownTimer;
+  int _countdownSeconds = 0;
 
   int? _selectedPieceId;
 
@@ -59,7 +64,10 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
       vsync: this,
       duration: const Duration(milliseconds: 700),
     );
-    _resultBounce = CurvedAnimation(parent: _resultBounceCtrl, curve: Curves.bounceOut);
+    _resultBounce = CurvedAnimation(
+      parent: _resultBounceCtrl,
+      curve: Curves.bounceOut,
+    );
 
     _stickThrowCtrl = AnimationController(
       vsync: this,
@@ -71,6 +79,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
         _resultBounceCtrl.forward(from: 0);
       }
     });
+    _syncCountdown();
   }
 
   @override
@@ -89,13 +98,47 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
         widget.pendingMoves != oldWidget.pendingMoves) {
       _selectedPieceId = null;
     }
+    if (widget.phase != oldWidget.phase ||
+        widget.orderCountdownUntil != oldWidget.orderCountdownUntil) {
+      _syncCountdown();
+    }
   }
 
   @override
   void dispose() {
+    _countdownTimer?.cancel();
     _resultBounceCtrl.dispose();
     _stickThrowCtrl.dispose();
     super.dispose();
+  }
+
+  void _syncCountdown() {
+    _countdownTimer?.cancel();
+    if (widget.phase != 'order_countdown' ||
+        widget.orderCountdownUntil == null) {
+      _countdownSeconds = 0;
+      return;
+    }
+
+    void tick() {
+      final remainingMs =
+          widget.orderCountdownUntil! - DateTime.now().millisecondsSinceEpoch;
+      final nextSeconds = (remainingMs / 1000).ceil().clamp(0, 3);
+      if (mounted) {
+        setState(() => _countdownSeconds = nextSeconds);
+      } else {
+        _countdownSeconds = nextSeconds;
+      }
+      if (nextSeconds <= 0) {
+        _countdownTimer?.cancel();
+      }
+    }
+
+    tick();
+    _countdownTimer = Timer.periodic(
+      const Duration(milliseconds: 250),
+      (_) => tick(),
+    );
   }
 
   void _handleThrow() {
@@ -495,7 +538,87 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildStartDice(String name, dynamic value) {
+  Widget _buildOrderCountdownView() {
+    final players = widget.startRolls?.keys.toList() ?? const [];
+    final first = players.contains('jun')
+        ? 'jun'
+        : (players.isNotEmpty ? players[0] : 'jun');
+    final second = players.contains('gf')
+        ? 'gf'
+        : (players.length > 1
+              ? players.firstWhere(
+                  (player) => player != first,
+                  orElse: () => 'gf',
+                )
+              : 'gf');
+    final firstRoll = widget.startRolls?[first];
+    final secondRoll = widget.startRolls?[second];
+    final starter = widget.turn ?? '-';
+
+    return Container(
+      color: Colors.brown[900],
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              '선공 결정!',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 26,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 22),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildStartDice(first, firstRoll, highlight: first == starter),
+                const SizedBox(width: 28),
+                _buildStartDice(
+                  second,
+                  secondRoll,
+                  highlight: second == starter,
+                ),
+              ],
+            ),
+            const SizedBox(height: 22),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.amber[700],
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Text(
+                '$starter 선공',
+                style: const TextStyle(
+                  color: Colors.black87,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            const SizedBox(height: 28),
+            Text(
+              '${_countdownSeconds.clamp(1, 3)}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 76,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '곧 게임이 시작됩니다',
+              style: TextStyle(color: Colors.white70, fontSize: 15),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStartDice(String name, dynamic value, {bool highlight = false}) {
     return Column(
       children: [
         Text(
@@ -512,12 +635,17 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(18),
-            boxShadow: const [
-              BoxShadow(
+            border: highlight
+                ? Border.all(color: Colors.amberAccent, width: 4)
+                : null,
+            boxShadow: [
+              const BoxShadow(
                 color: Colors.black45,
                 blurRadius: 12,
                 offset: Offset(0, 5),
               ),
+              if (highlight)
+                const BoxShadow(color: Colors.amberAccent, blurRadius: 18),
             ],
           ),
           alignment: Alignment.center,
@@ -540,6 +668,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     final opponent = widget.currentUser == 'jun' ? 'gf' : 'jun';
     final isGf = widget.currentUser == 'gf';
     final isRollOrder = widget.phase == 'roll_order';
+    final isOrderCountdown = widget.phase == 'order_countdown';
     final canThrow = isMyTurn && widget.phase == 'throwing';
 
     final myPieces = isGf ? widget.p2Pieces : widget.p1Pieces;
@@ -615,187 +744,196 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
               )
             : isRollOrder
             ? _buildRollOrderView()
+            : isOrderCountdown
+            ? _buildOrderCountdownView()
             : Stack(
                 children: [
                   Column(
                     children: [
-                  Container(
-                    color: Colors.brown[900],
-                    padding: const EdgeInsets.all(8),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: _buildProfileCard(
-                            opponent,
-                            opColor,
-                            opPieces,
-                            widget.turn == opponent,
-                            false,
-                            null,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _buildProfileCard(
-                            widget.currentUser,
-                            myColor,
-                            myPieces,
-                            isMyTurn,
-                            true,
-                            _selectPiece,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: AspectRatio(
-                        aspectRatio: 1,
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            final boardSize = Size(
-                              constraints.maxWidth,
-                              constraints.maxHeight,
-                            );
-
-                            return Stack(
-                              clipBehavior: Clip.none,
-                              children: [
-                                Positioned.fill(
-                                  child: CustomPaint(
-                                    painter: HangameYutPainter(
-                                      inset: _boardInset,
-                                    ),
-                                  ),
-                                ),
-                                if (widget.p1Pieces != null)
-                                  ...widget.p1Pieces!.asMap().entries.map((e) {
-                                    final pos = _getPos(e.value);
-                                    if (pos == 0 || pos == 20) {
-                                      return const SizedBox.shrink();
-                                    }
-                                    if (renderedP1.contains(pos)) {
-                                      return const SizedBox.shrink();
-                                    }
-                                    renderedP1.add(pos);
-                                    final count = p1Counts[pos] ?? 1;
-                                    return _buildBoardPiece(
-                                      boardSize: boardSize,
-                                      pos: pos,
-                                      color: Colors.redAccent,
-                                      team: 'P1',
-                                      count: count,
-                                      selected:
-                                          !isGf && _selectedPieceId == e.key,
-                                      onTap: !isGf
-                                          ? () => _selectPiece(e.key)
-                                          : null,
-                                      stackOffset: const Offset(-10, -10),
-                                    );
-                                  }),
-                                if (widget.p2Pieces != null)
-                                  ...widget.p2Pieces!.asMap().entries.map((e) {
-                                    final pos = _getPos(e.value);
-                                    if (pos == 0 || pos == 20) {
-                                      return const SizedBox.shrink();
-                                    }
-                                    if (renderedP2.contains(pos)) {
-                                      return const SizedBox.shrink();
-                                    }
-                                    renderedP2.add(pos);
-                                    final count = p2Counts[pos] ?? 1;
-                                    return _buildBoardPiece(
-                                      boardSize: boardSize,
-                                      pos: pos,
-                                      color: Colors.blueAccent,
-                                      team: 'P2',
-                                      count: count,
-                                      selected:
-                                          isGf && _selectedPieceId == e.key,
-                                      onTap: isGf
-                                          ? () => _selectPiece(e.key)
-                                          : null,
-                                      stackOffset: const Offset(10, 10),
-                                    );
-                                  }),
-                                if (guideTarget != null)
-                                  _buildGuideMarker(boardSize, guideTarget),
-                              ],
-                            );
-                          },
+                      Container(
+                        color: Colors.brown[900],
+                        padding: const EdgeInsets.all(8),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: _buildProfileCard(
+                                opponent,
+                                opColor,
+                                opPieces,
+                                widget.turn == opponent,
+                                false,
+                                null,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _buildProfileCard(
+                                widget.currentUser,
+                                myColor,
+                                myPieces,
+                                isMyTurn,
+                                true,
+                                _selectPiece,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ),
-                  ),
-                  Container(
-                    color: Colors.brown[800],
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      children: [
-                        Text(
-                          '이동 대기: ${widget.pendingMoves?.join(", ") ?? "-"}',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Colors.yellowAccent,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        SizedBox(
-                          height: 74,
-                          child: Center(
-                            child: widget.lastResultName != null
-                                ? ScaleTransition(
-                                    scale: _resultBounce,
-                                    child: CircleAvatar(
-                                      radius: 34,
-                                      backgroundColor: Colors.white,
-                                      child: Text(
-                                        widget.lastResultName!,
-                                        style: const TextStyle(
-                                          fontSize: 28,
-                                          fontWeight: FontWeight.w900,
-                                          color: Colors.brown,
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: AspectRatio(
+                            aspectRatio: 1,
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                final boardSize = Size(
+                                  constraints.maxWidth,
+                                  constraints.maxHeight,
+                                );
+
+                                return Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    Positioned.fill(
+                                      child: CustomPaint(
+                                        painter: HangameYutPainter(
+                                          inset: _boardInset,
                                         ),
                                       ),
                                     ),
-                                  )
-                                : const Icon(
-                                    Icons.casino,
-                                    size: 42,
-                                    color: Colors.white54,
-                                  ),
+                                    if (widget.p1Pieces != null)
+                                      ...widget.p1Pieces!.asMap().entries.map((
+                                        e,
+                                      ) {
+                                        final pos = _getPos(e.value);
+                                        if (pos == 0 || pos == 20) {
+                                          return const SizedBox.shrink();
+                                        }
+                                        if (renderedP1.contains(pos)) {
+                                          return const SizedBox.shrink();
+                                        }
+                                        renderedP1.add(pos);
+                                        final count = p1Counts[pos] ?? 1;
+                                        return _buildBoardPiece(
+                                          boardSize: boardSize,
+                                          pos: pos,
+                                          color: Colors.redAccent,
+                                          team: 'P1',
+                                          count: count,
+                                          selected:
+                                              !isGf &&
+                                              _selectedPieceId == e.key,
+                                          onTap: !isGf
+                                              ? () => _selectPiece(e.key)
+                                              : null,
+                                          stackOffset: const Offset(-10, -10),
+                                        );
+                                      }),
+                                    if (widget.p2Pieces != null)
+                                      ...widget.p2Pieces!.asMap().entries.map((
+                                        e,
+                                      ) {
+                                        final pos = _getPos(e.value);
+                                        if (pos == 0 || pos == 20) {
+                                          return const SizedBox.shrink();
+                                        }
+                                        if (renderedP2.contains(pos)) {
+                                          return const SizedBox.shrink();
+                                        }
+                                        renderedP2.add(pos);
+                                        final count = p2Counts[pos] ?? 1;
+                                        return _buildBoardPiece(
+                                          boardSize: boardSize,
+                                          pos: pos,
+                                          color: Colors.blueAccent,
+                                          team: 'P2',
+                                          count: count,
+                                          selected:
+                                              isGf && _selectedPieceId == e.key,
+                                          onTap: isGf
+                                              ? () => _selectPiece(e.key)
+                                              : null,
+                                          stackOffset: const Offset(10, 10),
+                                        );
+                                      }),
+                                    if (guideTarget != null)
+                                      _buildGuideMarker(boardSize, guideTarget),
+                                  ],
+                                );
+                              },
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 10),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: canThrow ? _handleThrow : null,
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              backgroundColor: canThrow
-                                  ? Colors.amber[700]
-                                  : Colors.grey,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                            ),
-                            child: const Text(
-                              '윷 던지기',
-                              style: TextStyle(
-                                fontSize: 18,
+                      ),
+                      Container(
+                        color: Colors.brown[800],
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          children: [
+                            Text(
+                              '이동 대기: ${widget.pendingMoves?.join(", ") ?? "-"}',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Colors.yellowAccent,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.black87,
                               ),
                             ),
-                          ),
+                            const SizedBox(height: 10),
+                            SizedBox(
+                              height: 74,
+                              child: Center(
+                                child: widget.lastResultName != null
+                                    ? ScaleTransition(
+                                        scale: _resultBounce,
+                                        child: CircleAvatar(
+                                          radius: 34,
+                                          backgroundColor: Colors.white,
+                                          child: Text(
+                                            widget.lastResultName!,
+                                            style: const TextStyle(
+                                              fontSize: 28,
+                                              fontWeight: FontWeight.w900,
+                                              color: Colors.brown,
+                                            ),
+                                          ),
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.casino,
+                                        size: 42,
+                                        color: Colors.white54,
+                                      ),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed: canThrow ? _handleThrow : null,
+                                style: ElevatedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 16,
+                                  ),
+                                  backgroundColor: canThrow
+                                      ? Colors.amber[700]
+                                      : Colors.grey,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                                child: const Text(
+                                  '윷 던지기',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
+                      ),
                     ],
                   ),
                   // Yut stick throw animation overlay
@@ -1032,7 +1170,9 @@ class _YutThrowOverlay extends StatelessWidget {
                         fontSize: 72,
                         fontWeight: FontWeight.w900,
                         color: Colors.amber,
-                        shadows: [Shadow(color: Colors.black54, blurRadius: 12)],
+                        shadows: [
+                          Shadow(color: Colors.black54, blurRadius: 12),
+                        ],
                       ),
                     ),
                   ),
@@ -1158,5 +1298,6 @@ class _YutSticksPainter extends CustomPainter {
   double _lerp(double a, double b, double t) => a + (b - a) * t;
 
   @override
-  bool shouldRepaint(_YutSticksPainter old) => old.t != t || old.resultName != resultName;
+  bool shouldRepaint(_YutSticksPainter old) =>
+      old.t != t || old.resultName != resultName;
 }

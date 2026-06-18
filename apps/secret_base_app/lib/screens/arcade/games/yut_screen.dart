@@ -15,11 +15,15 @@ class YutScreen extends StatefulWidget {
 
 class _YutScreenState extends State<YutScreen> {
   final _socket = SocketService();
+  bool _requestedStart = false;
 
   @override
   void initState() {
     super.initState();
     _socket.addListener(_rebuild);
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _startFromLobbyIfHost(),
+    );
   }
 
   @override
@@ -30,6 +34,14 @@ class _YutScreenState extends State<YutScreen> {
 
   void _rebuild() {
     if (mounted) setState(() {});
+  }
+
+  void _startFromLobbyIfHost() {
+    if (_requestedStart) return;
+    if (_socket.yutActive) return;
+    if (_socket.userId == null || _socket.userId != _socket.lobbyHost) return;
+    _requestedStart = true;
+    _socket.newYutGame();
   }
 
   @override
@@ -63,6 +75,7 @@ class _YutScreenState extends State<YutScreen> {
               p2Pieces: p2Pieces,
               pendingMoves: sock.yutPendingMoves,
               startRolls: sock.yutStartRolls,
+              orderCountdownUntil: sock.yutOrderCountdownUntil,
               onNewGame: sock.newYutGame,
               onRollStartDice: sock.rollYutStartDice,
               onThrow: sock.throwYut,
@@ -93,6 +106,8 @@ class _StatusStrip extends StatelessWidget {
         ? '새 게임을 시작하면 선공 주사위부터 굴립니다.'
         : sock.yutPhase == 'roll_order'
         ? '선공 정하기 · 각자 주사위를 굴려요'
+        : sock.yutPhase == 'order_countdown'
+        ? '${sock.yutCurrentTurn ?? '선공'} 선공 · 곧 시작합니다'
         : isMyTurn
         ? (sock.yutPendingMoves.isEmpty
               ? '내 턴 · 윷을 던지세요'

@@ -68,6 +68,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             _header(),
             const SizedBox(height: 16),
+            _profileCard(sock),
+            const SizedBox(height: 12),
             _connectionCard(sock),
             const SizedBox(height: 12),
             _presenceCard(sock),
@@ -124,6 +126,63 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Text('연결 상태를 조용히 확인해요', style: mainBody(size: 13)),
             ],
           ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _profileCard(SocketService sock) => _Card(
+    title: '프로필 이모지',
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            DoodleBadge(
+              color: kMainHoney,
+              backgroundColor: kMainHoneySoft,
+              size: 48,
+              child: Text(
+                sock.profileEmoji,
+                style: const TextStyle(fontSize: 24),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                '대기방에서 보이는 내 프로필이에요',
+                style: mainBody(size: 13, color: kMainSub),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: SocketService.profileEmojiOptions.map((emoji) {
+            final selected = emoji == sock.profileEmoji;
+            return InkWell(
+              onTap: () => sock.setProfileEmoji(emoji),
+              borderRadius: BorderRadius.circular(16),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: selected ? kMainSageSoft : kMainPaperSoft,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: selected ? kMainSage : kMainLine,
+                    width: selected ? 1.5 : 1,
+                  ),
+                ),
+                child: Center(
+                  child: Text(emoji, style: const TextStyle(fontSize: 22)),
+                ),
+              ),
+            );
+          }).toList(),
         ),
       ],
     ),

@@ -20,6 +20,46 @@
 }
 ```
 
+### `profile:update`
+
+설정 탭에서 선택한 프로필 이모지를 현재 접속 세션에 반영한다.
+
+```json
+{
+  "profileEmoji": "🙂"
+}
+```
+
+### `game:lobby:join`
+
+아케이드 게임별 대기방에 입장한다. 각 게임 대기방에 가장 먼저 들어온 사용자가 방장이 된다.
+
+```json
+{
+  "gameType": "dice | roulette | rps | telepathy | pirate | yut | uno | bomb"
+}
+```
+
+### `game:lobby:leave`
+
+현재 게임 대기방에서 나간다.
+
+```json
+{
+  "gameType": "dice | roulette | rps | telepathy | pirate | yut | uno | bomb"
+}
+```
+
+### `game:lobby:start`
+
+방장이 게임 시작을 요청한다. 대기방에 2명이 있어야 성공한다.
+
+```json
+{
+  "gameType": "dice | roulette | rps | telepathy | pirate | yut | uno | bomb"
+}
+```
+
 ### `game:dice:roll`
 
 ```json
@@ -66,7 +106,45 @@
 ```json
 {
   "roomCode": "secret-room",
-  "users": ["jun", "gf"]
+  "users": ["jun", "gf"],
+  "profileEmojis": {
+    "jun": "🙂",
+    "gf": "🐰"
+  }
+}
+```
+
+### `game:lobby:updated`
+
+대기방 입장/퇴장/방장 변경 시 방 전체에 전달된다.
+
+```json
+{
+  "gameType": "dice",
+  "host": "jun",
+  "players": ["jun", "gf"],
+  "profileEmojis": {
+    "jun": "🙂",
+    "gf": "🐰"
+  },
+  "updatedAt": 1781760000000
+}
+```
+
+### `game:lobby:started`
+
+방장이 시작 버튼을 눌러 대기방이 게임 화면으로 전환될 때 방 전체에 전달된다.
+
+```json
+{
+  "gameType": "dice",
+  "host": "jun",
+  "players": ["jun", "gf"],
+  "profileEmojis": {
+    "jun": "🙂",
+    "gf": "🐰"
+  },
+  "at": 1781760000000
 }
 ```
 

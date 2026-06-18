@@ -30,6 +30,26 @@ const joinSchema = z.object({
   userId: z.string().min(1),
   roomCode: z.string().min(1).max(24),
   roomSecret: z.string().min(1),
+  profileEmoji: z.string().min(1).max(16).optional(),
+});
+
+const profileSchema = z.object({
+  profileEmoji: z.string().min(1).max(16),
+});
+
+const gameTypes = [
+  "dice",
+  "roulette",
+  "rps",
+  "telepathy",
+  "pirate",
+  "yut",
+  "uno",
+  "bomb",
+];
+
+const lobbySchema = z.object({
+  gameType: z.enum(gameTypes),
 });
 
 const rouletteSchema = z.object({
@@ -73,6 +93,7 @@ const roomKey = (roomCode) => `room:${roomCode}:state`;
 const yutGameKey = (roomCode) => `yut:${roomCode}:game`;
 const unoGameKey = (roomCode) => `uno:${roomCode}:game`;
 const bombGameKey = (roomCode) => `bomb:${roomCode}:game`;
+const gameLobbyKey = (roomCode, gameType) => `lobby:${roomCode}:${gameType}`;
 
 const defaultState = {
   lastDice: null,
@@ -91,6 +112,69 @@ const getPresence = (io, roomCode) => {
     return [];
   }
   return [...room].map((socketId) => io.sockets.sockets.get(socketId)?.data?.userId).filter(Boolean);
+};
+
+const getPresenceProfiles = (io, roomCode) => {
+  const room = io.sockets.adapter.rooms.get(roomCode);
+  if (!room) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    [...room]
+      .map((socketId) => io.sockets.sockets.get(socketId))
+      .filter(Boolean)
+      .map((sock) => [sock.data.userId, sock.data.profileEmoji])
+      .filter(([userId, emoji]) => userId && emoji),
+  );
+};
+
+const emitPresence = (io, roomCode) => {
+  io.to(roomCode).emit("room:presence", {
+    roomCode,
+    users: getPresence(io, roomCode),
+    profileEmojis: getPresenceProfiles(io, roomCode),
+  });
+};
+
+const normalizeLobby = (lobby, presence) => {
+  const players = (lobby?.players ?? []).filter((player) => presence.includes(player));
+  const host = players.includes(lobby?.host) ? lobby.host : (players[0] ?? null);
+  return {
+    gameType: lobby?.gameType,
+    host,
+    players,
+    updatedAt: Date.now(),
+  };
+};
+
+const emitLobby = (io, roomCode, lobby) => {
+  io.to(roomCode).emit("game:lobby:updated", {
+    ...lobby,
+    profileEmojis: getPresenceProfiles(io, roomCode),
+  });
+};
+
+const cleanupLobbyForUser = async (io, roomCode, gameType, userId) => {
+  const key = gameLobbyKey(roomCode, gameType);
+  const lobbyText = await redis.get(key);
+  if (!lobbyText) {
+    return;
+  }
+
+  const lobby = normalizeLobby(JSON.parse(lobbyText), getPresence(io, roomCode));
+  lobby.players = lobby.players.filter((player) => player !== userId);
+  lobby.host = lobby.players.includes(lobby.host) ? lobby.host : (lobby.players[0] ?? null);
+  lobby.updatedAt = Date.now();
+
+  if (lobby.players.length === 0) {
+    await redis.del(key);
+    emitLobby(io, roomCode, { gameType, host: null, players: [], updatedAt: Date.now() });
+    return;
+  }
+
+  await redis.set(key, JSON.stringify(lobby), "EX", 1800);
+  emitLobby(io, roomCode, lobby);
 };
 
 const getOrderedPlayers = (presence) =>
@@ -121,7 +205,7 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const { userId, roomCode, roomSecret } = parsed.data;
+      const { userId, roomCode, roomSecret, profileEmoji } = parsed.data;
       if (roomSecret !== config.ROOM_SECRET) {
         ack({ ok: false, reason: "invalid_secret" });
         return;
@@ -139,17 +223,133 @@ export const registerSocketHandlers = (io) => {
 
       socket.data.userId = userId;
       socket.data.roomCode = roomCode;
+      socket.data.profileEmoji = profileEmoji ?? "🙂";
       await socket.join(roomCode);
 
       const stateText = await redis.get(roomKey(roomCode));
       const state = stateText ? JSON.parse(stateText) : defaultState;
 
-      io.to(roomCode).emit("room:presence", {
-        roomCode,
-        users: getPresence(io, roomCode),
-      });
+      emitPresence(io, roomCode);
 
       ack({ ok: true, state });
+    });
+
+    socket.on("profile:update", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+
+      const parsed = profileSchema.safeParse(payload);
+      if (!parsed.success) {
+        ack({ ok: false, reason: "invalid_payload" });
+        return;
+      }
+
+      socket.data.profileEmoji = parsed.data.profileEmoji;
+      emitPresence(io, roomCode);
+      ack({ ok: true });
+    });
+
+    socket.on("game:lobby:join", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+
+      const parsed = lobbySchema.safeParse(payload);
+      if (!parsed.success) {
+        ack({ ok: false, reason: "invalid_payload" });
+        return;
+      }
+
+      const { gameType } = parsed.data;
+      const key = gameLobbyKey(roomCode, gameType);
+      const presence = getPresence(io, roomCode);
+      const lobbyText = await redis.get(key);
+      const baseLobby = lobbyText ? JSON.parse(lobbyText) : { gameType, host: null, players: [] };
+      const lobby = normalizeLobby({ ...baseLobby, gameType }, presence);
+
+      if (!lobby.players.includes(userId)) {
+        lobby.players.push(userId);
+      }
+      if (!lobby.host) {
+        lobby.host = userId;
+      }
+      lobby.updatedAt = Date.now();
+
+      await redis.set(key, JSON.stringify(lobby), "EX", 1800);
+      emitLobby(io, roomCode, lobby);
+      ack({ ok: true, lobby: { ...lobby, profileEmojis: getPresenceProfiles(io, roomCode) } });
+    });
+
+    socket.on("game:lobby:leave", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+
+      const parsed = lobbySchema.safeParse(payload);
+      if (!parsed.success) {
+        ack({ ok: false, reason: "invalid_payload" });
+        return;
+      }
+
+      await cleanupLobbyForUser(io, roomCode, parsed.data.gameType, userId);
+      ack({ ok: true });
+    });
+
+    socket.on("game:lobby:start", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+
+      const parsed = lobbySchema.safeParse(payload);
+      if (!parsed.success) {
+        ack({ ok: false, reason: "invalid_payload" });
+        return;
+      }
+
+      const { gameType } = parsed.data;
+      const key = gameLobbyKey(roomCode, gameType);
+      const lobbyText = await redis.get(key);
+      if (!lobbyText) {
+        ack({ ok: false, reason: "lobby_not_found" });
+        return;
+      }
+
+      const lobby = normalizeLobby(JSON.parse(lobbyText), getPresence(io, roomCode));
+      if (lobby.host !== userId) {
+        ack({ ok: false, reason: "not_host" });
+        return;
+      }
+      if (lobby.players.length < 2) {
+        ack({ ok: false, reason: "need_two_players" });
+        return;
+      }
+
+      await redis.del(key);
+      io.to(roomCode).emit("game:lobby:started", {
+        gameType,
+        host: lobby.host,
+        players: lobby.players,
+        profileEmojis: getPresenceProfiles(io, roomCode),
+        at: Date.now(),
+      });
+      ack({ ok: true });
     });
 
     // 재접속 시 게임 세션 복원
@@ -496,13 +696,35 @@ export const registerSocketHandlers = (io) => {
           gameState.startRolls = {};
         } else {
           gameState.currentTurn = p1Roll > p2Roll ? player1 : player2;
-          gameState.phase = "throwing";
+          gameState.phase = "order_countdown";
+          gameState.orderCountdownUntil = Date.now() + 3000;
         }
       }
 
       await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
       emitYutState(io, roomCode, "game:yut:start_roll", gameState, { by: userId });
       ack({ ok: true, gameState: serializeYutGame(gameState) });
+
+      if (gameState.phase === "order_countdown") {
+        setTimeout(async () => {
+          try {
+            const latestText = await redis.get(yutGameKey(roomCode));
+            if (!latestText) return;
+            const latestState = JSON.parse(latestText);
+            if (latestState.id !== gameState.id || latestState.phase !== "order_countdown") {
+              return;
+            }
+            latestState.phase = "throwing";
+            latestState.orderCountdownUntil = null;
+            await redis.set(yutGameKey(roomCode), JSON.stringify(latestState), "EX", 3600);
+            emitYutState(io, roomCode, "game:yut:started", latestState, {
+              orderReady: true,
+            });
+          } catch (err) {
+            console.error(`yut order countdown error: ${err.message}`);
+          }
+        }, 3000);
+      }
     });
 
     socket.on("game:yut:throw", async (_, ackRaw) => {
@@ -1067,10 +1289,12 @@ export const registerSocketHandlers = (io) => {
       if (!roomCode) {
         return;
       }
-      io.to(roomCode).emit("room:presence", {
-        roomCode,
-        users: getPresence(io, roomCode),
-      });
+      emitPresence(io, roomCode);
+      for (const gameType of gameTypes) {
+        cleanupLobbyForUser(io, roomCode, gameType, socket.data.userId).catch((err) =>
+          console.error(`lobby cleanup error: ${err.message}`),
+        );
+      }
     });
   });
 };

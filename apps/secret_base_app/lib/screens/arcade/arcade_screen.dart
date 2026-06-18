@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/main_design.dart';
 import '../../core/socket_service.dart';
+import 'game_lobby_screen.dart';
 import 'games/dice_screen.dart';
 import 'games/roulette_screen.dart';
 import 'games/rps_screen.dart';
@@ -37,14 +38,21 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
   }
 
   static const _games = [
-    _GameInfo('🎲', '주사위', '1~6 랜덤', kMainSky, kMainSkySoft),
-    _GameInfo('🎡', '룰렛', '운명의 선택', kMainRose, kMainRoseSoft),
-    _GameInfo('✊', '가위바위보', '동시 선택', kMainSage, kMainSageSoft),
-    _GameInfo('🧠', '텔레파시', '마음이 통할까', kMainHoney, kMainHoneySoft),
-    _GameInfo('🏴‍☠️', '해적 룰렛', '폭탄을 피해라', kMainPeach, kMainPeachSoft),
-    _GameInfo('🀄', '윷놀이', '턴제 보드게임', kMainSky, kMainSkySoft),
-    _GameInfo('🃏', 'UNO', '카드 대결', kMainRose, kMainRoseSoft),
-    _GameInfo('💣', '폭탄 돌리기', '퀴즈 + 타이머', kMainHoney, kMainHoneySoft),
+    _GameInfo('dice', '🎲', '주사위', '1~6 랜덤', kMainSky, kMainSkySoft),
+    _GameInfo('roulette', '🎡', '룰렛', '운명의 선택', kMainRose, kMainRoseSoft),
+    _GameInfo('rps', '✊', '가위바위보', '동시 선택', kMainSage, kMainSageSoft),
+    _GameInfo('telepathy', '🧠', '텔레파시', '마음이 통할까', kMainHoney, kMainHoneySoft),
+    _GameInfo(
+      'pirate',
+      '🏴‍☠️',
+      '해적 룰렛',
+      '폭탄을 피해라',
+      kMainPeach,
+      kMainPeachSoft,
+    ),
+    _GameInfo('yut', '🀄', '윷놀이', '턴제 보드게임', kMainSky, kMainSkySoft),
+    _GameInfo('uno', '🃏', 'UNO', '카드 대결', kMainRose, kMainRoseSoft),
+    _GameInfo('bomb', '💣', '폭탄 돌리기', '퀴즈 + 타이머', kMainHoney, kMainHoneySoft),
   ];
 
   Widget _screen(int i) {
@@ -68,8 +76,23 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     }
   }
 
-  void _open(int i) =>
-      Navigator.push(context, MaterialPageRoute(builder: (_) => _screen(i)));
+  void _open(int i) {
+    final info = _games[i];
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => GameLobbyScreen(
+          gameType: info.gameType,
+          title: info.name,
+          description: info.desc,
+          emoji: info.emoji,
+          color: info.color,
+          backgroundColor: info.bgColor,
+          gameScreen: _screen(i),
+        ),
+      ),
+    );
+  }
 
   int _cols(BuildContext ctx) {
     final w = MediaQuery.of(ctx).size.width;
@@ -135,12 +158,20 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
 }
 
 class _GameInfo {
+  final String gameType;
   final String emoji;
   final String name;
   final String desc;
   final Color color;
   final Color bgColor;
-  const _GameInfo(this.emoji, this.name, this.desc, this.color, this.bgColor);
+  const _GameInfo(
+    this.gameType,
+    this.emoji,
+    this.name,
+    this.desc,
+    this.color,
+    this.bgColor,
+  );
 }
 
 class _GameCard extends StatelessWidget {
