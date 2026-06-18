@@ -1,32 +1,40 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../core/app_theme.dart';
+import '../core/main_design.dart';
 import '../core/socket_service.dart';
 
-const _defaultUrl = String.fromEnvironment('SOCKET_URL', defaultValue: 'http://localhost:4100');
+const _defaultUrl = String.fromEnvironment(
+  'SOCKET_URL',
+  defaultValue: 'http://localhost:4100',
+);
 
 class EntryScreen extends StatefulWidget {
   const EntryScreen({super.key});
+
   @override
   State<EntryScreen> createState() => _EntryScreenState();
 }
 
-class _EntryScreenState extends State<EntryScreen> with SingleTickerProviderStateMixin {
-  final _urlCtrl    = TextEditingController(text: _defaultUrl);
-  final _roomCtrl   = TextEditingController(text: 'secret-room');
+class _EntryScreenState extends State<EntryScreen>
+    with SingleTickerProviderStateMixin {
+  final _urlCtrl = TextEditingController(text: _defaultUrl);
+  final _roomCtrl = TextEditingController(text: 'secret-room');
   final _secretCtrl = TextEditingController(text: 'secretbase');
-  String _user      = 'jun';
-  bool _connecting  = false;
+  String _user = 'jun';
+  bool _connecting = false;
 
-  late AnimationController _anim;
-  late Animation<double> _fadeIn;
+  late final AnimationController _anim;
+  late final Animation<double> _fadeIn;
   final _socket = SocketService();
 
   @override
   void initState() {
     super.initState();
-    _anim = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
-    _fadeIn = CurvedAnimation(parent: _anim, curve: Curves.easeOut);
+    _anim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
+    _fadeIn = CurvedAnimation(parent: _anim, curve: Curves.easeOutCubic);
     _anim.forward();
     _socket.addListener(_onSocket);
   }
@@ -50,91 +58,115 @@ class _EntryScreenState extends State<EntryScreen> with SingleTickerProviderStat
     if (_connecting) return;
     FocusScope.of(context).unfocus();
     setState(() => _connecting = true);
-    _socket.connect(_urlCtrl.text.trim(), _roomCtrl.text.trim(), _secretCtrl.text.trim(), _user);
+    _socket.connect(
+      _urlCtrl.text.trim(),
+      _roomCtrl.text.trim(),
+      _secretCtrl.text.trim(),
+      _user,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: kBg,
-      body: Stack(
-        children: [
-          // 배경 그라데이션
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFFFFE4EF), Color(0xFFFFF5F8), Color(0xFFFFEBF5)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-          ),
-          // 하트 장식
-          const _Decoration(),
-          SafeArea(
-            child: FadeTransition(
-              opacity: _fadeIn,
-              child: Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 420),
-                    child: Column(
-                      children: [
-                        _buildLogo(),
-                        const SizedBox(height: 36),
-                        _buildForm(),
-                      ],
-                    ),
+      backgroundColor: kMainBg,
+      body: CozyPage(
+        child: SafeArea(
+          child: FadeTransition(
+            opacity: _fadeIn,
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 28, 24, 36),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: Column(
+                    children: [_intro(), const SizedBox(height: 22), _form()],
                   ),
                 ),
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildLogo() {
+  Widget _intro() {
     return Column(
       children: [
-        Container(
-          width: 88,
-          height: 88,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: kPrimaryGrad,
-            boxShadow: [BoxShadow(color: kPrimary.withAlpha(80), blurRadius: 24, offset: const Offset(0, 8))],
-          ),
-          child: const Center(child: Text('💌', style: TextStyle(fontSize: 40))),
-        ),
-        const SizedBox(height: 20),
         Text(
-          '비밀기지',
-          style: GoogleFonts.notoSans(fontSize: 34, fontWeight: FontWeight.w900, color: kText, letterSpacing: -1),
+          '답변 속 진심을 먹고 자라요',
+          style: mainTitle(size: 20, color: kMainSub, weight: FontWeight.w600),
         ),
         const SizedBox(height: 6),
+        Text('두 분만의 비밀기지', style: mainTitle(size: 34)),
+        const SizedBox(height: 22),
+        SizedBox(
+          height: 152,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Positioned(left: 40, top: 22, child: _softHeart(kMainSky, 18)),
+              Positioned(right: 48, top: 18, child: _softHeart(kMainRose, 14)),
+              Positioned(
+                left: 82,
+                bottom: 20,
+                child: _softHeart(kMainRose, 10),
+              ),
+              Positioned(
+                right: 74,
+                bottom: 30,
+                child: _softHeart(kMainSage, 12),
+              ),
+              const CozyMascot(size: 124),
+              Positioned(
+                left: 34,
+                bottom: 12,
+                child: Transform.rotate(
+                  angle: -0.12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: kMainHoneySoft,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: kMainHoney),
+                    ),
+                    child: Text(
+                      'Secret',
+                      style: mainBody(
+                        size: 11,
+                        color: kMainSub,
+                        weight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text('짜잔!', style: mainTitle(size: 22)),
+        const SizedBox(height: 6),
         Text(
-          '우리 둘만의 공간 💕',
-          style: GoogleFonts.notoSans(fontSize: 14, color: kTextSub),
+          '안녕하세요. 오늘의 비밀기지로 들어가 볼까요?',
+          style: mainBody(size: 13),
+          textAlign: TextAlign.center,
         ),
       ],
     );
   }
 
-  Widget _buildForm() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: kCard,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: kBorder),
-        boxShadow: [
-          BoxShadow(color: kPrimary.withAlpha(20), blurRadius: 32, offset: const Offset(0, 8)),
-          const BoxShadow(color: Colors.white, blurRadius: 0, offset: Offset(0, 0)),
-        ],
-      ),
+  Widget _softHeart(Color color, double size) {
+    return Icon(Icons.favorite, color: color.withAlpha(120), size: size);
+  }
+
+  Widget _form() {
+    return MainCard(
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -142,10 +174,10 @@ class _EntryScreenState extends State<EntryScreen> with SingleTickerProviderStat
           const SizedBox(height: 6),
           TextField(
             controller: _urlCtrl,
-            style: GoogleFonts.notoSans(color: kText, fontSize: 14),
-            decoration: const InputDecoration(
-              hintText: 'http://192.168.x.x:4100',
-              prefixIcon: Icon(Icons.dns_outlined, color: kTextMuted, size: 20),
+            style: mainBody(size: 14, color: kMainInk),
+            decoration: _inputDecoration(
+              'http://192.168.x.x:4100',
+              Icons.dns_outlined,
             ),
           ),
           const SizedBox(height: 14),
@@ -153,10 +185,10 @@ class _EntryScreenState extends State<EntryScreen> with SingleTickerProviderStat
           const SizedBox(height: 6),
           TextField(
             controller: _roomCtrl,
-            style: GoogleFonts.notoSans(color: kText, fontSize: 14),
-            decoration: const InputDecoration(
-              hintText: 'secret-room',
-              prefixIcon: Icon(Icons.favorite_border, color: kTextMuted, size: 20),
+            style: mainBody(size: 14, color: kMainInk),
+            decoration: _inputDecoration(
+              'secret-room',
+              Icons.meeting_room_outlined,
             ),
           ),
           const SizedBox(height: 14),
@@ -165,136 +197,171 @@ class _EntryScreenState extends State<EntryScreen> with SingleTickerProviderStat
           TextField(
             controller: _secretCtrl,
             obscureText: true,
-            style: GoogleFonts.notoSans(color: kText, fontSize: 14),
-            decoration: const InputDecoration(
-              hintText: '••••••••',
-              prefixIcon: Icon(Icons.lock_outline, color: kTextMuted, size: 20),
-            ),
+            style: mainBody(size: 14, color: kMainInk),
+            decoration: _inputDecoration('비밀 단어', Icons.lock_outline),
+          ),
+          const SizedBox(height: 18),
+          _label('나는 누구?'),
+          const SizedBox(height: 9),
+          Row(
+            children: [
+              _userTile('jun', '준'),
+              const SizedBox(width: 10),
+              _userTile('gf', 'GF'),
+            ],
           ),
           const SizedBox(height: 20),
-          _label('나는 누구?'),
-          const SizedBox(height: 10),
-          Row(children: [
-            _userTile('jun', '💙 준'),
-            const SizedBox(width: 10),
-            _userTile('gf', '🩷 GF'),
-          ]),
-          const SizedBox(height: 24),
           if (_socket.status != '대기 중' && !_socket.isConnected && !_connecting)
             Padding(
-              padding: const EdgeInsets.only(bottom: 14),
+              padding: const EdgeInsets.only(bottom: 12),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: kError.withAlpha(20),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: kError.withAlpha(80)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
                 ),
-                child: Row(children: [
-                  const Icon(Icons.error_outline, color: kError, size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(_socket.status, style: GoogleFonts.notoSans(color: kError, fontSize: 13))),
-                ]),
+                decoration: BoxDecoration(
+                  color: kError.withAlpha(18),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: kError.withAlpha(60)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline, color: kError, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _socket.status,
+                        style: mainBody(
+                          size: 12,
+                          color: kError,
+                          weight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          _buildBtn(),
+          _enterButton(),
         ],
       ),
     );
   }
 
-  Widget _label(String t) => Text(
-    t,
-    style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.4),
-  );
+  InputDecoration _inputDecoration(String hint, IconData icon) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: mainBody(size: 13, color: kMainMuted),
+      prefixIcon: Icon(icon, color: kMainMuted, size: 19),
+      filled: true,
+      fillColor: kMainPaperSoft.withAlpha(170),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: kMainLine),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: kMainLine),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: kMainSage, width: 1.4),
+      ),
+    );
+  }
+
+  Widget _label(String text) {
+    return Text(
+      text,
+      style: mainBody(
+        size: 12,
+        color: kMainSub,
+        weight: FontWeight.w700,
+        height: 1.1,
+      ),
+    );
+  }
 
   Widget _userTile(String val, String label) {
-    final sel = _user == val;
+    final selected = _user == val;
     return Expanded(
-      child: GestureDetector(
+      child: InkWell(
         onTap: () => setState(() => _user = val),
+        borderRadius: BorderRadius.circular(16),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(vertical: 14),
+          padding: const EdgeInsets.symmetric(vertical: 13),
           decoration: BoxDecoration(
-            color: sel ? kPrimary.withAlpha(20) : const Color(0xFFFFF0F5),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: sel ? kPrimary : kBorder, width: sel ? 1.5 : 1),
-          ),
-          child: Center(
-            child: Text(
-              label,
-              style: GoogleFonts.notoSans(
-                color: sel ? kPrimary : kTextSub,
-                fontWeight: sel ? FontWeight.w700 : FontWeight.normal,
-                fontSize: 15,
-              ),
+            color: selected ? kMainSageSoft : kMainPaperSoft.withAlpha(150),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: selected ? kMainSage : kMainLine,
+              width: selected ? 1.4 : 1,
             ),
           ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  color: selected ? kMainSage : kMainMuted,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 7),
+              Text(
+                label,
+                style: mainBody(
+                  size: 14,
+                  color: selected ? kMainInk : kMainSub,
+                  weight: selected ? FontWeight.w700 : FontWeight.w500,
+                  height: 1,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildBtn() {
+  Widget _enterButton() {
     return SizedBox(
       width: double.infinity,
-      height: 52,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: _connecting ? null : kPrimaryGrad,
-          color: _connecting ? kBorder : null,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: _connecting ? null : [BoxShadow(color: kPrimary.withAlpha(80), blurRadius: 16, offset: const Offset(0, 4))],
+      height: 50,
+      child: FilledButton(
+        onPressed: _connecting ? null : _connect,
+        style: FilledButton.styleFrom(
+          backgroundColor: kMainInk,
+          disabledBackgroundColor: kMainLine,
+          foregroundColor: kMainPaper,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          elevation: 0,
         ),
-        child: MaterialButton(
-          onPressed: _connecting ? null : _connect,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: _connecting
-            ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: kPrimary))
-            : Text('우리 방 입장 💌', style: GoogleFonts.notoSans(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
-        ),
+        child: _connecting
+            ? const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.4,
+                  color: kMainInk,
+                ),
+              )
+            : Text(
+                '우리 방 입장',
+                style: mainBody(
+                  size: 15,
+                  color: kMainPaper,
+                  weight: FontWeight.w700,
+                  height: 1,
+                ),
+              ),
       ),
     );
   }
-}
-
-class _Decoration extends StatelessWidget {
-  const _Decoration();
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: CustomPaint(
-        size: MediaQuery.of(context).size,
-        painter: _HeartPainter(),
-      ),
-    );
-  }
-}
-
-class _HeartPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = const Color(0xFFFFB6D1).withAlpha(50);
-    const hearts = [(0.1, 0.08), (0.88, 0.12), (0.05, 0.55), (0.92, 0.48), (0.5, 0.04), (0.75, 0.85), (0.2, 0.92)];
-    for (final (x, y) in hearts) {
-      final cx = size.width * x;
-      final cy = size.height * y;
-      _drawHeart(canvas, paint, cx, cy, 12);
-    }
-  }
-
-  void _drawHeart(Canvas canvas, Paint paint, double cx, double cy, double r) {
-    final path = Path()
-      ..moveTo(cx, cy + r * 0.3)
-      ..cubicTo(cx, cy - r * 0.5, cx - r, cy - r * 0.5, cx - r, cy)
-      ..cubicTo(cx - r, cy + r * 0.8, cx, cy + r * 1.2, cx, cy + r * 1.4)
-      ..cubicTo(cx, cy + r * 1.2, cx + r, cy + r * 0.8, cx + r, cy)
-      ..cubicTo(cx + r, cy - r * 0.5, cx, cy - r * 0.5, cx, cy + r * 0.3)
-      ..close();
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter _) => false;
 }

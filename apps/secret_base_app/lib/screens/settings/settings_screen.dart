@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_theme.dart';
+import '../../core/main_design.dart';
 import '../../core/socket_service.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -25,20 +25,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.dispose();
   }
 
-  void _rebuild() { if (mounted) setState(() {}); }
+  void _rebuild() {
+    if (mounted) setState(() {});
+  }
 
   void _disconnect() {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
+        backgroundColor: kMainPaper,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('방 나가기', style: GoogleFonts.notoSans(color: kText, fontWeight: FontWeight.w700)),
-        content: Text('정말 방에서 나갈까요?', style: GoogleFonts.notoSans(color: kTextSub)),
+        title: Text('방 나가기', style: mainTitle(size: 24)),
+        content: Text('정말 방에서 나갈까요?', style: mainBody(size: 14)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('취소', style: GoogleFonts.notoSans(color: kTextMuted))),
           TextButton(
-            onPressed: () { Navigator.pop(context); _socket.disconnect(); },
-            child: Text('나가기', style: GoogleFonts.notoSans(color: kError, fontWeight: FontWeight.w600)),
+            onPressed: () => Navigator.pop(context),
+            child: Text('취소', style: mainBody(size: 14, color: kMainMuted)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _socket.disconnect();
+            },
+            child: Text(
+              '나가기',
+              style: mainBody(size: 14, color: kError, weight: FontWeight.w700),
+            ),
           ),
         ],
       ),
@@ -48,10 +60,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final sock = _socket;
-    return Container(
-      color: kBg,
+    return CozyPage(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 32),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -72,27 +83,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 label: const Text('방 나가기'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: kError,
-                  side: const BorderSide(color: kError),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  side: BorderSide(color: kError.withAlpha(120)),
+                  backgroundColor: kMainPaper.withAlpha(210),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                 ),
               ),
             ),
             const SizedBox(height: 24),
-            Center(child: Text('비밀기지 💕 Secret Base', style: GoogleFonts.notoSans(color: kBorder, fontSize: 12))),
+            Center(
+              child: Text(
+                '비밀기지 Secret Base',
+                style: mainBody(size: 12, color: kMainMuted),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _header() => Container(
-    padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _header() => MainCard(
+    padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+    child: Row(
       children: [
-        Text('⚙️ 설정', style: GoogleFonts.notoSans(fontSize: 22, fontWeight: FontWeight.w800, color: kText)),
-        const SizedBox(height: 2),
-        Text('연결 상태와 설정을 확인해요', style: GoogleFonts.notoSans(fontSize: 13, color: kTextSub)),
+        DoodleBadge(
+          color: kMainSage,
+          backgroundColor: kMainSageSoft,
+          size: 54,
+          child: const Icon(Icons.tune_rounded, color: kMainInk, size: 24),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('설정', style: mainTitle(size: 28)),
+              const SizedBox(height: 2),
+              Text('연결 상태를 조용히 확인해요', style: mainBody(size: 13)),
+            ],
+          ),
+        ),
       ],
     ),
   );
@@ -101,13 +133,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
     title: '연결 상태',
     child: Column(
       children: [
-        _InfoRow(Icons.wifi, sock.isConnected ? kSuccess : kError, '상태', sock.status, sock.isConnected ? kSuccess : kError),
+        _InfoRow(
+          Icons.wifi,
+          sock.isConnected ? kSuccess : kError,
+          '상태',
+          sock.status,
+          sock.isConnected ? kSuccess : kError,
+        ),
         const SizedBox(height: 10),
-        if (sock.userId != null) _InfoRow(Icons.person_outline, kPrimary, '사용자', sock.userId!, null),
+        if (sock.userId != null)
+          _InfoRow(Icons.person_outline, kMainSage, '사용자', sock.userId!, null),
         if (sock.userId != null) const SizedBox(height: 10),
-        if (sock.roomCode != null) _InfoRow(Icons.meeting_room_outlined, kPrimary, '방 코드', sock.roomCode!, null),
+        if (sock.roomCode != null)
+          _InfoRow(
+            Icons.meeting_room_outlined,
+            kMainSage,
+            '방 코드',
+            sock.roomCode!,
+            null,
+          ),
         if (sock.roomCode != null) const SizedBox(height: 10),
-        if (sock.lastPingMs != null) _InfoRow(Icons.speed, kTeal, 'Ping', '${sock.lastPingMs}ms', _pingColor(sock.lastPingMs!)),
+        if (sock.lastPingMs != null)
+          _InfoRow(
+            Icons.speed,
+            kMainSky,
+            'Ping',
+            '${sock.lastPingMs}ms',
+            _pingColor(sock.lastPingMs!),
+          ),
         if (sock.lastPingMs != null) const SizedBox(height: 12),
         SizedBox(
           width: double.infinity,
@@ -116,9 +169,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: const Icon(Icons.speed, size: 16),
             label: const Text('Ping 테스트'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: kPrimary,
-              side: const BorderSide(color: kBorder),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              foregroundColor: kMainInk,
+              backgroundColor: kMainPaperSoft,
+              side: const BorderSide(color: kMainLine),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
             ),
           ),
         ),
@@ -129,28 +185,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _presenceCard(SocketService sock) => _Card(
     title: '접속자',
     child: sock.presenceUsers.isEmpty
-      ? Row(children: [
-          const Icon(Icons.person_off_outlined, color: kTextMuted, size: 18),
-          const SizedBox(width: 8),
-          Text('아직 혼자에요', style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 14)),
-        ])
-      : Column(
-          children: sock.presenceUsers.map((u) => Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(children: [
-              Container(width: 8, height: 8, decoration: const BoxDecoration(shape: BoxShape.circle, color: kSuccess)),
-              const SizedBox(width: 10),
-              Text(
-                u == sock.userId ? '$u (나)' : u,
-                style: GoogleFonts.notoSans(
-                  color: u == sock.userId ? kPrimary : kText,
-                  fontSize: 15,
-                  fontWeight: u == sock.userId ? FontWeight.w700 : FontWeight.normal,
-                ),
+        ? Row(
+            children: [
+              const Icon(
+                Icons.person_off_outlined,
+                color: kMainMuted,
+                size: 18,
               ),
-            ]),
-          )).toList(),
-        ),
+              const SizedBox(width: 8),
+              Text('아직 혼자에요', style: mainBody(size: 14, color: kMainMuted)),
+            ],
+          )
+        : Column(
+            children: sock.presenceUsers
+                .map(
+                  (u) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: kSuccess,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          u == sock.userId ? '$u (나)' : u,
+                          style: mainBody(
+                            color: u == sock.userId ? kMainInk : kMainSub,
+                            size: 15,
+                            weight: u == sock.userId
+                                ? FontWeight.w700
+                                : FontWeight.normal,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
   );
 
   Widget _logCard(SocketService sock) => _Card(
@@ -158,14 +235,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
     child: SizedBox(
       height: 160,
       child: sock.logs.isEmpty
-        ? Center(child: Text('로그 없음', style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 13)))
-        : ListView.builder(
-            itemCount: sock.logs.length,
-            itemBuilder: (_, i) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 1),
-              child: Text(sock.logs[i], style: GoogleFonts.notoSans(color: kTextSub, fontSize: 12)),
+          ? Center(
+              child: Text(
+                '로그 없음',
+                style: mainBody(size: 13, color: kMainMuted),
+              ),
+            )
+          : ListView.builder(
+              itemCount: sock.logs.length,
+              itemBuilder: (_, i) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 1),
+                child: Text(
+                  sock.logs[i],
+                  style: mainBody(size: 12, color: kMainSub, height: 1.3),
+                ),
+              ),
             ),
-          ),
     ),
   );
 
@@ -183,18 +268,21 @@ class _Card extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return MainCard(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: kCard,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kBorder),
-        boxShadow: [BoxShadow(color: kPrimary.withAlpha(12), blurRadius: 8, offset: const Offset(0, 2))],
-      ),
+      radius: 18,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+          Text(
+            title,
+            style: mainBody(
+              size: 12,
+              color: kMainSub,
+              weight: FontWeight.w800,
+              height: 1,
+            ),
+          ),
           const SizedBox(height: 12),
           child,
         ],
@@ -209,16 +297,32 @@ class _InfoRow extends StatelessWidget {
   final String label;
   final String value;
   final Color? valueColor;
-  const _InfoRow(this.icon, this.iconColor, this.label, this.value, this.valueColor);
+  const _InfoRow(
+    this.icon,
+    this.iconColor,
+    this.label,
+    this.value,
+    this.valueColor,
+  );
 
   @override
   Widget build(BuildContext context) {
-    return Row(children: [
-      Icon(icon, color: iconColor, size: 16),
-      const SizedBox(width: 8),
-      Text(label, style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 13)),
-      const Spacer(),
-      Text(value, style: GoogleFonts.notoSans(color: valueColor ?? kText, fontSize: 13, fontWeight: FontWeight.w600)),
-    ]);
+    return Row(
+      children: [
+        Icon(icon, color: iconColor, size: 16),
+        const SizedBox(width: 8),
+        Text(label, style: mainBody(size: 13, color: kMainMuted, height: 1)),
+        const Spacer(),
+        Text(
+          value,
+          style: mainBody(
+            color: valueColor ?? kMainInk,
+            size: 13,
+            weight: FontWeight.w700,
+            height: 1,
+          ),
+        ),
+      ],
+    );
   }
 }
