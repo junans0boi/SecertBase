@@ -20,6 +20,8 @@ import {
   clearDrawStack,
   hadPlayableCardOfColor,
   collectDiscardAllBatch,
+  UNO_MODES,
+  DEFAULT_UNO_MODE,
   getNextPlayer,
   checkWin as checkUnoWin,
 } from "./uno-engine.js";
@@ -49,12 +51,21 @@ const gameTypes = [
   "pirate",
   "yut",
   "uno",
+  "uno_classic",
+  "uno_go_wild",
   "bomb",
 ];
 
 const lobbySchema = z.object({
   gameType: z.enum(gameTypes),
 });
+
+const unoNewSchema = z
+  .object({
+    mode: z.enum(UNO_MODES).optional().default(DEFAULT_UNO_MODE),
+  })
+  .optional()
+  .default({ mode: DEFAULT_UNO_MODE });
 
 const rouletteSchema = z.object({
   options: z.array(z.string().min(1)).min(2).max(12),
@@ -83,6 +94,19 @@ const unoPlaySchema = z.object({
     (value) => (value === null ? undefined : value),
     z.enum(["red", "yellow", "green", "blue"]).optional(),
   ),
+});
+
+const unoReactionSchema = z.object({
+  type: z.enum([
+    "cake",
+    "candy",
+    "coffee",
+    "flyby",
+    "pillow",
+    "pizza",
+    "sportscar",
+    "tomato",
+  ]),
 });
 
 const bombAnswerSchema = z.object({
@@ -436,14 +460,18 @@ export const registerSocketHandlers = (io) => {
         if (unoGame) {
           const game = JSON.parse(unoGame);
           const userId = socket.data.userId;
-          if (game.p1 && game.p2) {
+          if (game.hands && game.discardPile) {
             activeGames.uno = {
-              gameId: game.gameId,
-              turn: game.turn,
-              topCard: game.topCard,
-              p1Count: game.p1.hand?.length ?? 0,
-              p2Count: game.p2.hand?.length ?? 0,
-              hand: userId === "p1" ? (game.p1.hand ?? []) : (game.p2.hand ?? []),
+              gameId: "active",
+              turn: game.currentPlayer,
+              mode: game.mode ?? DEFAULT_UNO_MODE,
+              topCard: game.discardPile[game.discardPile.length - 1],
+              declaredColor: game.declaredColor ?? null,
+              drawStack: game.drawStack ?? 0,
+              drawStackType: game.drawStackType ?? null,
+              handCount: getUnoHandCount(game),
+              hand: game.hands?.[userId] ?? [],
+              unoCallNeeded: game.unoCallNeeded ?? null,
             };
           }
         }
@@ -919,7 +947,7 @@ export const registerSocketHandlers = (io) => {
       }
     });
 
-    socket.on("game:uno:new", async (_, ackRaw) => {
+    socket.on("game:uno:new", async (payload, ackRaw) => {
       const ack = normalizeAck(ackRaw);
       const roomCode = socket.data.roomCode;
       const userId = socket.data.userId;
@@ -934,19 +962,27 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
+      const parsed = unoNewSchema.safeParse(payload);
+      if (!parsed.success) {
+        ack({ ok: false, reason: "invalid_payload" });
+        return;
+      }
+      const { mode } = parsed.data;
+
       const orderedPlayers = await getOrderedPlayers(roomCode, presence);
       if (orderedPlayers.length !== 2) {
         ack({ ok: false, reason: "need_two_players" });
         return;
       }
 
-      const gameState = createUnoGameState(orderedPlayers);
+      const gameState = createUnoGameState(orderedPlayers, 7, { mode });
       await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
 
       // Broadcast common info to room
       io.to(roomCode).emit("game:uno:started", {
         topCard: gameState.discardPile[gameState.discardPile.length - 1],
         currentPlayer: gameState.currentPlayer,
+        mode: gameState.mode,
         declaredColor: gameState.declaredColor,
         drawStack: 0,
         drawStackType: null,
@@ -1007,11 +1043,18 @@ export const registerSocketHandlers = (io) => {
       // Draw stack restriction: when stack is pending, only matching defense cards allowed
       const hasStack = (gameState.drawStack || 0) > 0 && gameState.drawStackType;
       if (hasStack) {
-        if (!canPlayCard(card, topCard, gameState.declaredColor, gameState.drawStack, gameState.drawStackType)) {
+        if (!canPlayCard(
+          card,
+          topCard,
+          gameState.declaredColor,
+          gameState.drawStack,
+          gameState.drawStackType,
+          { mode: gameState.mode },
+        )) {
           ack({ ok: false, reason: "must_draw_or_defend" });
           return;
         }
-      } else if (!canPlayCard(card, topCard, gameState.declaredColor)) {
+      } else if (!canPlayCard(card, topCard, gameState.declaredColor, 0, null, { mode: gameState.mode })) {
         ack({ ok: false, reason: "cannot_play_card" });
         return;
       }
@@ -1023,7 +1066,9 @@ export const registerSocketHandlers = (io) => {
       // trigger card is removed, all remaining cards of that color are also
       // discarded in current hand order.
       hand.splice(cardIndex, 1);
-      const playedCards = collectDiscardAllBatch(hand, card);
+      const playedCards = gameState.mode === "go_wild"
+        ? collectDiscardAllBatch(hand, card)
+        : [card];
       for (const playedCard of playedCards) {
         gameState.discardPile.push(playedCard);
       }
@@ -1061,6 +1106,7 @@ export const registerSocketHandlers = (io) => {
         card: playedCards[playedCards.length - 1],
         cards: playedCards,
         count: playedCards.length,
+        mode: gameState.mode,
         declaredColor: gameState.declaredColor,
         nextPlayer: gameState.currentPlayer,
         drawStack: gameState.drawStack,
@@ -1205,6 +1251,7 @@ export const registerSocketHandlers = (io) => {
         drawnPlayer,
         drawnCount,
         nextPlayer,
+        mode: gameState.mode,
         drawStack: 0,
         drawStackType: null,
         handCount: getUnoHandCount(gameState),
@@ -1220,6 +1267,36 @@ export const registerSocketHandlers = (io) => {
       }
 
       ack({ ok: true, success: challengeSuccess });
+    });
+
+    socket.on("game:uno:reaction", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+
+      const parsed = unoReactionSchema.safeParse(payload);
+      if (!parsed.success) {
+        ack({ ok: false, reason: "invalid_payload" });
+        return;
+      }
+
+      const gameText = await redis.get(unoGameKey(roomCode));
+      if (!gameText) {
+        ack({ ok: false, reason: "no_game" });
+        return;
+      }
+
+      const event = {
+        by: userId,
+        type: parsed.data.type,
+        at: Date.now(),
+      };
+      io.to(roomCode).emit("game:uno:reaction", event);
+      ack({ ok: true, event });
     });
 
     // ── 모두 내기 (Discard All) ────────────────────────────────────────────────
@@ -1269,6 +1346,7 @@ export const registerSocketHandlers = (io) => {
         by: userId,
         count: drawCount,
         nextPlayer: gameState.currentPlayer,
+        mode: gameState.mode,
         declaredColor: gameState.declaredColor,
         drawStack: 0,
         drawStackType: null,
@@ -1432,11 +1510,16 @@ export const registerSocketHandlers = (io) => {
         await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
         emitYutState(io, roomCode, "game:yut:started", gameState);
       } else if (gameType === "uno") {
-        const gameState = createUnoGameState(orderedPlayers);
+        const previousText = await redis.get(unoGameKey(roomCode));
+        const previous = previousText ? JSON.parse(previousText) : {};
+        const gameState = createUnoGameState(orderedPlayers, 7, {
+          mode: previous.mode ?? DEFAULT_UNO_MODE,
+        });
         await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
         io.to(roomCode).emit("game:uno:started", {
           topCard: gameState.discardPile[gameState.discardPile.length - 1],
           currentPlayer: gameState.currentPlayer,
+          mode: gameState.mode,
           declaredColor: gameState.declaredColor,
           drawStack: 0,
           drawStackType: null,

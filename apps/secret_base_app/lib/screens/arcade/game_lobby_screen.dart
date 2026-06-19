@@ -12,6 +12,7 @@ class GameLobbyScreen extends StatefulWidget {
   final Color color;
   final Color backgroundColor;
   final Widget gameScreen;
+  final String? unoMode;
 
   const GameLobbyScreen({
     super.key,
@@ -22,6 +23,7 @@ class GameLobbyScreen extends StatefulWidget {
     required this.color,
     required this.backgroundColor,
     required this.gameScreen,
+    this.unoMode,
   });
 
   @override
@@ -65,14 +67,17 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
   }
 
   void _beginCountdown() {
-    if (widget.gameType == 'uno') {
+    if (_isUnoLobby) {
       // Unlock audio on first interaction before countdown
       UnoAudio.instance.unlock();
     }
     setState(() => _countdown = 5);
     UnoAudio.instance.countdownBeep(5);
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (!mounted) { t.cancel(); return; }
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
       setState(() => _countdown--);
       if (_countdown <= 0) {
         t.cancel();
@@ -86,19 +91,28 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
 
   void _launchGame() {
     final isHost = _socket.userId == _socket.lobbyHost;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => widget.gameScreen),
-    );
+    Navigator.of(
+      context,
+    ).pushReplacement(MaterialPageRoute(builder: (_) => widget.gameScreen));
     if (isHost) {
       Future.delayed(const Duration(milliseconds: 300), () {
+        if (_isUnoLobby) {
+          _socket.newUnoGame(mode: widget.unoMode ?? 'go_wild');
+          return;
+        }
         switch (widget.gameType) {
-          case 'uno': _socket.newUnoGame(); break;
-          case 'yut': _socket.newYutGame(); break;
-          case 'bomb': _socket.newBombGame(); break;
+          case 'yut':
+            _socket.newYutGame();
+            break;
+          case 'bomb':
+            _socket.newBombGame();
+            break;
         }
       });
     }
   }
+
+  bool get _isUnoLobby => widget.gameType.startsWith('uno');
 
   @override
   Widget build(BuildContext context) {

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/app_theme.dart';
@@ -94,9 +95,11 @@ class _UnoScreenState extends State<UnoScreen> {
                       hand: sock.unoHand,
                       topCard: sock.unoTopCardMap,
                       declaredColor: sock.unoDeclaredColor,
+                      mode: sock.unoMode,
                       drawStack: sock.unoDrawStack,
                       drawStackType: sock.unoDrawStackType,
-                      onNewGame: sock.newUnoGame,
+                      onNewGame: () =>
+                          sock.newUnoGame(mode: sock.selectedUnoMode),
                       onDrawCard: sock.drawUnoCard,
                       onPlayCard: (cardId, color) =>
                           sock.playUnoCard(cardId, color: color),
@@ -117,6 +120,23 @@ class _UnoScreenState extends State<UnoScreen> {
                       topInset: topInset,
                     ),
                   ),
+                  if (sock.unoActive)
+                    Positioned(
+                      right: 8,
+                      top: topInset + 10,
+                      child: _UnoReactionBar(onReact: sock.sendUnoReaction),
+                    ),
+                  if (sock.unoReactionType != null)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: _UnoGiftBurst(
+                          key: ValueKey(sock.unoReactionAt),
+                          type: sock.unoReactionType!,
+                          by: sock.unoReactionBy,
+                          isMe: sock.unoReactionBy == sock.userId,
+                        ),
+                      ),
+                    ),
                   Positioned(
                     top: 0,
                     left: 0,
@@ -216,6 +236,228 @@ class _UnoTopOverlay extends StatelessWidget {
   }
 }
 
+class _UnoReactionBar extends StatelessWidget {
+  final void Function(String type) onReact;
+  const _UnoReactionBar({required this.onReact});
+
+  static const _gifts = [
+    ('cake', '🎂'),
+    ('candy', '🍬'),
+    ('coffee', '☕'),
+    ('pizza', '🍕'),
+    ('pillow', '🛏️'),
+    ('tomato', '🍅'),
+    ('flyby', '✈️'),
+    ('sportscar', '🏎️'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.28),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: _gifts
+            .map(
+              (gift) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(15),
+                  onTap: () => onReact(gift.$1),
+                  child: SizedBox(
+                    width: 34,
+                    height: 34,
+                    child: Center(
+                      child: Text(
+                        gift.$2,
+                        style: const TextStyle(fontSize: 20),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            )
+            .toList(),
+      ),
+    );
+  }
+}
+
+class _UnoGiftBurst extends StatefulWidget {
+  final String type;
+  final String? by;
+  final bool isMe;
+
+  const _UnoGiftBurst({
+    super.key,
+    required this.type,
+    required this.by,
+    required this.isMe,
+  });
+
+  @override
+  State<_UnoGiftBurst> createState() => _UnoGiftBurstState();
+}
+
+class _UnoGiftBurstState extends State<_UnoGiftBurst> {
+  @override
+  void initState() {
+    super.initState();
+    UnoAudio.instance.giftReaction(widget.type);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final gift = _UnoGiftSpec.fromType(widget.type);
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: gift.durationMs),
+      builder: (context, t, _) {
+        final opacity = t < 0.18
+            ? t / 0.18
+            : t > 0.78
+            ? (1 - t) / 0.22
+            : 1.0;
+        final curved = Curves.easeOutCubic.transform(t.clamp(0, 1));
+
+        return Opacity(
+          opacity: opacity.clamp(0.0, 1.0),
+          child: Stack(
+            children: [
+              ...List.generate(gift.count, (i) {
+                final lane = i - ((gift.count - 1) / 2);
+                final startX = widget.isMe ? -0.34 : 0.34;
+                final endX = widget.isMe ? 0.18 : -0.18;
+                final dxFactor = startX + ((endX - startX) * curved);
+                final arc =
+                    math.sin((t + i * 0.045).clamp(0, 1) * math.pi) *
+                    (72 + (i % 3) * 18);
+                final wobble = math.sin((t * 8) + i) * 10;
+
+                return Align(
+                  alignment: Alignment(dxFactor, -0.08 + lane * 0.05),
+                  child: Transform.translate(
+                    offset: Offset(wobble, -arc),
+                    child: Transform.rotate(
+                      angle: (widget.isMe ? 1 : -1) * (0.9 * t + i * 0.08),
+                      child: Transform.scale(
+                        scale: 0.82 + 0.28 * math.sin(t * math.pi),
+                        child: Text(
+                          gift.emoji,
+                          style: TextStyle(fontSize: gift.fontSize),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+              Align(
+                alignment: const Alignment(0, 0.42),
+                child: Text(
+                  widget.isMe ? '나의 선물' : '${widget.by ?? '상대'}의 선물',
+                  style: GoogleFonts.notoSans(
+                    color: Colors.white.withValues(alpha: 0.74),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    shadows: const [Shadow(color: Colors.black, blurRadius: 8)],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _UnoGiftSpec {
+  final String emoji;
+  final int count;
+  final double fontSize;
+  final int durationMs;
+
+  const _UnoGiftSpec({
+    required this.emoji,
+    required this.count,
+    required this.fontSize,
+    required this.durationMs,
+  });
+
+  static _UnoGiftSpec fromType(String type) {
+    switch (type) {
+      case 'cake':
+        return const _UnoGiftSpec(
+          emoji: '🎂',
+          count: 9,
+          fontSize: 38,
+          durationMs: 1350,
+        );
+      case 'candy':
+        return const _UnoGiftSpec(
+          emoji: '🍬',
+          count: 7,
+          fontSize: 36,
+          durationMs: 1100,
+        );
+      case 'coffee':
+        return const _UnoGiftSpec(
+          emoji: '☕',
+          count: 5,
+          fontSize: 38,
+          durationMs: 1150,
+        );
+      case 'pizza':
+        return const _UnoGiftSpec(
+          emoji: '🍕',
+          count: 6,
+          fontSize: 38,
+          durationMs: 1150,
+        );
+      case 'pillow':
+        return const _UnoGiftSpec(
+          emoji: '🛏️',
+          count: 9,
+          fontSize: 34,
+          durationMs: 1300,
+        );
+      case 'tomato':
+        return const _UnoGiftSpec(
+          emoji: '🍅',
+          count: 8,
+          fontSize: 36,
+          durationMs: 1050,
+        );
+      case 'flyby':
+        return const _UnoGiftSpec(
+          emoji: '✈️',
+          count: 3,
+          fontSize: 46,
+          durationMs: 1250,
+        );
+      case 'sportscar':
+        return const _UnoGiftSpec(
+          emoji: '🏎️',
+          count: 3,
+          fontSize: 46,
+          durationMs: 1250,
+        );
+      default:
+        return const _UnoGiftSpec(
+          emoji: '🎁',
+          count: 5,
+          fontSize: 38,
+          durationMs: 1100,
+        );
+    }
+  }
+}
+
 class _UnoStatus extends StatelessWidget {
   final SocketService sock;
   const _UnoStatus({required this.sock});
@@ -223,11 +465,14 @@ class _UnoStatus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMyTurn = sock.unoCurrentPlayer == sock.userId;
+    final modeLabel = sock.unoActive
+        ? (sock.unoMode == 'classic' ? '클래식' : '고와일드')
+        : (sock.selectedUnoMode == 'classic' ? '클래식' : '고와일드');
     final text = !sock.unoActive
-        ? '새 게임을 시작하면 7장씩 받고 바로 플레이합니다.'
+        ? '$modeLabel · 새 게임을 시작하면 7장씩 받고 바로 플레이합니다.'
         : isMyTurn
-        ? '내 턴 · 낼 수 있는 카드를 터치하거나 더미를 눌러 뽑기'
-        : '${sock.unoCurrentPlayer ?? '상대'} 차례입니다';
+        ? '$modeLabel · 내 턴 · 낼 수 있는 카드를 터치하거나 더미를 눌러 뽑기'
+        : '$modeLabel · ${sock.unoCurrentPlayer ?? '상대'} 차례입니다';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   COLORS,
+  canPlayCard,
   createDeck,
   collectDiscardAllBatch,
   applyCardEffect,
@@ -15,6 +16,44 @@ test('UNO deck includes colored discard_all cards', () => {
     const cards = deck.filter((card) => card.color === color && card.value === 'discard_all');
     assert.equal(cards.length, 2);
   }
+});
+
+test('classic deck excludes discard_all cards', () => {
+  const deck = createDeck({ mode: 'classic' });
+
+  assert.equal(deck.some((card) => card.value === 'discard_all'), false);
+});
+
+test('go wild allows cross stacking draw2 and wild draw4', () => {
+  const topCard = { color: 'red', value: 'draw2', id: 'red-draw2-a' };
+
+  assert.equal(
+    canPlayCard(
+      { color: null, value: 'wild_draw4', id: 'wild_draw4-0' },
+      topCard,
+      null,
+      2,
+      'draw2',
+      { mode: 'go_wild' },
+    ),
+    true,
+  );
+});
+
+test('classic blocks draw stack defense', () => {
+  const topCard = { color: 'red', value: 'draw2', id: 'red-draw2-a' };
+
+  assert.equal(
+    canPlayCard(
+      { color: null, value: 'wild_draw4', id: 'wild_draw4-0' },
+      topCard,
+      null,
+      2,
+      'draw2',
+      { mode: 'classic' },
+    ),
+    false,
+  );
 });
 
 test('discard_all card discards every card of its own color only', () => {

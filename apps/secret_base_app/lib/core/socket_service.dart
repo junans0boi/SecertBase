@@ -73,6 +73,8 @@ class SocketService extends ChangeNotifier {
   String? unoTopCard;
   Map<String, dynamic>? unoTopCardMap;
   String? unoDeclaredColor;
+  String unoMode = 'go_wild';
+  String selectedUnoMode = 'go_wild';
   int? unoP1Count;
   int? unoP2Count;
   List<String> unoPlayers = [];
@@ -86,6 +88,9 @@ class SocketService extends ChangeNotifier {
   // special card effect tracking (for opponent's plays)
   String? unoLastSpecialCard;
   String? unoLastSpecialBy;
+  String? unoReactionType;
+  String? unoReactionBy;
+  int? unoReactionAt;
 
   // menu / reconnect state
   bool restartPending = false; // received opponent's restart request
@@ -318,6 +323,8 @@ class SocketService extends ChangeNotifier {
       unoActive = true;
       restartWaiting = false;
       unoCurrentPlayer = map['currentPlayer'] as String?;
+      unoMode = map['mode'] as String? ?? 'go_wild';
+      selectedUnoMode = unoMode;
       final topCardRaw = map['topCard'];
       unoTopCardMap = _cardMap(topCardRaw);
       unoTopCard = unoTopCardMap == null
@@ -328,6 +335,9 @@ class SocketService extends ChangeNotifier {
       unoDrawStackType = null;
       unoLastSpecialCard = null;
       unoLastSpecialBy = null;
+      unoReactionType = null;
+      unoReactionBy = null;
+      unoReactionAt = null;
       _applyUnoCounts(map['handCount']);
       unoHand = [];
       unoWinner = null;
@@ -349,6 +359,7 @@ class SocketService extends ChangeNotifier {
     socket.on('game:uno:played', (data) {
       final map = _m(data);
       unoCurrentPlayer = map['nextPlayer'] as String?;
+      unoMode = map['mode'] as String? ?? unoMode;
       final card = _m(map['card'] ?? {});
       unoTopCardMap = card;
       unoTopCard = '${card['color']} ${card['value']}';
@@ -380,6 +391,7 @@ class SocketService extends ChangeNotifier {
     socket.on('game:uno:drawn', (data) {
       final map = _m(data);
       unoCurrentPlayer = map['nextPlayer'] as String?;
+      unoMode = map['mode'] as String? ?? unoMode;
       unoDeclaredColor = map['declaredColor'] as String? ?? unoDeclaredColor;
       unoDrawStack = 0;
       unoDrawStackType = null;
@@ -392,6 +404,7 @@ class SocketService extends ChangeNotifier {
     socket.on('game:uno:challenged', (data) {
       final map = _m(data);
       unoCurrentPlayer = map['nextPlayer'] as String?;
+      unoMode = map['mode'] as String? ?? unoMode;
       unoDrawStack = 0;
       unoDrawStackType = null;
       _applyUnoCounts(map['handCount']);
@@ -414,7 +427,7 @@ class SocketService extends ChangeNotifier {
       _applyUnoCounts(map['handCount']);
       _applyUnoCallNeeded(map['unoCallNeeded']);
       final count = map['count'] as int? ?? 0;
-      _log('UNO 모두내기: ${map['by']} ${count}장');
+      _log('UNO 모두내기: ${map['by']} $count장');
       notifyListeners();
     });
 
@@ -422,6 +435,16 @@ class SocketService extends ChangeNotifier {
       unoPendingCall = false;
       unoCatchable = false;
       _log('UNO 선언: ${_m(data)['by']}');
+      notifyListeners();
+    });
+
+    socket.on('game:uno:reaction', (data) {
+      final map = _m(data);
+      unoReactionType = map['type'] as String?;
+      unoReactionBy = map['by'] as String?;
+      unoReactionAt =
+          (map['at'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch;
+      _log('UNO 선물 리액션: $unoReactionBy $unoReactionType');
       notifyListeners();
     });
 
@@ -541,6 +564,9 @@ class SocketService extends ChangeNotifier {
     unoDrawStackType = null;
     unoLastSpecialCard = null;
     unoLastSpecialBy = null;
+    unoReactionType = null;
+    unoReactionBy = null;
+    unoReactionAt = null;
     bombActive = false;
     restartPending = false;
     restartWaiting = false;
@@ -670,7 +696,14 @@ class SocketService extends ChangeNotifier {
   void moveYut(int pieceId) =>
       _socket?.emit('game:yut:move', {'pieceId': pieceId});
 
-  void newUnoGame() => _socket?.emit('game:uno:new');
+  void setUnoMode(String mode) {
+    if (mode != 'classic' && mode != 'go_wild') return;
+    selectedUnoMode = mode;
+    notifyListeners();
+  }
+
+  void newUnoGame({String? mode}) =>
+      _socket?.emit('game:uno:new', {'mode': mode ?? selectedUnoMode});
   void playUnoCard(String cardId, {String? color}) {
     final payload = {'cardId': cardId};
     if (color != null) {
@@ -694,6 +727,8 @@ class SocketService extends ChangeNotifier {
 
   void challengeDraw4() => _socket?.emit('game:uno:challenge');
   void discardAllUno() => _socket?.emit('game:uno:discard_all');
+  void sendUnoReaction(String type) =>
+      _socket?.emit('game:uno:reaction', {'type': type});
 
   void newBombGame({int duration = 30}) =>
       _socket?.emit('game:bomb:new', {'duration': duration});
@@ -713,9 +748,17 @@ class SocketService extends ChangeNotifier {
       final uno = _m(games['uno']);
       unoActive = true;
       unoCurrentPlayer = uno['turn'] as String?;
+      unoMode = uno['mode'] as String? ?? unoMode;
+      selectedUnoMode = unoMode;
       unoTopCardMap = _cardMap(uno['topCard']);
       unoTopCard = unoTopCardMap?.toString() ?? uno['topCard']?.toString();
-      unoHand = [];
+      unoDeclaredColor = uno['declaredColor'] as String?;
+      unoDrawStack = (uno['drawStack'] as num?)?.toInt() ?? 0;
+      unoDrawStackType = uno['drawStackType'] as String?;
+      _applyUnoCounts(uno['handCount']);
+      _applyUnoCallNeeded(uno['unoCallNeeded']);
+      final hand = uno['hand'];
+      unoHand = hand is List ? hand : [];
       _log('UNO 복원');
     }
     if (games.containsKey('bomb')) {

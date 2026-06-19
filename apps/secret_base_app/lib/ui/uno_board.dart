@@ -11,6 +11,7 @@ class UnoBoard extends StatefulWidget {
   final List<dynamic>? hand;
   final Map<String, dynamic>? topCard;
   final String? declaredColor;
+  final String mode;
   final int drawStack;
   final String? drawStackType;
   final VoidCallback onNewGame;
@@ -34,6 +35,7 @@ class UnoBoard extends StatefulWidget {
     this.hand,
     this.topCard,
     this.declaredColor,
+    this.mode = 'go_wild',
     this.drawStack = 0,
     this.drawStackType,
     required this.onNewGame,
@@ -263,8 +265,10 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
     final val = card['value'] as String?;
     // In draw stack mode, only matching defense cards are playable
     if (widget.drawStack > 0 && widget.drawStackType != null) {
-      return val == widget.drawStackType;
+      if (widget.mode == 'classic') return false;
+      return val == 'draw2' || val == 'wild_draw4';
     }
+    if (widget.mode == 'classic' && val == 'discard_all') return false;
     // Normal playability check (mirrors server canPlayCard)
     if (val == 'wild' || val == 'wild_draw4') return true;
     final topCard = widget.topCard;
@@ -653,7 +657,8 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
                                         fontSize: isCompact ? 14 : 16,
                                       ),
                                     ),
-                                    if (hasPendingStack) ...[
+                                    if (hasPendingStack &&
+                                        widget.mode != 'classic') ...[
                                       if (!isCompact) ...[
                                         const SizedBox(width: 8),
                                         Text(

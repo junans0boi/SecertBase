@@ -15,12 +15,17 @@ export const COLORS = ['red', 'yellow', 'green', 'blue'];
 export const NUMBERS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 export const ACTIONS = ['skip', 'reverse', 'draw2', 'discard_all'];
 export const WILDS = ['wild', 'wild_draw4'];
+export const UNO_MODES = ['classic', 'go_wild'];
+export const DEFAULT_UNO_MODE = 'go_wild';
 
 /**
  * Create a standard UNO deck
  */
-export function createDeck() {
+export function createDeck({ mode = DEFAULT_UNO_MODE } = {}) {
   const cards = [];
+  const actions = mode === 'classic'
+    ? ACTIONS.filter((action) => action !== 'discard_all')
+    : ACTIONS;
 
   // Number cards (2 each for 1-9, 1 each for 0)
   COLORS.forEach((color) => {
@@ -33,7 +38,7 @@ export function createDeck() {
 
   // Action cards (2 each per color)
   COLORS.forEach((color) => {
-    ACTIONS.forEach((action) => {
+    actions.forEach((action) => {
       cards.push({ color, value: action, id: `${color}-${action}-a` });
       cards.push({ color, value: action, id: `${color}-${action}-b` });
     });
@@ -63,10 +68,22 @@ export function shuffle(array) {
  * Check if a card can be played on top card.
  * When drawStack > 0, only matching defense cards are allowed.
  */
-export function canPlayCard(card, topCard, declaredColor = null, drawStack = 0, drawStackType = null) {
+export function canPlayCard(
+  card,
+  topCard,
+  declaredColor = null,
+  drawStack = 0,
+  drawStackType = null,
+  { mode = DEFAULT_UNO_MODE } = {},
+) {
   // Draw stack restriction: must defend with same type or accept
   if (drawStack > 0 && drawStackType) {
-    return card.value === drawStackType;
+    if (mode === 'classic') return false;
+    return card.value === 'draw2' || card.value === 'wild_draw4';
+  }
+
+  if (mode === 'classic' && card.value === 'discard_all') {
+    return false;
   }
 
   if (card.value === 'wild' || card.value === 'wild_draw4') {
@@ -122,8 +139,9 @@ export function collectDiscardAllBatch(hand, triggerCard) {
 /**
  * Initialize UNO game
  */
-export function createUnoGameState(players, handSize = 7) {
-  const deck = shuffle(createDeck());
+export function createUnoGameState(players, handSize = 7, options = {}) {
+  const mode = UNO_MODES.includes(options.mode) ? options.mode : DEFAULT_UNO_MODE;
+  const deck = shuffle(createDeck({ mode }));
   const hands = {};
 
   players.forEach((player) => {
@@ -139,6 +157,7 @@ export function createUnoGameState(players, handSize = 7) {
   }
 
   return {
+    mode,
     players,
     hands,
     deck,

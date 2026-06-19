@@ -39,6 +39,16 @@ This document outlines the current server configuration and deployment steps for
   - `/health` -> Proxied to `http://localhost:4100/health`
 
 ## HTTP Deployment Commands
+
+Preferred deployment command:
+
+```bash
+cd /home/junzzang/SecertBase
+./scripts/deploy_server.sh
+```
+
+Manual equivalent:
+
 ```bash
 cd /home/junzzang/SecertBase/apps/secret_base_app
 flutter build web --release --no-wasm-dry-run --dart-define=SOCKET_URL=http://secertbase.kro.kr

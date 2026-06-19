@@ -65,10 +65,10 @@ class UnoAudio {
   // ── 색상 선언 (Wild / +4 이후) ────────────────────────────────────────────
   Future<void> colorDeclared(String color) {
     const map = {
-      'green':  'color_green.mp3',
-      'red':    'color_red.mp3',
+      'green': 'color_green.mp3',
+      'red': 'color_red.mp3',
       'yellow': 'color_yellow.mp3',
-      'blue':   'color_blue.mp3',
+      'blue': 'color_blue.mp3',
     };
     final f = map[color];
     if (f == null) return Future.value();
@@ -76,8 +76,25 @@ class UnoAudio {
   }
 
   // ── UNO 선언 / 잡기 ───────────────────────────────────────────────────────
-  Future<void> unoCall()   => _play('voice_uno.mp3');
+  Future<void> unoCall() => _play('voice_uno.mp3');
   Future<void> unoCaught() => _play('voice_oops.mp3');
+
+  // ── 선물 / 장난 리액션 ───────────────────────────────────────────────────
+  Future<void> giftReaction(String type) {
+    const map = {
+      'cake': 'gift_cake_9hit.wav',
+      'candy': 'gift_candy.wav',
+      'coffee': 'gift_coffee.wav',
+      'flyby': 'gift_flyby.wav',
+      'pillow': 'gift_pillow_9hit.wav',
+      'pizza': 'gift_pizza.wav',
+      'sportscar': 'gift_sportscar.wav',
+      'tomato': 'item_tomato.wav',
+    };
+    final file = map[type];
+    if (file == null) return Future.value();
+    return _play(file);
+  }
 
   // ── 게임 시작 카운트다운 ──────────────────────────────────────────────────
   // remaining: 5→4→3→2→1, gamestart_5.mp3 ~ gamestart_1.mp3 순으로 재생
@@ -85,6 +102,7 @@ class UnoAudio {
     final n = remaining.clamp(1, 5);
     return _play('gamestart_$n.mp3');
   }
+
   Future<void> countdownEnd() => _play('gamestart_end.mp3');
 
   // ── 턴 타이머 카운트다운 ──────────────────────────────────────────────────

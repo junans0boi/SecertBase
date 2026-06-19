@@ -78,6 +78,14 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
 
   void _open(int i) {
     final info = _games[i];
+    if (info.gameType == 'uno') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const _UnoModeSelectScreen()),
+      );
+      return;
+    }
+
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -206,6 +214,305 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
           ),
         );
       },
+    );
+  }
+}
+
+class _UnoModeSelectScreen extends StatelessWidget {
+  const _UnoModeSelectScreen();
+
+  void _openLobby(BuildContext context, _UnoModeInfo mode) {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => GameLobbyScreen(
+          gameType: mode.lobbyType,
+          title: mode.title,
+          description: mode.description,
+          emoji: mode.emoji,
+          color: mode.color,
+          backgroundColor: mode.backgroundColor,
+          gameScreen: const UnoScreen(),
+          unoMode: mode.mode,
+        ),
+      ),
+    );
+  }
+
+  static const _modes = [
+    _UnoModeInfo(
+      mode: 'classic',
+      lobbyType: 'uno_classic',
+      emoji: '🃏',
+      title: '클래식',
+      description: '기본 UNO 룰',
+      badge: '기본',
+      color: kMainRose,
+      backgroundColor: kMainRoseSoft,
+    ),
+    _UnoModeInfo(
+      mode: 'go_wild',
+      lobbyType: 'uno_go_wild',
+      emoji: '⚡',
+      title: '고와일드',
+      description: '스태킹 + 모두내기',
+      badge: '추천',
+      color: kMainHoney,
+      backgroundColor: kMainHoneySoft,
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: kMainBg,
+      body: SafeArea(
+        child: CozyPage(
+          child: CustomScrollView(
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(18, 14, 18, 12),
+                sliver: SliverToBoxAdapter(
+                  child: _Header(onBack: () => Navigator.of(context).pop()),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(18, 4, 18, 28),
+                sliver: SliverLayoutBuilder(
+                  builder: (context, constraints) {
+                    final wide = constraints.crossAxisExtent >= 720;
+                    return SliverGrid.builder(
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: wide ? 2 : 1,
+                        crossAxisSpacing: 14,
+                        mainAxisSpacing: 14,
+                        childAspectRatio: wide ? 0.82 : 1.75,
+                      ),
+                      itemCount: _modes.length,
+                      itemBuilder: (_, i) => _UnoModeCard(
+                        mode: _modes[i],
+                        wide: wide,
+                        onTap: () => _openLobby(context, _modes[i]),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Header extends StatelessWidget {
+  final VoidCallback onBack;
+  const _Header({required this.onBack});
+
+  @override
+  Widget build(BuildContext context) {
+    return MainCard(
+      padding: const EdgeInsets.fromLTRB(10, 10, 14, 10),
+      radius: 16,
+      color: kMainPaper.withAlpha(242),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: onBack,
+            icon: const Icon(Icons.arrow_back_ios_new, size: 18),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('UNO 모드 선택', style: mainTitle(size: 24)),
+                const SizedBox(height: 2),
+                Text(
+                  '플레이할 룰을 고르고 대기방에 들어가요',
+                  style: mainBody(size: 12, color: kMainSub),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _UnoModeInfo {
+  final String mode;
+  final String lobbyType;
+  final String emoji;
+  final String title;
+  final String description;
+  final String badge;
+  final Color color;
+  final Color backgroundColor;
+
+  const _UnoModeInfo({
+    required this.mode,
+    required this.lobbyType,
+    required this.emoji,
+    required this.title,
+    required this.description,
+    required this.badge,
+    required this.color,
+    required this.backgroundColor,
+  });
+}
+
+class _UnoModeCard extends StatelessWidget {
+  final _UnoModeInfo mode;
+  final bool wide;
+  final VoidCallback onTap;
+
+  const _UnoModeCard({
+    required this.mode,
+    required this.wide,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Ink(
+          decoration: BoxDecoration(
+            color: mode.backgroundColor,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: mode.color.withAlpha(110), width: 1.4),
+            boxShadow: [
+              BoxShadow(
+                color: mode.color.withAlpha(26),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(wide ? 18 : 14),
+            child: wide ? _wideContent() : _compactContent(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _compactContent() {
+    return Row(
+      children: [
+        _cardFace(92),
+        const SizedBox(width: 16),
+        Expanded(child: _textContent()),
+        const SizedBox(width: 8),
+        Icon(Icons.arrow_forward_ios, size: 18, color: mode.color),
+      ],
+    );
+  }
+
+  Widget _wideContent() {
+    return Column(
+      children: [
+        Expanded(child: Center(child: _cardFace(150))),
+        const SizedBox(height: 18),
+        _textContent(center: true),
+      ],
+    );
+  }
+
+  Widget _textContent({bool center = false}) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: center
+          ? CrossAxisAlignment.center
+          : CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: mode.color,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(
+            mode.badge,
+            style: mainBody(
+              size: 11,
+              color: Colors.white,
+              weight: FontWeight.w900,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          mode.title,
+          textAlign: center ? TextAlign.center : TextAlign.start,
+          style: mainTitle(size: wide ? 28 : 24, color: kMainInk),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          mode.description,
+          textAlign: center ? TextAlign.center : TextAlign.start,
+          style: mainBody(size: 13, color: kMainSub, weight: FontWeight.w700),
+        ),
+      ],
+    );
+  }
+
+  Widget _cardFace(double width) {
+    return Transform.rotate(
+      angle: mode.mode == 'classic' ? -0.08 : 0.08,
+      child: Container(
+        width: width,
+        height: width * 1.42,
+        decoration: BoxDecoration(
+          color: mode.mode == 'classic'
+              ? const Color(0xFF171717)
+              : const Color(0xFF7B3FF2),
+          borderRadius: BorderRadius.circular(width * 0.09),
+          border: Border.all(color: Colors.white, width: width * 0.045),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x33000000),
+              blurRadius: 12,
+              offset: Offset(0, 7),
+            ),
+          ],
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Transform.rotate(
+              angle: -0.55,
+              child: Container(
+                width: width * 0.78,
+                height: width * 0.5,
+                decoration: BoxDecoration(
+                  color: Colors.white.withAlpha(235),
+                  borderRadius: BorderRadius.circular(width * 0.35),
+                ),
+              ),
+            ),
+            Text(mode.emoji, style: TextStyle(fontSize: width * 0.34)),
+            Positioned(
+              bottom: width * 0.17,
+              child: Text(
+                mode.mode == 'classic' ? 'CLASSIC' : 'GO WILD',
+                style: mainBody(
+                  size: width * 0.12,
+                  color: Colors.white,
+                  weight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
