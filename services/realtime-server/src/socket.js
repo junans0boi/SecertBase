@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { config } from "./config.js";
+import { query } from "./db.js";
 import { redis } from "./redis.js";
 import {
   throwYut,
@@ -16,6 +17,8 @@ import {
   canPlayCard,
   drawCards,
   applyCardEffect,
+  clearDrawStack,
+  hadPlayableCardOfColor,
   getNextPlayer,
   checkWin as checkUnoWin,
 } from "./uno-engine.js";
@@ -177,8 +180,41 @@ const cleanupLobbyForUser = async (io, roomCode, gameType, userId) => {
   emitLobby(io, roomCode, lobby);
 };
 
-const getOrderedPlayers = (presence) =>
-  config.ALLOWED_USERS.filter((user) => presence.includes(user));
+const getRoomMembers = async (roomCode, roomSecret) => {
+  const result = await query(
+    `SELECT c.RoomCode, c.RoomSecret, u1.UserCode AS User1Code, u2.UserCode AS User2Code
+     FROM Couples c
+     JOIN Users u1 ON c.User1Id = u1.UserId
+     JOIN Users u2 ON c.User2Id = u2.UserId
+     WHERE c.RoomCode = ? AND c.RoomSecret = ?`,
+    [roomCode, roomSecret],
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  const room = result.rows[0];
+  return [room.User1Code, room.User2Code];
+};
+
+const getOrderedPlayers = async (roomCode, presence) => {
+  const result = await query(
+    `SELECT u1.UserCode AS User1Code, u2.UserCode AS User2Code
+     FROM Couples c
+     JOIN Users u1 ON c.User1Id = u1.UserId
+     JOIN Users u2 ON c.User2Id = u2.UserId
+     WHERE c.RoomCode = ?`,
+    [roomCode],
+  );
+
+  if (result.rows.length > 0) {
+    const room = result.rows[0];
+    return [room.User1Code, room.User2Code].filter((user) => presence.includes(user));
+  }
+
+  return presence.slice(0, 2);
+};
 
 const emitYutState = (io, roomCode, eventName, gameState, extra = {}) => {
   io.to(roomCode).emit(eventName, {
@@ -206,11 +242,14 @@ export const registerSocketHandlers = (io) => {
       }
 
       const { userId, roomCode, roomSecret, profileEmoji } = parsed.data;
-      if (roomSecret !== config.ROOM_SECRET) {
+      const roomMembers = await getRoomMembers(roomCode, roomSecret);
+      const isLegacyRoom = roomSecret === config.ROOM_SECRET;
+
+      if (!roomMembers && !isLegacyRoom) {
         ack({ ok: false, reason: "invalid_secret" });
         return;
       }
-      if (!config.ALLOWED_USERS.includes(userId)) {
+      if (roomMembers && !roomMembers.includes(userId)) {
         ack({ ok: false, reason: "forbidden_user" });
         return;
       }
@@ -650,7 +689,11 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const [player1, player2] = getOrderedPlayers(presence);
+      const [player1, player2] = await getOrderedPlayers(roomCode, presence);
+      if (!player1 || !player2) {
+        ack({ ok: false, reason: "need_two_players" });
+        return;
+      }
       const gameState = createYutGameState(player1, player2);
       await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
 
@@ -884,7 +927,13 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const gameState = createUnoGameState(presence);
+      const orderedPlayers = await getOrderedPlayers(roomCode, presence);
+      if (orderedPlayers.length !== 2) {
+        ack({ ok: false, reason: "need_two_players" });
+        return;
+      }
+
+      const gameState = createUnoGameState(orderedPlayers);
       await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
 
       // Broadcast common info to room
@@ -892,6 +941,8 @@ export const registerSocketHandlers = (io) => {
         topCard: gameState.discardPile[gameState.discardPile.length - 1],
         currentPlayer: gameState.currentPlayer,
         declaredColor: gameState.declaredColor,
+        drawStack: 0,
+        drawStackType: null,
         handCount: getUnoHandCount(gameState),
       });
 
@@ -946,18 +997,28 @@ export const registerSocketHandlers = (io) => {
       const card = hand[cardIndex];
       const topCard = gameState.discardPile[gameState.discardPile.length - 1];
 
-      if (!canPlayCard(card, topCard, gameState.declaredColor)) {
+      // Draw stack restriction: when stack is pending, only matching defense cards allowed
+      const hasStack = (gameState.drawStack || 0) > 0 && gameState.drawStackType;
+      if (hasStack) {
+        if (!canPlayCard(card, topCard, gameState.declaredColor, gameState.drawStack, gameState.drawStackType)) {
+          ack({ ok: false, reason: "must_draw_or_defend" });
+          return;
+        }
+      } else if (!canPlayCard(card, topCard, gameState.declaredColor)) {
         ack({ ok: false, reason: "cannot_play_card" });
         return;
       }
+
+      // Capture previous effective color (needed for +4 challenge tracking)
+      const previousColor = gameState.declaredColor || topCard.color;
 
       // Remove card from hand
       hand.splice(cardIndex, 1);
       gameState.discardPile.push(card);
       gameState.declaredColor = declaredColor || null;
 
-      // Apply card effect
-      applyCardEffect(gameState, card);
+      // Apply card effect (pass previousColor for draw4 tracking)
+      applyCardEffect(gameState, card, previousColor);
 
       // Check win
       const won = checkUnoWin(gameState, userId);
@@ -987,6 +1048,7 @@ export const registerSocketHandlers = (io) => {
         declaredColor: gameState.declaredColor,
         nextPlayer: gameState.currentPlayer,
         drawStack: gameState.drawStack,
+        drawStackType: gameState.drawStackType ?? null,
         handCount: getUnoHandCount(gameState),
         winner: gameState.winner,
         unoCallNeeded: gameState.unoCallNeeded ?? null,
@@ -1067,6 +1129,82 @@ export const registerSocketHandlers = (io) => {
       ack({ ok: true });
     });
 
+    // +4 도전: 상대가 +4를 낼 자격이 있었는지 확인
+    socket.on("game:uno:challenge", async (_, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) { ack({ ok: false, reason: "not_joined" }); return; }
+
+      const gameText = await redis.get(unoGameKey(roomCode));
+      if (!gameText) { ack({ ok: false, reason: "no_game" }); return; }
+
+      const gameState = JSON.parse(gameText);
+
+      // Only allowed when draw4 stack is pending and it's the challenger's turn
+      if (gameState.drawStackType !== "wild_draw4" || gameState.currentPlayer !== userId) {
+        ack({ ok: false, reason: "cannot_challenge" });
+        return;
+      }
+
+      const attackerPlayer = gameState.lastDraw4Player;
+      const colorBefore = gameState.colorBeforeDraw4;
+
+      if (!attackerPlayer || !colorBefore) {
+        ack({ ok: false, reason: "no_challenge_data" });
+        return;
+      }
+
+      // Did the attacker have a card of colorBefore? → challenge success
+      const attackerHand = gameState.hands[attackerPlayer] ?? [];
+      const challengeSuccess = hadPlayableCardOfColor(attackerHand, colorBefore);
+
+      let drawnPlayer, drawnCount, nextPlayer;
+
+      if (challengeSuccess) {
+        // Attacker draws 6 (penalty for illegal +4)
+        drawnCount = 6;
+        drawnPlayer = attackerPlayer;
+        nextPlayer = userId; // challenger gets their turn
+      } else {
+        // Challenger draws 6 (4 base + 2 fail penalty)
+        drawnCount = 6;
+        drawnPlayer = userId;
+        nextPlayer = attackerPlayer; // challenger loses turn, attacker continues
+      }
+
+      const drawnCards = drawCards(gameState, drawnCount);
+      gameState.hands[drawnPlayer].push(...drawnCards);
+      clearDrawStack(gameState);
+      gameState.currentPlayer = nextPlayer;
+      gameState.declaredColor = challengeSuccess ? null : gameState.declaredColor;
+
+      await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
+
+      io.to(roomCode).emit("game:uno:challenged", {
+        by: userId,
+        challenged: attackerPlayer,
+        success: challengeSuccess,
+        drawnPlayer,
+        drawnCount,
+        nextPlayer,
+        drawStack: 0,
+        drawStackType: null,
+        handCount: getUnoHandCount(gameState),
+      });
+
+      // Send updated hand to the player who drew
+      const sockets = await io.in(roomCode).fetchSockets();
+      for (const sock of sockets) {
+        if (sock.data.userId === drawnPlayer) {
+          sock.emit("game:uno:hand_update", { hand: gameState.hands[drawnPlayer] });
+          break;
+        }
+      }
+
+      ack({ ok: true, success: challengeSuccess });
+    });
+
     socket.on("game:uno:draw", async (_, ackRaw) => {
       const ack = normalizeAck(ackRaw);
       const roomCode = socket.data.roomCode;
@@ -1088,10 +1226,10 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const drawCount = gameState.drawStack > 0 ? gameState.drawStack : 1;
+      const drawCount = (gameState.drawStack || 0) > 0 ? gameState.drawStack : 1;
       const drawnCards = drawCards(gameState, drawCount);
       gameState.hands[userId].push(...drawnCards);
-      gameState.drawStack = 0;
+      clearDrawStack(gameState);
 
       // Next turn
       gameState.currentPlayer = getNextPlayer(gameState);
@@ -1108,6 +1246,8 @@ export const registerSocketHandlers = (io) => {
         count: drawCount,
         nextPlayer: gameState.currentPlayer,
         declaredColor: gameState.declaredColor,
+        drawStack: 0,
+        drawStackType: null,
         handCount: getUnoHandCount(gameState),
         unoCallNeeded: gameState.unoCallNeeded ?? null,
       };
@@ -1139,7 +1279,13 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const gameState = createBombGameState(presence, parsed.data.duration);
+      const orderedPlayers = await getOrderedPlayers(roomCode, presence);
+      if (orderedPlayers.length !== 2) {
+        ack({ ok: false, reason: "need_two_players" });
+        return;
+      }
+
+      const gameState = createBombGameState(orderedPlayers, parsed.data.duration);
       await redis.set(bombGameKey(roomCode), JSON.stringify(gameState), "EX", 300);
 
       io.to(roomCode).emit("game:bomb:started", {
@@ -1250,19 +1396,26 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const [p1, p2] = getOrderedPlayers(presence);
+      const orderedPlayers = await getOrderedPlayers(roomCode, presence);
+      const [p1, p2] = orderedPlayers;
+      if (!p1 || !p2) {
+        ack({ ok: false, reason: "need_two_players" });
+        return;
+      }
 
       if (gameType === "yut") {
         const gameState = createYutGameState(p1, p2);
         await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
         emitYutState(io, roomCode, "game:yut:started", gameState);
       } else if (gameType === "uno") {
-        const gameState = createUnoGameState(presence);
+        const gameState = createUnoGameState(orderedPlayers);
         await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
         io.to(roomCode).emit("game:uno:started", {
           topCard: gameState.discardPile[gameState.discardPile.length - 1],
           currentPlayer: gameState.currentPlayer,
           declaredColor: gameState.declaredColor,
+          drawStack: 0,
+          drawStackType: null,
           handCount: getUnoHandCount(gameState),
         });
         const sockets = await io.in(roomCode).fetchSockets();
@@ -1271,7 +1424,7 @@ export const registerSocketHandlers = (io) => {
           if (gameState.hands[pid]) sock.emit("game:uno:hand_update", { hand: gameState.hands[pid] });
         }
       } else if (gameType === "bomb") {
-        const gameState = createBombGameState(presence, 30);
+        const gameState = createBombGameState(orderedPlayers, 30);
         await redis.set(bombGameKey(roomCode), JSON.stringify(gameState), "EX", 300);
         io.to(roomCode).emit("game:bomb:started", {
           currentPlayer: gameState.currentPlayer,

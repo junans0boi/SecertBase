@@ -96,8 +96,8 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
 
   int _cols(BuildContext ctx) {
     final w = MediaQuery.of(ctx).size.width;
-    if (w >= 900) return 4;
-    if (w >= 600) return 3;
+    if (w >= 1100) return 4;
+    if (w >= 720) return 3;
     return 2;
   }
 
@@ -106,18 +106,32 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     final users = _socket.presenceUsers;
     final cols = _cols(context);
     return CozyPage(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildHeader(users),
-          Expanded(
-            child: GridView.builder(
-              padding: const EdgeInsets.fromLTRB(18, 8, 18, 26),
+      child: CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 10),
+            sliver: SliverToBoxAdapter(child: _buildHeader(users)),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
+            sliver: SliverToBoxAdapter(
+              child: Row(
+                children: [
+                  Text('게임 목록', style: mainBody(weight: FontWeight.w800)),
+                  const SizedBox(width: 8),
+                  Text('${_games.length}개', style: mainBody(size: 12)),
+                ],
+              ),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 26),
+            sliver: SliverGrid.builder(
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: cols,
-                crossAxisSpacing: 13,
-                mainAxisSpacing: 13,
-                childAspectRatio: 0.94,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+                childAspectRatio: cols == 2 ? 2.15 : 2.55,
               ),
               itemCount: _games.length,
               itemBuilder: (_, i) =>
@@ -130,29 +144,68 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
   }
 
   Widget _buildHeader(List<String> users) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
-      child: MainCard(
-        padding: const EdgeInsets.fromLTRB(18, 14, 16, 14),
-        color: kMainPaper.withAlpha(235),
-        child: Row(
-          children: [
-            const CozyMascot(size: 70),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('함께 놀 시간', style: mainTitle(size: 28)),
-                  const SizedBox(height: 2),
-                  Text('오늘 어떤 게임 할까요?', style: mainBody(size: 13)),
-                ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 370;
+        return MainCard(
+          padding: EdgeInsets.fromLTRB(
+            compact ? 10 : 14,
+            compact ? 9 : 12,
+            compact ? 10 : 12,
+            compact ? 9 : 12,
+          ),
+          radius: 16,
+          color: kMainPaper.withAlpha(240),
+          child: Row(
+            children: [
+              Container(
+                width: compact ? 34 : 42,
+                height: compact ? 34 : 42,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: kMainSageSoft,
+                  borderRadius: BorderRadius.circular(compact ? 10 : 12),
+                  border: Border.all(color: kMainSage.withAlpha(120)),
+                ),
+                child: Icon(
+                  Icons.sports_esports,
+                  color: kMainInk,
+                  size: compact ? 19 : 22,
+                ),
               ),
-            ),
-            _PresenceChip(users: users),
-          ],
-        ),
-      ),
+              SizedBox(width: compact ? 8 : 12),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '함께 놀 시간',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: mainTitle(size: compact ? 21 : 24),
+                    ),
+                    if (!compact) ...[
+                      const SizedBox(height: 1),
+                      Text(
+                        '바로 고르고 같이 시작해요',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: mainBody(size: 12, height: 1.2),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              SizedBox(width: compact ? 6 : 10),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: compact ? 78 : 132),
+                child: _PresenceChip(users: users, compact: compact),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -181,54 +234,114 @@ class _GameCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: MainCard(
-        padding: EdgeInsets.zero,
-        radius: 20,
-        borderColor: info.color.withAlpha(95),
-        child: Padding(
-          padding: const EdgeInsets.all(15),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              DoodleBadge(
-                color: info.color,
-                backgroundColor: info.bgColor,
-                child: Text(info.emoji, style: const TextStyle(fontSize: 24)),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 165;
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(14),
+            child: Ink(
+              decoration: BoxDecoration(
+                color: kMainPaper,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: info.color.withAlpha(85)),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF8A7F70).withAlpha(12),
+                    blurRadius: 12,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
               ),
-              const Spacer(),
-              Text(
-                info.name,
-                style: mainBody(
-                  size: 15,
-                  color: kMainInk,
-                  weight: FontWeight.w800,
-                  height: 1.2,
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: compact ? 8 : 10,
+                  vertical: 8,
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: compact ? 34 : 42,
+                      height: compact ? 34 : 42,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: info.bgColor,
+                        borderRadius: BorderRadius.circular(11),
+                        border: Border.all(color: info.color.withAlpha(120)),
+                      ),
+                      child: Text(
+                        info.emoji,
+                        style: TextStyle(
+                          fontSize: compact ? 19 : 22,
+                          height: 1,
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: compact ? 7 : 10),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            info.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: mainBody(
+                              size: compact ? 13 : 14,
+                              color: kMainInk,
+                              weight: FontWeight.w800,
+                              height: 1.15,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            info.desc,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: mainBody(
+                              size: compact ? 10 : 11,
+                              color: kMainMuted,
+                              height: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (!compact) ...[
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        size: 22,
+                        color: info.color,
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              const SizedBox(height: 2),
-              Text(
-                info.desc,
-                style: mainBody(size: 11, color: kMainMuted, height: 1.2),
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
 
 class _PresenceChip extends StatelessWidget {
   final List<String> users;
-  const _PresenceChip({required this.users});
+  final bool compact;
+  const _PresenceChip({required this.users, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
     if (users.isEmpty) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 9 : 12,
+          vertical: compact ? 5 : 6,
+        ),
         decoration: BoxDecoration(
           color: kMainPaperSoft,
           borderRadius: BorderRadius.circular(20),
@@ -236,12 +349,21 @@ class _PresenceChip extends StatelessWidget {
         ),
         child: Text(
           '혼자',
-          style: mainBody(size: 12, color: kMainMuted, height: 1),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: mainBody(
+            size: compact ? 11 : 12,
+            color: kMainMuted,
+            height: 1,
+          ),
         ),
       );
     }
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 8 : 12,
+        vertical: compact ? 5 : 6,
+      ),
       decoration: BoxDecoration(
         color: kMainSageSoft,
         borderRadius: BorderRadius.circular(20),
@@ -251,21 +373,25 @@ class _PresenceChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 7,
-            height: 7,
+            width: compact ? 6 : 7,
+            height: compact ? 6 : 7,
             decoration: const BoxDecoration(
               shape: BoxShape.circle,
               color: kMainSage,
             ),
           ),
-          const SizedBox(width: 6),
-          Text(
-            users.join(' · '),
-            style: mainBody(
-              size: 12,
-              color: kMainInk,
-              weight: FontWeight.w700,
-              height: 1,
+          SizedBox(width: compact ? 4 : 6),
+          Flexible(
+            child: Text(
+              compact ? '${users.length}명' : users.join(' · '),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: mainBody(
+                size: compact ? 11 : 12,
+                color: kMainInk,
+                weight: FontWeight.w700,
+                height: 1,
+              ),
             ),
           ),
         ],

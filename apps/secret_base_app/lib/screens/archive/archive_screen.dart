@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
 import '../../core/main_design.dart';
+import 'moment_loop_screen.dart';
 
 class ArchiveScreen extends StatelessWidget {
   const ArchiveScreen({super.key});
 
   static const _items = [
-    _ArchiveItem('📸', '셋로그', 'OOTD & 데이트 사진', kMainRose, kMainRoseSoft),
+    _ArchiveItem(
+      '📸',
+      'MomentLoop',
+      '우리 둘의 날것 같은 하루 조각',
+      kMainRose,
+      kMainRoseSoft,
+    ),
     _ArchiveItem('🗺️', '비밀 지도', '우리가 간 곳 모음', kMainSage, kMainSageSoft),
     _ArchiveItem('❓', '10시의 질문', '매일 밤 10시 Q&A', kMainHoney, kMainHoneySoft),
     _ArchiveItem('🏆', '목표 챌린지', '함께하는 도전', kMainSky, kMainSkySoft),
@@ -67,6 +74,14 @@ class ArchiveScreen extends StatelessWidget {
   }
 
   void _openDetail(BuildContext ctx, _ArchiveItem item) {
+    if (item.name == 'MomentLoop') {
+      Navigator.push(
+        ctx,
+        MaterialPageRoute(builder: (_) => const MomentLoopScreen()),
+      );
+      return;
+    }
+
     Navigator.push(
       ctx,
       MaterialPageRoute(builder: (_) => _ArchiveDetailPage(item: item)),
@@ -146,7 +161,7 @@ class _ArchiveDetailPage extends StatelessWidget {
 
   String get _endpoint {
     switch (item.name) {
-      case '셋로그':
+      case 'MomentLoop':
         return 'GET/POST /api/setlog';
       case '비밀 지도':
         return 'GET/POST /api/map';

@@ -1,10 +1,12 @@
 /**
  * UNO Card Game Engine
- * 
+ *
  * Rules:
  * - Each player starts with 7 cards
  * - Match card by color or number
  * - Special cards: Skip, Reverse, Draw2, Wild, Wild Draw4
+ * - Draw stack chaining: +2 defends against +2, +4 defends against +4
+ * - +4 challenge: challenger can call bluff
  * - Shout "UNO" when down to 1 card
  * - Win: Empty hand first
  */
@@ -58,9 +60,15 @@ export function shuffle(array) {
 }
 
 /**
- * Check if a card can be played on top card
+ * Check if a card can be played on top card.
+ * When drawStack > 0, only matching defense cards are allowed.
  */
-export function canPlayCard(card, topCard, declaredColor = null) {
+export function canPlayCard(card, topCard, declaredColor = null, drawStack = 0, drawStackType = null) {
+  // Draw stack restriction: must defend with same type or accept
+  if (drawStack > 0 && drawStackType) {
+    return card.value === drawStackType;
+  }
+
   if (card.value === 'wild' || card.value === 'wild_draw4') {
     return true;
   }
@@ -79,6 +87,14 @@ export function canPlayCard(card, topCard, declaredColor = null) {
 }
 
 /**
+ * Check if the challenged player had a playable card of the given color
+ * (used for +4 challenge resolution)
+ */
+export function hadPlayableCardOfColor(hand, color) {
+  return hand.some((c) => c.color === color && c.value !== 'wild' && c.value !== 'wild_draw4');
+}
+
+/**
  * Initialize UNO game
  */
 export function createUnoGameState(players, handSize = 7) {
@@ -90,7 +106,7 @@ export function createUnoGameState(players, handSize = 7) {
   });
 
   const discardPile = [deck.pop()];
-  
+
   // Ensure first card is not action/wild
   while (ACTIONS.includes(discardPile[0].value) || WILDS.includes(discardPile[0].value)) {
     deck.unshift(discardPile.pop());
@@ -106,6 +122,9 @@ export function createUnoGameState(players, handSize = 7) {
     direction: 1, // 1: clockwise, -1: counterclockwise
     declaredColor: null,
     drawStack: 0,
+    drawStackType: null,     // 'draw2' | 'wild_draw4' | null
+    lastDraw4Player: null,   // who played the last wild_draw4 (for challenge check)
+    colorBeforeDraw4: null,  // effective color before last draw4 (for challenge check)
     winner: null,
     unoCallers: [],
   };
@@ -126,7 +145,7 @@ export function getNextPlayer(gameState) {
  */
 export function drawCards(gameState, count) {
   const cards = [];
-  
+
   for (let i = 0; i < count; i++) {
     if (gameState.deck.length === 0) {
       // Reshuffle discard pile into deck
@@ -134,19 +153,20 @@ export function drawCards(gameState, count) {
       gameState.deck = shuffle([...gameState.discardPile]);
       gameState.discardPile = [topCard];
     }
-    
+
     if (gameState.deck.length > 0) {
       cards.push(gameState.deck.pop());
     }
   }
-  
+
   return cards;
 }
 
 /**
- * Apply card effect
+ * Apply card effect.
+ * previousColor: the effective color before this card was played (needed for draw4 challenge tracking).
  */
-export function applyCardEffect(gameState, card) {
+export function applyCardEffect(gameState, card, previousColor = null) {
   if (card.value === 'skip') {
     gameState.currentPlayer = getNextPlayer(gameState);
   } else if (card.value === 'reverse') {
@@ -156,10 +176,25 @@ export function applyCardEffect(gameState, card) {
       gameState.currentPlayer = getNextPlayer(gameState);
     }
   } else if (card.value === 'draw2') {
-    gameState.drawStack += 2;
+    gameState.drawStack = (gameState.drawStack || 0) + 2;
+    gameState.drawStackType = 'draw2';
   } else if (card.value === 'wild_draw4') {
-    gameState.drawStack += 4;
+    gameState.drawStack = (gameState.drawStack || 0) + 4;
+    gameState.drawStackType = 'wild_draw4';
+    // Track for challenge resolution
+    gameState.lastDraw4Player = gameState.currentPlayer;
+    gameState.colorBeforeDraw4 = previousColor;
   }
+}
+
+/**
+ * Reset draw stack state
+ */
+export function clearDrawStack(gameState) {
+  gameState.drawStack = 0;
+  gameState.drawStackType = null;
+  gameState.lastDraw4Player = null;
+  gameState.colorBeforeDraw4 = null;
 }
 
 /**

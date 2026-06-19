@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
 import '../../core/main_design.dart';
 import '../../core/socket_service.dart';
+import '../../core/auth_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -12,16 +13,19 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final _socket = SocketService();
+  final _auth = AuthService();
 
   @override
   void initState() {
     super.initState();
     _socket.addListener(_rebuild);
+    _auth.addListener(_rebuild);
   }
 
   @override
   void dispose() {
     _socket.removeListener(_rebuild);
+    _auth.removeListener(_rebuild);
     super.dispose();
   }
 
@@ -29,14 +33,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) setState(() {});
   }
 
-  void _disconnect() {
+  void _logout() {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: kMainPaper,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('방 나가기', style: mainTitle(size: 24)),
-        content: Text('정말 방에서 나갈까요?', style: mainBody(size: 14)),
+        title: Text('로그아웃', style: mainTitle(size: 24)),
+        content: Text('비밀기지에서 로그아웃할까요?', style: mainBody(size: 14)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -46,9 +50,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onPressed: () {
               Navigator.pop(context);
               _socket.disconnect();
+              _auth.logout();
             },
             child: Text(
-              '나가기',
+              '로그아웃',
               style: mainBody(size: 14, color: kError, weight: FontWeight.w700),
             ),
           ),
@@ -68,21 +73,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             _header(),
             const SizedBox(height: 16),
+            _accountCard(),
+            const SizedBox(height: 12),
             _profileCard(sock),
             const SizedBox(height: 12),
             _connectionCard(sock),
             const SizedBox(height: 12),
             _presenceCard(sock),
-            const SizedBox(height: 12),
-            _logCard(sock),
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
               height: 50,
               child: OutlinedButton.icon(
-                onPressed: _disconnect,
+                onPressed: _logout,
                 icon: const Icon(Icons.logout, size: 18),
-                label: const Text('방 나가기'),
+                label: const Text('로그아웃'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: kError,
                   side: BorderSide(color: kError.withAlpha(120)),
@@ -105,6 +110,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
+
+  Widget _accountCard() => _Card(
+    title: '계정 및 연결',
+    child: Column(
+      children: [
+        _InfoRow(Icons.person_outline, kMainSub, '내 이메일', _auth.user?['Email'] ?? '-', null),
+        const SizedBox(height: 10),
+        _InfoRow(Icons.qr_code_scanner_outlined, kMainInk, '내 회원코드', _auth.user?['UserCode'] ?? '-', kMainInk),
+        const SizedBox(height: 12),
+        const Divider(color: kMainLine),
+        const SizedBox(height: 10),
+        _InfoRow(Icons.favorite_outline, kMainRose, '연결된 애인', _auth.user?['PartnerCode'] ?? '없음', _auth.user?['PartnerCode'] != null ? kMainRose : kMainMuted),
+      ],
+    ),
+  );
 
   Widget _header() => MainCard(
     padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),

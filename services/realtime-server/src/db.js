@@ -1,29 +1,18 @@
-/**
- * PostgreSQL Database Connection
- * Phase 3: Archiving Zone (Setlog, Map, Q&A, Challenges, Jukebox)
- */
-
-import pg from 'pg';
+import mysql from 'mysql2/promise';
 import { config } from './config.js';
 
-const { Pool } = pg;
-
-// PostgreSQL 연결 풀
-const pool = new Pool({
-  connectionString: config.DATABASE_URL,
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-});
+// MariaDB 연결 풀
+const pool = mysql.createPool(config.DATABASE_URL);
 
 // 연결 테스트
-pool.on('connect', () => {
-  console.log('[DB] PostgreSQL connected');
-});
-
-pool.on('error', (err) => {
-  console.error('[DB] Unexpected error:', err);
-});
+pool.getConnection()
+  .then(conn => {
+    console.log('[DB] MariaDB connected');
+    conn.release();
+  })
+  .catch(err => {
+    console.error('[DB] Connection error:', err);
+  });
 
 /**
  * SQL 쿼리 실행 헬퍼
@@ -33,10 +22,12 @@ pool.on('error', (err) => {
 export async function query(text, params = []) {
   const start = Date.now();
   try {
-    const res = await pool.query(text, params);
+    // MariaDB/MySQL은 $1 대신 ?를 사용하므로 호환성을 위해 변환하거나 직접 ? 사용 권장
+    // 여기서는 신규 코드이므로 ?를 사용하도록 안내하고 래퍼 제공
+    const [rows] = await pool.execute(text, params);
     const duration = Date.now() - start;
-    console.log('[DB] Query executed', { text: text.substring(0, 50), duration, rows: res.rowCount });
-    return res;
+    console.log('[DB] Query executed', { text: text.substring(0, 50), duration, rowCount: rows.length });
+    return { rows };
   } catch (err) {
     console.error('[DB] Query error:', { text, params, error: err.message });
     throw err;
@@ -45,20 +36,20 @@ export async function query(text, params = []) {
 
 /**
  * 트랜잭션 헬퍼
- * @param {Function} callback - 트랜잭션 콜백 (client) => Promise
+ * @param {Function} callback - 트랜잭션 콜백 (connection) => Promise
  */
 export async function transaction(callback) {
-  const client = await pool.connect();
+  const connection = await pool.getConnection();
   try {
-    await client.query('BEGIN');
-    const result = await callback(client);
-    await client.query('COMMIT');
+    await connection.beginTransaction();
+    const result = await callback(connection);
+    await connection.commit();
     return result;
   } catch (err) {
-    await client.query('ROLLBACK');
+    await connection.rollback();
     throw err;
   } finally {
-    client.release();
+    connection.release();
   }
 }
 
@@ -67,7 +58,7 @@ export async function transaction(callback) {
  */
 export async function close() {
   await pool.end();
-  console.log('[DB] PostgreSQL connection closed');
+  console.log('[DB] MariaDB connection closed');
 }
 
 export default { query, transaction, close };

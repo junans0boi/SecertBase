@@ -5,7 +5,21 @@ dotenv.config();
 
 const schema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(4100),
-  CORS_ORIGIN: z.string().url(),
+  CORS_ORIGIN: z
+    .string()
+    .min(1)
+    .transform((value) =>
+      value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+    )
+    .refine(
+      (origins) =>
+        origins.length > 0 &&
+        origins.every((origin) => z.string().url().safeParse(origin).success),
+      "CORS_ORIGIN must contain valid URL origins",
+    ),
   REDIS_URL: z.string().url(),
   DATABASE_URL: z.string().optional().default('postgresql://localhost/secretbase'),
   ROOM_SECRET: z.string().min(4),

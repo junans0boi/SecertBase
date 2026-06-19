@@ -2,11 +2,8 @@ import 'package:flutter/material.dart';
 import '../core/app_theme.dart';
 import '../core/main_design.dart';
 import '../core/socket_service.dart';
-
-const _defaultUrl = String.fromEnvironment(
-  'SOCKET_URL',
-  defaultValue: 'http://localhost:4100',
-);
+import '../core/auth_service.dart';
+import '../core/server_config.dart';
 
 class EntryScreen extends StatefulWidget {
   const EntryScreen({super.key});
@@ -17,8 +14,8 @@ class EntryScreen extends StatefulWidget {
 
 class _EntryScreenState extends State<EntryScreen>
     with SingleTickerProviderStateMixin {
-  final _urlCtrl = TextEditingController(text: _defaultUrl);
-  final _roomCtrl = TextEditingController(text: 'secret-room');
+  final _urlCtrl = TextEditingController(text: serverBaseUrl);
+  final _roomCtrl = TextEditingController();
   final _secretCtrl = TextEditingController(text: 'secretbase');
   String _user = 'jun';
   bool _connecting = false;
@@ -26,10 +23,23 @@ class _EntryScreenState extends State<EntryScreen>
   late final AnimationController _anim;
   late final Animation<double> _fadeIn;
   final _socket = SocketService();
+  final _auth = AuthService();
 
   @override
   void initState() {
     super.initState();
+    
+    // Auto-fill from auth
+    final myCode = _auth.user?['UserCode'] as String?;
+    if (myCode != null) {
+      _user = myCode;
+      // If paired: use couple room code & secret from DB
+      final roomCode = _auth.user!['RoomCode'] as String?;
+      final roomSecret = _auth.user!['RoomSecret'] as String?;
+      if (roomCode != null) _roomCtrl.text = roomCode;
+      if (roomSecret != null) _secretCtrl.text = roomSecret;
+    }
+
     _anim = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 700),
@@ -203,13 +213,19 @@ class _EntryScreenState extends State<EntryScreen>
           const SizedBox(height: 18),
           _label('나는 누구?'),
           const SizedBox(height: 9),
-          Row(
-            children: [
-              _userTile('jun', '준'),
-              const SizedBox(width: 10),
-              _userTile('gf', 'GF'),
-            ],
-          ),
+          if (_auth.user?['UserCode'] != null)
+            _userBadge(
+              _auth.user!['UserCode'] as String,
+              (_auth.user!['UserName'] ?? _auth.user!['userName'] ?? '') as String,
+            )
+          else
+            Row(
+              children: [
+                _userTile('jun', '준'),
+                const SizedBox(width: 10),
+                _userTile('gf', 'GF'),
+              ],
+            ),
           const SizedBox(height: 20),
           if (_socket.status != '대기 중' && !_socket.isConnected && !_connecting)
             Padding(
@@ -279,6 +295,38 @@ class _EntryScreenState extends State<EntryScreen>
         color: kMainSub,
         weight: FontWeight.w700,
         height: 1.1,
+      ),
+    );
+  }
+
+  Widget _userBadge(String code, String name) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: kMainSageSoft,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: kMainSage, width: 1.4),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.person, color: kMainSage, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              name.isNotEmpty ? '$name ($code)' : code,
+              style: mainBody(
+                size: 14,
+                color: kMainInk,
+                weight: FontWeight.w700,
+              ),
+            ),
+          ),
+          Text(
+            '로그인됨',
+            style: mainBody(size: 11, color: kMainSage, weight: FontWeight.w600),
+          ),
+        ],
       ),
     );
   }

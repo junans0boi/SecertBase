@@ -23,12 +23,13 @@ TextStyle mainTitle({
   double size = 28,
   Color color = kMainInk,
   FontWeight weight = FontWeight.w700,
+  double letterSpacing = 0,
 }) {
   return GoogleFonts.gaegu(
     fontSize: size,
     fontWeight: weight,
     color: color,
-    letterSpacing: 0,
+    letterSpacing: letterSpacing,
     height: 1.08,
   );
 }

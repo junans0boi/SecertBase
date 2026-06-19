@@ -87,10 +87,16 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     super.didUpdateWidget(oldWidget);
     if (widget.lastResultName != oldWidget.lastResultName &&
         widget.lastResultName != null) {
-      _animResult = widget.lastResultName;
-      if (!_showThrowAnim) {
-        // result arrived without our animation (opponent's throw), just bounce
-        _resultBounceCtrl.forward(from: 0);
+      if (_showThrowAnim) {
+        // My throw: result arrived mid-animation — update result so sticks settle correctly
+        setState(() => _animResult = widget.lastResultName);
+      } else {
+        // Opponent's throw: play the same throw animation then show result
+        setState(() {
+          _animResult = widget.lastResultName;
+          _showThrowAnim = true;
+        });
+        _stickThrowCtrl.forward(from: 0);
       }
     }
     if (widget.turn != oldWidget.turn ||
@@ -151,7 +157,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
   }
 
   Offset _getBoardPoint(int pos) {
-    if (pos == 0 || pos >= 20) return const Offset(1.0, 1.0);
+    if (pos == 0 || pos == 20) return const Offset(1.0, 1.0);
     if (pos >= 1 && pos <= 5) return Offset(1.0, 1.0 - (pos * 0.2));
     if (pos >= 6 && pos <= 10) return Offset(1.0 - ((pos - 5) * 0.2), 0.0);
     if (pos >= 11 && pos <= 15) return Offset(0.0, (pos - 10) * 0.2);

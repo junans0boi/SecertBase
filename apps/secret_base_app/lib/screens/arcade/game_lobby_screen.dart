@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/main_design.dart';
 import '../../core/socket_service.dart';
@@ -29,6 +30,8 @@ class GameLobbyScreen extends StatefulWidget {
 class _GameLobbyScreenState extends State<GameLobbyScreen> {
   final _socket = SocketService();
   bool _started = false;
+  int _countdown = 0;
+  Timer? _countdownTimer;
 
   @override
   void initState() {
@@ -41,6 +44,7 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
 
   @override
   void dispose() {
+    _countdownTimer?.cancel();
     _socket.removeListener(_onSocket);
     if (!_started) {
       _socket.leaveGameLobby(widget.gameType);
@@ -53,12 +57,38 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
     if (_socket.lobbyStartedGameType == widget.gameType && !_started) {
       _started = true;
       _socket.clearLobbyStart();
-      Navigator.of(
-        context,
-      ).pushReplacement(MaterialPageRoute(builder: (_) => widget.gameScreen));
+      _beginCountdown();
       return;
     }
     setState(() {});
+  }
+
+  void _beginCountdown() {
+    setState(() => _countdown = 3);
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) { t.cancel(); return; }
+      setState(() => _countdown--);
+      if (_countdown <= 0) {
+        t.cancel();
+        _launchGame();
+      }
+    });
+  }
+
+  void _launchGame() {
+    final isHost = _socket.userId == _socket.lobbyHost;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => widget.gameScreen),
+    );
+    if (isHost) {
+      Future.delayed(const Duration(milliseconds: 300), () {
+        switch (widget.gameType) {
+          case 'uno': _socket.newUnoGame(); break;
+          case 'yut': _socket.newYutGame(); break;
+          case 'bomb': _socket.newBombGame(); break;
+        }
+      });
+    }
   }
 
   @override
@@ -67,6 +97,45 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
         _socket.userId != null && _socket.userId == _socket.lobbyHost;
     final canStart = isHost && _socket.lobbyPlayers.length >= 2;
 
+    return Stack(
+      children: [
+        _buildScaffold(isHost: isHost, canStart: canStart),
+        if (_countdown > 0) _buildCountdownOverlay(),
+      ],
+    );
+  }
+
+  Widget _buildCountdownOverlay() {
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Container(
+          color: Colors.black.withValues(alpha: 0.72),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '$_countdown',
+                  style: mainTitle(size: 96, color: Colors.white),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '게임 시작!',
+                  style: mainBody(
+                    size: 22,
+                    color: Colors.white70,
+                    weight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScaffold({required bool isHost, required bool canStart}) {
     return Scaffold(
       backgroundColor: kMainBg,
       body: SafeArea(
