@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/main_design.dart';
 import '../../core/socket_service.dart';
+import '../../core/uno_audio.dart';
 
 class GameLobbyScreen extends StatefulWidget {
   final String gameType;
@@ -64,13 +65,21 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
   }
 
   void _beginCountdown() {
-    setState(() => _countdown = 3);
+    if (widget.gameType == 'uno') {
+      // Unlock audio on first interaction before countdown
+      UnoAudio.instance.unlock();
+    }
+    setState(() => _countdown = 5);
+    UnoAudio.instance.countdownBeep(5);
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) { t.cancel(); return; }
       setState(() => _countdown--);
       if (_countdown <= 0) {
         t.cancel();
+        UnoAudio.instance.countdownEnd();
         _launchGame();
+      } else {
+        UnoAudio.instance.countdownBeep(_countdown);
       }
     });
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/socket_service.dart';
+import '../../../core/uno_audio.dart';
 import '../../../ui/uno_board.dart';
 import '../../../widgets/game_scaffold.dart';
 import '../../../widgets/game_menu.dart';
@@ -15,11 +16,15 @@ class UnoScreen extends StatefulWidget {
 
 class _UnoScreenState extends State<UnoScreen> {
   final _socket = SocketService();
+  String? _lastWinner;
+  bool _resultShown = false;
 
   @override
   void initState() {
     super.initState();
     _socket.addListener(_rebuild);
+    // Unlock audio when UNO screen opens (web autoplay policy)
+    UnoAudio.instance.unlock();
   }
 
   @override
@@ -29,7 +34,37 @@ class _UnoScreenState extends State<UnoScreen> {
   }
 
   void _rebuild() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    final w = _socket.unoWinner;
+    if (w != null && w != _lastWinner) {
+      _lastWinner = w;
+      _resultShown = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _showResult(w));
+    }
+    setState(() {});
+  }
+
+  void _showResult(String winner) {
+    if (_resultShown || !mounted) return;
+    _resultShown = true;
+    final isMe = winner == _socket.userId;
+    if (isMe) {
+      UnoAudio.instance.victory();
+    } else {
+      UnoAudio.instance.defeat();
+    }
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => _ResultDialog(
+        winner: winner,
+        userId: _socket.userId,
+        onRestart: () {
+          Navigator.of(context).pop();
+          _socket.newUnoGame();
+        },
+      ),
+    );
   }
 
   @override
@@ -78,7 +113,7 @@ class _UnoScreenState extends State<UnoScreen> {
           ),
           if (sock.unoWinner != null) ...[
             const SizedBox(height: 12),
-            _WinCard(winner: sock.unoWinner!, userId: sock.userId),
+            _WinBanner(winner: sock.unoWinner!, userId: sock.userId),
           ],
         ],
         ),
@@ -122,16 +157,17 @@ class _UnoStatus extends StatelessWidget {
   }
 }
 
-class _WinCard extends StatelessWidget {
+// Slim inline banner (always visible while winner != null)
+class _WinBanner extends StatelessWidget {
   final String winner;
   final String? userId;
-  const _WinCard({required this.winner, required this.userId});
+  const _WinBanner({required this.winner, required this.userId});
 
   @override
   Widget build(BuildContext context) {
     final isMe = winner == userId;
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
       decoration: BoxDecoration(
         color: isMe
             ? kSuccess.withValues(alpha: 0.1)
@@ -144,8 +180,123 @@ class _WinCard extends StatelessWidget {
         textAlign: TextAlign.center,
         style: GoogleFonts.notoSans(
           color: isMe ? kSuccess : kError,
-          fontSize: 16,
+          fontSize: 15,
           fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+// Full-screen result dialog
+class _ResultDialog extends StatelessWidget {
+  final String winner;
+  final String? userId;
+  final VoidCallback onRestart;
+
+  const _ResultDialog({
+    required this.winner,
+    required this.userId,
+    required this.onRestart,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isMe = winner == userId;
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(28, 32, 28, 24),
+        decoration: BoxDecoration(
+          color: const Color(0xFF10121C),
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(
+            color: isMe
+                ? const Color(0xFF4CAE4C).withValues(alpha: 0.6)
+                : const Color(0xFFE52521).withValues(alpha: 0.4),
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: (isMe
+                  ? const Color(0xFF4CAE4C)
+                  : const Color(0xFFE52521))
+                  .withValues(alpha: 0.3),
+              blurRadius: 40,
+              spreadRadius: 4,
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              isMe ? '🏆' : '😢',
+              style: const TextStyle(fontSize: 64),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              isMe ? 'UNO 승리!' : '패배...',
+              style: GoogleFonts.notoSans(
+                color: Colors.white,
+                fontSize: 28,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isMe
+                  ? '손패를 모두 냈어요! 최고예요!'
+                  : '$winner 님이 먼저 UNO를 달성했어요.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.notoSans(
+                color: Colors.white60,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 28),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      side: const BorderSide(color: Colors.white24),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: const Text('닫기'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: onRestart,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: isMe
+                          ? const Color(0xFF4CAE4C)
+                          : const Color(0xFFE52521),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: Text(
+                      isMe ? '한 판 더!' : '복수하기!',
+                      style: GoogleFonts.notoSans(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

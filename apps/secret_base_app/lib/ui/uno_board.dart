@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
+import '../core/uno_audio.dart';
 
 class UnoBoard extends StatefulWidget {
   final String? gameId;
@@ -108,6 +109,11 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
         widget.lastSpecialCard != old.lastSpecialCard) {
       _triggerSpecialEffect(widget.lastSpecialCard!);
     }
+
+    // Draw stack resolved → play cumulative draw voice
+    if (old.drawStack > 0 && widget.drawStack == 0) {
+      UnoAudio.instance.drawStack();
+    }
   }
 
   @override
@@ -131,6 +137,7 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
       }
       if (_visibleCardCount < total) {
         setState(() => _visibleCardCount++);
+        UnoAudio.instance.cardDeal();
       } else {
         setState(() => _isDealing = false);
         timer.cancel();
@@ -141,10 +148,18 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
   void _triggerSpecialEffect(String card) {
     setState(() => _effectCard = card);
     _effectCtrl.forward(from: 0);
+    switch (card) {
+      case 'skip':     UnoAudio.instance.cardSkip(); break;
+      case 'reverse':  UnoAudio.instance.cardReverse(); break;
+      case 'draw2':    UnoAudio.instance.cardDraw2(); break;
+      case 'wild_draw4': UnoAudio.instance.cardDraw4(); break;
+    }
   }
 
   void _handleCardTap(BuildContext context, Map<String, dynamic> cardMap) {
     if (widget.turn != widget.currentUser) return;
+
+    UnoAudio.instance.cardPick();
 
     final val = cardMap['value'] as String?;
     final id = cardMap['id'] as String;
@@ -163,6 +178,7 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
               return InkWell(
                 onTap: () {
                   Navigator.pop(ctx);
+                  UnoAudio.instance.colorDeclared(color);
                   widget.onPlayCard(id, color);
                 },
                 child: Container(
@@ -187,6 +203,7 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
         ),
       );
     } else {
+      UnoAudio.instance.cardPlay();
       widget.onPlayCard(id, null);
     }
   }
@@ -346,7 +363,10 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
                                     child: _UnoCallButton(
                                       label: 'UNO!',
                                       color: const Color(0xFFE52521),
-                                      onTap: widget.onCallUno ?? () {},
+                                      onTap: () {
+                                        UnoAudio.instance.unoCall();
+                                        widget.onCallUno?.call();
+                                      },
                                     ),
                                   ),
                                 if (widget.catchable)
@@ -356,7 +376,10 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
                                     child: _UnoCallButton(
                                       label: '잡기! 😈',
                                       color: const Color(0xFF7B1FA2),
-                                      onTap: widget.onCatchUno ?? () {},
+                                      onTap: () {
+                                        UnoAudio.instance.unoCaught();
+                                        widget.onCatchUno?.call();
+                                      },
                                     ),
                                   ),
                                 // Wild 카드가 아닌데 색상이 active한 경우 (일반 카드 후 color reset 등)에만 배지 표시
@@ -847,7 +870,7 @@ class _SpecialCardEffect extends StatelessWidget {
 
     return AnimatedBuilder(
       animation: animation,
-      builder: (_, __) {
+      builder: (context2, _) {
         // Fade in fast, linger, fade out at end
         final t = animation.value;
         double opacity;
