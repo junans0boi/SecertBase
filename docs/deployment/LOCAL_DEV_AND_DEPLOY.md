@@ -23,10 +23,21 @@ Backend:
 
 ```bash
 cd services/realtime-server
-cp .env.example .env  # if an example file is added later
+cp .env.example .env
+# edit .env for your local MariaDB/Redis/JWT values
 npm ci
 npm run dev
 ```
+
+Required backend env keys:
+
+- `PORT`: realtime/API server port, normally `4100`
+- `CORS_ORIGIN`: comma-separated allowed browser origins
+- `REDIS_URL`: Redis connection URL
+- `DATABASE_URL`: MariaDB/MySQL connection URL
+- `JWT_SECRET`: random 32+ character secret for login tokens
+- `ROOM_SECRET`: legacy room secret
+- `ALLOWED_USERS`: comma-separated pair for the legacy two-person room flow
 
 Flutter app:
 
@@ -74,6 +85,8 @@ ssh junzzang@<server-ip-or-domain>
 cd /home/junzzang/SecertBase
 ./scripts/deploy_server.sh
 ```
+
+The server keeps its own `services/realtime-server/.env`. Do not commit that file. If new env keys are added, update the server `.env` from `.env.example` before restarting PM2.
 
 The deploy script does this:
 

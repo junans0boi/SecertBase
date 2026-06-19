@@ -21,7 +21,8 @@ const schema = z.object({
       "CORS_ORIGIN must contain valid URL origins",
     ),
   REDIS_URL: z.string().url(),
-  DATABASE_URL: z.string().optional().default('postgresql://localhost/secretbase'),
+  DATABASE_URL: z.string().url(),
+  JWT_SECRET: z.string().min(32),
   ROOM_SECRET: z.string().min(4),
   ALLOWED_USERS: z
     .string()

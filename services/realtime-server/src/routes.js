@@ -136,7 +136,7 @@ router.post('/auth/login', async (req, res) => {
     // JWT 토큰 생성
     const token = jwt.sign(
       { userId: user.UserId, email: user.Email, userCode: user.UserCode },
-      config.JWT_SECRET || 'fallback_secret',
+      config.JWT_SECRET,
       { expiresIn: '7d' }
     );
 

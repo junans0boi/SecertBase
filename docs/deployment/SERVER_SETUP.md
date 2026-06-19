@@ -12,6 +12,7 @@ This document outlines the current server configuration and deployment steps for
 ## Backend (realtime-server)
 - **Path:** `/home/junzzang/SecertBase/services/realtime-server`
 - **Environment:** Node.js
+- **Env File:** `/home/junzzang/SecertBase/services/realtime-server/.env` (not committed)
 - **Service Name:** `secretbase-realtime` (PM2)
 - **Port:** 4100
 - **URL:** `http://SecertBase.kro.kr/socket.io/`
