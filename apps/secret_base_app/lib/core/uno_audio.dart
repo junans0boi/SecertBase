@@ -1,79 +1,68 @@
-import 'package:audioplayers/audioplayers.dart';
-import 'dart:math';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 
 class UnoAudio {
   UnoAudio._();
   static final UnoAudio instance = UnoAudio._();
 
-  final _sfx = AudioPlayer();
-  final _voice = AudioPlayer();
-  final _rng = Random();
   bool _enabled = true;
+  int _dealIdx = 0;
 
   bool get enabled => _enabled;
   set enabled(bool v) => _enabled = v;
 
-  // Unlock audio on first user interaction (web browser autoplay policy)
-  Future<void> unlock() async {
-    try {
-      await _sfx.setVolume(0);
-      await _sfx.play(AssetSource('sounds/uno/card_pick.mp3'));
-      await _sfx.stop();
-      await _sfx.setVolume(1);
-    } catch (_) {}
-  }
+  static String _url(String file) => 'assets/assets/sounds/uno/$file';
 
-  Future<void> _playSfx(String asset) async {
+  Future<void> unlock() async {}
+
+  Future<void> _play(String file) async {
     if (!_enabled) return;
     try {
-      await _sfx.stop();
-      await _sfx.play(AssetSource('sounds/uno/$asset'));
+      final audio = html.AudioElement(_url(file));
+      await audio.play();
     } catch (_) {}
   }
 
-  Future<void> _playVoice(String asset) async {
-    if (!_enabled) return;
-    try {
-      await _voice.stop();
-      await _voice.play(AssetSource('sounds/uno/$asset'));
-    } catch (_) {}
+  // ── 카드 선택 (내 패에서 카드 탭) ─────────────────────────────────────────
+  Future<void> cardPick() => _play('card_pick.mp3');
+
+  // ── 카드 1장 뽑기 (더미에서) ─────────────────────────────────────────────
+  Future<void> cardDrawFromDeck() => _play('card_draw.mp3');
+
+  // ── 딜링 (게임 시작 시 카드 한 장씩 지급) ─────────────────────────────────
+  // 7장이므로 1→deal_1, 2→deal_2, 3→deal_3, 4→deal_1, 5→deal_2, 6→deal_3, 7→deal_1
+  static const _dealFiles = ['deal_1.mp3', 'deal_2.mp3', 'deal_3.mp3'];
+  Future<void> cardDeal() => _play(_dealFiles[_dealIdx++ % _dealFiles.length]);
+
+  // ── Skip 효과 + 목소리 ────────────────────────────────────────────────────
+  Future<void> cardSkip() async {
+    await _play('card_skip_effect.mp3');
+    await Future.delayed(const Duration(milliseconds: 200));
+    await _play('voice_skip.mp3');
   }
 
-  // ── Card pick (tap to select a card) ──────────────────────────────────────
-  Future<void> cardPick() => _playSfx('card_pick.mp3');
-
-  // ── Card play (card placed on discard pile) ────────────────────────────────
-  Future<void> cardPlay() => _playSfx('card_draw.mp3');
-
-  // ── Deal: cycle through 3 deal sounds ─────────────────────────────────────
-  int _dealIdx = 0;
-  Future<void> cardDeal() {
-    final files = ['deal_1.mp3', 'deal_2.mp3', 'deal_3.mp3'];
-    final f = files[_dealIdx % files.length];
-    _dealIdx++;
-    return _playSfx(f);
-  }
-
-  // ── Skip ──────────────────────────────────────────────────────────────────
-  Future<void> cardSkip() => _playSfx('card_skip_effect.mp3');
-
-  // ── Reverse ───────────────────────────────────────────────────────────────
+  // ── Reverse 효과 + 목소리 ────────────────────────────────────────────────
   Future<void> cardReverse() async {
-    await _playSfx('card_reverse_effect.mp3');
+    await _play('card_reverse_effect.mp3');
     await Future.delayed(const Duration(milliseconds: 300));
-    await _playVoice('voice_reverse.mp3');
+    await _play('voice_reverse.mp3');
   }
 
-  // ── Draw 2 ────────────────────────────────────────────────────────────────
-  Future<void> cardDraw2() => _playVoice('voice_draw2.mp3');
+  // ── 드로우 해소 목소리 ────────────────────────────────────────────────────
+  // +2 단독(2장) → M_07_Draw2
+  // +4 단독(4장) → M_08_Draw4
+  // 누적(그 외)   → M_09_DrawCs
+  Future<void> drawResolved(int count, String? type) {
+    if (count == 2 && type == 'draw2') {
+      return _play('voice_draw2.mp3');
+    } else if (count == 4 && type == 'wild_draw4') {
+      return _play('voice_draw4.mp3');
+    } else {
+      return _play('voice_draw_stack.mp3');
+    }
+  }
 
-  // ── Wild Draw 4 ───────────────────────────────────────────────────────────
-  Future<void> cardDraw4() => _playVoice('voice_draw4.mp3');
-
-  // ── Draw stack resolved (cumulative draws) ────────────────────────────────
-  Future<void> drawStack() => _playVoice('voice_draw_stack.mp3');
-
-  // ── Color declared (wild / wild_draw4) ────────────────────────────────────
+  // ── 색상 선언 (Wild / +4 이후) ────────────────────────────────────────────
   Future<void> colorDeclared(String color) {
     const map = {
       'green':  'color_green.mp3',
@@ -83,33 +72,33 @@ class UnoAudio {
     };
     final f = map[color];
     if (f == null) return Future.value();
-    return _playVoice(f);
+    return _play(f);
   }
 
-  // ── UNO call / caught ─────────────────────────────────────────────────────
-  Future<void> unoCall() => _playVoice('voice_uno.mp3');
-  Future<void> unoCaught() => _playVoice('voice_oops.mp3');
+  // ── UNO 선언 / 잡기 ───────────────────────────────────────────────────────
+  Future<void> unoCall()   => _play('voice_uno.mp3');
+  Future<void> unoCaught() => _play('voice_oops.mp3');
 
-  // ── Game start countdown ──────────────────────────────────────────────────
+  // ── 게임 시작 카운트다운 ──────────────────────────────────────────────────
+  // remaining: 5→4→3→2→1, gamestart_5.mp3 ~ gamestart_1.mp3 순으로 재생
   Future<void> countdownBeep(int remaining) {
-    // remaining: 5,4,3,2,1 → gamestart_5..1
     final n = remaining.clamp(1, 5);
-    return _playSfx('gamestart_$n.mp3');
+    return _play('gamestart_$n.mp3');
   }
+  Future<void> countdownEnd() => _play('gamestart_end.mp3');
 
-  Future<void> countdownEnd() => _playSfx('gamestart_end.mp3');
+  // ── 턴 타이머 카운트다운 ──────────────────────────────────────────────────
+  // 5초 이하 매 초마다 tick, 0초에 end
+  Future<void> timerTick() => _play('timer_tick.mp3');
+  Future<void> timerEnd() => _play('timer_end.mp3');
 
-  // ── Victory / Defeat ─────────────────────────────────────────────────────
-  Future<void> victory() => _playVoice('voice_super.mp3');
+  // ── 승리 / 패배 ──────────────────────────────────────────────────────────
+  Future<void> victory() => _play('voice_super.mp3');
   Future<void> defeat() async {
-    // voice_oops for loser (funny but fitting)
-    await _playVoice('voice_oops.mp3');
+    await _play('voice_oops.mp3');
     await Future.delayed(const Duration(milliseconds: 600));
-    await _playSfx('victory_token.mp3');
+    await _play('victory_token.mp3');
   }
 
-  void dispose() {
-    _sfx.dispose();
-    _voice.dispose();
-  }
+  void dispose() {}
 }

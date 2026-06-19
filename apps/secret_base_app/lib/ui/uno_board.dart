@@ -20,10 +20,10 @@ class UnoBoard extends StatefulWidget {
   final String currentUser;
   final bool pendingCall;
   final bool catchable;
-  final VoidCallback? onCallUno;
-  final VoidCallback? onCatchUno;
+  final VoidCallback? onUnoButton;
   final String? lastSpecialCard;
   final String? lastSpecialBy;
+  final double topInset;
 
   const UnoBoard({
     super.key,
@@ -43,10 +43,10 @@ class UnoBoard extends StatefulWidget {
     required this.currentUser,
     this.pendingCall = false,
     this.catchable = false,
-    this.onCallUno,
-    this.onCatchUno,
+    this.onUnoButton,
     this.lastSpecialCard,
     this.lastSpecialBy,
+    this.topInset = 0,
   });
 
   @override
@@ -66,6 +66,12 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
   int _visibleCardCount = 0;
   bool _isDealing = false;
   Timer? _dealTimer;
+
+  // --- Turn timer ---
+  static const _turnSeconds = 15;
+  int _timeLeft = _turnSeconds;
+  Timer? _turnTimer;
+  bool _autoActed = false;
 
   // --- Special card effect ---
   late AnimationController _effectCtrl;
@@ -93,8 +99,15 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
     // New game: reset dealing state
     if (old.gameId != null && widget.gameId == null) {
       _dealTimer?.cancel();
+      _turnTimer?.cancel();
       _visibleCardCount = 0;
       _isDealing = false;
+      setState(() => _timeLeft = _turnSeconds);
+    }
+
+    // Turn changed → restart timer
+    if (widget.turn != old.turn && widget.gameId != null && !_isDealing) {
+      _startTurnTimer();
     }
 
     // Trigger dealing animation when hand is populated for the first time
@@ -110,17 +123,64 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
       _triggerSpecialEffect(widget.lastSpecialCard!);
     }
 
-    // Draw stack resolved → play cumulative draw voice
+    // Draw stack resolved → play correct draw voice (M_07/M_08/M_09)
     if (old.drawStack > 0 && widget.drawStack == 0) {
-      UnoAudio.instance.drawStack();
+      UnoAudio.instance.drawResolved(old.drawStack, old.drawStackType);
     }
   }
 
   @override
   void dispose() {
     _dealTimer?.cancel();
+    _turnTimer?.cancel();
     _effectCtrl.dispose();
     super.dispose();
+  }
+
+  void _startTurnTimer() {
+    _turnTimer?.cancel();
+    _autoActed = false;
+    setState(() => _timeLeft = _turnSeconds);
+    _turnTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      setState(() => _timeLeft--);
+      if (_timeLeft <= 5 && _timeLeft > 0) {
+        UnoAudio.instance.timerTick();
+      }
+      if (_timeLeft <= 0) {
+        t.cancel();
+        UnoAudio.instance.timerEnd();
+        _autoAct();
+      }
+    });
+  }
+
+  void _autoAct() {
+    if (_autoActed || !mounted) return;
+    _autoActed = true;
+    if (widget.turn != widget.currentUser) return;
+
+    final hand = (widget.hand ?? []).map(_asMap).toList();
+    final playable = hand.where(_isCardPlayable).toList();
+
+    if (playable.isNotEmpty) {
+      final card = playable[math.Random().nextInt(playable.length)];
+      final val = card['value'] as String?;
+      if (val == 'wild' || val == 'wild_draw4') {
+        const colors = ['red', 'yellow', 'green', 'blue'];
+        widget.onPlayCard(
+          card['id'] as String,
+          colors[math.Random().nextInt(4)],
+        );
+      } else {
+        widget.onPlayCard(card['id'] as String, null);
+      }
+    } else {
+      _handleDrawCard();
+    }
   }
 
   void _startDealingAnimation() {
@@ -141,6 +201,7 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
       } else {
         setState(() => _isDealing = false);
         timer.cancel();
+        _startTurnTimer();
       }
     });
   }
@@ -149,10 +210,16 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
     setState(() => _effectCard = card);
     _effectCtrl.forward(from: 0);
     switch (card) {
-      case 'skip':     UnoAudio.instance.cardSkip(); break;
-      case 'reverse':  UnoAudio.instance.cardReverse(); break;
-      case 'draw2':    UnoAudio.instance.cardDraw2(); break;
-      case 'wild_draw4': UnoAudio.instance.cardDraw4(); break;
+      case 'skip':
+        UnoAudio.instance.cardSkip();
+        break;
+      case 'reverse':
+        UnoAudio.instance.cardReverse();
+        break;
+      case 'discard_all':
+        UnoAudio.instance.cardPick();
+        break;
+      // draw2/draw4 목소리는 실제로 카드를 받을 때(drawStack→0) 재생
     }
   }
 
@@ -167,45 +234,22 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
     if (val == 'wild' || val == 'wild_draw4') {
       showDialog(
         context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text(
-            '색상 선택',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          content: Wrap(
-            spacing: 12,
-            children: ['red', 'blue', 'green', 'yellow'].map((color) {
-              return InkWell(
-                onTap: () {
-                  Navigator.pop(ctx);
-                  UnoAudio.instance.colorDeclared(color);
-                  widget.onPlayCard(id, color);
-                },
-                child: Container(
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    color: UnoBoard.getColorFromString(color),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 3),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Colors.black45,
-                        blurRadius: 4,
-                        offset: Offset(2, 2),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
+        barrierColor: Colors.black.withValues(alpha: 0.75),
+        builder: (ctx) => _ColorPickerDialog(
+          onColorSelected: (color) {
+            UnoAudio.instance.colorDeclared(color);
+            widget.onPlayCard(id, color);
+          },
         ),
       );
     } else {
-      UnoAudio.instance.cardPlay();
       widget.onPlayCard(id, null);
     }
+  }
+
+  void _handleDrawCard() {
+    UnoAudio.instance.cardDrawFromDeck();
+    widget.onDrawCard();
   }
 
   Map<String, dynamic> _asMap(dynamic value) {
@@ -234,12 +278,9 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final isMyTurn = widget.turn == widget.currentUser;
-    final opponentCount = widget.currentUser == 'jun'
-        ? (widget.p2Count ?? 0)
-        : (widget.p1Count ?? 0);
-    final myCount = widget.currentUser == 'jun'
-        ? (widget.p1Count ?? 0)
-        : (widget.p2Count ?? 0);
+    // p1Count = 나(currentUser)의 패 수, p2Count = 상대방의 패 수
+    final myCount = widget.p1Count ?? 0;
+    final opponentCount = widget.p2Count ?? 0;
     final hasPendingStack = widget.drawStack > 0 && isMyTurn;
 
     // Wild/+4 카드는 선언된 색상으로 표시
@@ -248,7 +289,8 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
         ? null
         : () {
             final v = rawTop['value'] as String?;
-            if ((v == 'wild' || v == 'wild_draw4') && widget.declaredColor != null) {
+            if ((v == 'wild' || v == 'wild_draw4') &&
+                widget.declaredColor != null) {
               return Map<String, dynamic>.from(rawTop)
                 ..['color'] = widget.declaredColor;
             }
@@ -257,20 +299,47 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isCompact = constraints.maxWidth < 700;
-        final handCardWidth = isCompact ? 58.0 : 70.0;
-        final handCardHeight = isCompact ? 88.0 : 105.0;
-        final pileCardWidth = isCompact ? 68.0 : 80.0;
-        final pileCardHeight = isCompact ? 102.0 : 120.0;
+        final boardWidth = constraints.maxWidth;
+        final boardHeight = constraints.maxHeight.isFinite
+            ? constraints.maxHeight
+            : (boardWidth < 700 ? 500.0 : 620.0);
+        final isLandscape = boardWidth > boardHeight * 1.15;
+        final isCompact = boardWidth < 520 || boardHeight < 560;
+        final scale = math
+            .min(boardWidth / 540, boardHeight / 560)
+            .clamp(isLandscape ? 0.68 : 0.76, 1.2);
+        final handCardWidth = (64.0 * scale).clamp(
+          isLandscape ? 44.0 : 50.0,
+          78.0,
+        );
+        final handCardHeight = handCardWidth * 1.5;
+        final pileCardWidth = (76.0 * scale).clamp(
+          isLandscape ? 50.0 : 60.0,
+          94.0,
+        );
+        final pileCardHeight = pileCardWidth * 1.5;
+        final opponentAreaHeight =
+            (86.0 * scale).clamp(isLandscape ? 54.0 : 68.0, 112.0) +
+            widget.topInset;
+        final handAreaHeight = (168.0 * scale).clamp(
+          isLandscape ? 108.0 : 128.0,
+          208.0,
+        );
+        final pileGap = (boardWidth * 0.06).clamp(18.0, 44.0);
+        final sideActionInset = isCompact ? 8.0 : 14.0;
         final visibleOpponentCards = opponentCount.clamp(
           0,
-          isCompact ? 10 : 15,
+          boardWidth > 760 ? 18 : (isCompact ? 10 : 14),
         );
 
         final sortedHand = [...(widget.hand ?? [])]
           ..sort((a, b) {
-            final aIsWild4 = (_asMap(a)['value'] as String?) == 'wild_draw4' ? 0 : 1;
-            final bIsWild4 = (_asMap(b)['value'] as String?) == 'wild_draw4' ? 0 : 1;
+            final aIsWild4 = (_asMap(a)['value'] as String?) == 'wild_draw4'
+                ? 0
+                : 1;
+            final bIsWild4 = (_asMap(b)['value'] as String?) == 'wild_draw4'
+                ? 0
+                : 1;
             return aIsWild4.compareTo(bIsWild4);
           });
         final displayHand = _isDealing
@@ -280,24 +349,16 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
         return Stack(
           children: [
             Container(
-              height: isCompact ? 500 : 550,
+              width: double.infinity,
+              height: boardHeight,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black26,
-                    blurRadius: 8,
-                    offset: Offset(0, 4),
-                  ),
-                ],
                 gradient: const RadialGradient(
                   center: Alignment.center,
                   radius: 1.2,
                   colors: [Color(0xFF2A2D43), Color(0xFF10121C)],
                 ),
               ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
+              child: ClipRect(
                 child: widget.gameId == null
                     ? Center(
                         child: ElevatedButton.icon(
@@ -321,8 +382,10 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
                         children: [
                           // --- TOP: Opponent Hand ---
                           Container(
-                            height: 100,
-                            padding: const EdgeInsets.only(top: 16),
+                            height: opponentAreaHeight,
+                            padding: EdgeInsets.only(
+                              top: widget.topInset + 12 * scale,
+                            ),
                             child: Stack(
                               alignment: Alignment.topCenter,
                               children: [
@@ -336,14 +399,14 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
                                   ),
                                 ),
                                 Positioned(
-                                  top: 24,
+                                  top: 24 * scale,
                                   child: Wrap(
-                                    spacing: -20,
+                                    spacing: -18 * scale,
                                     children: List.generate(
                                       visibleOpponentCards,
                                       (i) => UnoCardBack(
-                                        width: isCompact ? 34 : 40,
-                                        height: isCompact ? 51 : 60,
+                                        width: (38 * scale).clamp(31.0, 46.0),
+                                        height: (57 * scale).clamp(46.5, 69.0),
                                       ),
                                     ),
                                   ),
@@ -352,44 +415,43 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
                             ),
                           ),
 
+                          // --- TURN TIMER ---
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 2,
+                            ),
+                            child: _TurnTimerBar(
+                              timeLeft: _timeLeft,
+                              totalSeconds: _turnSeconds,
+                              isMyTurn: isMyTurn,
+                              turn: widget.turn,
+                            ),
+                          ),
+
                           // --- MIDDLE: Piles & Status ---
                           Expanded(
                             child: Stack(
                               children: [
-                                if (widget.pendingCall)
-                                  Positioned(
-                                    bottom: 8,
-                                    left: 8,
-                                    child: _UnoCallButton(
-                                      label: 'UNO!',
-                                      color: const Color(0xFFE52521),
-                                      onTap: () {
-                                        UnoAudio.instance.unoCall();
-                                        widget.onCallUno?.call();
-                                      },
-                                    ),
+                                Positioned(
+                                  bottom: sideActionInset,
+                                  left: sideActionInset,
+                                  child: _UnoCallButton(
+                                    label: 'UNO!',
+                                    color: const Color(0xFFE52521),
+                                    enabled:
+                                        widget.pendingCall || widget.catchable,
+                                    onTap: widget.onUnoButton ?? () {},
                                   ),
-                                if (widget.catchable)
-                                  Positioned(
-                                    bottom: 8,
-                                    right: 8,
-                                    child: _UnoCallButton(
-                                      label: '잡기! 😈',
-                                      color: const Color(0xFF7B1FA2),
-                                      onTap: () {
-                                        UnoAudio.instance.unoCaught();
-                                        widget.onCatchUno?.call();
-                                      },
-                                    ),
-                                  ),
+                                ),
                                 // Wild 카드가 아닌데 색상이 active한 경우 (일반 카드 후 color reset 등)에만 배지 표시
                                 if (widget.declaredColor != null &&
                                     widget.topCard != null &&
                                     widget.topCard!['value'] != 'wild' &&
                                     widget.topCard!['value'] != 'wild_draw4')
                                   Positioned(
-                                    top: 20,
-                                    right: 20,
+                                    top: sideActionInset,
+                                    right: sideActionInset,
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 12,
@@ -418,7 +480,7 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
                                 // Draw stack indicator (center-top)
                                 if (widget.drawStack > 0)
                                   Positioned(
-                                    top: 12,
+                                    top: sideActionInset,
                                     left: 0,
                                     right: 0,
                                     child: Center(
@@ -436,7 +498,7 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
                                       // Draw Pile
                                       GestureDetector(
                                         onTap: isMyTurn
-                                            ? widget.onDrawCard
+                                            ? _handleDrawCard
                                             : null,
                                         child: Stack(
                                           clipBehavior: Clip.none,
@@ -499,7 +561,7 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
                                           ],
                                         ),
                                       ),
-                                      const SizedBox(width: 30),
+                                      SizedBox(width: pileGap),
                                       // Discard Pile (Top Card)
                                       if (displayTopCard != null)
                                         AnimatedSwitcher(
@@ -544,8 +606,8 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
                                     widget.drawStackType == 'wild_draw4' &&
                                     widget.onChallengeDraw4 != null)
                                   Positioned(
-                                    top: 8,
-                                    right: 8,
+                                    top: sideActionInset,
+                                    right: sideActionInset,
                                     child: _UnoCallButton(
                                       label: '도전! 🔍',
                                       color: const Color(0xFFFF6D00),
@@ -558,8 +620,8 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
 
                           // --- BOTTOM: Player Hand ---
                           Container(
-                            height: 180,
-                            padding: const EdgeInsets.only(bottom: 16),
+                            height: handAreaHeight,
+                            padding: EdgeInsets.only(bottom: 12 * scale),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 begin: Alignment.topCenter,
@@ -588,25 +650,27 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
                                             ? Colors.greenAccent
                                             : Colors.white54,
                                         fontWeight: FontWeight.bold,
-                                        fontSize: 16,
+                                        fontSize: isCompact ? 14 : 16,
                                       ),
                                     ),
                                     if (hasPendingStack) ...[
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        widget.drawStackType == 'draw2'
-                                            ? '+2로 방어 가능'
-                                            : '+4로 방어 또는 도전',
-                                        style: const TextStyle(
-                                          color: Colors.orangeAccent,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
+                                      if (!isCompact) ...[
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          widget.drawStackType == 'draw2'
+                                              ? '+2로 방어 가능'
+                                              : '+4로 방어 또는 도전',
+                                          style: const TextStyle(
+                                            color: Colors.orangeAccent,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                         ),
-                                      ),
+                                      ],
                                     ],
                                   ],
                                 ),
-                                const SizedBox(height: 12),
+                                SizedBox(height: 10 * scale),
                                 Expanded(
                                   child: displayHand.isEmpty
                                       ? const Center(
@@ -620,7 +684,7 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
                                       : SingleChildScrollView(
                                           scrollDirection: Axis.horizontal,
                                           padding: const EdgeInsets.symmetric(
-                                            horizontal: 16,
+                                            horizontal: 14,
                                           ),
                                           child: Row(
                                             crossAxisAlignment:
@@ -636,8 +700,8 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
                                               );
 
                                               return Padding(
-                                                padding: const EdgeInsets.only(
-                                                  right: 8.0,
+                                                padding: EdgeInsets.only(
+                                                  right: 7.0 * scale,
                                                 ),
                                                 child: _DealingCard(
                                                   index: i,
@@ -859,6 +923,11 @@ class _SpecialCardEffect extends StatelessWidget {
         color = const Color(0xFF4CAE4C);
         emoji = '📥';
         break;
+      case 'discard_all':
+        label = 'ALL!';
+        color = const Color(0xFF00897B);
+        emoji = '🃏';
+        break;
       case 'wild_draw4':
         label = '+4!';
         color = const Color(0xFF7B1FA2);
@@ -946,10 +1015,13 @@ class _UnoCallButton extends StatefulWidget {
   final String label;
   final Color color;
   final VoidCallback onTap;
+  final bool enabled;
+
   const _UnoCallButton({
     required this.label,
     required this.color,
     required this.onTap,
+    this.enabled = true,
   });
 
   @override
@@ -967,11 +1039,25 @@ class _UnoCallButtonState extends State<_UnoCallButton>
     _anim = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
-    )..repeat(reverse: true);
+    );
+    if (widget.enabled) {
+      _anim.repeat(reverse: true);
+    }
     _scale = Tween<double>(
       begin: 1.0,
       end: 1.08,
     ).animate(CurvedAnimation(parent: _anim, curve: Curves.easeInOut));
+  }
+
+  @override
+  void didUpdateWidget(covariant _UnoCallButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.enabled && !_anim.isAnimating) {
+      _anim.repeat(reverse: true);
+    } else if (!widget.enabled && _anim.isAnimating) {
+      _anim.stop();
+      _anim.value = 0;
+    }
   }
 
   @override
@@ -982,35 +1068,43 @@ class _UnoCallButtonState extends State<_UnoCallButton>
 
   @override
   Widget build(BuildContext context) {
+    final effectiveColor = widget.enabled
+        ? widget.color
+        : const Color(0xFF5F6675);
+
     return ScaleTransition(
-      scale: _scale,
+      scale: widget.enabled ? _scale : const AlwaysStoppedAnimation(1.0),
       child: GestureDetector(
-        onTap: widget.onTap,
+        onTap: widget.enabled ? widget.onTap : null,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
           decoration: BoxDecoration(
-            color: widget.color,
+            color: effectiveColor,
             borderRadius: BorderRadius.circular(14),
             boxShadow: [
               BoxShadow(
-                color: widget.color.withValues(alpha: 0.6),
+                color: effectiveColor.withValues(
+                  alpha: widget.enabled ? 0.6 : 0.2,
+                ),
                 blurRadius: 16,
                 spreadRadius: 2,
               ),
             ],
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.4),
+              color: Colors.white.withValues(
+                alpha: widget.enabled ? 0.4 : 0.18,
+              ),
               width: 2,
             ),
           ),
           child: Text(
             widget.label,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: widget.enabled ? Colors.white : Colors.white54,
               fontSize: 18,
               fontWeight: FontWeight.w900,
               letterSpacing: 1,
-              shadows: [Shadow(color: Colors.black38, blurRadius: 4)],
+              shadows: const [Shadow(color: Colors.black38, blurRadius: 4)],
             ),
           ),
         ),
@@ -1080,6 +1174,61 @@ class UnoCardBack extends StatelessWidget {
   }
 }
 
+class _DiscardAllMark extends StatelessWidget {
+  final Color color;
+  final double width;
+
+  const _DiscardAllMark({required this.color, required this.width});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width * 0.58,
+      height: width * 0.5,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          _miniCard(-width * 0.16, -0.22),
+          _miniCard(0, 0),
+          _miniCard(width * 0.16, 0.22),
+        ],
+      ),
+    );
+  }
+
+  Widget _miniCard(double dx, double turns) {
+    return Transform.translate(
+      offset: Offset(dx, 0),
+      child: Transform.rotate(
+        angle: turns,
+        child: Container(
+          width: width * 0.26,
+          height: width * 0.38,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(width * 0.04),
+            border: Border.all(color: color, width: 2),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 2,
+                offset: Offset(1, 1),
+              ),
+            ],
+          ),
+          child: Center(
+            child: Container(
+              width: width * 0.13,
+              height: width * 0.13,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class UnoCardFront extends StatelessWidget {
   final Map<String, dynamic> cardMap;
   final double width;
@@ -1094,21 +1243,18 @@ class UnoCardFront extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorStr = cardMap['color'] as String?;
     final valueStr = cardMap['value'] as String?;
+
+    // Wild Draw 4: 전용 디자인 (실제 UNO +4 카드 스타일)
+    if (valueStr == 'wild_draw4') return _buildWildDraw4();
+    // Wild: 4색 원형 디자인
+    if (valueStr == 'wild') return _buildWild();
+
+    final colorStr = cardMap['color'] as String?;
     final cardColor = UnoBoard.getColorFromString(colorStr);
 
     String displayValue = valueStr ?? '?';
     String cornerValue = displayValue;
-
-    if (displayValue == 'wild') {
-      displayValue = 'WILD';
-      cornerValue = 'W';
-    }
-    if (displayValue == 'wild_draw4') {
-      displayValue = '+4\nWILD';
-      cornerValue = '+4';
-    }
     if (displayValue == 'draw2') {
       displayValue = '+2';
       cornerValue = '+2';
@@ -1121,10 +1267,52 @@ class UnoCardFront extends StatelessWidget {
       displayValue = '⇄';
       cornerValue = '⇄';
     }
+    if (displayValue == 'discard_all') {
+      displayValue = 'ALL';
+      cornerValue = 'ALL';
+    }
 
-    final isBlack = cardColor == const Color(0xFF222222);
-    final textColorColor = isBlack ? Colors.black : cardColor;
+    if (valueStr == 'discard_all') {
+      return _cardShell(
+        color: cardColor,
+        cornerValue: cornerValue,
+        child: Center(
+          child: _DiscardAllMark(color: cardColor, width: width),
+        ),
+      );
+    }
 
+    return _cardShell(
+      color: cardColor,
+      cornerValue: cornerValue,
+      child: Center(
+        child: Text(
+          displayValue,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: cardColor,
+            fontSize: displayValue.length > 2 ? width * 0.2 : width * 0.35,
+            fontWeight: FontWeight.w900,
+            shadows: const [
+              Shadow(
+                color: Colors.black26,
+                blurRadius: 1,
+                offset: Offset(1, 1),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _cardShell({
+    required Color color,
+    required String cornerValue,
+    required Widget child,
+    Color? overrideBackground,
+  }) {
+    final bg = overrideBackground ?? color;
     return Container(
       width: width,
       height: height,
@@ -1138,12 +1326,13 @@ class UnoCardFront extends StatelessWidget {
       padding: EdgeInsets.all(width * 0.05),
       child: Container(
         decoration: BoxDecoration(
-          color: cardColor,
+          color: bg,
           borderRadius: BorderRadius.circular(width * 0.08),
           border: Border.all(color: Colors.black87, width: 1),
         ),
         child: Stack(
           children: [
+            // Oval center highlight
             Center(
               child: Transform.rotate(
                 angle: -math.pi / 6,
@@ -1151,54 +1340,30 @@ class UnoCardFront extends StatelessWidget {
                   width: width * 0.8,
                   height: height * 0.5,
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: Colors.white.withValues(alpha: 0.18),
                     borderRadius: BorderRadius.circular(width * 0.4),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Colors.black26,
-                        blurRadius: 2,
-                        offset: Offset(-1, 1),
-                      ),
-                    ],
                   ),
                 ),
               ),
             ),
-            Center(
-              child: Text(
-                displayValue,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: textColorColor,
-                  fontSize: displayValue.length > 2
-                      ? width * 0.2
-                      : width * 0.35,
-                  fontWeight: FontWeight.w900,
-                  shadows: const [
-                    Shadow(
-                      color: Colors.black26,
-                      blurRadius: 1,
-                      offset: Offset(1, 1),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            child,
+            // Top-left corner
             Positioned(
-              top: 4,
+              top: 3,
               left: 4,
               child: Text(
                 cornerValue,
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: width * 0.15,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w900,
                   shadows: const [Shadow(color: Colors.black, blurRadius: 1)],
                 ),
               ),
             ),
+            // Bottom-right corner (rotated)
             Positioned(
-              bottom: 4,
+              bottom: 3,
               right: 4,
               child: Transform.rotate(
                 angle: math.pi,
@@ -1207,7 +1372,7 @@ class UnoCardFront extends StatelessWidget {
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: width * 0.15,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w900,
                     shadows: const [Shadow(color: Colors.black, blurRadius: 1)],
                   ),
                 ),
@@ -1216,6 +1381,355 @@ class UnoCardFront extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildWild() {
+    const qColors = [
+      Color(0xFFE52521),
+      Color(0xFFF9D000),
+      Color(0xFF0068B5),
+      Color(0xFF4CAE4C),
+    ];
+    return _cardShell(
+      color: const Color(0xFF111111),
+      overrideBackground: const Color(0xFF111111),
+      cornerValue: 'W',
+      child: Center(
+        child: Container(
+          width: width * 0.62,
+          height: height * 0.45,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 1.5),
+          ),
+          child: ClipOval(
+            child: Column(
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      Expanded(child: Container(color: qColors[0])),
+                      Expanded(child: Container(color: qColors[1])),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Expanded(child: Container(color: qColors[2])),
+                      Expanded(child: Container(color: qColors[3])),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWildDraw4() {
+    const qColors = [
+      Color(0xFFE52521),
+      Color(0xFFF9D000),
+      Color(0xFF4CAE4C),
+      Color(0xFF0068B5),
+    ];
+    // Reference: real UNO +4 card — 4 colored small cards fanned + black bg
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(width * 0.1),
+        boxShadow: const [
+          BoxShadow(color: Colors.black54, blurRadius: 5, offset: Offset(2, 3)),
+        ],
+      ),
+      padding: EdgeInsets.all(width * 0.05),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF111111),
+          borderRadius: BorderRadius.circular(width * 0.08),
+          border: Border.all(color: Colors.black87, width: 1),
+        ),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            // 4 mini colored cards arranged in 2x2
+            Positioned(
+              top: height * 0.12,
+              left: width * 0.06,
+              child: _miniCard(qColors[0], width, height),
+            ),
+            Positioned(
+              top: height * 0.12,
+              right: width * 0.06,
+              child: _miniCard(qColors[1], width, height),
+            ),
+            Positioned(
+              top: height * 0.38,
+              left: width * 0.06,
+              child: _miniCard(qColors[2], width, height),
+            ),
+            Positioned(
+              top: height * 0.38,
+              right: width * 0.06,
+              child: _miniCard(qColors[3], width, height),
+            ),
+            // +4 circle in center
+            Center(
+              child: Container(
+                width: width * 0.48,
+                height: width * 0.48,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF111111),
+                  border: Border.all(color: Colors.white, width: 2.5),
+                  boxShadow: const [
+                    BoxShadow(color: Colors.black54, blurRadius: 4),
+                  ],
+                ),
+                child: Center(
+                  child: Text(
+                    '+4',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: width * 0.28,
+                      fontWeight: FontWeight.w900,
+                      height: 1,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            // Corner labels
+            Positioned(
+              top: 3,
+              left: 4,
+              child: Text(
+                '+4',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: width * 0.14,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            Positioned(
+              bottom: 3,
+              right: 4,
+              child: Transform.rotate(
+                angle: math.pi,
+                child: Text(
+                  '+4',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: width * 0.14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _miniCard(Color color, double w, double h) {
+    return Container(
+      width: w * 0.35,
+      height: h * 0.22,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(w * 0.04),
+        border: Border.all(color: Colors.white, width: 1),
+      ),
+    );
+  }
+}
+
+// ── Color Picker Dialog ───────────────────────────────────────────────────────
+
+class _ColorPickerDialog extends StatelessWidget {
+  final void Function(String color) onColorSelected;
+  const _ColorPickerDialog({required this.onColorSelected});
+
+  static const _colors = ['red', 'yellow', 'green', 'blue'];
+  static const _labels = ['빨강', '노랑', '초록', '파랑'];
+  static const _emojis = ['🔴', '🟡', '🟢', '🔵'];
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1C28),
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.15),
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.6),
+              blurRadius: 40,
+              spreadRadius: 8,
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'WILD',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 3,
+                height: 1,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              '색상을 선택하세요',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 20),
+            GridView.count(
+              shrinkWrap: true,
+              crossAxisCount: 2,
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              childAspectRatio: 1.5,
+              children: List.generate(4, (i) {
+                final color = _colors[i];
+                final cardColor = UnoBoard.getColorFromString(color);
+                return GestureDetector(
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    onColorSelected(color);
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: cardColor,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.4),
+                        width: 1.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: cardColor.withValues(alpha: 0.5),
+                          blurRadius: 10,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(_emojis[i], style: const TextStyle(fontSize: 22)),
+                        const SizedBox(height: 4),
+                        Text(
+                          _labels[i],
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            shadows: [
+                              Shadow(color: Colors.black38, blurRadius: 3),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Turn Timer Bar ────────────────────────────────────────────────────────────
+
+class _TurnTimerBar extends StatelessWidget {
+  final int timeLeft;
+  final int totalSeconds;
+  final bool isMyTurn;
+  final String? turn;
+
+  const _TurnTimerBar({
+    required this.timeLeft,
+    required this.totalSeconds,
+    required this.isMyTurn,
+    required this.turn,
+  });
+
+  Color get _barColor {
+    if (timeLeft > 8) return const Color(0xFF4CAE4C);
+    if (timeLeft > 4) return const Color(0xFFF9D000);
+    return const Color(0xFFE52521);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = (timeLeft / totalSeconds).clamp(0.0, 1.0);
+    final barColor = _barColor;
+    final isWarning = timeLeft <= 5;
+
+    return Row(
+      children: [
+        SizedBox(
+          width: 60,
+          child: Text(
+            isMyTurn ? '내 턴' : (turn ?? '상대'),
+            style: TextStyle(
+              color: isMyTurn ? Colors.greenAccent : Colors.white54,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: SizedBox(
+              height: 7,
+              child: LinearProgressIndicator(
+                value: progress,
+                backgroundColor: Colors.white12,
+                valueColor: AlwaysStoppedAnimation<Color>(barColor),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        AnimatedDefaultTextStyle(
+          duration: const Duration(milliseconds: 200),
+          style: TextStyle(
+            color: barColor,
+            fontSize: isWarning ? 15 : 13,
+            fontWeight: FontWeight.w900,
+          ),
+          child: Text('$timeLeft'),
+        ),
+      ],
     );
   }
 }

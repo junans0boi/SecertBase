@@ -19,6 +19,7 @@ import {
   applyCardEffect,
   clearDrawStack,
   hadPlayableCardOfColor,
+  collectDiscardAllBatch,
   getNextPlayer,
   checkWin as checkUnoWin,
 } from "./uno-engine.js";
@@ -114,7 +115,13 @@ const getPresence = (io, roomCode) => {
   if (!room) {
     return [];
   }
-  return [...room].map((socketId) => io.sockets.sockets.get(socketId)?.data?.userId).filter(Boolean);
+  return [
+    ...new Set(
+      [...room]
+        .map((socketId) => io.sockets.sockets.get(socketId)?.data?.userId)
+        .filter(Boolean),
+    ),
+  ];
 };
 
 const getPresenceProfiles = (io, roomCode) => {
@@ -1012,13 +1019,20 @@ export const registerSocketHandlers = (io) => {
       // Capture previous effective color (needed for +4 challenge tracking)
       const previousColor = gameState.declaredColor || topCard.color;
 
-      // Remove card from hand
+      // Remove card from hand. Discard All is a colored card: after the
+      // trigger card is removed, all remaining cards of that color are also
+      // discarded in current hand order.
       hand.splice(cardIndex, 1);
-      gameState.discardPile.push(card);
+      const playedCards = collectDiscardAllBatch(hand, card);
+      for (const playedCard of playedCards) {
+        gameState.discardPile.push(playedCard);
+      }
       gameState.declaredColor = declaredColor || null;
 
-      // Apply card effect (pass previousColor for draw4 tracking)
-      applyCardEffect(gameState, card, previousColor);
+      // Apply card effects in the same order the cards reached the discard pile.
+      for (const playedCard of playedCards) {
+        applyCardEffect(gameState, playedCard, previousColor);
+      }
 
       // Check win
       const won = checkUnoWin(gameState, userId);
@@ -1044,7 +1058,9 @@ export const registerSocketHandlers = (io) => {
 
       const event = {
         by: userId,
-        card,
+        card: playedCards[playedCards.length - 1],
+        cards: playedCards,
+        count: playedCards.length,
         declaredColor: gameState.declaredColor,
         nextPlayer: gameState.currentPlayer,
         drawStack: gameState.drawStack,
@@ -1162,22 +1178,23 @@ export const registerSocketHandlers = (io) => {
       let drawnPlayer, drawnCount, nextPlayer;
 
       if (challengeSuccess) {
-        // Attacker draws 6 (penalty for illegal +4)
-        drawnCount = 6;
+        // B의 도전 성공: A가 +4를 불법으로 냈음 → A가 4장 받기, B 턴 유지, 선언 색상 유지
+        drawnCount = 4;
         drawnPlayer = attackerPlayer;
-        nextPlayer = userId; // challenger gets their turn
+        nextPlayer = userId; // B(challenger)의 턴 유지
       } else {
-        // Challenger draws 6 (4 base + 2 fail penalty)
+        // B의 도전 실패: A가 정당하게 냈음 → B가 6장 받기(4장+벌칙2장), A 턴 유지
         drawnCount = 6;
         drawnPlayer = userId;
-        nextPlayer = attackerPlayer; // challenger loses turn, attacker continues
+        nextPlayer = attackerPlayer; // A 턴 유지
       }
 
       const drawnCards = drawCards(gameState, drawnCount);
       gameState.hands[drawnPlayer].push(...drawnCards);
       clearDrawStack(gameState);
       gameState.currentPlayer = nextPlayer;
-      gameState.declaredColor = challengeSuccess ? null : gameState.declaredColor;
+      // 선언 색상: 성공/실패 모두 A가 선언한 색상 유지 (공식 룰)
+      // gameState.declaredColor는 이미 +4 플레이 시 설정된 상태로 유지
 
       await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
 
@@ -1203,6 +1220,13 @@ export const registerSocketHandlers = (io) => {
       }
 
       ack({ ok: true, success: challengeSuccess });
+    });
+
+    // ── 모두 내기 (Discard All) ────────────────────────────────────────────────
+    // Deprecated: Discard All is now a colored card handled by game:uno:play.
+    socket.on("game:uno:discard_all", async (_, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      ack({ ok: false, reason: "discard_all_is_card" });
     });
 
     socket.on("game:uno:draw", async (_, ackRaw) => {

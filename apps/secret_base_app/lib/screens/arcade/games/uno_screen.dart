@@ -4,7 +4,6 @@ import '../../../core/app_theme.dart';
 import '../../../core/socket_service.dart';
 import '../../../core/uno_audio.dart';
 import '../../../ui/uno_board.dart';
-import '../../../widgets/game_scaffold.dart';
 import '../../../widgets/game_menu.dart';
 
 class UnoScreen extends StatefulWidget {
@@ -36,7 +35,9 @@ class _UnoScreenState extends State<UnoScreen> {
   void _rebuild() {
     if (!mounted) return;
     final w = _socket.unoWinner;
-    if (w != null && w != _lastWinner) {
+    if (w == null) {
+      _lastWinner = null; // 새 게임 시작 시 리셋
+    } else if (w != _lastWinner) {
       _lastWinner = w;
       _resultShown = false;
       WidgetsBinding.instance.addPostFrameCallback((_) => _showResult(w));
@@ -72,50 +73,143 @@ class _UnoScreenState extends State<UnoScreen> {
     final sock = _socket;
     final currentUser = sock.userId ?? 'jun';
 
-    return GameScaffold(
-      title: '🃏 UNO',
-      actions: [
-        GameMenuButton(
-          hasRestart: sock.unoActive,
-          restartWaiting: sock.restartWaiting,
-          onRequestRestart: () => sock.requestRestart('uno'),
-        ),
-      ],
-      child: GameMenuListener(
-        gameType: 'uno',
-        child: ListView(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
-        children: [
-          _UnoStatus(sock: sock),
-          const SizedBox(height: 10),
-          UnoBoard(
-            gameId: sock.unoActive ? 'active' : null,
-            turn: sock.unoCurrentPlayer,
-            p1Count: sock.unoP1Count,
-            p2Count: sock.unoP2Count,
-            hand: sock.unoHand,
-            topCard: sock.unoTopCardMap,
-            declaredColor: sock.unoDeclaredColor,
-            drawStack: sock.unoDrawStack,
-            drawStackType: sock.unoDrawStackType,
-            onNewGame: sock.newUnoGame,
-            onDrawCard: sock.drawUnoCard,
-            onPlayCard: (cardId, color) =>
-                sock.playUnoCard(cardId, color: color),
-            onChallengeDraw4: sock.challengeDraw4,
-            currentUser: currentUser,
-            pendingCall: sock.unoPendingCall,
-            catchable: sock.unoCatchable,
-            onCallUno: sock.callUno,
-            onCatchUno: sock.catchUno,
-            lastSpecialCard: sock.unoLastSpecialCard,
-            lastSpecialBy: sock.unoLastSpecialBy,
+    return Scaffold(
+      backgroundColor: const Color(0xFF10121C),
+      body: SafeArea(
+        child: GameMenuListener(
+          gameType: 'uno',
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isShort = constraints.maxHeight < 520;
+              final topInset = isShort ? 52.0 : 86.0;
+
+              return Stack(
+                children: [
+                  Positioned.fill(
+                    child: UnoBoard(
+                      gameId: sock.unoActive ? 'active' : null,
+                      turn: sock.unoCurrentPlayer,
+                      p1Count: sock.unoP1Count,
+                      p2Count: sock.unoP2Count,
+                      hand: sock.unoHand,
+                      topCard: sock.unoTopCardMap,
+                      declaredColor: sock.unoDeclaredColor,
+                      drawStack: sock.unoDrawStack,
+                      drawStackType: sock.unoDrawStackType,
+                      onNewGame: sock.newUnoGame,
+                      onDrawCard: sock.drawUnoCard,
+                      onPlayCard: (cardId, color) =>
+                          sock.playUnoCard(cardId, color: color),
+                      onChallengeDraw4: sock.challengeDraw4,
+                      currentUser: currentUser,
+                      pendingCall: sock.unoPendingCall,
+                      catchable: sock.unoCatchable,
+                      onUnoButton: () {
+                        if (sock.unoPendingCall) {
+                          UnoAudio.instance.unoCall();
+                        } else if (sock.unoCatchable) {
+                          UnoAudio.instance.unoCaught();
+                        }
+                        sock.pressUnoButton();
+                      },
+                      lastSpecialCard: sock.unoLastSpecialCard,
+                      lastSpecialBy: sock.unoLastSpecialBy,
+                      topInset: topInset,
+                    ),
+                  ),
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: _UnoTopOverlay(
+                      sock: sock,
+                      compact: isShort,
+                      onBack: () => Navigator.of(context).pop(),
+                    ),
+                  ),
+                  if (sock.unoWinner != null)
+                    Positioned(
+                      left: 10,
+                      right: 10,
+                      bottom: 10,
+                      child: _WinBanner(
+                        winner: sock.unoWinner!,
+                        userId: sock.userId,
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
-          if (sock.unoWinner != null) ...[
-            const SizedBox(height: 12),
-            _WinBanner(winner: sock.unoWinner!, userId: sock.userId),
+        ),
+      ),
+    );
+  }
+}
+
+class _UnoTopOverlay extends StatelessWidget {
+  final SocketService sock;
+  final bool compact;
+  final VoidCallback onBack;
+
+  const _UnoTopOverlay({
+    required this.sock,
+    required this.compact,
+    required this.onBack,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.black.withValues(alpha: 0.56),
+            Colors.black.withValues(alpha: compact ? 0.12 : 0.0),
           ],
-        ],
+        ),
+      ),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(8, compact ? 2 : 6, 8, compact ? 4 : 10),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              height: compact ? 36 : 42,
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(
+                      Icons.arrow_back_ios_new,
+                      size: 18,
+                      color: Colors.white,
+                    ),
+                    onPressed: onBack,
+                  ),
+                  Expanded(
+                    child: Text(
+                      '🃏 UNO',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.notoSans(
+                        color: Colors.white,
+                        fontSize: compact ? 15 : 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  GameMenuButton(
+                    hasRestart: sock.unoActive,
+                    restartWaiting: sock.restartWaiting,
+                    onRequestRestart: () => sock.requestRestart('uno'),
+                    iconColor: Colors.white,
+                  ),
+                ],
+              ),
+            ),
+            if (!compact) _UnoStatus(sock: sock),
+          ],
         ),
       ),
     );
@@ -136,19 +230,21 @@ class _UnoStatus extends StatelessWidget {
         : '${sock.unoCurrentPlayer ?? '상대'} 차례입니다';
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: kCard,
-        borderRadius: BorderRadius.circular(14),
+        color: Colors.black.withValues(alpha: 0.22),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isMyTurn ? kSuccess.withValues(alpha: 0.5) : kBorder,
+          color: isMyTurn
+              ? kSuccess.withValues(alpha: 0.65)
+              : Colors.white.withValues(alpha: 0.18),
         ),
       ),
       child: Text(
         text,
         textAlign: TextAlign.center,
         style: GoogleFonts.notoSans(
-          color: isMyTurn ? kSuccess : kTextSub,
+          color: isMyTurn ? kSuccess : Colors.white70,
           fontSize: 13,
           fontWeight: FontWeight.w700,
         ),
@@ -219,9 +315,7 @@ class _ResultDialog extends StatelessWidget {
           ),
           boxShadow: [
             BoxShadow(
-              color: (isMe
-                  ? const Color(0xFF4CAE4C)
-                  : const Color(0xFFE52521))
+              color: (isMe ? const Color(0xFF4CAE4C) : const Color(0xFFE52521))
                   .withValues(alpha: 0.3),
               blurRadius: 40,
               spreadRadius: 4,
@@ -231,10 +325,7 @@ class _ResultDialog extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              isMe ? '🏆' : '😢',
-              style: const TextStyle(fontSize: 64),
-            ),
+            Text(isMe ? '🏆' : '😢', style: const TextStyle(fontSize: 64)),
             const SizedBox(height: 16),
             Text(
               isMe ? 'UNO 승리!' : '패배...',
@@ -246,9 +337,7 @@ class _ResultDialog extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              isMe
-                  ? '손패를 모두 냈어요! 최고예요!'
-                  : '$winner 님이 먼저 UNO를 달성했어요.',
+              isMe ? '손패를 모두 냈어요! 최고예요!' : '$winner 님이 먼저 UNO를 달성했어요.',
               textAlign: TextAlign.center,
               style: GoogleFonts.notoSans(
                 color: Colors.white60,
@@ -288,9 +377,7 @@ class _ResultDialog extends StatelessWidget {
                     ),
                     child: Text(
                       isMe ? '한 판 더!' : '복수하기!',
-                      style: GoogleFonts.notoSans(
-                        fontWeight: FontWeight.w800,
-                      ),
+                      style: GoogleFonts.notoSans(fontWeight: FontWeight.w800),
                     ),
                   ),
                 ),

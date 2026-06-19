@@ -6,12 +6,16 @@ class GameScaffold extends StatelessWidget {
   final String title;
   final Widget child;
   final List<Widget>? actions;
+  final double maxContentWidth;
+  final bool fullBleed;
 
   const GameScaffold({
     super.key,
     required this.title,
     required this.child,
     this.actions,
+    this.maxContentWidth = 540,
+    this.fullBleed = false,
   });
 
   @override
@@ -27,7 +31,14 @@ class GameScaffold extends StatelessWidget {
           icon: const Icon(Icons.arrow_back_ios_new, size: 18, color: kText),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text(title, style: GoogleFonts.notoSans(color: kText, fontSize: 18, fontWeight: FontWeight.w700)),
+        title: Text(
+          title,
+          style: GoogleFonts.notoSans(
+            color: kText,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
         centerTitle: true,
         actions: actions,
         bottom: PreferredSize(
@@ -36,12 +47,14 @@ class GameScaffold extends StatelessWidget {
         ),
       ),
       body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 540),
-            child: child,
-          ),
-        ),
+        child: fullBleed
+            ? child
+            : Center(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: maxContentWidth),
+                  child: child,
+                ),
+              ),
       ),
     );
   }

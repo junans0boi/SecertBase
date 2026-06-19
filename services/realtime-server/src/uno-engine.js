@@ -4,7 +4,7 @@
  * Rules:
  * - Each player starts with 7 cards
  * - Match card by color or number
- * - Special cards: Skip, Reverse, Draw2, Wild, Wild Draw4
+ * - Special cards: Skip, Reverse, Draw2, Discard All, Wild, Wild Draw4
  * - Draw stack chaining: +2 defends against +2, +4 defends against +4
  * - +4 challenge: challenger can call bluff
  * - Shout "UNO" when down to 1 card
@@ -13,7 +13,7 @@
 
 export const COLORS = ['red', 'yellow', 'green', 'blue'];
 export const NUMBERS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
-export const ACTIONS = ['skip', 'reverse', 'draw2'];
+export const ACTIONS = ['skip', 'reverse', 'draw2', 'discard_all'];
 export const WILDS = ['wild', 'wild_draw4'];
 
 /**
@@ -92,6 +92,31 @@ export function canPlayCard(card, topCard, declaredColor = null, drawStack = 0, 
  */
 export function hadPlayableCardOfColor(hand, color) {
   return hand.some((c) => c.color === color && c.value !== 'wild' && c.value !== 'wild_draw4');
+}
+
+export function isDiscardAllCard(card) {
+  return card?.value === 'discard_all' && COLORS.includes(card.color);
+}
+
+/**
+ * Discard All is a colored action card. Playing a blue Discard All card also
+ * discards every remaining blue card from that player's hand.
+ */
+export function collectDiscardAllBatch(hand, triggerCard) {
+  if (!isDiscardAllCard(triggerCard)) return [triggerCard];
+
+  const batch = [triggerCard];
+  const remaining = [];
+  for (const card of hand) {
+    if (card.color === triggerCard.color) {
+      batch.push(card);
+    } else {
+      remaining.push(card);
+    }
+  }
+
+  hand.splice(0, hand.length, ...remaining);
+  return batch;
 }
 
 /**
@@ -178,6 +203,9 @@ export function applyCardEffect(gameState, card, previousColor = null) {
   } else if (card.value === 'draw2') {
     gameState.drawStack = (gameState.drawStack || 0) + 2;
     gameState.drawStackType = 'draw2';
+  } else if (card.value === 'discard_all') {
+    // Batch collection is handled by the play action. The trigger card itself
+    // does not add another turn effect.
   } else if (card.value === 'wild_draw4') {
     gameState.drawStack = (gameState.drawStack || 0) + 4;
     gameState.drawStackType = 'wild_draw4';

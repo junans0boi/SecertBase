@@ -8,18 +8,20 @@ class GameMenuButton extends StatelessWidget {
   final bool hasRestart;
   final bool restartWaiting;
   final VoidCallback? onRequestRestart;
+  final Color iconColor;
 
   const GameMenuButton({
     super.key,
     this.hasRestart = false,
     this.restartWaiting = false,
     this.onRequestRestart,
+    this.iconColor = kText,
   });
 
   @override
   Widget build(BuildContext context) {
     return IconButton(
-      icon: const Icon(Icons.more_vert, color: kText),
+      icon: Icon(Icons.more_vert, color: iconColor),
       onPressed: () => _showMenu(context),
     );
   }
@@ -91,7 +93,10 @@ class _GameMenuSheet extends StatelessWidget {
                     ? null
                     : Text(
                         '상대방에게 동의를 구합니다',
-                        style: GoogleFonts.notoSans(color: kTextSub, fontSize: 12),
+                        style: GoogleFonts.notoSans(
+                          color: kTextSub,
+                          fontSize: 12,
+                        ),
                       ),
                 enabled: !restartWaiting,
                 onTap: restartWaiting
@@ -131,7 +136,10 @@ class _GameMenuSheet extends StatelessWidget {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
           '다시 시작 요청',
-          style: GoogleFonts.notoSans(color: kText, fontWeight: FontWeight.w700),
+          style: GoogleFonts.notoSans(
+            color: kText,
+            fontWeight: FontWeight.w700,
+          ),
         ),
         content: Text(
           '상대방에게 다시 시작을 요청할게요.\n상대방이 수락해야 재시작됩니다.',
@@ -149,7 +157,10 @@ class _GameMenuSheet extends StatelessWidget {
             },
             child: Text(
               '요청하기',
-              style: GoogleFonts.notoSans(color: kPrimary, fontWeight: FontWeight.w700),
+              style: GoogleFonts.notoSans(
+                color: kPrimary,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],
@@ -194,7 +205,9 @@ class _GameMenuListenerState extends State<GameMenuListener> {
     if (!mounted) return;
     if (_sock.opponentJustLeft && !_disconnectDialogShown) {
       _disconnectDialogShown = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _showDisconnectDialog());
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _showDisconnectDialog(),
+      );
     }
     if (!_sock.opponentJustLeft) _disconnectDialogShown = false;
 
@@ -215,7 +228,10 @@ class _GameMenuListenerState extends State<GameMenuListener> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
           '상대방이 나갔어요',
-          style: GoogleFonts.notoSans(color: kText, fontWeight: FontWeight.w700),
+          style: GoogleFonts.notoSans(
+            color: kText,
+            fontWeight: FontWeight.w700,
+          ),
         ),
         content: Text(
           '상대방과의 연결이 끊겼어요.\n잠시 기다리면 돌아올 수도 있어요.',
@@ -258,7 +274,10 @@ class _GameMenuListenerState extends State<GameMenuListener> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
           '다시 시작 요청',
-          style: GoogleFonts.notoSans(color: kText, fontWeight: FontWeight.w700),
+          style: GoogleFonts.notoSans(
+            color: kText,
+            fontWeight: FontWeight.w700,
+          ),
         ),
         content: Text(
           '상대방이 게임을 다시 시작하고 싶어해요.\n수락하면 새 게임이 시작됩니다.',

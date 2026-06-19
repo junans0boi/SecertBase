@@ -357,11 +357,17 @@ class SocketService extends ChangeNotifier {
       unoDrawStackType = map['drawStackType'] as String?;
       _applyUnoCounts(map['handCount']);
       _applyUnoCallNeeded(map['unoCallNeeded']);
-      // Track special card effect (only for opponent plays)
+      // Track special card effect (both players see the same effect)
       final playedBy = map['by'] as String?;
       final cardValue = card['value'] as String?;
-      const specialValues = ['skip', 'reverse', 'draw2', 'wild_draw4'];
-      if (playedBy != null && playedBy != userId && specialValues.contains(cardValue)) {
+      const specialValues = [
+        'skip',
+        'reverse',
+        'draw2',
+        'discard_all',
+        'wild_draw4',
+      ];
+      if (specialValues.contains(cardValue)) {
         unoLastSpecialCard = cardValue;
         unoLastSpecialBy = playedBy;
       } else {
@@ -392,6 +398,23 @@ class SocketService extends ChangeNotifier {
       final success = map['success'] == true;
       final by = map['by'] as String?;
       _log('UNO +4 도전 ${success ? "성공" : "실패"}: $by');
+      notifyListeners();
+    });
+
+    socket.on('game:uno:discarded_all', (data) {
+      final map = _m(data);
+      unoCurrentPlayer = map['nextPlayer'] as String?;
+      unoTopCardMap = _m(map['lastCard'] ?? {}).isEmpty
+          ? unoTopCardMap
+          : _m(map['lastCard']);
+      unoTopCard = '${unoTopCardMap?['color']} ${unoTopCardMap?['value']}';
+      unoDeclaredColor = null;
+      unoDrawStack = (map['drawStack'] as num?)?.toInt() ?? 0;
+      unoDrawStackType = map['drawStackType'] as String?;
+      _applyUnoCounts(map['handCount']);
+      _applyUnoCallNeeded(map['unoCallNeeded']);
+      final count = map['count'] as int? ?? 0;
+      _log('UNO 모두내기: ${map['by']} ${count}장');
       notifyListeners();
     });
 
@@ -659,7 +682,18 @@ class SocketService extends ChangeNotifier {
   void drawUnoCard() => _socket?.emit('game:uno:draw');
   void callUno() => _socket?.emit('game:uno:call');
   void catchUno() => _socket?.emit('game:uno:catch');
+  void pressUnoButton() {
+    if (unoPendingCall) {
+      callUno();
+      return;
+    }
+    if (unoCatchable) {
+      catchUno();
+    }
+  }
+
   void challengeDraw4() => _socket?.emit('game:uno:challenge');
+  void discardAllUno() => _socket?.emit('game:uno:discard_all');
 
   void newBombGame({int duration = 30}) =>
       _socket?.emit('game:bomb:new', {'duration': duration});

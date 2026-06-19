@@ -11,7 +11,7 @@ import 'screens/home_shell.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Initialize AuthService
   final auth = AuthService();
   await auth.init();
@@ -19,6 +19,8 @@ Future<void> main() async {
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
   ]);
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -48,7 +50,7 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
     super.initState();
     _socket.addListener(_rebuild);
     _auth.addListener(_onAuthChanged);
-    
+
     // Initial check for auto-connect
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _onAuthChanged();
@@ -65,9 +67,9 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
   void _onAuthChanged() {
     _rebuild();
     // If logged in and paired, but not connected to socket, try auto-connect
-    if (_auth.token != null && 
-        _auth.user?['PartnerCode'] != null && 
-        !_socket.isConnected && 
+    if (_auth.token != null &&
+        _auth.user?['PartnerCode'] != null &&
+        !_socket.isConnected &&
         !_autoConnecting) {
       _autoConnect();
     }
@@ -75,20 +77,15 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
 
   void _autoConnect() async {
     setState(() => _autoConnecting = true);
-    
+
     final roomCode = _auth.user?['RoomCode'];
     final roomSecret = _auth.user?['RoomSecret'];
     final userId = _auth.user?['UserCode'];
-    
+
     if (roomCode != null && roomSecret != null && userId != null) {
-      _socket.connect(
-        _auth.baseUrl,
-        roomCode,
-        roomSecret,
-        userId,
-      );
+      _socket.connect(_auth.baseUrl, roomCode, roomSecret, userId);
     }
-    
+
     // The socket service will update isConnected, which triggers rebuild
     setState(() => _autoConnecting = false);
   }
@@ -139,7 +136,10 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
               const SizedBox(height: 24),
               Text('비밀기지로 입장하는 중...', style: mainTitle(size: 24)),
               const SizedBox(height: 12),
-              Text('v1.0.4 - ' + _socket.status, style: mainBody(size: 14, color: kMainSub)),
+              Text(
+                'v1.0.4 - ' + _socket.status,
+                style: mainBody(size: 14, color: kMainSub),
+              ),
               if (_socket.status == '연결 실패' || _socket.status == '연결 끊김') ...[
                 const SizedBox(height: 32),
                 SizedBox(
@@ -148,13 +148,22 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
                   child: FilledButton(
                     onPressed: _autoConnect,
                     style: FilledButton.styleFrom(backgroundColor: kMainInk),
-                    child: Text('다시 시도하기', style: mainBody(color: Colors.white, weight: FontWeight.bold)),
+                    child: Text(
+                      '다시 시도하기',
+                      style: mainBody(
+                        color: Colors.white,
+                        weight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
                 TextButton(
                   onPressed: () => _auth.logout(),
-                  child: Text('로그아웃', style: mainBody(size: 13, color: kMainMuted)),
+                  child: Text(
+                    '로그아웃',
+                    style: mainBody(size: 13, color: kMainMuted),
+                  ),
                 ),
               ],
             ],
