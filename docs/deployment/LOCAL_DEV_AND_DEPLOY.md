@@ -62,7 +62,7 @@ npm run check
 
 cd ../../apps/secret_base_app
 flutter analyze
-flutter build web --release --no-wasm-dry-run --dart-define=SOCKET_URL=http://secertbase.kro.kr
+flutter build web --release --no-wasm-dry-run --dart-define=SOCKET_URL=https://secertbase.kro.kr
 ```
 
 `flutter analyze` currently reports existing lint warnings in unrelated files. Treat new errors as blockers.
@@ -94,7 +94,7 @@ The deploy script does this:
 - pulls `origin/main`
 - installs backend dependencies with `npm ci`
 - runs backend tests and syntax check
-- builds Flutter web with `SOCKET_URL=http://secertbase.kro.kr`
+- builds Flutter web with `SOCKET_URL=https://secertbase.kro.kr`
 - syncs `build/web/` to `/var/www/secretbase`
 - restarts `secretbase-realtime` with PM2
 - verifies `http://localhost:4100/health`
@@ -112,5 +112,5 @@ kill <pid>
 ## Useful Overrides
 
 ```bash
-BRANCH=main WEB_ROOT=/var/www/secretbase SOCKET_URL=http://secertbase.kro.kr ./scripts/deploy_server.sh
+BRANCH=main WEB_ROOT=/var/www/secretbase SOCKET_URL=https://secertbase.kro.kr ./scripts/deploy_server.sh
 ```

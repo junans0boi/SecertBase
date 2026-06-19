@@ -4,7 +4,7 @@ set -euo pipefail
 REPO_DIR="${REPO_DIR:-/home/junzzang/SecertBase}"
 BRANCH="${BRANCH:-main}"
 WEB_ROOT="${WEB_ROOT:-/var/www/secretbase}"
-SOCKET_URL="${SOCKET_URL:-http://secertbase.kro.kr}"
+SOCKET_URL="${SOCKET_URL:-https://secertbase.kro.kr}"
 PM2_NAME="${PM2_NAME:-secretbase-realtime}"
 
 cd "$REPO_DIR"
