@@ -109,9 +109,13 @@ class _PirateScreenState extends State<PirateScreen>
     );
   }
 
+  bool get _isHost => _socket.userId != null &&
+      _socket.lobbyHost == _socket.userId;
+
   // ── Setup Phase ──────────────────────────────────────────────────────────
 
   Widget _buildSetup(bool compact) {
+    final isHost = _isHost;
     return Column(
       children: [
         const SizedBox(height: 8),
@@ -140,30 +144,54 @@ class _PirateScreenState extends State<PirateScreen>
           ),
         ),
         const SizedBox(height: 28),
-        _buildSlotStepper(compact),
-        const SizedBox(height: 24),
-        SizedBox(
-          width: double.infinity,
-          height: compact ? 48 : 54,
-          child: ElevatedButton(
-            onPressed: _startGame,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFCC4F2A),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+        if (isHost) ...[
+          _buildSlotStepper(compact),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            height: compact ? 48 : 54,
+            child: ElevatedButton(
+              onPressed: _startGame,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFCC4F2A),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                elevation: 3,
               ),
-              elevation: 3,
-            ),
-            child: Text(
-              '게임 시작!',
-              style: GoogleFonts.notoSans(
-                fontSize: compact ? 15 : 17,
-                fontWeight: FontWeight.w800,
+              child: Text(
+                '게임 시작!',
+                style: GoogleFonts.notoSans(
+                  fontSize: compact ? 15 : 17,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
           ),
-        ),
+        ] else ...[
+          Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: compact ? 20 : 28,
+              vertical: compact ? 14 : 18,
+            ),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF5E9D4),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFD4A96A)),
+            ),
+            child: Text(
+              '방장이 구멍 개수를 정하고\n게임을 시작할 때까지 기다려요',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.notoSans(
+                color: const Color(0xFF7A5C3A),
+                fontSize: compact ? 13 : 14,
+                height: 1.6,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
       ],
     );
@@ -376,27 +404,31 @@ class _PirateScreenState extends State<PirateScreen>
         const SizedBox(height: 20),
         _buildResultGrid(compact, bombSlot),
         const SizedBox(height: 24),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            OutlinedButton.icon(
-              onPressed: _resetGame,
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('다시 하기'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFFCC4F2A),
-                side: const BorderSide(color: Color(0xFFCC4F2A)),
-                padding: EdgeInsets.symmetric(
-                  horizontal: compact ? 18 : 24,
-                  vertical: compact ? 10 : 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
+        if (_isHost)
+          OutlinedButton.icon(
+            onPressed: _resetGame,
+            icon: const Icon(Icons.refresh, size: 18),
+            label: const Text('다시 하기'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFFCC4F2A),
+              side: const BorderSide(color: Color(0xFFCC4F2A)),
+              padding: EdgeInsets.symmetric(
+                horizontal: compact ? 18 : 24,
+                vertical: compact ? 10 : 12,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
               ),
             ),
-          ],
-        ),
+          )
+        else
+          Text(
+            '방장이 다시 시작하길 기다려요',
+            style: GoogleFonts.notoSans(
+              color: const Color(0xFF7A5C3A),
+              fontSize: compact ? 12 : 13,
+            ),
+          ),
         const SizedBox(height: 16),
       ],
     );
