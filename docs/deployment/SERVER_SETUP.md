@@ -15,7 +15,7 @@ This document outlines the current server configuration and deployment steps for
 - **Env File:** `/home/junzzang/SecertBase/services/realtime-server/.env` (not committed)
 - **Service Name:** `secretbase-realtime` (PM2)
 - **Port:** 4100
-- **URL:** `http://SecertBase.kro.kr/socket.io/`
+- **URL:** `https://secertbase.kro.kr/socket.io/`
 
 ## API Endpoints (New)
 - **POST `/api/auth/register`:** User registration with auto-generated `UserCode`.
@@ -39,7 +39,7 @@ This document outlines the current server configuration and deployment steps for
   - `/api/` -> Proxied to `http://localhost:4100/api/`
   - `/health` -> Proxied to `http://localhost:4100/health`
 
-## HTTP Deployment Commands
+## Deployment Commands
 
 Preferred deployment command:
 
@@ -67,8 +67,29 @@ pm2 restart secretbase-realtime --update-env
 HTTPS is enabled with Let's Encrypt. Port 80 should redirect to `https://secertbase.kro.kr` while keeping `/.well-known/acme-challenge/` available for renewal.
 
 ## Firewall (UFW)
-- **Allowed:** `Nginx Full` (80, 443), `OpenSSH`, `3389` (RDP), etc.
+- Public access required: 80, 443
+- SSH from outside should use Tailscale where possible.
+- Current Tailscale server IP: `100.82.126.57`
 
-## Known Limitations
-- **SSL:** Attempted but failed due to Let's Encrypt rate limits for `kro.kr`. Currently running on HTTP only.
-- **Port Forwarding:** External access requires port 80 to be forwarded to this server's local IP.
+## SSH / Terminal Access
+
+Preferred external SSH:
+
+```bash
+ssh -t junzzang@100.82.126.57 'cd ~/SecertBase && exec bash -l'
+```
+
+DB/Redis tunnel for local development:
+
+```bash
+ssh -L 3307:127.0.0.1:3306 -L 6380:127.0.0.1:6379 junzzang@100.82.126.57
+```
+
+Public domain SSH requires router/NAT port forwarding for TCP 22. As of the latest check, public `124.58.75.93:22` was not reachable, while Tailscale SSH was reachable.
+
+## Current Notes
+
+- HTTPS is active with Let's Encrypt.
+- nginx serves the Flutter build from `/var/www/secretbase`.
+- PM2 owns the backend process `secretbase-realtime`.
+- The server currently keeps local-only reference folders such as `trash/` and `uno/` untracked.

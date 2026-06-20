@@ -1,131 +1,166 @@
-# Socket Event Contract (v1)
+# Socket Event Contract
 
-## Client -> Server
+Last updated: 2026-06-20
+
+Socket.IO endpoint:
+
+```text
+Production: https://secertbase.kro.kr/socket.io/
+Local:      http://localhost:4100/socket.io/
+```
+
+All realtime game events require a successful `session:join` first.
+
+## Common Client -> Server
 
 ### `session:join`
 
-```json
-{
-  "userId": "jun | gf",
-  "roomCode": "secret-room",
-  "roomSecret": "secretbase"
-}
-```
-
-### `sync:ping`
+Joins the couple room. `roomCode`, `roomSecret`, and `userId` normally come from `/api/user/profile/:userId`.
 
 ```json
 {
-  "clientTs": 1730000000000
-}
-```
-
-### `profile:update`
-
-설정 탭에서 선택한 프로필 이모지를 현재 접속 세션에 반영한다.
-
-```json
-{
+  "userId": "USERCODE",
+  "roomCode": "room_1_2",
+  "roomSecret": "secret",
   "profileEmoji": "🙂"
 }
 ```
 
-### `game:lobby:join`
-
-아케이드 게임별 대기방에 입장한다. 각 게임 대기방에 가장 먼저 들어온 사용자가 방장이 된다.
+Ack:
 
 ```json
-{
-  "gameType": "dice | roulette | rps | telepathy | pirate | yut | uno | bomb"
-}
+{ "ok": true, "state": {} }
 ```
 
-### `game:lobby:leave`
+Common failure reasons:
 
-현재 게임 대기방에서 나간다.
-
-```json
-{
-  "gameType": "dice | roulette | rps | telepathy | pirate | yut | uno | bomb"
-}
+```text
+invalid_payload
+invalid_room
+room_full
+user_not_allowed
 ```
 
-### `game:lobby:start`
+### `session:restore`
 
-방장이 게임 시작을 요청한다. 대기방에 2명이 있어야 성공한다.
-
-```json
-{
-  "gameType": "dice | roulette | rps | telepathy | pirate | yut | uno | bomb"
-}
-```
-
-### `game:dice:roll`
+Restores active yut/uno/bomb state if present in Redis.
 
 ```json
 {}
 ```
 
-### `game:roulette:spin`
+### `sync:ping`
 
 ```json
-{
-  "options": ["야식", "벌칙", "결제자", "면제권"]
-}
+{ "clientTs": 1781760000000 }
 ```
 
-### `game:rps:select`
+Ack includes server timestamp.
+
+### `profile:update`
 
 ```json
-{
-  "choice": "rock | paper | scissors"
-}
+{ "profileEmoji": "🐰" }
 ```
 
-### `game:telepathy:select`
+### `heart:send`
+
+Sends a lightweight heart animation to the partner.
 
 ```json
-{
-  "choice": "치킨",
-  "options": ["치킨", "피자", "족발", "회"]
-}
+{}
 ```
 
-### `game:pirate:spin`
-
-```json
-{
-  "slots": 8
-}
-```
-
-## Server -> Client
+## Common Server -> Client
 
 ### `room:presence`
 
 ```json
 {
-  "roomCode": "secret-room",
-  "users": ["jun", "gf"],
+  "roomCode": "room_1_2",
+  "users": ["ABC123", "XYZ789"],
   "profileEmojis": {
-    "jun": "🙂",
-    "gf": "🐰"
+    "ABC123": "🙂",
+    "XYZ789": "🐰"
   }
 }
 ```
 
-### `game:lobby:updated`
+### `heart:received`
 
-대기방 입장/퇴장/방장 변경 시 방 전체에 전달된다.
+```json
+{ "from": "ABC123" }
+```
+
+## Game Lobby
+
+Supported `gameType` values:
+
+```text
+dice
+roulette
+rps
+telepathy
+pirate
+yut
+uno
+uno_classic
+uno_go_wild
+bomb
+```
+
+`uno_classic` and `uno_go_wild` are lobby-level types. The actual UNO game state uses mode `classic` or `go_wild`.
+
+### `game:lobby:join`
+
+```json
+{ "gameType": "uno_go_wild" }
+```
+
+### `game:lobby:leave`
+
+```json
+{ "gameType": "uno_go_wild" }
+```
+
+### `game:lobby:select_character`
+
+Only for yut lobby.
 
 ```json
 {
-  "gameType": "dice",
-  "host": "jun",
-  "players": ["jun", "gf"],
-  "profileEmojis": {
-    "jun": "🙂",
-    "gf": "🐰"
+  "gameType": "yut",
+  "character": "honggilldong"
+}
+```
+
+Characters:
+
+```text
+honggilldong
+nolbu
+miho
+```
+
+### `game:lobby:start`
+
+Host starts the lobby game. Requires 2 players.
+
+```json
+{ "gameType": "uno_go_wild" }
+```
+
+### `game:lobby:updated`
+
+```json
+{
+  "gameType": "yut",
+  "host": "ABC123",
+  "players": ["ABC123", "XYZ789"],
+  "profileEmojis": {},
+  "characters": {
+    "ABC123": "honggilldong",
+    "XYZ789": "miho"
   },
   "updatedAt": 1781760000000
 }
@@ -133,117 +168,400 @@
 
 ### `game:lobby:started`
 
-방장이 시작 버튼을 눌러 대기방이 게임 화면으로 전환될 때 방 전체에 전달된다.
-
 ```json
 {
-  "gameType": "dice",
-  "host": "jun",
-  "players": ["jun", "gf"],
-  "profileEmojis": {
-    "jun": "🙂",
-    "gf": "🐰"
-  },
+  "gameType": "uno_go_wild",
+  "host": "ABC123",
+  "players": ["ABC123", "XYZ789"],
+  "profileEmojis": {},
   "at": 1781760000000
 }
 ```
 
-### `game:dice:result`
+## Lightweight Games
 
-```json
-{
-  "value": 4,
-  "by": "jun",
-  "at": 1730000000000
-}
-```
+### Dice
 
-### `game:roulette:result`
+Client:
 
-```json
-{
-  "index": 2,
-  "selected": "결제자",
-  "options": ["야식", "벌칙", "결제자", "면제권"],
-  "by": "gf",
-  "at": 1730000000000
-}
-```
-
-### `game:rps:result`
-
-```json
-{
-  "choices": {
-    "jun": "rock",
-    "gf": "scissors"
-  },
-  "winner": "jun | gf | draw",
-  "at": 1730000000000
-}
-```
-
-### `game:telepathy:result`
-
-```json
-{
-  "choices": {
-    "jun": "치킨",
-    "gf": "치킨"
-  },
-  "success": true,
-  "selected": "치킨",
-  "at": 1730000000000
-}
-```
-
-### `game:pirate:result`
-
-```json
-{
-  "slots": 8,
-  "bombSlot": 3,
-  "by": "jun",
-  "at": 1730000000000
-}
-```
-
-### `session:restore`
-
-재접속 시 활성 게임 세션 복원
-
-**Client → Server:**
 ```json
 {}
 ```
 
-**Server → Client (Ack):**
+Event:
+
+```text
+game:dice:roll -> game:dice:result
+```
+
+Result:
+
 ```json
 {
-  "ok": true,
-  "activeGames": {
-    "yut": {
-      "gameId": "yut-1730000000000",
-      "turn": "p1",
-      "p1Pieces": [0, 0, 0, 0],
-      "p2Pieces": [0, 0, 0, 0]
-    },
-    "uno": {
-      "gameId": "uno-1730000000000",
-      "turn": "p2",
-      "topCard": "Red-5",
-      "p1Count": 7,
-      "p2Count": 5,
-      "hand": ["Blue-3", "Green-7", "Wild"]
-    },
-    "bomb": {
-      "gameId": "bomb-1730000000000",
-      "holder": "p1",
-      "timer": 25,
-      "category": "general"
-    }
+  "value": 4,
+  "by": "ABC123",
+  "at": 1781760000000
+}
+```
+
+### Roulette
+
+Client:
+
+```json
+{
+  "options": ["야식", "벌칙", "결제자"]
+}
+```
+
+Event:
+
+```text
+game:roulette:spin -> game:roulette:result
+```
+
+### Rock Paper Scissors
+
+Client:
+
+```json
+{ "choice": "rock" }
+```
+
+Choices:
+
+```text
+rock
+paper
+scissors
+```
+
+When both players choose, server emits `game:rps:result`.
+
+### Telepathy
+
+Client:
+
+```json
+{
+  "choice": "치킨",
+  "options": ["치킨", "피자", "족발"]
+}
+```
+
+When both players choose, server emits `game:telepathy:result`.
+
+### Pirate
+
+Client:
+
+```json
+{ "slots": 8 }
+```
+
+`slots` must be 4-12.
+
+Server emits `game:pirate:result`.
+
+## Yut
+
+### `game:yut:new`
+
+Starts yut game. Requires 2 players.
+
+```json
+{
+  "characters": {
+    "ABC123": "honggilldong",
+    "XYZ789": "miho"
+  },
+  "bgm": "yut1.mp3"
+}
+```
+
+`bgm` can be `yut1.mp3`, `yut2.mp3`, `yut3.mp3`, or null.
+
+Server emits `game:yut:started`.
+
+### `game:yut:roll_start`
+
+Used during the roll-order phase.
+
+```json
+{}
+```
+
+Server emits `game:yut:start_roll`.
+
+### `game:yut:throw`
+
+Throws 윷 during the active game.
+
+```json
+{}
+```
+
+Server emits `game:yut:throw_result`.
+
+### `game:yut:move`
+
+```json
+{
+  "pieceId": 0,
+  "moveIndex": 0
+}
+```
+
+Server emits:
+
+```text
+game:yut:move_result
+game:yut:ended
+```
+
+Yut state payloads include:
+
+```json
+{
+  "id": "yut-1781760000000",
+  "players": ["ABC123", "XYZ789"],
+  "phase": "roll_order",
+  "currentTurn": "ABC123",
+  "characters": {},
+  "bgm": "yut1.mp3",
+  "startRolls": {},
+  "orderCountdownUntil": null,
+  "pendingMoves": [],
+  "lastThrow": null,
+  "winner": null,
+  "pieces": {
+    "ABC123": [],
+    "XYZ789": []
   }
 }
 ```
 
-**Note:** `activeGames` 객체는 현재 진행 중인 게임만 포함. 게임이 없으면 빈 객체 `{}`
+## UNO
+
+### Modes
+
+```text
+classic
+go_wild
+```
+
+Rules by mode:
+
+- classic: no `discard_all`, no draw-stack defense
+- go_wild: includes `discard_all`, allows +2/+4 cross stack defense
+
+### `game:uno:new`
+
+```json
+{ "mode": "go_wild" }
+```
+
+Server emits `game:uno:started` to the room and `game:uno:hand_update` privately to each player.
+
+### `game:uno:play`
+
+```json
+{
+  "cardId": "red-5-a",
+  "declaredColor": "blue"
+}
+```
+
+`declaredColor` is required by the client for wild cards and optional otherwise.
+
+Server emits:
+
+```text
+game:uno:played
+game:uno:hand_update
+game:uno:ended
+```
+
+### `game:uno:draw`
+
+Draws 1 card, or accepts the pending draw stack.
+
+```json
+{}
+```
+
+Server emits `game:uno:drawn` and private `game:uno:hand_update`.
+
+### `game:uno:call`
+
+Used by the player who has one card and needs to declare UNO.
+
+```json
+{}
+```
+
+Server emits `game:uno:called`.
+
+### `game:uno:catch`
+
+Used by the opponent while `unoCallNeeded` points to the target player. The target draws 2.
+
+```json
+{}
+```
+
+Server emits `game:uno:penalty`.
+
+### `game:uno:challenge`
+
+Challenges a pending wild +4. Only valid when `drawStackType` is `wild_draw4` and it is the challenger's turn.
+
+```json
+{}
+```
+
+Server emits `game:uno:challenged`.
+
+### `game:uno:reaction`
+
+Gift reaction. Requires an active UNO game.
+
+```json
+{ "type": "cake" }
+```
+
+Types:
+
+```text
+cake
+candy
+coffee
+flyby
+pillow
+pizza
+sportscar
+tomato
+```
+
+Server emits:
+
+```json
+{
+  "by": "ABC123",
+  "type": "cake",
+  "at": 1781760000000
+}
+```
+
+### UNO Room Events
+
+`game:uno:started`:
+
+```json
+{
+  "topCard": { "color": "red", "value": "5", "id": "red-5-a" },
+  "currentPlayer": "ABC123",
+  "mode": "go_wild",
+  "declaredColor": null,
+  "drawStack": 0,
+  "drawStackType": null,
+  "handCount": {
+    "ABC123": 7,
+    "XYZ789": 7
+  }
+}
+```
+
+`game:uno:played` includes:
+
+```json
+{
+  "by": "ABC123",
+  "card": {},
+  "cards": [],
+  "count": 1,
+  "mode": "go_wild",
+  "declaredColor": null,
+  "nextPlayer": "XYZ789",
+  "drawStack": 0,
+  "drawStackType": null,
+  "handCount": {},
+  "winner": null,
+  "unoCallNeeded": null,
+  "at": 1781760000000
+}
+```
+
+## Bomb
+
+### `game:bomb:new`
+
+```json
+{ "duration": 30 }
+```
+
+Duration must be 10-120 seconds.
+
+Server emits `game:bomb:started`:
+
+```json
+{
+  "currentPlayer": "ABC123",
+  "duration": 30,
+  "startTime": 1781760000000,
+  "quiz": {
+    "category": "general",
+    "question": "..."
+  }
+}
+```
+
+### `game:bomb:answer`
+
+```json
+{ "answer": "정답" }
+```
+
+Server emits:
+
+```text
+game:bomb:passed
+game:bomb:wrong_answer
+game:bomb:exploded
+```
+
+## Restart
+
+### `game:restart:request`
+
+```json
+{}
+```
+
+Server emits `game:restart:requested` to the partner.
+
+### `game:restart:respond`
+
+```json
+{
+  "accept": true,
+  "gameType": "uno"
+}
+```
+
+Supported restart game types:
+
+```text
+yut
+uno
+bomb
+```
+
+Server emits one of:
+
+```text
+game:restart:declined
+game:yut:started
+game:uno:started
+game:bomb:started
+```

@@ -9,7 +9,7 @@ Use the local PC for development and Git commits. Use the server only for pullin
 1. Develop on the local PC.
 2. Run checks locally.
 3. Commit and push to GitHub.
-4. SSH into the server.
+4. SSH into the server, preferably through Tailscale.
 5. Run the server deploy script.
 
 ## Local PC Setup
@@ -81,7 +81,7 @@ Do not commit temporary folders such as `trash/` or raw reference asset folders 
 ## Deploy on Server
 
 ```bash
-ssh junzzang@<server-ip-or-domain>
+ssh -t junzzang@100.82.126.57 'cd ~/SecertBase && exec bash -l'
 cd /home/junzzang/SecertBase
 ./scripts/deploy_server.sh
 ```
@@ -101,7 +101,7 @@ The deploy script does this:
 
 ## First PM2 Migration Note
 
-If a manually started `npm start` or `node src/index.js` process is already using port `4100`, stop that process once before the first PM2-managed deploy. After that, PM2 should own the realtime server.
+PM2 now owns the realtime server as `secretbase-realtime`. If a manually started `npm start` or `node src/index.js` process is already using port `4100`, stop that process before deploying.
 
 ```bash
 ps -ef | rg 'node src/index.js|npm start'
@@ -114,3 +114,20 @@ kill <pid>
 ```bash
 BRANCH=main WEB_ROOT=/var/www/secretbase SOCKET_URL=https://secertbase.kro.kr ./scripts/deploy_server.sh
 ```
+
+## Production DB/Redis From Local PC
+
+Use Tailscale SSH tunneling rather than opening MariaDB/Redis publicly:
+
+```bash
+ssh -L 3307:127.0.0.1:3306 -L 6380:127.0.0.1:6379 junzzang@100.82.126.57
+```
+
+Then local `services/realtime-server/.env` can use:
+
+```text
+DATABASE_URL=mysql://<server-user>:<server-password>@127.0.0.1:3307/secretbase
+REDIS_URL=redis://127.0.0.1:6380
+```
+
+This points local development at production data. Use it carefully.

@@ -1,125 +1,289 @@
-# REST API Documentation (Phase 3)
+# REST API Documentation
 
-**Base URL**: `http://localhost:4100/api`
+Last updated: 2026-06-20
 
----
+Base URLs:
 
-## 1. Setlog API (OOTD & 데이트 사진)
+```text
+Production: https://secertbase.kro.kr/api
+Local:      http://localhost:4100/api
+```
 
-### GET `/api/setlog`
-셋로그 포스트 목록 조회
+File uploads are served from:
 
-**Query Parameters:**
-- `month` (optional): YYYY-MM 형식 (예: 2026-06)
+```text
+Production: https://secertbase.kro.kr/uploads/<filename>
+Local:      http://localhost:4100/uploads/<filename>
+```
 
-**Response:**
+The backend uses MariaDB through `DATABASE_URL`.
+
+## Auth
+
+### POST `/auth/register`
+
+Creates a user and default `User_Preference` row.
+
+Request:
+
+```json
+{
+  "email": "user@example.com",
+  "password": "password",
+  "user_name": "Jun"
+}
+```
+
+Response:
+
+```json
+{
+  "ok": true,
+  "userCode": "ABC123"
+}
+```
+
+Failure reasons:
+
+```text
+missing_fields
+email_already_exists
+internal_error
+```
+
+### POST `/auth/login`
+
+Returns a 7-day JWT and basic user info.
+
+Request:
+
+```json
+{
+  "email": "user@example.com",
+  "password": "password"
+}
+```
+
+Response:
+
+```json
+{
+  "ok": true,
+  "token": "jwt",
+  "user": {
+    "id": 1,
+    "email": "user@example.com",
+    "userName": "Jun",
+    "userCode": "ABC123"
+  }
+}
+```
+
+Failure reasons:
+
+```text
+invalid_credentials
+internal_error
+```
+
+## User / Partner
+
+### POST `/user/partner`
+
+Pairs the current user with a partner by `UserCode`. The server updates both users' `PartnerCode` and creates a deterministic couple room.
+
+Request:
+
+```json
+{
+  "userId": 1,
+  "partnerCode": "XYZ789"
+}
+```
+
+Response:
+
+```json
+{ "ok": true }
+```
+
+Failure reasons:
+
+```text
+missing_fields
+partner_not_found
+cannot_pair_with_self
+internal_error
+```
+
+### GET `/user/profile/:userId`
+
+Returns the user profile, partner code, and room credentials used for Socket.IO.
+
+Response:
+
+```json
+{
+  "ok": true,
+  "user": {
+    "UserId": 1,
+    "Email": "user@example.com",
+    "UserName": "Jun",
+    "UserCode": "ABC123",
+    "UserIcon": null,
+    "PartnerCode": "XYZ789",
+    "RoomCode": "room_1_2",
+    "RoomSecret": "secret"
+  }
+}
+```
+
+## Couple
+
+### GET `/couple/info?user_id=1`
+
+Returns couple metadata for the home screen.
+
+Response:
+
+```json
+{
+  "ok": true,
+  "coupleId": 1,
+  "startDate": "2026-06-01",
+  "dDay": 20,
+  "partnerName": "Partner",
+  "partnerCode": "XYZ789"
+}
+```
+
+### PATCH `/couple/info`
+
+Updates the couple start date.
+
+Request:
+
+```json
+{
+  "user_id": 1,
+  "start_date": "2026-06-01"
+}
+```
+
+Response:
+
+```json
+{ "ok": true }
+```
+
+## Setlog / Moment Loop
+
+Setlog supports text, image, and video records. Upload field name is `media`.
+
+### GET `/setlog`
+
+Query parameters:
+
+- `month`: optional `YYYY-MM`
+- `user_id`: optional. If the user belongs to a couple, the API returns the couple's records.
+
+Response:
+
 ```json
 {
   "ok": true,
   "posts": [
     {
       "id": 1,
-      "user_id": "jun",
-      "photo_url": "/uploads/photo-1730000000000.jpg",
-      "caption": "한강 데이트 🌊",
-      "tags": ["#데이트", "#한강", "#OOTD"],
-      "taken_at": "2026-06-17",
-      "created_at": "2026-06-17T10:00:00Z",
-      "updated_at": "2026-06-17T10:00:00Z"
+      "couple_id": 1,
+      "user_id": 1,
+      "user_code": "ABC123",
+      "media_type": "image",
+      "media_url": "/uploads/media-1781760000000.png",
+      "caption": "한강 데이트",
+      "tags": "[\"date\"]",
+      "taken_at": "2026-06-20",
+      "captured_at": "2026-06-20T12:00:00.000Z",
+      "UserName": "Jun"
     }
   ]
 }
 ```
 
-### POST `/api/setlog`
-셋로그 포스트 생성
+### POST `/setlog`
 
-**Content-Type:** `multipart/form-data`
+Content type:
 
-**Form Fields:**
-- `photo`: File (이미지 파일, 최대 10MB)
-- `user_id`: String ('jun' or 'gf')
-- `caption`: String (optional)
-- `tags`: JSON Array String (예: `["#데이트", "#한강"]`)
-- `taken_at`: Date (YYYY-MM-DD)
+```text
+multipart/form-data
+```
 
-**Response:**
+Fields:
+
+- `media`: optional file, max 30MB
+- `user_id`: required
+- `user_code`: optional
+- `caption`: required for text-only posts
+- `tags`: JSON array string, optional
+- `taken_at`: required `YYYY-MM-DD`
+- `captured_at`: optional timestamp
+- `media_type`: optional `text`, `image`, `video`
+
+Response:
+
 ```json
 {
   "ok": true,
-  "post": { ... }
+  "post": {}
 }
 ```
 
-### DELETE `/api/setlog/:id`
-셋로그 포스트 삭제
+### DELETE `/setlog/:id`
 
-**Response:**
+Response:
+
 ```json
-{
-  "ok": true
-}
+{ "ok": true }
 ```
 
----
+## Map
 
-## 2. Map API (데이트 장소 핀)
+### GET `/map`
 
-### GET `/api/map`
-지도 핀 목록 조회
+Returns all map pins ordered by visit date.
 
-**Response:**
-```json
-{
-  "ok": true,
-  "pins": [
-    {
-      "id": 1,
-      "place_name": "을지로 술집",
-      "latitude": 37.5665,
-      "longitude": 126.9780,
-      "category": "restaurant",
-      "rating": 5,
-      "visit_date": "2026-06-15",
-      "memo": "분위기 좋고 맛있었음 ⭐",
-      "photos": [],
-      "created_by": "gf",
-      "created_at": "2026-06-15T18:00:00Z",
-      "updated_at": "2026-06-15T18:00:00Z"
-    }
-  ]
-}
-```
+### POST `/map`
 
-### POST `/api/map`
-지도 핀 생성
+Request:
 
-**Request Body:**
 ```json
 {
   "place_name": "을지로 술집",
   "latitude": 37.5665,
-  "longitude": 126.9780,
+  "longitude": 126.978,
   "category": "restaurant",
   "rating": 5,
-  "visit_date": "2026-06-15",
+  "visit_date": "2026-06-20",
   "memo": "분위기 좋음",
-  "created_by": "gf"
+  "created_by": "ABC123"
 }
 ```
 
-**Response:**
+Response:
+
 ```json
 {
   "ok": true,
-  "pin": { ... }
+  "id": 1
 }
 ```
 
-### PATCH `/api/map/:id`
-지도 핀 업데이트 (별점/메모)
+### PATCH `/map/:id`
 
-**Request Body:**
+Updates rating and/or memo.
+
+Request:
+
 ```json
 {
   "rating": 4,
@@ -127,221 +291,191 @@
 }
 ```
 
-**Response:**
+Response:
+
 ```json
-{
-  "ok": true,
-  "pin": { ... }
-}
+{ "ok": true }
 ```
 
----
+## Daily Q&A
 
-## 3. Q&A API (10시의 질문)
+### GET `/qa/today`
 
-### GET `/api/qa/today`
-오늘의 질문 조회
+Creates today's question from the built-in pool if no row exists.
 
-**Response:**
+Response:
+
 ```json
 {
   "ok": true,
   "question": {
     "id": 1,
     "question": "오늘 가장 행복했던 순간은?",
-    "scheduled_date": "2026-06-17",
-    "created_at": "2026-06-01T00:00:00Z"
+    "scheduled_date": "2026-06-20"
   },
-  "answers": [
-    {
-      "id": 1,
-      "question_id": 1,
-      "user_id": "jun",
-      "answer": "저녁 먹을 때!",
-      "answered_at": "2026-06-17T22:15:00Z"
-    }
-  ]
+  "answers": []
 }
 ```
 
-### POST `/api/qa/answer`
-질문 답변 제출
+### POST `/qa/answer`
 
-**Request Body:**
+Request:
+
 ```json
 {
   "question_id": 1,
-  "user_id": "jun",
-  "answer": "저녁 먹을 때!"
+  "user_id": 1,
+  "answer": "저녁 먹을 때"
 }
 ```
 
-**Response:**
+Response:
+
 ```json
 {
   "ok": true,
-  "answer": { ... }
+  "id": 1
 }
 ```
 
----
+## Challenges
 
-## 4. Challenges API (목표 챌린지)
+### GET `/challenges`
 
-### GET `/api/challenges`
-활성 챌린지 목록
+Returns active challenges.
 
-**Response:**
-```json
-{
-  "ok": true,
-  "challenges": [
-    {
-      "id": 1,
-      "title": "벤치프레스 100kg",
-      "description": "3개월 안에 달성",
-      "target_value": 100,
-      "current_value": 85,
-      "unit": "kg",
-      "owner_id": "jun",
-      "status": "active",
-      "start_date": "2026-06-01",
-      "target_date": "2026-09-01",
-      "progress_pct": 85,
-      "log_count": 12,
-      "created_at": "2026-06-01T00:00:00Z",
-      "updated_at": "2026-06-17T10:00:00Z"
-    }
-  ]
-}
-```
+### POST `/challenges`
 
-### POST `/api/challenges`
-챌린지 생성
+Request:
 
-**Request Body:**
 ```json
 {
   "title": "벤치프레스 100kg",
   "description": "3개월 안에 달성",
   "target_value": 100,
   "unit": "kg",
-  "owner_id": "jun",
-  "start_date": "2026-06-01",
-  "target_date": "2026-09-01"
+  "owner_id": "ABC123",
+  "start_date": "2026-06-20",
+  "target_date": "2026-09-20"
 }
 ```
 
-**Response:**
+Response:
+
 ```json
 {
   "ok": true,
-  "challenge": { ... }
+  "id": 1
 }
 ```
 
-### POST `/api/challenges/:id/log`
-챌린지 진행 기록
+### POST `/challenges/:id/log`
 
-**Request Body:**
+Adds progress and completes the challenge when `current_value >= target_value`.
+
+Request:
+
 ```json
 {
   "value": 5,
-  "note": "오늘 5kg 증량!"
+  "note": "오늘 운동"
 }
 ```
 
-**Response:**
+Response:
+
 ```json
-{
-  "ok": true
-}
+{ "ok": true }
 ```
 
-**Note:** `current_value`가 `target_value` 이상이 되면 자동으로 `status`가 'completed'로 변경됨.
+## Jukebox
 
----
+### GET `/jukebox`
 
-## 5. Jukebox API (음원 관리)
+Returns uploaded tracks.
 
-### GET `/api/jukebox`
-트랙 목록 조회
+### POST `/jukebox`
 
-**Response:**
-```json
-{
-  "ok": true,
-  "tracks": [
-    {
-      "id": 1,
-      "title": "Cover - 좋은 날",
-      "artist": "준 (Logic Pro Mix)",
-      "file_url": "/uploads/audio-1730000000000.mp3",
-      "duration_sec": 245,
-      "cover_art_url": null,
-      "uploaded_by": "jun",
-      "uploaded_at": "2026-06-17T12:00:00Z"
-    }
-  ]
-}
+Content type:
+
+```text
+multipart/form-data
 ```
 
-### POST `/api/jukebox`
-트랙 업로드
+Fields:
 
-**Content-Type:** `multipart/form-data`
+- `audio`: required file
+- `title`: required
+- `artist`: optional
+- `duration_sec`: optional
+- `uploaded_by`: required
 
-**Form Fields:**
-- `audio`: File (MP3/WAV 파일, 최대 10MB)
-- `title`: String
-- `artist`: String (optional)
-- `duration_sec`: Number (optional)
-- `uploaded_by`: String ('jun' or 'gf')
+Response:
 
-**Response:**
 ```json
 {
   "ok": true,
-  "track": { ... }
+  "id": 1
 }
 ```
 
----
+## Time Capsules
 
-## Error Responses
+### GET `/capsules`
 
-### 400 Bad Request
+Returns capsules with computed `is_openable`.
+
+### POST `/capsules`
+
+`open_date` must be in the future.
+
+Request:
+
 ```json
 {
-  "ok": false,
-  "reason": "missing_fields"
+  "title": "1년 뒤 편지",
+  "message": "보고 싶을 때 열기",
+  "created_by": "ABC123",
+  "open_date": "2027-06-20"
 }
 ```
 
-### 500 Internal Server Error
+Response:
+
 ```json
-{
-  "ok": false,
-  "reason": "internal_error"
-}
+{ "ok": true }
 ```
 
----
+### PATCH `/capsules/:id/open`
 
-## File Upload Notes
+Opens a capsule only when `open_date <= today`.
 
-- **Supported Image Types**: JPEG, PNG, GIF, WebP
-- **Supported Audio Types**: MP3, WAV, OGG
-- **Max File Size**: 10MB
-- **Upload Directory**: `/uploads` (gitignored)
-- **URL Format**: `http://localhost:4100/uploads/filename.ext`
+Response:
 
----
+```json
+{ "ok": true }
+```
 
-## Database Schema
+Failure reasons:
 
-모든 테이블 스키마는 `schema.sql` 참고.
+```text
+not_found
+not_yet
+internal_error
+```
 
----
+## Health
 
-**Last Updated**: 2026-06-17 17:45
+### GET `/health`
+
+Not under `/api`.
+
+```text
+https://secertbase.kro.kr/health
+```
+
+Response:
+
+```json
+{ "ok": true }
+```
