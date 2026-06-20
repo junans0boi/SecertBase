@@ -45,6 +45,17 @@ fi
 pm2 save
 
 echo "==> Verifying health"
-curl -fsS http://localhost:4100/health
+for attempt in {1..10}; do
+  if curl -fsS http://localhost:4100/health; then
+    echo
+    echo "Deploy complete."
+    exit 0
+  fi
+
+  echo "Health check failed, retrying ($attempt/10)..."
+  sleep 1
+done
+
 echo
-echo "Deploy complete."
+echo "Realtime server did not become healthy in time."
+exit 1
