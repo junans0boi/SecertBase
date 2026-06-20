@@ -264,7 +264,7 @@ class _PirateScreenState extends State<PirateScreen>
     final isMyTurn = _isMyTurn;
     final turnLabel = isMyTurn
         ? '내 차례 — 구멍을 골라요!'
-        : '${sock.pirateCurrentTurn ?? '상대방'} 차례입니다';
+        : '${sock.nameOf(sock.pirateCurrentTurn) == '' ? '상대방' : sock.nameOf(sock.pirateCurrentTurn)} 차례입니다';
 
     return Column(
       children: [
@@ -394,7 +394,7 @@ class _PirateScreenState extends State<PirateScreen>
         Text(
           imLoser
               ? '${bombSlot + 1}번 구멍에 폭탄이 있었어요'
-              : '${_socket.pirateLoser ?? '상대방'}이(가) 폭탄을 건드렸어요',
+              : '${_socket.nameOf(_socket.pirateLoser).isNotEmpty ? _socket.nameOf(_socket.pirateLoser) : '상대방'}이(가) 폭탄을 건드렸어요',
           textAlign: TextAlign.center,
           style: GoogleFonts.notoSans(
             color: const Color(0xFF7A5C3A),

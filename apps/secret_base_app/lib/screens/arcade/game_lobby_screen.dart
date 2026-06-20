@@ -202,6 +202,7 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
   }) {
     final lobbyPlayers = List<String>.from(_socket.lobbyPlayers);
     final profileEmojis = Map<String, String>.from(_socket.profileEmojis);
+    final nicknames = Map<String, String>.from(_socket.presenceNicknames);
     final characterSelections = Map<String, String>.from(
       _socket.lobbyCharacterSelections,
     );
@@ -245,6 +246,7 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
                                   players: lobbyPlayers,
                                   host: _socket.lobbyHost,
                                   profileEmojis: profileEmojis,
+                                  nicknames: nicknames,
                                   characterSelections: characterSelections,
                                 ),
                               ),
@@ -256,6 +258,7 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
                                   players: lobbyPlayers,
                                   host: _socket.lobbyHost,
                                   profileEmojis: profileEmojis,
+                                  nicknames: nicknames,
                                   characterSelections: characterSelections,
                                 ),
                               ),
@@ -383,6 +386,7 @@ class _PlayerSlot extends StatelessWidget {
   final List<String> players;
   final String? host;
   final Map<String, String> profileEmojis;
+  final Map<String, String> nicknames;
   final Map<String, String> characterSelections;
 
   const _PlayerSlot({
@@ -391,6 +395,7 @@ class _PlayerSlot extends StatelessWidget {
     required this.players,
     required this.host,
     required this.profileEmojis,
+    required this.nicknames,
     required this.characterSelections,
   });
 
@@ -457,7 +462,7 @@ class _PlayerSlot extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          player ?? '비어 있음',
+          player == null ? '비어 있음' : (nicknames[player] ?? player),
           textAlign: TextAlign.center,
           style: mainBody(
             size: 14,

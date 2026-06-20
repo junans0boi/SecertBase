@@ -3,6 +3,7 @@ import 'dart:developer';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
+import 'auth_service.dart';
 
 class SocketService extends ChangeNotifier {
   static final SocketService _i = SocketService._internal();
@@ -40,6 +41,7 @@ class SocketService extends ChangeNotifier {
   String? serverUrl;
   List<String> presenceUsers = [];
   Map<String, String> profileEmojis = {};
+  Map<String, String> presenceNicknames = {};
   String profileEmoji = defaultProfileEmoji;
   int? lastPingMs;
 
@@ -190,6 +192,7 @@ class SocketService extends ChangeNotifier {
           'roomCode': room,
           'roomSecret': secret,
           'profileEmoji': profileEmoji,
+          'nickname': _currentNickname(),
         },
         ack: (r) {
           final map = _m(r);
@@ -239,6 +242,10 @@ class SocketService extends ChangeNotifier {
         final prevOnline = opponentOnline;
         presenceUsers = users.map((e) => '$e').toList();
         profileEmojis = _stringMap(map['profileEmojis']);
+        presenceNicknames = _stringMap(map['displayNames']);
+        if (presenceNicknames.isEmpty) {
+          presenceNicknames = _stringMap(map['nicknames']);
+        }
         opponentOnline = presenceUsers.length == 2;
         if (prevOnline &&
             !opponentOnline &&
@@ -264,6 +271,8 @@ class SocketService extends ChangeNotifier {
       lobbyCharacterSelections = _stringMap(map['characterSelections']);
       final emojis = _stringMap(map['profileEmojis']);
       if (emojis.isNotEmpty) profileEmojis = emojis;
+      final nicks = _stringMap(map['nicknames']);
+      if (nicks.isNotEmpty) presenceNicknames = {...presenceNicknames, ...nicks};
       _log('대기방 업데이트: $lobbyGameType / ${lobbyPlayers.join(', ')}');
       notifyListeners();
     });
@@ -279,6 +288,8 @@ class SocketService extends ChangeNotifier {
       lobbyStartedYutCharacters = _stringMap(metadata['yutCharacters']);
       final emojis = _stringMap(map['profileEmojis']);
       if (emojis.isNotEmpty) profileEmojis = emojis;
+      final nicks = _stringMap(map['nicknames']);
+      if (nicks.isNotEmpty) presenceNicknames = {...presenceNicknames, ...nicks};
       _log('대기방 게임 시작: $lobbyStartedGameType');
       notifyListeners();
     });
@@ -317,7 +328,9 @@ class SocketService extends ChangeNotifier {
       rpsActive = true;
       rpsPlayers = (map['players'] as List?)?.map((e) => '$e').toList() ?? [];
       final sc = map['scores'];
-      rpsScores = sc is Map ? sc.map((k, v) => MapEntry('$k', (v as num).toInt())) : {};
+      rpsScores = sc is Map
+          ? sc.map((k, v) => MapEntry('$k', (v as num).toInt()))
+          : {};
       rpsRound = 1;
       rpsMukjippaPhase = map['phase'] as String? ?? 'play';
       rpsMukjippaAttacker = null;
@@ -342,7 +355,8 @@ class SocketService extends ChangeNotifier {
           rpsLastChoices = choices.map((k, v) => MapEntry('$k', '$v'));
         }
         final sc = map['scores'];
-        if (sc is Map) rpsScores = sc.map((k, v) => MapEntry('$k', (v as num).toInt()));
+        if (sc is Map)
+          rpsScores = sc.map((k, v) => MapEntry('$k', (v as num).toInt()));
         rpsRound = (map['round'] as num?)?.toInt() ?? rpsRound;
       } else if (mode == 'mukjippa') {
         final choices = map['choices'];
@@ -354,15 +368,20 @@ class SocketService extends ChangeNotifier {
       } else if (mode == 'hanabagi') {
         final fingers = map['fingers'];
         if (fingers is Map) {
-          rpsLastFingers = fingers.map((k, v) => MapEntry('$k', (v as num).toInt()));
+          rpsLastFingers = fingers.map(
+            (k, v) => MapEntry('$k', (v as num).toInt()),
+          );
         }
         final guesses = map['guesses'];
         if (guesses is Map) {
-          rpsLastGuesses = guesses.map((k, v) => MapEntry('$k', (v as num).toInt()));
+          rpsLastGuesses = guesses.map(
+            (k, v) => MapEntry('$k', (v as num).toInt()),
+          );
         }
         rpsLastTotal = (map['total'] as num?)?.toInt();
         final sc = map['scores'];
-        if (sc is Map) rpsScores = sc.map((k, v) => MapEntry('$k', (v as num).toInt()));
+        if (sc is Map)
+          rpsScores = sc.map((k, v) => MapEntry('$k', (v as num).toInt()));
         rpsRound = (map['round'] as num?)?.toInt() ?? rpsRound;
       }
 
@@ -749,6 +768,7 @@ class SocketService extends ChangeNotifier {
     roomCode = null;
     presenceUsers = [];
     profileEmojis = {};
+    presenceNicknames = {};
     lobbyGameType = null;
     lobbyHost = null;
     lobbyPlayers = [];
@@ -828,6 +848,24 @@ class SocketService extends ChangeNotifier {
     lobbyStartedYutBgm = null;
     if (me != null) {
       profileEmojis = {...profileEmojis, me: profileEmoji};
+    }
+    // RPS 게임 로비 재진입 시 이전 게임 상태 초기화
+    if (gameType == 'rps') {
+      rpsMode = null;
+      rpsActive = false;
+      rpsPlayers = [];
+      rpsScores = {};
+      rpsRound = 0;
+      rpsMukjippaPhase = null;
+      rpsMukjippaAttacker = null;
+      rpsLastChoices = null;
+      rpsLastFingers = null;
+      rpsLastGuesses = null;
+      rpsLastTotal = null;
+      rpsRoundWinner = null;
+      rpsGameWinner = null;
+      rpsResult = null;
+      rpsChoices = null;
     }
     notifyListeners();
     _socket?.emitWithAck(
@@ -1182,5 +1220,17 @@ class SocketService extends ChangeNotifier {
   static Map<String, String> _stringMap(dynamic v) {
     final map = _m(v);
     return map.map((key, value) => MapEntry(key, '$value'));
+  }
+
+  String _currentNickname() {
+    final user = AuthService().user;
+    return '${user?['Nickname'] ?? user?['nickname'] ?? user?['UserName'] ?? user?['userName'] ?? userId ?? ''}';
+  }
+
+  /// userId → 닉네임. 없으면 userId 그대로.
+  String nameOf(String? uid) {
+    if (uid == null) return '';
+    if (uid == userId) return _currentNickname().isNotEmpty ? _currentNickname() : uid;
+    return presenceNicknames[uid] ?? uid;
   }
 }

@@ -38,6 +38,7 @@ const joinSchema = z.object({
   roomCode: z.string().min(1).max(24),
   roomSecret: z.string().min(1),
   profileEmoji: z.string().min(1).max(16).optional(),
+  nickname: z.string().max(50).optional(),
 });
 
 const profileSchema = z.object({
@@ -183,10 +184,7 @@ const getPresence = (io, roomCode) => {
 
 const getPresenceProfiles = (io, roomCode) => {
   const room = io.sockets.adapter.rooms.get(roomCode);
-  if (!room) {
-    return {};
-  }
-
+  if (!room) return {};
   return Object.fromEntries(
     [...room]
       .map((socketId) => io.sockets.sockets.get(socketId))
@@ -196,11 +194,26 @@ const getPresenceProfiles = (io, roomCode) => {
   );
 };
 
+const getPresenceNicknames = (io, roomCode) => {
+  const room = io.sockets.adapter.rooms.get(roomCode);
+  if (!room) return {};
+  return Object.fromEntries(
+    [...room]
+      .map((socketId) => io.sockets.sockets.get(socketId))
+      .filter(Boolean)
+      .map((sock) => [sock.data.userId, sock.data.nickname])
+      .filter(([userId, name]) => userId && name),
+  );
+};
+
 const emitPresence = (io, roomCode) => {
+  const nicknames = getPresenceNicknames(io, roomCode);
   io.to(roomCode).emit("room:presence", {
     roomCode,
     users: getPresence(io, roomCode),
     profileEmojis: getPresenceProfiles(io, roomCode),
+    nicknames,
+    displayNames: nicknames,
   });
 };
 
@@ -226,6 +239,7 @@ const emitLobby = (io, roomCode, lobby) => {
   io.to(roomCode).emit("game:lobby:updated", {
     ...lobby,
     profileEmojis: getPresenceProfiles(io, roomCode),
+    nicknames: getPresenceNicknames(io, roomCode),
   });
 };
 
@@ -313,7 +327,7 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const { userId, roomCode, roomSecret, profileEmoji } = parsed.data;
+      const { userId, roomCode, roomSecret, profileEmoji, nickname } = parsed.data;
       const roomMembers = await getRoomMembers(roomCode, roomSecret);
       const isLegacyRoom = roomSecret === config.ROOM_SECRET;
 
@@ -335,6 +349,7 @@ export const registerSocketHandlers = (io) => {
       socket.data.userId = userId;
       socket.data.roomCode = roomCode;
       socket.data.profileEmoji = profileEmoji ?? "🙂";
+      socket.data.nickname = nickname ?? userId;
       await socket.join(roomCode);
 
       const stateText = await redis.get(roomKey(roomCode));
@@ -397,7 +412,7 @@ export const registerSocketHandlers = (io) => {
 
       await redis.set(key, JSON.stringify(lobby), "EX", 1800);
       emitLobby(io, roomCode, lobby);
-      ack({ ok: true, lobby: { ...lobby, profileEmojis: getPresenceProfiles(io, roomCode) } });
+      ack({ ok: true, lobby: { ...lobby, profileEmojis: getPresenceProfiles(io, roomCode), nicknames: getPresenceNicknames(io, roomCode) } });
     });
 
     socket.on("game:lobby:leave", async (payload, ackRaw) => {
@@ -464,7 +479,7 @@ export const registerSocketHandlers = (io) => {
 
       await redis.set(key, JSON.stringify(lobby), "EX", 1800);
       emitLobby(io, roomCode, lobby);
-      ack({ ok: true, lobby: { ...lobby, profileEmojis: getPresenceProfiles(io, roomCode) } });
+      ack({ ok: true, lobby: { ...lobby, profileEmojis: getPresenceProfiles(io, roomCode), nicknames: getPresenceNicknames(io, roomCode) } });
     });
 
     socket.on("game:lobby:start", async (payload, ackRaw) => {
@@ -525,6 +540,7 @@ export const registerSocketHandlers = (io) => {
         host: lobby.host,
         players: lobby.players,
         profileEmojis: getPresenceProfiles(io, roomCode),
+        nicknames: getPresenceNicknames(io, roomCode),
         metadata,
         at: Date.now(),
       });

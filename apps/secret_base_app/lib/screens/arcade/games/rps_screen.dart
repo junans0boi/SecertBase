@@ -303,7 +303,7 @@ class _ModeSelectView extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 _PlayerHand(
-                  name: myKey.isEmpty ? '나' : myKey,
+                  name: myKey.isEmpty ? '나' : (singleChoices != null ? SocketService().nameOf(myKey) : myKey),
                   emoji: myEmoji,
                   isMe: true,
                 ),
@@ -312,7 +312,7 @@ class _ModeSelectView extends StatelessWidget {
                   style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 18),
                 ),
                 _PlayerHand(
-                  name: opKey.isEmpty ? '상대' : opKey,
+                  name: opKey.isEmpty ? '상대' : (singleChoices != null ? SocketService().nameOf(opKey) : opKey),
                   emoji: opEmoji,
                   isMe: false,
                 ),
@@ -693,7 +693,7 @@ class _Rps3View extends StatelessWidget {
   Widget build(BuildContext context) {
     final userId = sock.userId ?? '';
     final players = sock.rpsPlayers;
-    final opId = players.firstWhere((p) => p != userId, orElse: () => '상대');
+    final opId = players.firstWhere((p) => p != userId, orElse: () => '');
     final myScore = sock.rpsScores[userId] ?? 0;
     final opScore = sock.rpsScores[opId] ?? 0;
 
@@ -707,8 +707,8 @@ class _Rps3View extends StatelessWidget {
             opScore: opScore,
             target: 3,
             compact: compact,
-            myLabel: userId,
-            opLabel: opId,
+            myLabel: sock.nameOf(userId).isNotEmpty ? sock.nameOf(userId) : '나',
+            opLabel: sock.nameOf(opId).isNotEmpty ? sock.nameOf(opId) : '상대',
           ),
           const SizedBox(height: 20),
 
@@ -933,7 +933,7 @@ class _HanabagiView extends StatelessWidget {
   Widget build(BuildContext context) {
     final userId = sock.userId ?? '';
     final players = sock.rpsPlayers;
-    final opId = players.firstWhere((p) => p != userId, orElse: () => '상대');
+    final opId = players.firstWhere((p) => p != userId, orElse: () => '');
     final myScore = sock.rpsScores[userId] ?? 0;
     final opScore = sock.rpsScores[opId] ?? 0;
 
@@ -947,8 +947,8 @@ class _HanabagiView extends StatelessWidget {
             opScore: opScore,
             target: 3,
             compact: compact,
-            myLabel: userId,
-            opLabel: opId,
+            myLabel: sock.nameOf(userId).isNotEmpty ? sock.nameOf(userId) : '나',
+            opLabel: sock.nameOf(opId).isNotEmpty ? sock.nameOf(opId) : '상대',
           ),
           const SizedBox(height: 20),
 
