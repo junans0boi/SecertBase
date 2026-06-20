@@ -60,8 +60,15 @@ class SocketService extends ChangeNotifier {
   bool? telepathySuccess;
   String? telepathySelected;
   Map<String, String>? telepathyChoices;
-  int? pirateSlot;
-  int? pirateSlots;
+
+  // pirate roulette (turn-based)
+  bool pirateActive = false;
+  int pirateTotalSlots = 8;
+  String? pirateCurrentTurn;
+  List<int> piratePickedSlots = [];
+  String? pirateLoser;
+  int? pirateBombSlot;
+  List<String> piratePlayers = [];
 
   // yut
   bool yutActive = false;
@@ -300,11 +307,46 @@ class SocketService extends ChangeNotifier {
       notifyListeners();
     });
 
-    socket.on('game:pirate:result', (data) {
+    socket.on('game:pirate:started', (data) {
       final map = _m(data);
-      pirateSlot = map['bombSlot'] as int?;
-      pirateSlots = map['slots'] as int?;
-      _log('해적룰렛 폭탄: $pirateSlot/$pirateSlots');
+      pirateActive = true;
+      pirateTotalSlots = (map['slots'] as num?)?.toInt() ?? 8;
+      pirateCurrentTurn = map['currentTurn'] as String?;
+      piratePickedSlots = [];
+      pirateLoser = null;
+      pirateBombSlot = null;
+      final players = map['players'];
+      piratePlayers = players is List ? players.map((e) => '$e').toList() : [];
+      _log('해적룰렛 시작: $pirateTotalSlots개');
+      notifyListeners();
+    });
+
+    socket.on('game:pirate:slot_picked', (data) {
+      final map = _m(data);
+      final slot = (map['slot'] as num?)?.toInt();
+      if (slot != null) piratePickedSlots = [...piratePickedSlots, slot];
+      pirateCurrentTurn = map['nextTurn'] as String?;
+      _log('해적룰렛 선택: $slot → 다음 ${pirateCurrentTurn}');
+      notifyListeners();
+    });
+
+    socket.on('game:pirate:exploded', (data) {
+      final map = _m(data);
+      pirateLoser = map['loser'] as String?;
+      pirateBombSlot = (map['bombSlot'] as num?)?.toInt();
+      pirateActive = false;
+      _log('해적룰렛 폭발! 패배: $pirateLoser');
+      notifyListeners();
+    });
+
+    socket.on('game:pirate:reset_done', (data) {
+      pirateActive = false;
+      pirateCurrentTurn = null;
+      piratePickedSlots = [];
+      pirateLoser = null;
+      pirateBombSlot = null;
+      piratePlayers = [];
+      _log('해적룰렛 리셋');
       notifyListeners();
     });
 
@@ -622,6 +664,12 @@ class SocketService extends ChangeNotifier {
     lobbyCharacterSelections = {};
     lobbyStartedYutCharacters = {};
     lobbyStartedYutBgm = null;
+    pirateActive = false;
+    pirateCurrentTurn = null;
+    piratePickedSlots = [];
+    pirateLoser = null;
+    pirateBombSlot = null;
+    piratePlayers = [];
     yutActive = false;
     yutCharacters = {};
     yutBgm = null;
@@ -801,10 +849,23 @@ class SocketService extends ChangeNotifier {
     });
   }
 
-  void spinPirate(int slots) {
-    pirateSlot = null;
+  void startPirate(int slots) {
+    _socket?.emit('game:pirate:start', {'slots': slots});
+  }
+
+  void pickPirateSlot(int slot) {
+    _socket?.emit('game:pirate:pick', {'slot': slot});
+  }
+
+  void resetPirate() {
+    pirateActive = false;
+    pirateCurrentTurn = null;
+    piratePickedSlots = [];
+    pirateLoser = null;
+    pirateBombSlot = null;
+    piratePlayers = [];
     notifyListeners();
-    _socket?.emit('game:pirate:spin', {'slots': slots});
+    _socket?.emit('game:pirate:reset', {});
   }
 
   void newYutGame({Map<String, String>? characters, String? bgm}) {

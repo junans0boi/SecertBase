@@ -70,6 +70,12 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
   static const double _pieceSize = 36;
   static const double _guideSize = 56;
 
+  // Responsive computed values (set each build from MediaQuery)
+  double _cBoardInset = 28;
+  double _cPieceSize = 36;
+  double _cGuideSize = 56;
+  bool _compact = false;
+
   late AnimationController _resultBounceCtrl;
   late Animation<double> _resultBounce;
   late AnimationController _stickThrowCtrl;
@@ -213,11 +219,11 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
 
   Offset _toCanvasPoint(Size size, int pos) {
     final point = _getBoardPoint(pos);
-    final boardWidth = size.width - (_boardInset * 2);
-    final boardHeight = size.height - (_boardInset * 2);
+    final boardWidth = size.width - (_cBoardInset * 2);
+    final boardHeight = size.height - (_cBoardInset * 2);
     return Offset(
-      _boardInset + (point.dx * boardWidth),
-      _boardInset + (point.dy * boardHeight),
+      _cBoardInset + (point.dx * boardWidth),
+      _cBoardInset + (point.dy * boardHeight),
     );
   }
 
@@ -488,10 +494,10 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
         : _moveLabel(option.steps);
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 250),
-      left: targetOffset.dx - (_guideSize / 2),
-      top: targetOffset.dy - (_guideSize / 2),
-      width: _guideSize,
-      height: _guideSize,
+      left: targetOffset.dx - (_cGuideSize / 2),
+      top: targetOffset.dy - (_cGuideSize / 2),
+      width: _cGuideSize,
+      height: _cGuideSize,
       child: GestureDetector(
         onTap: () {
           final pieceId = _selectedPieceId;
@@ -531,6 +537,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     Offset offset = Offset.zero,
     bool selected = false,
   }) {
+    final inner = (_cPieceSize - 4).clamp(22.0, 36.0);
     return Transform.translate(
       offset: offset,
       child: Stack(
@@ -540,8 +547,8 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
             top: i * -4.0,
             left: i * -4.0,
             child: Container(
-              width: 32,
-              height: 32,
+              width: inner,
+              height: inner,
               alignment: Alignment.center,
               child: _CharacterToken(
                 character: character,
@@ -571,10 +578,10 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 600),
       curve: Curves.easeInOutBack,
-      left: point.dx - (_pieceSize / 2),
-      top: point.dy - (_pieceSize / 2),
-      width: _pieceSize,
-      height: _pieceSize,
+      left: point.dx - (_cPieceSize / 2),
+      top: point.dy - (_cPieceSize / 2),
+      width: _cPieceSize,
+      height: _cPieceSize,
       child: GestureDetector(
         onTap: onTap,
         child: _buildGroupedPiece(
@@ -795,6 +802,19 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    // Compute responsive sizes based on screen width
+    final screenWidth = MediaQuery.of(context).size.width;
+    _compact = screenWidth < 430;
+    if (_compact) {
+      _cBoardInset = 14.0;
+      _cPieceSize = 28.0;
+      _cGuideSize = 42.0;
+    } else {
+      _cBoardInset = _boardInset;
+      _cPieceSize = _pieceSize;
+      _cGuideSize = _guideSize;
+    }
+
     final isMyTurn = widget.turn == widget.currentUser;
     final opponent = widget.currentUser == 'jun' ? 'gf' : 'jun';
     final isGf = widget.currentUser == 'gf';
@@ -892,7 +912,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                             colors: [Color(0xFF5D3F25), Color(0xFF8B622F)],
                           ),
                         ),
-                        padding: const EdgeInsets.all(8),
+                        padding: EdgeInsets.all(_compact ? 5 : 8),
                         child: Row(
                           children: [
                             Expanded(
@@ -923,7 +943,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                       ),
                       Expanded(
                         child: Padding(
-                          padding: const EdgeInsets.all(12),
+                          padding: EdgeInsets.all(_compact ? 6 : 12),
                           child: AspectRatio(
                             aspectRatio: 1,
                             child: LayoutBuilder(
@@ -939,7 +959,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                     Positioned.fill(
                                       child: CustomPaint(
                                         painter: HangameYutPainter(
-                                          inset: _boardInset,
+                                          inset: _cBoardInset,
                                         ),
                                       ),
                                     ),
@@ -1016,8 +1036,9 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                             top: BorderSide(color: Color(0xFFBA8A45), width: 1),
                           ),
                         ),
-                        padding: const EdgeInsets.all(12),
+                        padding: EdgeInsets.all(_compact ? 8 : 12),
                         child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
                               widget.lastThrowNak
@@ -1029,17 +1050,18 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                     ? const Color(0xFFB13B2E)
                                     : const Color(0xFF5A3718),
                                 fontWeight: FontWeight.bold,
+                                fontSize: _compact ? 13 : 14,
                               ),
                             ),
-                            const SizedBox(height: 10),
+                            SizedBox(height: _compact ? 6 : 10),
                             SizedBox(
-                              height: 74,
+                              height: _compact ? 52 : 74,
                               child: Center(
                                 child: widget.lastResultName != null
                                     ? ScaleTransition(
                                         scale: _resultBounce,
                                         child: CircleAvatar(
-                                          radius: 34,
+                                          radius: _compact ? 22 : 34,
                                           backgroundColor: const Color(
                                             0xFFFFF9EA,
                                           ),
@@ -1047,29 +1069,29 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                             widget.lastThrowNak
                                                 ? '낙'
                                                 : widget.lastResultName!,
-                                            style: const TextStyle(
-                                              fontSize: 28,
+                                            style: TextStyle(
+                                              fontSize: _compact ? 20 : 28,
                                               fontWeight: FontWeight.w900,
-                                              color: Color(0xFF6E3F1D),
+                                              color: const Color(0xFF6E3F1D),
                                             ),
                                           ),
                                         ),
                                       )
-                                    : const Icon(
+                                    : Icon(
                                         Icons.casino,
-                                        size: 42,
-                                        color: Color(0xAA6E3F1D),
+                                        size: _compact ? 32 : 42,
+                                        color: const Color(0xAA6E3F1D),
                                       ),
                               ),
                             ),
-                            const SizedBox(height: 10),
+                            SizedBox(height: _compact ? 6 : 10),
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton(
                                 onPressed: canThrow ? _handleThrow : null,
                                 style: ElevatedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 16,
+                                  padding: EdgeInsets.symmetric(
+                                    vertical: _compact ? 10 : 16,
                                   ),
                                   backgroundColor: canThrow
                                       ? const Color(0xFFFFCB4D)
@@ -1078,12 +1100,12 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                     borderRadius: BorderRadius.circular(14),
                                   ),
                                 ),
-                                child: const Text(
+                                child: Text(
                                   '윷 던지기',
                                   style: TextStyle(
-                                    fontSize: 18,
+                                    fontSize: _compact ? 15 : 18,
                                     fontWeight: FontWeight.bold,
-                                    color: Color(0xFF3D2A12),
+                                    color: const Color(0xFF3D2A12),
                                   ),
                                 ),
                               ),
@@ -1117,6 +1139,11 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     void Function(int)? onPieceTap,
   ) {
     final safePieces = pieces ?? List.generate(4, (_) => 0);
+    final tokenSize = _compact ? 28.0 : 38.0;
+    final charSize = _compact ? 22.0 : 28.0;
+    final spacing = _compact ? 4.0 : 6.0;
+    final hPad = _compact ? 6.0 : 8.0;
+    final vPad = _compact ? 4.0 : 7.0;
 
     return Container(
       decoration: BoxDecoration(
@@ -1127,22 +1154,23 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
         ),
         borderRadius: BorderRadius.circular(12),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+      padding: EdgeInsets.symmetric(horizontal: hPad, vertical: vPad),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               SizedBox(
-                width: 28,
-                height: 28,
+                width: charSize,
+                height: charSize,
                 child: _CharacterToken(
                   character: character,
                   color: color,
                   selected: isActiveTurn,
                 ),
               ),
-              const SizedBox(width: 7),
+              SizedBox(width: _compact ? 5 : 7),
               Flexible(
                 child: Text(
                   name,
@@ -1153,17 +1181,15 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                         ? const Color(0xFF3D2A12)
                         : Colors.white,
                     fontWeight: FontWeight.bold,
-                    fontSize: 14,
+                    fontSize: _compact ? 12 : 14,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            alignment: WrapAlignment.center,
+          SizedBox(height: _compact ? 4 : 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: safePieces.asMap().entries.map((entry) {
               final pieceId = entry.key;
               final pos = _getPos(entry.value);
@@ -1172,62 +1198,67 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
               final canTap = selectable && _canSelectPiece(pieceId);
               final selected = selectable && _selectedPieceId == pieceId;
 
-              return GestureDetector(
-                onTap: canTap ? () => onPieceTap?.call(pieceId) : null,
-                child: SizedBox(
-                  width: 38,
-                  height: 38,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Positioned.fill(
-                        child: Opacity(
-                          opacity: isFinished ? 0.45 : 1,
-                          child: _CharacterToken(
-                            character: character,
-                            color: isFinished ? const Color(0xFF8E8E8E) : color,
-                            selected: selected || canTap,
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        right: -2,
-                        bottom: -2,
-                        child: Container(
-                          height: 17,
-                          padding: const EdgeInsets.symmetric(horizontal: 3),
-                          alignment: Alignment.center,
-                          constraints: const BoxConstraints(minWidth: 17),
-                          decoration: BoxDecoration(
-                            color: isFinished
-                                ? const Color(0xFF61705B)
-                                : isWaiting
-                                ? const Color(0xFF5B4632)
-                                : const Color(0xFFFFCB4D),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.white, width: 1),
-                          ),
-                          child: Text(
-                            isFinished
-                                ? '✓'
-                                : isWaiting
-                                ? '${pieceId + 1}'
-                                : '$pos',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w900,
+              return Padding(
+                padding: EdgeInsets.only(right: pieceId < 3 ? spacing : 0),
+                child: GestureDetector(
+                  onTap: canTap ? () => onPieceTap?.call(pieceId) : null,
+                  child: SizedBox(
+                    width: tokenSize,
+                    height: tokenSize,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Positioned.fill(
+                          child: Opacity(
+                            opacity: isFinished ? 0.45 : 1,
+                            child: _CharacterToken(
+                              character: character,
+                              color: isFinished ? const Color(0xFF8E8E8E) : color,
+                              selected: selected || canTap,
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                        Positioned(
+                          right: -2,
+                          bottom: -2,
+                          child: Container(
+                            height: _compact ? 14 : 17,
+                            padding: EdgeInsets.symmetric(
+                                horizontal: _compact ? 2 : 3),
+                            alignment: Alignment.center,
+                            constraints: BoxConstraints(
+                                minWidth: _compact ? 14 : 17),
+                            decoration: BoxDecoration(
+                              color: isFinished
+                                  ? const Color(0xFF61705B)
+                                  : isWaiting
+                                  ? const Color(0xFF5B4632)
+                                  : const Color(0xFFFFCB4D),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.white, width: 1),
+                            ),
+                            child: Text(
+                              isFinished
+                                  ? '✓'
+                                  : isWaiting
+                                  ? '${pieceId + 1}'
+                                  : '$pos',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: _compact ? 8 : 9,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               );
             }).toList(),
           ),
-          const SizedBox(height: 7),
+          SizedBox(height: _compact ? 4 : 7),
           Text(
             '대기 ${_getRemaining(pieces)} · 완주 ${safePieces.where(_isFinished).length}',
             maxLines: 1,
@@ -1236,11 +1267,11 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
               color: isActiveTurn
                   ? const Color(0xFF5A3718)
                   : Colors.white.withValues(alpha: 0.72),
-              fontSize: 11,
+              fontSize: _compact ? 9 : 11,
               fontWeight: FontWeight.w700,
             ),
           ),
-          if (isActiveTurn)
+          if (isActiveTurn && !_compact)
             Padding(
               padding: const EdgeInsets.only(top: 3.0),
               child: Text(

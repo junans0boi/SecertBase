@@ -96,8 +96,12 @@ const telepathySchema = z.object({
   options: z.array(z.string().min(1)).min(2).max(10),
 });
 
-const pirateSchema = z.object({
-  slots: z.number().int().min(4).max(12),
+const pirateStartSchema = z.object({
+  slots: z.number().int().min(4).max(16),
+});
+
+const piratePickSchema = z.object({
+  slot: z.number().int().min(0),
 });
 
 const yutMoveSchema = z.object({
@@ -139,6 +143,7 @@ const yutGameKey = (roomCode) => `yut:${roomCode}:game`;
 const unoGameKey = (roomCode) => `uno:${roomCode}:game`;
 const bombGameKey = (roomCode) => `bomb:${roomCode}:game`;
 const gameLobbyKey = (roomCode, gameType) => `lobby:${roomCode}:${gameType}`;
+const pirateKey = (roomCode) => `pirate:${roomCode}:game`;
 const randomYutBgm = () => `yut${Math.floor(Math.random() * 3) + 1}.mp3`;
 
 const defaultState = {
@@ -765,7 +770,7 @@ export const registerSocketHandlers = (io) => {
       }
     });
 
-    socket.on("game:pirate:spin", async (payload, ackRaw) => {
+    socket.on("game:pirate:start", async (payload, ackRaw) => {
       const ack = normalizeAck(ackRaw);
       const roomCode = socket.data.roomCode;
       const userId = socket.data.userId;
@@ -774,28 +779,114 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const parsed = pirateSchema.safeParse(payload);
+      const presence = getPresence(io, roomCode);
+      if (presence.length !== 2) {
+        ack({ ok: false, reason: "need_two_players" });
+        return;
+      }
+
+      const parsed = pirateStartSchema.safeParse(payload);
       if (!parsed.success) {
         ack({ ok: false, reason: "invalid_payload" });
         return;
       }
 
       const { slots } = parsed.data;
+      const players = await getOrderedPlayers(roomCode, presence);
       const bombSlot = Math.floor(Math.random() * slots);
-      const event = {
+      const gameState = {
         slots,
         bombSlot,
-        by: userId,
-        at: Date.now(),
+        pickedSlots: [],
+        players,
+        currentTurn: players[0],
+        startedAt: Date.now(),
       };
 
-      const stateText = await redis.get(roomKey(roomCode));
-      const state = stateText ? JSON.parse(stateText) : defaultState;
-      const nextState = { ...state, lastPirate: event, updatedAt: Date.now() };
-      await redis.set(roomKey(roomCode), JSON.stringify(nextState));
+      await redis.set(pirateKey(roomCode), JSON.stringify(gameState), "EX", 1800);
+      io.to(roomCode).emit("game:pirate:started", {
+        slots,
+        players,
+        currentTurn: players[0],
+        pickedSlots: [],
+        at: Date.now(),
+      });
+      ack({ ok: true });
+    });
 
-      io.to(roomCode).emit("game:pirate:result", event);
-      ack({ ok: true, event });
+    socket.on("game:pirate:pick", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+
+      const parsed = piratePickSchema.safeParse(payload);
+      if (!parsed.success) {
+        ack({ ok: false, reason: "invalid_payload" });
+        return;
+      }
+
+      const gameText = await redis.get(pirateKey(roomCode));
+      if (!gameText) {
+        ack({ ok: false, reason: "no_game" });
+        return;
+      }
+
+      const gameState = JSON.parse(gameText);
+      if (gameState.currentTurn !== userId) {
+        ack({ ok: false, reason: "not_your_turn" });
+        return;
+      }
+
+      const { slot } = parsed.data;
+      if (slot < 0 || slot >= gameState.slots) {
+        ack({ ok: false, reason: "invalid_slot" });
+        return;
+      }
+      if (gameState.pickedSlots.includes(slot)) {
+        ack({ ok: false, reason: "slot_taken" });
+        return;
+      }
+
+      if (slot === gameState.bombSlot) {
+        await redis.del(pirateKey(roomCode));
+        io.to(roomCode).emit("game:pirate:exploded", {
+          loser: userId,
+          bombSlot: slot,
+          by: userId,
+          at: Date.now(),
+        });
+        ack({ ok: true, exploded: true });
+      } else {
+        gameState.pickedSlots.push(slot);
+        const nextIdx = (gameState.players.indexOf(userId) + 1) % gameState.players.length;
+        gameState.currentTurn = gameState.players[nextIdx];
+        await redis.set(pirateKey(roomCode), JSON.stringify(gameState), "EX", 1800);
+        io.to(roomCode).emit("game:pirate:slot_picked", {
+          slot,
+          by: userId,
+          nextTurn: gameState.currentTurn,
+          pickedSlots: gameState.pickedSlots,
+          at: Date.now(),
+        });
+        ack({ ok: true, exploded: false });
+      }
+    });
+
+    socket.on("game:pirate:reset", async (_, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+      await redis.del(pirateKey(roomCode));
+      io.to(roomCode).emit("game:pirate:reset_done", { by: userId, at: Date.now() });
+      ack({ ok: true });
     });
 
     socket.on("game:yut:new", async (payload, ackRaw) => {
