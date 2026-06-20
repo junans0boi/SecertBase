@@ -61,6 +61,22 @@ class SocketService extends ChangeNotifier {
   String? telepathySelected;
   Map<String, String>? telepathyChoices;
 
+  // RPS multi-mode
+  String? rpsMode; // 'rps3' | 'mukjippa' | 'hanabagi'
+  bool rpsActive = false;
+  List<String> rpsPlayers = [];
+  Map<String, int> rpsScores = {};
+  int rpsRound = 0;
+  String? rpsMukjippaPhase; // 'determine' | 'play'
+  String? rpsMukjippaAttacker;
+  // last round result
+  Map<String, String>? rpsLastChoices;
+  Map<String, int>? rpsLastFingers;
+  Map<String, int>? rpsLastGuesses;
+  int? rpsLastTotal;
+  String? rpsRoundWinner;
+  String? rpsGameWinner;
+
   // pirate roulette (turn-based)
   bool pirateActive = false;
   int pirateTotalSlots = 8;
@@ -292,6 +308,82 @@ class SocketService extends ChangeNotifier {
         rpsResult = winner == userId ? 'win' : 'lose';
       }
       _log('가위바위보: $rpsResult');
+      notifyListeners();
+    });
+
+    socket.on('game:rps:started', (data) {
+      final map = _m(data);
+      rpsMode = map['mode'] as String?;
+      rpsActive = true;
+      rpsPlayers = (map['players'] as List?)?.map((e) => '$e').toList() ?? [];
+      final sc = map['scores'];
+      rpsScores = sc is Map ? sc.map((k, v) => MapEntry('$k', (v as num).toInt())) : {};
+      rpsRound = 1;
+      rpsMukjippaPhase = map['phase'] as String? ?? 'play';
+      rpsMukjippaAttacker = null;
+      rpsLastChoices = null;
+      rpsLastFingers = null;
+      rpsLastGuesses = null;
+      rpsLastTotal = null;
+      rpsRoundWinner = null;
+      rpsGameWinner = null;
+      notifyListeners();
+    });
+
+    socket.on('game:rps:round_result', (data) {
+      final map = _m(data);
+      final mode = map['mode'] as String?;
+      rpsRoundWinner = map['roundWinner'] as String?;
+      rpsGameWinner = map['gameWinner'] as String?;
+
+      if (mode == 'rps3') {
+        final choices = map['choices'];
+        if (choices is Map) {
+          rpsLastChoices = choices.map((k, v) => MapEntry('$k', '$v'));
+        }
+        final sc = map['scores'];
+        if (sc is Map) rpsScores = sc.map((k, v) => MapEntry('$k', (v as num).toInt()));
+        rpsRound = (map['round'] as num?)?.toInt() ?? rpsRound;
+      } else if (mode == 'mukjippa') {
+        final choices = map['choices'];
+        if (choices is Map) {
+          rpsLastChoices = choices.map((k, v) => MapEntry('$k', '$v'));
+        }
+        rpsMukjippaPhase = map['phase'] as String?;
+        rpsMukjippaAttacker = map['attacker'] as String?;
+      } else if (mode == 'hanabagi') {
+        final fingers = map['fingers'];
+        if (fingers is Map) {
+          rpsLastFingers = fingers.map((k, v) => MapEntry('$k', (v as num).toInt()));
+        }
+        final guesses = map['guesses'];
+        if (guesses is Map) {
+          rpsLastGuesses = guesses.map((k, v) => MapEntry('$k', (v as num).toInt()));
+        }
+        rpsLastTotal = (map['total'] as num?)?.toInt();
+        final sc = map['scores'];
+        if (sc is Map) rpsScores = sc.map((k, v) => MapEntry('$k', (v as num).toInt()));
+        rpsRound = (map['round'] as num?)?.toInt() ?? rpsRound;
+      }
+
+      if (rpsGameWinner != null) rpsActive = false;
+      notifyListeners();
+    });
+
+    socket.on('game:rps:reset_done', (_) {
+      rpsMode = null;
+      rpsActive = false;
+      rpsPlayers = [];
+      rpsScores = {};
+      rpsRound = 0;
+      rpsMukjippaPhase = null;
+      rpsMukjippaAttacker = null;
+      rpsLastChoices = null;
+      rpsLastFingers = null;
+      rpsLastGuesses = null;
+      rpsLastTotal = null;
+      rpsRoundWinner = null;
+      rpsGameWinner = null;
       notifyListeners();
     });
 
@@ -836,6 +928,44 @@ class SocketService extends ChangeNotifier {
     rpsChoices = null;
     notifyListeners();
     _socket?.emit('game:rps:select', {'choice': choice});
+  }
+
+  void startRpsGame(String mode) {
+    _socket?.emit('game:rps:start', {'mode': mode});
+  }
+
+  void pickRps(String choice) {
+    _socket?.emit('game:rps:pick', {'choice': choice});
+  }
+
+  void pickHanabagi(int fingers, int guess) {
+    _socket?.emit('game:rps:pick', {'fingers': fingers, 'guess': guess});
+  }
+
+  void clearRpsRound() {
+    rpsLastChoices = null;
+    rpsLastFingers = null;
+    rpsLastGuesses = null;
+    rpsRoundWinner = null;
+    notifyListeners();
+  }
+
+  void resetRpsGame() {
+    rpsMode = null;
+    rpsActive = false;
+    rpsPlayers = [];
+    rpsScores = {};
+    rpsRound = 0;
+    rpsMukjippaPhase = null;
+    rpsMukjippaAttacker = null;
+    rpsLastChoices = null;
+    rpsLastFingers = null;
+    rpsLastGuesses = null;
+    rpsLastTotal = null;
+    rpsRoundWinner = null;
+    rpsGameWinner = null;
+    notifyListeners();
+    _socket?.emit('game:rps:reset');
   }
 
   void playTelepathy(String choice, List<String> options) {

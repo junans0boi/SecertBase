@@ -91,6 +91,16 @@ const rpsSchema = z.object({
   choice: z.enum(["rock", "paper", "scissors"]),
 });
 
+const rpsStartSchema = z.object({
+  mode: z.enum(["rps3", "mukjippa", "hanabagi"]),
+});
+
+const rpsPickSchema = z.object({
+  choice: z.enum(["rock", "paper", "scissors"]).optional(),
+  fingers: z.number().int().min(0).max(5).optional(),
+  guess: z.number().int().min(0).max(10).optional(),
+});
+
 const telepathySchema = z.object({
   choice: z.string().min(1),
   options: z.array(z.string().min(1)).min(2).max(10),
@@ -654,69 +664,213 @@ export const registerSocketHandlers = (io) => {
       ack({ ok: true, event });
     });
 
+    // ── RPS legacy (kept for safety) ─────────────────────────────────────────
     socket.on("game:rps:select", async (payload, ackRaw) => {
       const ack = normalizeAck(ackRaw);
       const roomCode = socket.data.roomCode;
       const userId = socket.data.userId;
-      if (!roomCode || !userId) {
-        ack({ ok: false, reason: "not_joined" });
-        return;
-      }
-
+      if (!roomCode || !userId) { ack({ ok: false, reason: "not_joined" }); return; }
       const parsed = rpsSchema.safeParse(payload);
-      if (!parsed.success) {
-        ack({ ok: false, reason: "invalid_payload" });
-        return;
-      }
-
+      if (!parsed.success) { ack({ ok: false, reason: "invalid_payload" }); return; }
       const { choice } = parsed.data;
       const sessionKey = `rps:${roomCode}:session`;
       const existing = await redis.get(sessionKey);
       const session = existing ? JSON.parse(existing) : { choices: {}, revealed: false };
-
       session.choices[userId] = choice;
-      session.updatedAt = Date.now();
-
       const presence = getPresence(io, roomCode);
       if (Object.keys(session.choices).length === presence.length && presence.length === 2) {
-        session.revealed = true;
-        const [user1, user2] = Object.keys(session.choices);
-        const choice1 = session.choices[user1];
-        const choice2 = session.choices[user2];
-
-        let winner = null;
-        if (choice1 === choice2) {
-          winner = "draw";
-        } else if (
-          (choice1 === "rock" && choice2 === "scissors") ||
-          (choice1 === "scissors" && choice2 === "paper") ||
-          (choice1 === "paper" && choice2 === "rock")
-        ) {
-          winner = user1;
-        } else {
-          winner = user2;
-        }
-
-        session.winner = winner;
+        const [u1, u2] = Object.keys(session.choices);
+        const c1 = session.choices[u1], c2 = session.choices[u2];
+        let winner = c1 === c2 ? "draw"
+          : ((c1==="rock"&&c2==="scissors")||(c1==="scissors"&&c2==="paper")||(c1==="paper"&&c2==="rock")) ? u1 : u2;
         await redis.del(sessionKey);
-
-        const event = {
-          choices: session.choices,
-          winner,
-          at: Date.now(),
-        };
-
-        const stateText = await redis.get(roomKey(roomCode));
-        const state = stateText ? JSON.parse(stateText) : defaultState;
-        const nextState = { ...state, lastRps: event, updatedAt: Date.now() };
-        await redis.set(roomKey(roomCode), JSON.stringify(nextState));
-
+        const event = { choices: session.choices, winner, at: Date.now() };
         io.to(roomCode).emit("game:rps:result", event);
         ack({ ok: true, result: event });
       } else {
         await redis.set(sessionKey, JSON.stringify(session), "EX", 60);
         ack({ ok: true, waiting: true });
       }
+    });
+
+    // ── RPS multi-mode ────────────────────────────────────────────────────────
+    const rpsGameKey = (rc) => `rps:${rc}:game`;
+    const rpsWinner = (c1, c2) =>
+      c1 === c2 ? "draw"
+      : ((c1==="rock"&&c2==="scissors")||(c1==="scissors"&&c2==="paper")||(c1==="paper"&&c2==="rock"))
+        ? "p1" : "p2";
+
+    socket.on("game:rps:start", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) { ack({ ok: false, reason: "not_joined" }); return; }
+      const parsed = rpsStartSchema.safeParse(payload);
+      if (!parsed.success) { ack({ ok: false, reason: "invalid_payload" }); return; }
+      const { mode } = parsed.data;
+      const presence = getPresence(io, roomCode);
+      if (presence.length < 2) { ack({ ok: false, reason: "need_two_players" }); return; }
+      const players = await getOrderedPlayers(roomCode, presence);
+      const game = {
+        mode,
+        players,
+        scores: { [players[0]]: 0, [players[1]]: 0 },
+        round: 1,
+        picks: {},
+        // mukjippa specific
+        phase: mode === "mukjippa" ? "determine" : "play",
+        attacker: null,
+        gameWinner: null,
+      };
+      await redis.set(rpsGameKey(roomCode), JSON.stringify(game), "EX", 600);
+      io.to(roomCode).emit("game:rps:started", { mode, players, scores: game.scores, phase: game.phase });
+      ack({ ok: true });
+    });
+
+    socket.on("game:rps:pick", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) { ack({ ok: false, reason: "not_joined" }); return; }
+      const parsed = rpsPickSchema.safeParse(payload);
+      if (!parsed.success) { ack({ ok: false, reason: "invalid_payload" }); return; }
+
+      const raw = await redis.get(rpsGameKey(roomCode));
+      if (!raw) { ack({ ok: false, reason: "no_game" }); return; }
+      const game = JSON.parse(raw);
+      if (game.gameWinner) { ack({ ok: false, reason: "game_over" }); return; }
+      if (game.picks[userId] !== undefined) { ack({ ok: true, waiting: true }); return; }
+
+      // Record pick
+      if (game.mode === "hanabagi") {
+        const { fingers, guess } = parsed.data;
+        if (fingers === undefined || guess === undefined) { ack({ ok: false, reason: "need_fingers_and_guess" }); return; }
+        game.picks[userId] = { fingers, guess };
+      } else {
+        const { choice } = parsed.data;
+        if (!choice) { ack({ ok: false, reason: "need_choice" }); return; }
+        game.picks[userId] = choice;
+      }
+
+      const [p1, p2] = game.players;
+      if (game.picks[p1] === undefined || game.picks[p2] === undefined) {
+        await redis.set(rpsGameKey(roomCode), JSON.stringify(game), "EX", 600);
+        ack({ ok: true, waiting: true });
+        return;
+      }
+
+      // Both picked — resolve round
+      let roundWinner = null; // userId or "draw"
+
+      if (game.mode === "rps3") {
+        const c1 = game.picks[p1], c2 = game.picks[p2];
+        const rel = rpsWinner(c1, c2);
+        roundWinner = rel === "draw" ? "draw" : rel === "p1" ? p1 : p2;
+        if (roundWinner !== "draw") {
+          game.scores[roundWinner] = (game.scores[roundWinner] || 0) + 1;
+          if (game.scores[roundWinner] >= 3) game.gameWinner = roundWinner;
+        }
+        game.round++;
+        const event = {
+          mode: "rps3", round: game.round - 1,
+          choices: { [p1]: c1, [p2]: c2 },
+          roundWinner, scores: { ...game.scores }, gameWinner: game.gameWinner,
+        };
+        game.picks = {};
+        await redis.set(rpsGameKey(roomCode), JSON.stringify(game), "EX", 600);
+        io.to(roomCode).emit("game:rps:round_result", event);
+
+      } else if (game.mode === "mukjippa") {
+        const c1 = game.picks[p1], c2 = game.picks[p2];
+        const rel = rpsWinner(c1, c2);
+        const pickedWinner = rel === "draw" ? "draw" : rel === "p1" ? p1 : p2;
+
+        if (game.phase === "determine") {
+          if (pickedWinner === "draw") {
+            // replay
+            game.picks = {};
+            await redis.set(rpsGameKey(roomCode), JSON.stringify(game), "EX", 600);
+            io.to(roomCode).emit("game:rps:round_result", {
+              mode: "mukjippa", phase: "determine",
+              choices: { [p1]: c1, [p2]: c2 },
+              roundWinner: "draw", attacker: null, gameWinner: null,
+            });
+          } else {
+            game.attacker = pickedWinner;
+            game.phase = "play";
+            game.picks = {};
+            await redis.set(rpsGameKey(roomCode), JSON.stringify(game), "EX", 600);
+            io.to(roomCode).emit("game:rps:round_result", {
+              mode: "mukjippa", phase: "determine",
+              choices: { [p1]: c1, [p2]: c2 },
+              roundWinner: pickedWinner, attacker: pickedWinner, gameWinner: null,
+            });
+          }
+        } else {
+          // mukjippa play phase
+          if (c1 === c2) {
+            // Same → attacker wins
+            game.gameWinner = game.attacker;
+            await redis.set(rpsGameKey(roomCode), JSON.stringify(game), "EX", 600);
+            io.to(roomCode).emit("game:rps:round_result", {
+              mode: "mukjippa", phase: "play",
+              choices: { [p1]: c1, [p2]: c2 },
+              roundWinner: "tie_attacker_wins", attacker: game.attacker,
+              gameWinner: game.gameWinner,
+            });
+          } else {
+            // Different → winner becomes new attacker
+            const newAttacker = pickedWinner;
+            game.attacker = newAttacker;
+            game.picks = {};
+            await redis.set(rpsGameKey(roomCode), JSON.stringify(game), "EX", 600);
+            io.to(roomCode).emit("game:rps:round_result", {
+              mode: "mukjippa", phase: "play",
+              choices: { [p1]: c1, [p2]: c2 },
+              roundWinner: newAttacker, attacker: newAttacker, gameWinner: null,
+            });
+          }
+        }
+
+      } else if (game.mode === "hanabagi") {
+        const pick1 = game.picks[p1], pick2 = game.picks[p2];
+        const total = pick1.fingers + pick2.fingers;
+        const p1Hit = pick1.guess === total;
+        const p2Hit = pick2.guess === total;
+        if (p1Hit && !p2Hit) {
+          roundWinner = p1;
+          game.scores[p1] = (game.scores[p1] || 0) + 1;
+        } else if (p2Hit && !p1Hit) {
+          roundWinner = p2;
+          game.scores[p2] = (game.scores[p2] || 0) + 1;
+        } else {
+          roundWinner = "draw";
+        }
+        if (roundWinner !== "draw" && game.scores[roundWinner] >= 3) {
+          game.gameWinner = roundWinner;
+        }
+        game.round++;
+        const event = {
+          mode: "hanabagi", round: game.round - 1,
+          fingers: { [p1]: pick1.fingers, [p2]: pick2.fingers },
+          guesses: { [p1]: pick1.guess, [p2]: pick2.guess },
+          total, roundWinner, scores: { ...game.scores }, gameWinner: game.gameWinner,
+        };
+        game.picks = {};
+        await redis.set(rpsGameKey(roomCode), JSON.stringify(game), "EX", 600);
+        io.to(roomCode).emit("game:rps:round_result", event);
+      }
+
+      ack({ ok: true });
+    });
+
+    socket.on("game:rps:reset", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      if (!roomCode) { ack({ ok: false, reason: "not_joined" }); return; }
+      await redis.del(rpsGameKey(roomCode));
+      io.to(roomCode).emit("game:rps:reset_done");
+      ack({ ok: true });
     });
 
     socket.on("game:telepathy:select", async (payload, ackRaw) => {
