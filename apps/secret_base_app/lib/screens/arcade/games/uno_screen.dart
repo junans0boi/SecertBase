@@ -63,7 +63,7 @@ class _UnoScreenState extends State<UnoScreen> {
         userId: _socket.userId,
         onRestart: () {
           Navigator.of(context).pop();
-          _socket.newUnoGame();
+          _socket.newUnoGame(mode: _socket.unoMode);
         },
       ),
     );
@@ -117,6 +117,7 @@ class _UnoScreenState extends State<UnoScreen> {
                       },
                       lastSpecialCard: sock.unoLastSpecialCard,
                       lastSpecialBy: sock.unoLastSpecialBy,
+                      lastSpecialAt: sock.unoLastSpecialAt,
                       topInset: topInset,
                     ),
                   ),

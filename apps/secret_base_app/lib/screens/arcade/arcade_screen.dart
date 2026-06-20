@@ -607,11 +607,11 @@ class _GameCard extends StatelessWidget {
                           Text(
                             info.desc,
                             maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                            overflow: TextOverflow.clip,
+                            softWrap: false,
                             style: mainBody(
                               size: compact ? 10 : 11,
                               color: kMainMuted,
-                              height: 1,
                             ),
                           ),
                         ],

@@ -69,7 +69,7 @@ export function throwYut() {
  * Returns `{ position, lastPos }` or null if the move cannot be made.
  */
 export function movePiece(piece, steps) {
-  if (piece.finished || piece.position === GOAL_POSITION) {
+  if (piece.finished) {
     return null;
   }
 
@@ -85,14 +85,14 @@ export function movePiece(piece, steps) {
 
   for (let i = 0; i < steps; i += 1) {
     if (position === GOAL_POSITION) {
-      break;
+      return { position: GOAL_POSITION, lastPos: GOAL_POSITION, finished: true };
     }
-    const nextPosition = getNextPosition(position, i === 0);
+    const nextPosition = getNextPosition(position, i === 0, lastPos);
     lastPos = position;
     position = nextPosition;
   }
 
-  return { position, lastPos };
+  return { position, lastPos, finished: false };
 }
 
 /**
@@ -114,10 +114,16 @@ export function getCarriedPieces(selectedPiece, playerPieces) {
   );
 }
 
+export function hasBackdoMove(playerPieces) {
+  return playerPieces.some(
+    (piece) => !piece.finished && piece.position !== 0,
+  );
+}
+
 /**
  * Initialize game state
  */
-export function createYutGameState(player1, player2) {
+export function createYutGameState(player1, player2, options = {}) {
   const createPieces = () => [
     { id: 0, position: 0, lastPos: 0, finished: false },
     { id: 1, position: 0, lastPos: 0, finished: false },
@@ -138,6 +144,8 @@ export function createYutGameState(player1, player2) {
     },
     phase: "roll_order",
     currentTurn: null,
+    characters: options.characters ?? {},
+    bgm: options.bgm ?? null,
     startRolls: {},
     orderCountdownUntil: null,
     pendingMoves: [],
@@ -163,6 +171,8 @@ export function serializeYutGame(gameState) {
     players: gameState.playersOrder,
     phase: gameState.phase,
     currentTurn: gameState.currentTurn,
+    characters: gameState.characters ?? {},
+    bgm: gameState.bgm ?? null,
     startRolls: gameState.startRolls ?? {},
     orderCountdownUntil: gameState.orderCountdownUntil ?? null,
     pendingMoves: gameState.pendingMoves,
@@ -177,7 +187,7 @@ export function serializeYutGame(gameState) {
   };
 }
 
-function getNextPosition(currentPosition, isFirstStep) {
+function getNextPosition(currentPosition, isFirstStep, lastPos = 0) {
   if (currentPosition === GOAL_POSITION) return GOAL_POSITION;
 
   if (isFirstStep) {
@@ -211,17 +221,25 @@ function getNextPosition(currentPosition, isFirstStep) {
     22: 23,
     24: 25,
     25: 23,
-    23: 26,
+    23: lastPos === 22 ? 28 : 26,
     26: 27,
     27: GOAL_POSITION,
+    28: 29,
+    29: 15,
   };
 
   return nextMap[currentPosition] ?? GOAL_POSITION;
 }
 
 function getPrevPosition(currentPosition, lastPos) {
+  if (currentPosition === GOAL_POSITION) {
+    return lastPos || 19;
+  }
   if (currentPosition === 23) {
     return lastPos === 25 || lastPos === 24 || lastPos === 10 ? 25 : 22;
+  }
+  if (currentPosition === 15 && lastPos === 29) {
+    return 29;
   }
 
   const prevMap = {
@@ -252,6 +270,8 @@ function getPrevPosition(currentPosition, lastPos) {
     25: 24,
     26: 23,
     27: 26,
+    28: 23,
+    29: 28,
   };
 
   return prevMap[currentPosition] ?? 0;

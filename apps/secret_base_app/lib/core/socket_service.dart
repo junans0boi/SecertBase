@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -22,6 +23,12 @@ class SocketService extends ChangeNotifier {
     '⭐',
   ];
   static const _profileEmojiKey = 'secret_base_profile_emoji';
+  static const yutCharacterIds = ['honggilldong', 'nolbu', 'miho'];
+  static const yutCharacterNames = {
+    'honggilldong': '홍길동',
+    'nolbu': '놀부',
+    'miho': '미호',
+  };
 
   io.Socket? _socket;
 
@@ -41,6 +48,9 @@ class SocketService extends ChangeNotifier {
   String? lobbyHost;
   List<String> lobbyPlayers = [];
   String? lobbyStartedGameType;
+  Map<String, String> lobbyCharacterSelections = {};
+  Map<String, String> lobbyStartedYutCharacters = {};
+  String? lobbyStartedYutBgm;
 
   // simple game results
   int? lastDice;
@@ -59,7 +69,17 @@ class SocketService extends ChangeNotifier {
   String? yutPhase;
   String? yutCurrentTurn;
   String? yutLastThrow;
+  bool yutLastNak = false;
   String? yutWinner;
+  Map<String, String> yutCharacters = {};
+  String? yutBgm;
+  String? yutLastThrowBy;
+  int? yutLastThrowAt;
+  String? yutLastMoveBy;
+  int? yutLastMoveAt;
+  int yutLastCapturedCount = 0;
+  int yutLastCarriedCount = 0;
+  int yutLastStackedCount = 0;
   int? yutOrderCountdownUntil;
   List<dynamic> yutPendingMoves = [];
   Map<String, dynamic> yutStartRolls = {};
@@ -88,9 +108,14 @@ class SocketService extends ChangeNotifier {
   // special card effect tracking (for opponent's plays)
   String? unoLastSpecialCard;
   String? unoLastSpecialBy;
+  int? unoLastSpecialAt;
   String? unoReactionType;
   String? unoReactionBy;
   int? unoReactionAt;
+
+  // heart
+  bool heartReceived = false;
+  String heartSenderEmoji = '💓';
 
   // menu / reconnect state
   bool restartPending = false; // received opponent's restart request
@@ -213,6 +238,7 @@ class SocketService extends ChangeNotifier {
       lobbyHost = map['host'] as String?;
       final players = map['players'];
       lobbyPlayers = players is List ? players.map((e) => '$e').toList() : [];
+      lobbyCharacterSelections = _stringMap(map['characterSelections']);
       final emojis = _stringMap(map['profileEmojis']);
       if (emojis.isNotEmpty) profileEmojis = emojis;
       _log('대기방 업데이트: $lobbyGameType / ${lobbyPlayers.join(', ')}');
@@ -222,6 +248,12 @@ class SocketService extends ChangeNotifier {
     socket.on('game:lobby:started', (data) {
       final map = _m(data);
       lobbyStartedGameType = map['gameType'] as String?;
+      final players = map['players'];
+      lobbyPlayers = players is List ? players.map((e) => '$e').toList() : [];
+      lobbyHost = map['host'] as String? ?? lobbyHost;
+      final metadata = _m(map['metadata']);
+      lobbyStartedYutBgm = metadata['yutBgm'] as String?;
+      lobbyStartedYutCharacters = _stringMap(metadata['yutCharacters']);
       final emojis = _stringMap(map['profileEmojis']);
       if (emojis.isNotEmpty) profileEmojis = emojis;
       _log('대기방 게임 시작: $lobbyStartedGameType');
@@ -296,6 +328,10 @@ class SocketService extends ChangeNotifier {
       final throwResult = _m(map['throwResult'] ?? {});
       _applyYutState(map);
       yutLastThrow = throwResult['resultName'] as String?;
+      yutLastNak = throwResult['nak'] == true;
+      yutLastThrowBy = map['by'] as String?;
+      yutLastThrowAt =
+          (map['at'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch;
       _log('윷 결과: $yutLastThrow - 다음 턴: $yutCurrentTurn');
       notifyListeners();
     });
@@ -303,6 +339,12 @@ class SocketService extends ChangeNotifier {
     socket.on('game:yut:move_result', (data) {
       final map = _m(data);
       _applyYutState(map);
+      yutLastMoveBy = map['by'] as String?;
+      yutLastMoveAt =
+          (map['at'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch;
+      yutLastCapturedCount = (map['capturedCount'] as num?)?.toInt() ?? 0;
+      yutLastCarriedCount = (map['carriedCount'] as num?)?.toInt() ?? 0;
+      yutLastStackedCount = (map['stackedCount'] as num?)?.toInt() ?? 0;
       if (map['winner'] != null) {
         yutWinner = map['winner'] as String?;
         yutActive = false;
@@ -335,6 +377,7 @@ class SocketService extends ChangeNotifier {
       unoDrawStackType = null;
       unoLastSpecialCard = null;
       unoLastSpecialBy = null;
+      unoLastSpecialAt = null;
       unoReactionType = null;
       unoReactionBy = null;
       unoReactionAt = null;
@@ -381,9 +424,13 @@ class SocketService extends ChangeNotifier {
       if (specialValues.contains(cardValue)) {
         unoLastSpecialCard = cardValue;
         unoLastSpecialBy = playedBy;
+        unoLastSpecialAt =
+            (map['at'] as num?)?.toInt() ??
+            DateTime.now().millisecondsSinceEpoch;
       } else {
         unoLastSpecialCard = null;
         unoLastSpecialBy = null;
+        unoLastSpecialAt = null;
       }
       notifyListeners();
     });
@@ -513,6 +560,13 @@ class SocketService extends ChangeNotifier {
       notifyListeners();
     });
 
+    socket.on('heart:received', (data) {
+      heartReceived = true;
+      heartSenderEmoji = '💓';
+      _log('하트 받음!');
+      notifyListeners();
+    });
+
     socket.on('game:restart:declined', (_) {
       restartWaiting = false;
       _log('다시 시작 거절됨');
@@ -521,6 +575,15 @@ class SocketService extends ChangeNotifier {
 
     socket.connect();
     _socket = socket;
+  }
+
+  void sendHeart() {
+    _socket?.emit('heart:send', {});
+  }
+
+  void clearHeart() {
+    heartReceived = false;
+    notifyListeners();
   }
 
   void requestRestart(String gameType) {
@@ -556,7 +619,20 @@ class SocketService extends ChangeNotifier {
     lobbyHost = null;
     lobbyPlayers = [];
     lobbyStartedGameType = null;
+    lobbyCharacterSelections = {};
+    lobbyStartedYutCharacters = {};
+    lobbyStartedYutBgm = null;
     yutActive = false;
+    yutCharacters = {};
+    yutBgm = null;
+    yutLastThrowBy = null;
+    yutLastNak = false;
+    yutLastThrowAt = null;
+    yutLastMoveBy = null;
+    yutLastMoveAt = null;
+    yutLastCapturedCount = 0;
+    yutLastCarriedCount = 0;
+    yutLastStackedCount = 0;
     unoActive = false;
     unoPendingCall = false;
     unoCatchable = false;
@@ -564,6 +640,7 @@ class SocketService extends ChangeNotifier {
     unoDrawStackType = null;
     unoLastSpecialCard = null;
     unoLastSpecialBy = null;
+    unoLastSpecialAt = null;
     unoReactionType = null;
     unoReactionBy = null;
     unoReactionAt = null;
@@ -606,6 +683,9 @@ class SocketService extends ChangeNotifier {
     lobbyHost = me;
     lobbyPlayers = me == null ? [] : [me];
     lobbyStartedGameType = null;
+    lobbyCharacterSelections = {};
+    lobbyStartedYutCharacters = {};
+    lobbyStartedYutBgm = null;
     if (me != null) {
       profileEmojis = {...profileEmojis, me: profileEmoji};
     }
@@ -622,6 +702,7 @@ class SocketService extends ChangeNotifier {
           lobbyPlayers = players is List
               ? players.map((e) => '$e').toList()
               : [];
+          lobbyCharacterSelections = _stringMap(lobby['characterSelections']);
           final emojis = _stringMap(lobby['profileEmojis']);
           if (emojis.isNotEmpty) profileEmojis = emojis;
           notifyListeners();
@@ -639,8 +720,44 @@ class SocketService extends ChangeNotifier {
       lobbyHost = null;
       lobbyPlayers = [];
       lobbyStartedGameType = null;
+      lobbyCharacterSelections = {};
+      lobbyStartedYutCharacters = {};
+      lobbyStartedYutBgm = null;
       notifyListeners();
     }
+  }
+
+  Future<bool> selectYutLobbyCharacter(String character) async {
+    if (!yutCharacterIds.contains(character) || lobbyGameType != 'yut') {
+      return false;
+    }
+    final completer = Completer<bool>();
+    _socket?.emitWithAck(
+      'game:lobby:select_character',
+      {'gameType': 'yut', 'character': character},
+      ack: (r) {
+        final map = _m(r);
+        if (map['ok'] == true) {
+          final lobby = _m(map['lobby']);
+          lobbyCharacterSelections = _stringMap(lobby['characterSelections']);
+          final players = lobby['players'];
+          lobbyPlayers = players is List
+              ? players.map((e) => '$e').toList()
+              : lobbyPlayers;
+          lobbyHost = lobby['host'] as String? ?? lobbyHost;
+          notifyListeners();
+          completer.complete(true);
+        } else {
+          _log('캐릭터 선택 실패: ${map['reason']}');
+          completer.complete(false);
+        }
+      },
+    );
+    if (_socket == null) return false;
+    return completer.future.timeout(
+      const Duration(seconds: 3),
+      onTimeout: () => false,
+    );
   }
 
   void startGameLobby(String gameType) {
@@ -690,11 +807,23 @@ class SocketService extends ChangeNotifier {
     _socket?.emit('game:pirate:spin', {'slots': slots});
   }
 
-  void newYutGame() => _socket?.emit('game:yut:new');
+  void newYutGame({Map<String, String>? characters, String? bgm}) {
+    final payload = <String, dynamic>{};
+    if (characters != null && characters.isNotEmpty) {
+      payload['characters'] = characters;
+    }
+    if (bgm != null) {
+      payload['bgm'] = bgm;
+    }
+    _socket?.emit('game:yut:new', payload);
+  }
+
   void rollYutStartDice() => _socket?.emit('game:yut:roll_start');
   void throwYut() => _socket?.emit('game:yut:throw');
-  void moveYut(int pieceId) =>
-      _socket?.emit('game:yut:move', {'pieceId': pieceId});
+  void moveYut(int pieceId, {int moveIndex = 0}) => _socket?.emit(
+    'game:yut:move',
+    {'pieceId': pieceId, 'moveIndex': moveIndex},
+  );
 
   void setUnoMode(String mode) {
     if (mode != 'classic' && mode != 'go_wild') return;
@@ -788,6 +917,8 @@ class SocketService extends ChangeNotifier {
     yutGameId = map['id'] as String? ?? yutGameId ?? 'active';
     yutPhase = map['phase'] as String? ?? yutPhase ?? 'throwing';
     yutCurrentTurn = map['currentTurn'] as String?;
+    yutCharacters = _stringMap(map['characters']);
+    yutBgm = map['bgm'] as String? ?? yutBgm;
     yutOrderCountdownUntil = map['orderCountdownUntil'] as int?;
     yutStartRolls = _m(map['startRolls'] ?? yutStartRolls);
     final pending = map['pendingMoves'];
@@ -795,6 +926,10 @@ class SocketService extends ChangeNotifier {
     final lastThrow = _m(map['lastThrow']);
     if (lastThrow.isNotEmpty) {
       yutLastThrow = lastThrow['resultName'] as String?;
+      yutLastNak = lastThrow['nak'] == true;
+    } else if (map.containsKey('lastThrow')) {
+      yutLastThrow = null;
+      yutLastNak = false;
     }
     final playersRaw = map['players'];
     if (playersRaw is List) {

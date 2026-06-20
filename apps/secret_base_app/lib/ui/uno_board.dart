@@ -24,6 +24,7 @@ class UnoBoard extends StatefulWidget {
   final VoidCallback? onUnoButton;
   final String? lastSpecialCard;
   final String? lastSpecialBy;
+  final int? lastSpecialAt;
   final double topInset;
 
   const UnoBoard({
@@ -48,6 +49,7 @@ class UnoBoard extends StatefulWidget {
     this.onUnoButton,
     this.lastSpecialCard,
     this.lastSpecialBy,
+    this.lastSpecialAt,
     this.topInset = 0,
   });
 
@@ -119,9 +121,15 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
       _startDealingAnimation();
     }
 
-    // Trigger special card effect
+    // Trigger special card effect for every server play event, including repeats.
+    final specialChanged =
+        widget.lastSpecialAt != null &&
+        widget.lastSpecialAt != old.lastSpecialAt;
+    final legacySpecialChanged =
+        widget.lastSpecialAt == null &&
+        widget.lastSpecialCard != old.lastSpecialCard;
     if (widget.lastSpecialCard != null &&
-        widget.lastSpecialCard != old.lastSpecialCard) {
+        (specialChanged || legacySpecialChanged)) {
       _triggerSpecialEffect(widget.lastSpecialCard!);
     }
 

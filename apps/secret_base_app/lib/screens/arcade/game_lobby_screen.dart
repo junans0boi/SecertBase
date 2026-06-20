@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/main_design.dart';
 import '../../core/socket_service.dart';
 import '../../core/uno_audio.dart';
+import '../../core/yut_audio.dart';
 
 class GameLobbyScreen extends StatefulWidget {
   final String gameType;
@@ -34,6 +35,8 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
   final _socket = SocketService();
   bool _started = false;
   int _countdown = 0;
+  Map<String, String> _startedYutCharacters = {};
+  String? _startedYutBgm;
   Timer? _countdownTimer;
 
   @override
@@ -59,6 +62,10 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
     if (!mounted) return;
     if (_socket.lobbyStartedGameType == widget.gameType && !_started) {
       _started = true;
+      _startedYutCharacters = Map<String, String>.from(
+        _socket.lobbyStartedYutCharacters,
+      );
+      _startedYutBgm = _socket.lobbyStartedYutBgm;
       _socket.clearLobbyStart();
       _beginCountdown();
       return;
@@ -91,6 +98,16 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
 
   void _launchGame() {
     final isHost = _socket.userId == _socket.lobbyHost;
+    if (widget.gameType == 'yut') {
+      final characterOrder = _socket.lobbyPlayers
+          .map((player) => _startedYutCharacters[player])
+          .whereType<String>()
+          .toList();
+      YutAudio.instance.playGameStart(
+        bgm: _startedYutBgm,
+        characters: characterOrder,
+      );
+    }
     Navigator.of(
       context,
     ).pushReplacement(MaterialPageRoute(builder: (_) => widget.gameScreen));
@@ -102,7 +119,10 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
         }
         switch (widget.gameType) {
           case 'yut':
-            _socket.newYutGame();
+            _socket.newYutGame(
+              characters: _startedYutCharacters,
+              bgm: _startedYutBgm,
+            );
             break;
           case 'bomb':
             _socket.newBombGame();
@@ -118,11 +138,28 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
   Widget build(BuildContext context) {
     final isHost =
         _socket.userId != null && _socket.userId == _socket.lobbyHost;
-    final canStart = isHost && _socket.lobbyPlayers.length >= 2;
+    final hasTwoPlayers = _socket.lobbyPlayers.length >= 2;
+    final yutReady =
+        widget.gameType != 'yut' ||
+        (hasTwoPlayers &&
+            _socket.lobbyPlayers.every(
+              (player) => _socket.lobbyCharacterSelections[player] != null,
+            ));
+    final canStart = isHost && hasTwoPlayers && yutReady;
+
+    final startLabel = canStart
+        ? '게임 시작'
+        : !hasTwoPlayers
+        ? '상대방을 기다리는 중'
+        : '캐릭터 선택 대기 중';
 
     return Stack(
       children: [
-        _buildScaffold(isHost: isHost, canStart: canStart),
+        _buildScaffold(
+          isHost: isHost,
+          canStart: canStart,
+          startLabel: startLabel,
+        ),
         if (_countdown > 0) _buildCountdownOverlay(),
       ],
     );
@@ -158,7 +195,17 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
     );
   }
 
-  Widget _buildScaffold({required bool isHost, required bool canStart}) {
+  Widget _buildScaffold({
+    required bool isHost,
+    required bool canStart,
+    required String startLabel,
+  }) {
+    final lobbyPlayers = List<String>.from(_socket.lobbyPlayers);
+    final profileEmojis = Map<String, String>.from(_socket.profileEmojis);
+    final characterSelections = Map<String, String>.from(
+      _socket.lobbyCharacterSelections,
+    );
+
     return Scaffold(
       backgroundColor: kMainBg,
       body: SafeArea(
@@ -195,6 +242,10 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
                                 child: _PlayerSlot(
                                   index: 0,
                                   color: widget.color,
+                                  players: lobbyPlayers,
+                                  host: _socket.lobbyHost,
+                                  profileEmojis: profileEmojis,
+                                  characterSelections: characterSelections,
                                 ),
                               ),
                               const SizedBox(width: 18),
@@ -202,10 +253,21 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
                                 child: _PlayerSlot(
                                   index: 1,
                                   color: widget.color,
+                                  players: lobbyPlayers,
+                                  host: _socket.lobbyHost,
+                                  profileEmojis: profileEmojis,
+                                  characterSelections: characterSelections,
                                 ),
                               ),
                             ],
                           ),
+                          if (widget.gameType == 'yut') ...[
+                            const SizedBox(height: 22),
+                            _YutCharacterSelector(
+                              userId: _socket.userId,
+                              selections: characterSelections,
+                            ),
+                          ],
                           const SizedBox(height: 26),
                           if (isHost)
                             SizedBox(
@@ -227,7 +289,7 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
                                   elevation: 0,
                                 ),
                                 child: Text(
-                                  canStart ? '게임 시작' : '상대방을 기다리는 중',
+                                  startLabel,
                                   style: mainBody(
                                     size: 15,
                                     color: canStart ? kMainPaper : kMainMuted,
@@ -318,19 +380,31 @@ class _Header extends StatelessWidget {
 class _PlayerSlot extends StatelessWidget {
   final int index;
   final Color color;
+  final List<String> players;
+  final String? host;
+  final Map<String, String> profileEmojis;
+  final Map<String, String> characterSelections;
 
-  const _PlayerSlot({required this.index, required this.color});
+  const _PlayerSlot({
+    required this.index,
+    required this.color,
+    required this.players,
+    required this.host,
+    required this.profileEmojis,
+    required this.characterSelections,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final socket = SocketService();
-    final player = index < socket.lobbyPlayers.length
-        ? socket.lobbyPlayers[index]
-        : null;
-    final isHost = player != null && player == socket.lobbyHost;
+    final player = index < players.length ? players[index] : null;
+    final isHost = player != null && player == host;
     final emoji = player == null
         ? '…'
-        : socket.profileEmojis[player] ?? SocketService.defaultProfileEmoji;
+        : profileEmojis[player] ?? SocketService.defaultProfileEmoji;
+    final characterId = player == null ? null : characterSelections[player];
+    final characterName = characterId == null
+        ? null
+        : SocketService.yutCharacterNames[characterId];
 
     return Column(
       children: [
@@ -391,6 +465,155 @@ class _PlayerSlot extends StatelessWidget {
             weight: player == null ? FontWeight.w500 : FontWeight.w800,
             height: 1.1,
           ),
+        ),
+        if (characterName != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            characterName,
+            textAlign: TextAlign.center,
+            style: mainBody(
+              size: 12,
+              color: color,
+              weight: FontWeight.w800,
+              height: 1,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _YutCharacterSelector extends StatelessWidget {
+  final String? userId;
+  final Map<String, String> selections;
+
+  const _YutCharacterSelector({required this.userId, required this.selections});
+
+  static const _icons = {'honggilldong': '🗡️', 'nolbu': '💰', 'miho': '🦊'};
+
+  @override
+  Widget build(BuildContext context) {
+    final socket = SocketService();
+    final me = userId;
+    final myCharacter = me == null ? null : selections[me];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              '캐릭터 선택',
+              style: mainBody(
+                size: 13,
+                color: kMainInk,
+                weight: FontWeight.w900,
+                height: 1,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '상대와 중복 선택 불가',
+              style: mainBody(size: 11, color: kMainMuted, height: 1),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: SocketService.yutCharacterIds.map((id) {
+            String? owner;
+            for (final entry in selections.entries) {
+              if (entry.value == id) {
+                owner = entry.key;
+                break;
+              }
+            }
+            final takenByOther = owner != null && owner != me;
+            final selected = myCharacter == id;
+            final name = SocketService.yutCharacterNames[id] ?? id;
+
+            return Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  right: id == SocketService.yutCharacterIds.last ? 0 : 8,
+                ),
+                child: InkWell(
+                  onTap: takenByOther
+                      ? null
+                      : () async {
+                          final ok = await socket.selectYutLobbyCharacter(id);
+                          if (ok) {
+                            YutAudio.instance.playCharacterSelect(id);
+                          }
+                        },
+                  borderRadius: BorderRadius.circular(14),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 160),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? kMainSageSoft
+                          : takenByOther
+                          ? kMainPaperSoft
+                          : kMainPaper,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: selected
+                            ? kMainSage
+                            : takenByOther
+                            ? kMainLine
+                            : kMainSky.withAlpha(120),
+                        width: selected ? 1.8 : 1,
+                      ),
+                    ),
+                    child: Opacity(
+                      opacity: takenByOther ? 0.45 : 1,
+                      child: Column(
+                        children: [
+                          Text(
+                            _icons[id] ?? '🎭',
+                            style: const TextStyle(fontSize: 24, height: 1),
+                          ),
+                          const SizedBox(height: 7),
+                          Text(
+                            name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: mainBody(
+                              size: 12,
+                              color: kMainInk,
+                              weight: FontWeight.w900,
+                              height: 1,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            selected
+                                ? '선택됨'
+                                : takenByOther
+                                ? '상대 선택'
+                                : '선택',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: mainBody(
+                              size: 10,
+                              color: selected ? kMainSage : kMainMuted,
+                              weight: FontWeight.w700,
+                              height: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
         ),
       ],
     );

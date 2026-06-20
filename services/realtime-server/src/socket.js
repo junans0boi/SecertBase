@@ -9,6 +9,7 @@ import {
   checkWin,
   checkCatch,
   getCarriedPieces,
+  hasBackdoMove,
   getNextPlayer as getNextYutPlayer,
   serializeYutGame,
 } from "./yut-engine.js";
@@ -60,6 +61,21 @@ const lobbySchema = z.object({
   gameType: z.enum(gameTypes),
 });
 
+const yutCharacters = ["honggilldong", "nolbu", "miho"];
+
+const lobbyCharacterSchema = z.object({
+  gameType: z.literal("yut"),
+  character: z.enum(yutCharacters),
+});
+
+const yutNewSchema = z
+  .object({
+    characters: z.record(z.string(), z.enum(yutCharacters)).optional().default({}),
+    bgm: z.enum(["yut1.mp3", "yut2.mp3", "yut3.mp3"]).optional().nullable(),
+  })
+  .optional()
+  .default({ characters: {}, bgm: null });
+
 const unoNewSchema = z
   .object({
     mode: z.enum(UNO_MODES).optional().default(DEFAULT_UNO_MODE),
@@ -86,6 +102,7 @@ const pirateSchema = z.object({
 
 const yutMoveSchema = z.object({
   pieceId: z.number().int().min(0).max(3),
+  moveIndex: z.number().int().min(0).max(20).optional().default(0),
 });
 
 const unoPlaySchema = z.object({
@@ -122,6 +139,7 @@ const yutGameKey = (roomCode) => `yut:${roomCode}:game`;
 const unoGameKey = (roomCode) => `uno:${roomCode}:game`;
 const bombGameKey = (roomCode) => `bomb:${roomCode}:game`;
 const gameLobbyKey = (roomCode, gameType) => `lobby:${roomCode}:${gameType}`;
+const randomYutBgm = () => `yut${Math.floor(Math.random() * 3) + 1}.mp3`;
 
 const defaultState = {
   lastDice: null,
@@ -174,10 +192,17 @@ const emitPresence = (io, roomCode) => {
 const normalizeLobby = (lobby, presence) => {
   const players = (lobby?.players ?? []).filter((player) => presence.includes(player));
   const host = players.includes(lobby?.host) ? lobby.host : (players[0] ?? null);
+  const rawSelections = lobby?.characterSelections ?? {};
+  const characterSelections = Object.fromEntries(
+    Object.entries(rawSelections).filter(([player, character]) =>
+      players.includes(player) && yutCharacters.includes(character),
+    ),
+  );
   return {
     gameType: lobby?.gameType,
     host,
     players,
+    characterSelections,
     updatedAt: Date.now(),
   };
 };
@@ -198,6 +223,7 @@ const cleanupLobbyForUser = async (io, roomCode, gameType, userId) => {
 
   const lobby = normalizeLobby(JSON.parse(lobbyText), getPresence(io, roomCode));
   lobby.players = lobby.players.filter((player) => player !== userId);
+  delete lobby.characterSelections[userId];
   lobby.host = lobby.players.includes(lobby.host) ? lobby.host : (lobby.players[0] ?? null);
   lobby.updatedAt = Date.now();
 
@@ -378,6 +404,54 @@ export const registerSocketHandlers = (io) => {
       ack({ ok: true });
     });
 
+    socket.on("game:lobby:select_character", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+
+      const parsed = lobbyCharacterSchema.safeParse(payload);
+      if (!parsed.success) {
+        ack({ ok: false, reason: "invalid_payload" });
+        return;
+      }
+
+      const { gameType, character } = parsed.data;
+      const key = gameLobbyKey(roomCode, gameType);
+      const lobbyText = await redis.get(key);
+      if (!lobbyText) {
+        ack({ ok: false, reason: "lobby_not_found" });
+        return;
+      }
+
+      const lobby = normalizeLobby(JSON.parse(lobbyText), getPresence(io, roomCode));
+      if (!lobby.players.includes(userId)) {
+        ack({ ok: false, reason: "not_in_lobby" });
+        return;
+      }
+
+      const takenBy = Object.entries(lobby.characterSelections).find(
+        ([player, selected]) => player !== userId && selected === character,
+      )?.[0];
+      if (takenBy) {
+        ack({ ok: false, reason: "character_taken", takenBy });
+        return;
+      }
+
+      lobby.characterSelections = {
+        ...lobby.characterSelections,
+        [userId]: character,
+      };
+      lobby.updatedAt = Date.now();
+
+      await redis.set(key, JSON.stringify(lobby), "EX", 1800);
+      emitLobby(io, roomCode, lobby);
+      ack({ ok: true, lobby: { ...lobby, profileEmojis: getPresenceProfiles(io, roomCode) } });
+    });
+
     socket.on("game:lobby:start", async (payload, ackRaw) => {
       const ack = normalizeAck(ackRaw);
       const roomCode = socket.data.roomCode;
@@ -410,13 +484,33 @@ export const registerSocketHandlers = (io) => {
         ack({ ok: false, reason: "need_two_players" });
         return;
       }
+      if (gameType === "yut") {
+        const selectedCharacters = lobby.players.map(
+          (player) => lobby.characterSelections[player],
+        );
+        if (selectedCharacters.some((character) => !character)) {
+          ack({ ok: false, reason: "need_character_selection" });
+          return;
+        }
+        if (new Set(selectedCharacters).size !== selectedCharacters.length) {
+          ack({ ok: false, reason: "duplicate_character" });
+          return;
+        }
+      }
 
+      const metadata = gameType === "yut"
+        ? {
+            yutBgm: randomYutBgm(),
+            yutCharacters: lobby.characterSelections,
+          }
+        : {};
       await redis.del(key);
       io.to(roomCode).emit("game:lobby:started", {
         gameType,
         host: lobby.host,
         players: lobby.players,
         profileEmojis: getPresenceProfiles(io, roomCode),
+        metadata,
         at: Date.now(),
       });
       ack({ ok: true });
@@ -447,13 +541,8 @@ export const registerSocketHandlers = (io) => {
         
         if (yutGame) {
           const game = JSON.parse(yutGame);
-          if (game.p1 && game.p2) {
-            activeGames.yut = {
-              gameId: game.gameId,
-              turn: game.turn,
-              p1Pieces: game.p1.pieces ?? [],
-              p2Pieces: game.p2.pieces ?? [],
-            };
+          if (game.players) {
+            activeGames.yut = serializeYutGame(game);
           }
         }
 
@@ -709,7 +798,7 @@ export const registerSocketHandlers = (io) => {
       ack({ ok: true, event });
     });
 
-    socket.on("game:yut:new", async (_, ackRaw) => {
+    socket.on("game:yut:new", async (payload, ackRaw) => {
       const ack = normalizeAck(ackRaw);
       const roomCode = socket.data.roomCode;
       const userId = socket.data.userId;
@@ -729,7 +818,15 @@ export const registerSocketHandlers = (io) => {
         ack({ ok: false, reason: "need_two_players" });
         return;
       }
+
+      const parsed = yutNewSchema.safeParse(payload);
+      if (!parsed.success) {
+        ack({ ok: false, reason: "invalid_payload" });
+        return;
+      }
       const gameState = createYutGameState(player1, player2);
+      gameState.characters = parsed.data.characters ?? {};
+      gameState.bgm = parsed.data.bgm ?? null;
       await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
 
       emitYutState(io, roomCode, "game:yut:started", gameState);
@@ -832,8 +929,19 @@ export const registerSocketHandlers = (io) => {
 
       const throwResult = throwYut();
       gameState.lastThrow = throwResult;
-      gameState.pendingMoves.push(throwResult.result);
-      if (!throwResult.bonusThrow) {
+
+      const isNak = throwResult.result === -1 &&
+        !hasBackdoMove(gameState.players[userId].pieces);
+      throwResult.nak = isNak;
+
+      if (!isNak) {
+        gameState.pendingMoves.push(throwResult.result);
+      }
+
+      if (isNak && gameState.pendingMoves.length === 0) {
+        gameState.currentTurn = getNextYutPlayer(gameState, userId);
+        gameState.phase = "throwing";
+      } else if (!throwResult.bonusThrow) {
         gameState.phase = "moving";
       }
 
@@ -842,6 +950,7 @@ export const registerSocketHandlers = (io) => {
       emitYutState(io, roomCode, "game:yut:throw_result", gameState, {
         by: userId,
         throwResult,
+        at: Date.now(),
       });
       ack({ ok: true, throwResult, gameState: serializeYutGame(gameState) });
     });
@@ -877,23 +986,43 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const { pieceId } = parsed.data;
+      const { pieceId, moveIndex } = parsed.data;
+      if (moveIndex >= gameState.pendingMoves.length) {
+        ack({ ok: false, reason: "invalid_move_index" });
+        return;
+      }
+
       const piece = gameState.players[userId].pieces[pieceId];
       if (!piece || piece.finished) {
         ack({ ok: false, reason: "invalid_piece" });
         return;
       }
 
-      const steps = gameState.pendingMoves.shift();
+      const steps = gameState.pendingMoves[moveIndex];
+      if (steps === -1 && piece.position === 0) {
+        ack({ ok: false, reason: "invalid_piece_for_move" });
+        return;
+      }
+
       const moveResult = movePiece(piece, steps);
 
       if (moveResult === null) {
         ack({ ok: false, reason: "invalid_move" });
         return;
       }
+      gameState.pendingMoves.splice(moveIndex, 1);
 
       const carriedPieces = getCarriedPieces(piece, gameState.players[userId].pieces);
-      if (moveResult.position >= 20) {
+      const stackedPieces = moveResult.position > 0 && moveResult.position !== 20
+        ? gameState.players[userId].pieces.filter(
+            (candidate) =>
+              candidate.id !== pieceId &&
+              !candidate.finished &&
+              candidate.position === moveResult.position,
+          )
+        : [];
+      let capturedPieces = [];
+      if (moveResult.finished) {
         for (const carriedPiece of carriedPieces) {
           carriedPiece.lastPos = moveResult.lastPos;
           carriedPiece.finished = true;
@@ -905,7 +1034,7 @@ export const registerSocketHandlers = (io) => {
           carriedPiece.position = moveResult.position;
         }
         const opponentId = getNextYutPlayer(gameState, userId);
-        const capturedPieces = checkCatch(piece.position, gameState.players[opponentId].pieces);
+        capturedPieces = checkCatch(piece.position, gameState.players[opponentId].pieces);
         for (const capturedPiece of capturedPieces) {
           capturedPiece.position = 0;
           capturedPiece.lastPos = 0;
@@ -934,7 +1063,12 @@ export const registerSocketHandlers = (io) => {
         newPosition: piece.position,
         finished: piece.finished,
         movedPieceIds: carriedPieces.map((carriedPiece) => carriedPiece.id),
+        capturedPieceIds: capturedPieces.map((capturedPiece) => capturedPiece.id),
+        capturedCount: capturedPieces.length,
+        carriedCount: carriedPieces.length,
+        stackedCount: stackedPieces.length,
         winner: gameState.winner,
+        at: Date.now(),
         ...serializeYutGame(gameState),
       };
 
@@ -1114,6 +1248,7 @@ export const registerSocketHandlers = (io) => {
         handCount: getUnoHandCount(gameState),
         winner: gameState.winner,
         unoCallNeeded: gameState.unoCallNeeded ?? null,
+        at: Date.now(),
       };
 
       io.to(roomCode).emit("game:uno:played", event);
@@ -1506,7 +1641,12 @@ export const registerSocketHandlers = (io) => {
       }
 
       if (gameType === "yut") {
-        const gameState = createYutGameState(p1, p2);
+        const previousText = await redis.get(yutGameKey(roomCode));
+        const previous = previousText ? JSON.parse(previousText) : {};
+        const gameState = createYutGameState(p1, p2, {
+          characters: previous.characters ?? {},
+          bgm: previous.bgm ?? null,
+        });
         await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
         emitYutState(io, roomCode, "game:yut:started", gameState);
       } else if (gameType === "uno") {
@@ -1542,6 +1682,14 @@ export const registerSocketHandlers = (io) => {
       }
 
       ack({ ok: true, accepted: true });
+    });
+
+    socket.on("heart:send", (_, ackRaw) => {
+      const ack = typeof ackRaw === "function" ? ackRaw : () => {};
+      const { roomCode, userId } = socket.data;
+      if (!roomCode) return ack({ ok: false });
+      socket.to(roomCode).emit("heart:received", { from: userId });
+      ack({ ok: true });
     });
 
     socket.on("disconnect", () => {

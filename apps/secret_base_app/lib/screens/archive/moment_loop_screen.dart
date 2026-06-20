@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 
@@ -127,11 +128,14 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
         });
 
         final media = _pickedMedia!;
+        final ext = media.name.split('.').last.toLowerCase();
+        final mime = _mimeFromExt(ext);
         request.files.add(
           http.MultipartFile.fromBytes(
             'media',
             media.bytes,
             filename: media.name,
+            contentType: MediaType.parse(mime),
           ),
         );
 
@@ -159,6 +163,16 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     final value = _auth.user?['UserId'] ?? _auth.user?['id'];
     if (value is int) return value;
     return int.tryParse('$value');
+  }
+
+  String _mimeFromExt(String ext) {
+    const map = {
+      'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
+      'gif': 'image/gif', 'webp': 'image/webp', 'heic': 'image/heic',
+      'mp4': 'video/mp4', 'mov': 'video/quicktime', 'avi': 'video/x-msvideo',
+      'mp3': 'audio/mpeg', 'aac': 'audio/aac', 'm4a': 'audio/mp4',
+    };
+    return map[ext] ?? 'image/jpeg';
   }
 
   String _dateOnly(DateTime value) =>

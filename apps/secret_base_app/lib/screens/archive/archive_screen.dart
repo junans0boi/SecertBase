@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
-import '../../core/app_theme.dart';
 import '../../core/main_design.dart';
 import 'moment_loop_screen.dart';
+import 'qa_screen.dart';
+import 'challenge_screen.dart';
+import 'map_screen.dart';
+import 'jukebox_screen.dart';
+import 'capsule_screen.dart';
 
 class ArchiveScreen extends StatelessWidget {
   const ArchiveScreen({super.key});
@@ -18,6 +22,7 @@ class ArchiveScreen extends StatelessWidget {
     _ArchiveItem('❓', '10시의 질문', '매일 밤 10시 Q&A', kMainHoney, kMainHoneySoft),
     _ArchiveItem('🏆', '목표 챌린지', '함께하는 도전', kMainSky, kMainSkySoft),
     _ArchiveItem('🎵', '주크박스', '우리의 플레이리스트', kMainPeach, kMainPeachSoft),
+    _ArchiveItem('🕯️', '타임캡슐', '미래의 우리에게 편지', kMainHoney, kMainHoneySoft),
   ];
 
   @override
@@ -74,21 +79,26 @@ class ArchiveScreen extends StatelessWidget {
   }
 
   void _openDetail(BuildContext ctx, _ArchiveItem item) {
-    if (item.name == 'MomentLoop') {
-      Navigator.push(
-        ctx,
-        MaterialPageRoute(builder: (_) => const MomentLoopScreen()),
-      );
-      return;
+    Widget? screen;
+    switch (item.name) {
+      case 'MomentLoop':
+        screen = const MomentLoopScreen();
+      case '비밀 지도':
+        screen = const MapScreen();
+      case '10시의 질문':
+        screen = const QaScreen();
+      case '목표 챌린지':
+        screen = const ChallengeScreen();
+      case '주크박스':
+        screen = const JukeboxScreen();
+      case '타임캡슐':
+        screen = const CapsuleScreen();
     }
-
-    Navigator.push(
-      ctx,
-      MaterialPageRoute(builder: (_) => _ArchiveDetailPage(item: item)),
-    );
+    if (screen != null) {
+      Navigator.push(ctx, MaterialPageRoute(builder: (_) => screen!));
+    }
   }
 }
-
 class _ArchiveItem {
   final String emoji;
   final String name;
@@ -149,116 +159,6 @@ class _ArchiveCard extends StatelessWidget {
             ),
             const Icon(Icons.arrow_forward_ios, color: kMainMuted, size: 14),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ArchiveDetailPage extends StatelessWidget {
-  final _ArchiveItem item;
-  const _ArchiveDetailPage({required this.item});
-
-  String get _endpoint {
-    switch (item.name) {
-      case 'MomentLoop':
-        return 'GET/POST /api/setlog';
-      case '비밀 지도':
-        return 'GET/POST /api/map';
-      case '10시의 질문':
-        return 'GET /api/qa/today';
-      case '목표 챌린지':
-        return 'GET/POST /api/challenges';
-      default:
-        return 'GET/POST /api/jukebox';
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: kMainBg,
-      appBar: AppBar(
-        backgroundColor: kMainBg,
-        foregroundColor: kMainInk,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 18),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text('${item.emoji} ${item.name}'),
-      ),
-      body: SafeArea(
-        child: CozyPage(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                SizedBox(
-                  width: double.infinity,
-                  child: MainCard(
-                    padding: const EdgeInsets.all(28),
-                    color: item.bgColor,
-                    borderColor: item.color.withAlpha(80),
-                    child: Column(
-                      children: [
-                        Text(item.emoji, style: const TextStyle(fontSize: 60)),
-                        const SizedBox(height: 10),
-                        Text(item.name, style: mainTitle(size: 28)),
-                        const SizedBox(height: 4),
-                        Text(
-                          item.desc,
-                          style: mainBody(size: 14),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                MainCard(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      const Icon(
-                        Icons.construction_rounded,
-                        color: kGold,
-                        size: 36,
-                      ),
-                      const SizedBox(height: 10),
-                      Text('개발 중', style: mainTitle(size: 24, color: kGold)),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Phase 4에서 완성 예정\n백엔드 API는 이미 준비됐어요!',
-                        style: mainBody(size: 13),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 14),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: kSuccess.withAlpha(25),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: kSuccess.withAlpha(80)),
-                        ),
-                        child: Text(
-                          _endpoint,
-                          style: mainBody(
-                            size: 12,
-                            color: kSuccess,
-                            weight: FontWeight.w700,
-                            height: 1,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
         ),
       ),
     );

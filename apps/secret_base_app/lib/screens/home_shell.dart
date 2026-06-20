@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../core/main_design.dart';
 import '../core/socket_service.dart';
+import '../widgets/heart_overlay.dart';
+import 'home/home_screen.dart';
 import 'arcade/arcade_screen.dart';
 import 'archive/archive_screen.dart';
 import 'settings/settings_screen.dart';
@@ -14,32 +16,50 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
+  bool _showHeartOverlay = false;
   final _socket = SocketService();
 
-  final _pages = const [ArcadeScreen(), ArchiveScreen(), SettingsScreen()];
+  final _pages = const [HomeScreen(), ArcadeScreen(), ArchiveScreen(), SettingsScreen()];
 
   @override
   void initState() {
     super.initState();
-    _socket.addListener(_rebuild);
+    _socket.addListener(_onSocket);
   }
 
   @override
   void dispose() {
-    _socket.removeListener(_rebuild);
+    _socket.removeListener(_onSocket);
     super.dispose();
   }
 
-  void _rebuild() {
-    if (mounted) setState(() {});
+  void _onSocket() {
+    if (_socket.heartReceived && !_showHeartOverlay) {
+      _socket.clearHeart();
+      if (mounted) setState(() => _showHeartOverlay = true);
+    } else {
+      if (mounted) setState(() {});
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: kMainBg,
-      body: SafeArea(bottom: false, child: _pages[_index]),
-      bottomNavigationBar: _buildNav(),
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: kMainBg,
+          body: SafeArea(bottom: false, child: _pages[_index]),
+          bottomNavigationBar: _buildNav(),
+        ),
+        if (_showHeartOverlay)
+          Positioned.fill(
+            child: HeartOverlay(
+              onComplete: () {
+                if (mounted) setState(() => _showHeartOverlay = false);
+              },
+            ),
+          ),
+      ],
     );
   }
 
@@ -47,25 +67,25 @@ class _HomeShellState extends State<HomeShell> {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: kMainBg,
-        border: const Border(top: BorderSide(color: kMainLine, width: 0.6)),
+        border: const Border(top: BorderSide(color: kMainLine, width: 0.5)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF8A7F70).withAlpha(18),
+            color: const Color(0xFF000000).withAlpha(12),
             blurRadius: 16,
-            offset: const Offset(0, -6),
+            offset: const Offset(0, -4),
           ),
         ],
       ),
       child: NavigationBarTheme(
         data: NavigationBarThemeData(
           backgroundColor: kMainPaper,
-          indicatorColor: kMainSageSoft,
+          indicatorColor: kMainRoseSoft,
           surfaceTintColor: Colors.transparent,
           shadowColor: Colors.transparent,
           iconTheme: WidgetStateProperty.resolveWith((states) {
             final selected = states.contains(WidgetState.selected);
             return IconThemeData(
-              color: selected ? kMainInk : kMainMuted,
+              color: selected ? kMainRose : kMainMuted,
               size: 23,
             );
           }),
@@ -73,7 +93,7 @@ class _HomeShellState extends State<HomeShell> {
             final selected = states.contains(WidgetState.selected);
             return mainBody(
               size: 11,
-              color: selected ? kMainInk : kMainMuted,
+              color: selected ? kMainRose : kMainMuted,
               weight: selected ? FontWeight.w800 : FontWeight.w500,
               height: 1,
             );
@@ -87,18 +107,23 @@ class _HomeShellState extends State<HomeShell> {
           height: 70,
           destinations: const [
             NavigationDestination(
+              icon: Icon(Icons.home_outlined),
+              selectedIcon: Icon(Icons.home_rounded),
+              label: '홈',
+            ),
+            NavigationDestination(
               icon: Icon(Icons.sports_esports_outlined),
-              selectedIcon: Icon(Icons.sports_esports),
+              selectedIcon: Icon(Icons.sports_esports_rounded),
               label: '놀이',
             ),
             NavigationDestination(
               icon: Icon(Icons.collections_bookmark_outlined),
-              selectedIcon: Icon(Icons.collections_bookmark),
+              selectedIcon: Icon(Icons.collections_bookmark_rounded),
               label: '기록',
             ),
             NavigationDestination(
               icon: Icon(Icons.settings_outlined),
-              selectedIcon: Icon(Icons.settings),
+              selectedIcon: Icon(Icons.settings_rounded),
               label: '설정',
             ),
           ],

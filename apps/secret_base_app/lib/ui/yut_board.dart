@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../core/yut_audio.dart';
 
 class YutBoard extends StatefulWidget {
   final String? gameId;
@@ -14,10 +15,15 @@ class YutBoard extends StatefulWidget {
   final VoidCallback onNewGame;
   final VoidCallback onRollStartDice;
   final VoidCallback onThrow;
-  final void Function(int) onMovePiece;
+  final void Function(int, int) onMovePiece;
   final VoidCallback onMoveNewPiece;
   final String currentUser;
   final String? lastResultName; // Added to show the recent throw
+  final int? lastThrowAt;
+  final bool lastThrowNak;
+  final String p1Character;
+  final String p2Character;
+  final ValueChanged<int>? onThrowResultRevealed;
 
   const YutBoard({
     super.key,
@@ -36,10 +42,27 @@ class YutBoard extends StatefulWidget {
     required this.onMoveNewPiece,
     required this.currentUser,
     this.lastResultName,
+    this.lastThrowAt,
+    this.lastThrowNak = false,
+    this.p1Character = 'honggilldong',
+    this.p2Character = 'miho',
+    this.onThrowResultRevealed,
   });
 
   @override
   State<YutBoard> createState() => _YutBoardState();
+}
+
+class _MoveGuideOption {
+  final int index;
+  final int steps;
+  final int targetPos;
+
+  const _MoveGuideOption({
+    required this.index,
+    required this.steps,
+    required this.targetPos,
+  });
 }
 
 class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
@@ -52,6 +75,8 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
   late AnimationController _stickThrowCtrl;
   bool _showThrowAnim = false;
   String? _animResult;
+  int? _animThrowAt;
+  int? _notifiedThrowAt;
   Timer? _countdownTimer;
   int _countdownSeconds = 0;
 
@@ -77,6 +102,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
       if (status == AnimationStatus.completed && mounted) {
         setState(() => _showThrowAnim = false);
         _resultBounceCtrl.forward(from: 0);
+        _notifyThrowResultRevealed();
       }
     });
     _syncCountdown();
@@ -85,8 +111,9 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
   @override
   void didUpdateWidget(YutBoard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.lastResultName != oldWidget.lastResultName &&
+    if (widget.lastThrowAt != oldWidget.lastThrowAt &&
         widget.lastResultName != null) {
+      _animThrowAt = widget.lastThrowAt;
       if (_showThrowAnim) {
         // My throw: result arrived mid-animation — update result so sticks settle correctly
         setState(() => _animResult = widget.lastResultName);
@@ -96,6 +123,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
           _animResult = widget.lastResultName;
           _showThrowAnim = true;
         });
+        YutAudio.instance.playThrow();
         _stickThrowCtrl.forward(from: 0);
       }
     }
@@ -151,9 +179,18 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     setState(() {
       _showThrowAnim = true;
       _animResult = null;
+      _animThrowAt = null;
     });
+    YutAudio.instance.playThrow();
     _stickThrowCtrl.forward(from: 0);
     widget.onThrow();
+  }
+
+  void _notifyThrowResultRevealed() {
+    final throwAt = _animThrowAt;
+    if (throwAt == null || throwAt == _notifiedThrowAt) return;
+    _notifiedThrowAt = throwAt;
+    widget.onThrowResultRevealed?.call(throwAt);
   }
 
   Offset _getBoardPoint(int pos) {
@@ -169,6 +206,8 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     if (pos == 25) return const Offset(0.4, 0.4);
     if (pos == 26) return const Offset(0.6, 0.6);
     if (pos == 27) return const Offset(0.75, 0.75);
+    if (pos == 28) return const Offset(0.4, 0.6);
+    if (pos == 29) return const Offset(0.25, 0.75);
     return const Offset(1.0, 1.0);
   }
 
@@ -188,16 +227,81 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     return 0;
   }
 
-  int _getFirstPendingMove() {
-    final move = widget.pendingMoves?.isNotEmpty == true
-        ? widget.pendingMoves!.first
-        : null;
-    if (move is int) return move;
-    if (move is num) return move.toInt();
-    return 0;
+  bool _isFinished(dynamic p) {
+    if (p is Map) return p['finished'] == true;
+    return false;
   }
 
-  int _getNextPos(int currentPos, bool isFirstStep) {
+  int _moveValue(dynamic move) {
+    if (move is int) return move;
+    if (move is num) return move.toInt();
+    return int.tryParse('$move') ?? 0;
+  }
+
+  List<_MoveGuideOption> _moveOptionsFor(dynamic piece) {
+    final moves = widget.pendingMoves;
+    if (piece == null || moves == null || moves.isEmpty) {
+      return const [];
+    }
+
+    final position = _getPos(piece);
+    if (_isFinished(piece)) {
+      return const [];
+    }
+
+    final options = <_MoveGuideOption>[];
+    for (var i = 0; i < moves.length; i += 1) {
+      final steps = _moveValue(moves[i]);
+      if (steps == -1 && position == 0) {
+        continue;
+      }
+      options.add(
+        _MoveGuideOption(
+          index: i,
+          steps: steps,
+          targetPos: _previewMove(piece, steps),
+        ),
+      );
+    }
+    return options;
+  }
+
+  bool _hasMoveOptionFor(dynamic piece) {
+    return _moveOptionsFor(piece).isNotEmpty;
+  }
+
+  int _optionOrdinal(_MoveGuideOption option) {
+    final moves = widget.pendingMoves ?? const [];
+    var ordinal = 0;
+    for (var i = 0; i <= option.index && i < moves.length; i += 1) {
+      if (_moveValue(moves[i]) == option.steps) {
+        ordinal += 1;
+      }
+    }
+    return ordinal;
+  }
+
+  bool _hasDuplicateMove(_MoveGuideOption option) {
+    final moves = widget.pendingMoves ?? const [];
+    var count = 0;
+    for (final move in moves) {
+      if (_moveValue(move) == option.steps) count += 1;
+    }
+    return count > 1;
+  }
+
+  Offset _guideJitter(_MoveGuideOption option) {
+    final sameTargetCount = (widget.pendingMoves ?? const [])
+        .asMap()
+        .entries
+        .where((entry) => _moveValue(entry.value) == option.steps)
+        .length;
+    if (sameTargetCount <= 1) return Offset.zero;
+    final angle = option.index * pi * 0.65;
+    return Offset(cos(angle), sin(angle)) * 6;
+  }
+
+  int _getNextPos(int currentPos, bool isFirstStep, int lastPos) {
     if (currentPos == 20) return 20;
     if (isFirstStep) {
       if (currentPos == 5) return 21;
@@ -255,11 +359,15 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
       case 25:
         return 23;
       case 23:
-        return 26;
+        return lastPos == 22 ? 28 : 26;
       case 26:
         return 27;
       case 27:
         return 20;
+      case 28:
+        return 29;
+      case 29:
+        return 15;
     }
     return 20;
   }
@@ -297,6 +405,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
       case 14:
         return 13;
       case 15:
+        if (lastPos == 29) return 29;
         return 14;
       case 16:
         return 15;
@@ -307,7 +416,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
       case 19:
         return 18;
       case 20:
-        return 20;
+        return lastPos == 0 ? 19 : lastPos;
       case 21:
         return 5;
       case 22:
@@ -322,6 +431,10 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
         return 23;
       case 27:
         return 26;
+      case 28:
+        return 23;
+      case 29:
+        return 28;
     }
     return 0;
   }
@@ -333,11 +446,14 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
 
   int _previewMove(dynamic piece, int steps) {
     var pos = _getPos(piece);
-    if (pos == 20) return 20;
-    if (steps == -1) return _getPrevPos(pos, _getLastPos(piece));
+    var lastPos = _getLastPos(piece);
+    if (_isFinished(piece)) return 20;
+    if (steps == -1) return _getPrevPos(pos, lastPos);
     for (var i = 0; i < steps; i++) {
-      if (pos == 20) break;
-      pos = _getNextPos(pos, i == 0);
+      if (pos == 20) return 20;
+      final nextPos = _getNextPos(pos, i == 0, lastPos);
+      lastPos = pos;
+      pos = nextPos;
     }
     return pos;
   }
@@ -358,14 +474,18 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
         : widget.p1Pieces;
     if (!isMyTurn || !hasMove || !isMovePhase || pieces == null) return false;
     if (pieceId < 0 || pieceId >= pieces.length) return false;
-    return _getPos(pieces[pieceId]) != 20;
+    return _hasMoveOptionFor(pieces[pieceId]);
   }
 
-  Widget _buildGuideMarker(Size boardSize, int targetPos) {
+  Widget _buildGuideMarker(Size boardSize, _MoveGuideOption option) {
     if (_selectedPieceId == null) {
       return const SizedBox.shrink();
     }
-    final targetOffset = _toCanvasPoint(boardSize, targetPos);
+    final targetOffset =
+        _toCanvasPoint(boardSize, option.targetPos) + _guideJitter(option);
+    final label = _hasDuplicateMove(option)
+        ? '${_moveLabel(option.steps)}${_optionOrdinal(option)}'
+        : _moveLabel(option.steps);
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 250),
       left: targetOffset.dx - (_guideSize / 2),
@@ -379,7 +499,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
           setState(() {
             _selectedPieceId = null;
           });
-          widget.onMovePiece(pieceId);
+          widget.onMovePiece(pieceId, option.index);
         },
         child: Container(
           decoration: BoxDecoration(
@@ -391,7 +511,14 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
             ],
           ),
           alignment: Alignment.center,
-          child: const Icon(Icons.touch_app, color: Colors.black87),
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Colors.black87,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
         ),
       ),
     );
@@ -399,7 +526,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
 
   Widget _buildGroupedPiece(
     Color color,
-    String team,
+    String character,
     int count, {
     Offset offset = Offset.zero,
     bool selected = false,
@@ -415,34 +542,13 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
             child: Container(
               width: 32,
               height: 32,
-              decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: selected ? Colors.yellowAccent : Colors.white,
-                  width: selected ? 4 : 2,
-                ),
-                boxShadow: [
-                  const BoxShadow(
-                    color: Colors.black54,
-                    blurRadius: 4,
-                    offset: Offset(2, 2),
-                  ),
-                  if (selected)
-                    const BoxShadow(color: Colors.yellowAccent, blurRadius: 14),
-                ],
-              ),
               alignment: Alignment.center,
-              child: i == count - 1
-                  ? Text(
-                      count > 1 ? 'x$count' : '',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    )
-                  : null,
+              child: _CharacterToken(
+                character: character,
+                color: color,
+                selected: selected,
+                count: i == count - 1 && count > 1 ? count : null,
+              ),
             ),
           );
         }).reversed.toList(),
@@ -454,7 +560,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     required Size boardSize,
     required int pos,
     required Color color,
-    required String team,
+    required String character,
     required int count,
     required bool selected,
     required VoidCallback? onTap,
@@ -473,7 +579,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
         onTap: onTap,
         child: _buildGroupedPiece(
           color,
-          team,
+          character,
           count,
           offset: stackOffset,
           selected: selected,
@@ -489,6 +595,25 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
       if (_getPos(p) == 0) remaining++;
     }
     return remaining;
+  }
+
+  String _moveLabel(dynamic move) {
+    final value = move is num ? move.toInt() : int.tryParse('$move');
+    return switch (value) {
+      -1 => '백도',
+      1 => '도',
+      2 => '개',
+      3 => '걸',
+      4 => '윷',
+      5 => '모',
+      _ => '$move',
+    };
+  }
+
+  String _pendingMoveText() {
+    final moves = widget.pendingMoves;
+    if (moves == null || moves.isEmpty) return '-';
+    return moves.map(_moveLabel).join(' · ');
   }
 
   Widget _buildRollOrderView() {
@@ -680,15 +805,18 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     final myPieces = isGf ? widget.p2Pieces : widget.p1Pieces;
     final opPieces = isGf ? widget.p1Pieces : widget.p2Pieces;
 
-    final myColor = isGf ? Colors.blueAccent : Colors.redAccent;
-    final opColor = isGf ? Colors.redAccent : Colors.blueAccent;
+    final myColor = isGf ? const Color(0xFF4B8DD8) : const Color(0xFFE45858);
+    final opColor = isGf ? const Color(0xFFE45858) : const Color(0xFF4B8DD8);
+    final myCharacter = isGf ? widget.p2Character : widget.p1Character;
+    final opCharacter = isGf ? widget.p1Character : widget.p2Character;
 
     Map<int, int> p1Counts = {};
     if (widget.p1Pieces != null) {
       for (var p in widget.p1Pieces!) {
         final pos = _getPos(p);
-        if (pos > 0 && pos < 20) p1Counts[pos] = (p1Counts[pos] ?? 0) + 1;
-        if (pos > 20) p1Counts[pos] = (p1Counts[pos] ?? 0) + 1;
+        if (!_isFinished(p) && pos > 0) {
+          p1Counts[pos] = (p1Counts[pos] ?? 0) + 1;
+        }
       }
     }
 
@@ -696,8 +824,9 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     if (widget.p2Pieces != null) {
       for (var p in widget.p2Pieces!) {
         final pos = _getPos(p);
-        if (pos > 0 && pos < 20) p2Counts[pos] = (p2Counts[pos] ?? 0) + 1;
-        if (pos > 20) p2Counts[pos] = (p2Counts[pos] ?? 0) + 1;
+        if (!_isFinished(p) && pos > 0) {
+          p2Counts[pos] = (p2Counts[pos] ?? 0) + 1;
+        }
       }
     }
 
@@ -709,26 +838,27 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
             _selectedPieceId! < myPieces.length
         ? myPieces[_selectedPieceId!]
         : null;
-    final guideTarget = selectedPiece == null
-        ? null
-        : _previewMove(selectedPiece, _getFirstPendingMove());
+    final guideOptions = selectedPiece == null
+        ? const <_MoveGuideOption>[]
+        : _moveOptionsFor(selectedPiece);
 
     return Container(
-      height: 690,
+      width: double.infinity,
+      height: double.infinity,
       decoration: BoxDecoration(
-        color: const Color(0xFFC0A080),
-        borderRadius: BorderRadius.circular(16),
+        color: const Color(0xFFF3E9D8),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: const [
           BoxShadow(
-            color: Colors.black45,
-            blurRadius: 10,
-            offset: Offset(0, 4),
+            color: Color(0x66000000),
+            blurRadius: 22,
+            offset: Offset(0, 10),
           ),
         ],
-        border: Border.all(color: const Color(0xFF8B5A2B), width: 4),
+        border: Border.all(color: const Color(0xFFB88F55), width: 2),
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(18),
         child: widget.gameId == null
             ? Center(
                 child: ElevatedButton.icon(
@@ -743,7 +873,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                       horizontal: 32,
                       vertical: 16,
                     ),
-                    backgroundColor: Colors.brown[800],
+                    backgroundColor: const Color(0xFF7D4F2A),
                     foregroundColor: Colors.white,
                   ),
                 ),
@@ -757,7 +887,11 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                   Column(
                     children: [
                       Container(
-                        color: Colors.brown[900],
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Color(0xFF5D3F25), Color(0xFF8B622F)],
+                          ),
+                        ),
                         padding: const EdgeInsets.all(8),
                         child: Row(
                           children: [
@@ -765,6 +899,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                               child: _buildProfileCard(
                                 opponent,
                                 opColor,
+                                opCharacter,
                                 opPieces,
                                 widget.turn == opponent,
                                 false,
@@ -776,6 +911,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                               child: _buildProfileCard(
                                 widget.currentUser,
                                 myColor,
+                                myCharacter,
                                 myPieces,
                                 isMyTurn,
                                 true,
@@ -812,7 +948,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                         e,
                                       ) {
                                         final pos = _getPos(e.value);
-                                        if (pos == 0 || pos == 20) {
+                                        if (pos == 0 || _isFinished(e.value)) {
                                           return const SizedBox.shrink();
                                         }
                                         if (renderedP1.contains(pos)) {
@@ -823,8 +959,8 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                         return _buildBoardPiece(
                                           boardSize: boardSize,
                                           pos: pos,
-                                          color: Colors.redAccent,
-                                          team: 'P1',
+                                          color: const Color(0xFFE45858),
+                                          character: widget.p1Character,
                                           count: count,
                                           selected:
                                               !isGf &&
@@ -840,7 +976,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                         e,
                                       ) {
                                         final pos = _getPos(e.value);
-                                        if (pos == 0 || pos == 20) {
+                                        if (pos == 0 || _isFinished(e.value)) {
                                           return const SizedBox.shrink();
                                         }
                                         if (renderedP2.contains(pos)) {
@@ -851,8 +987,8 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                         return _buildBoardPiece(
                                           boardSize: boardSize,
                                           pos: pos,
-                                          color: Colors.blueAccent,
-                                          team: 'P2',
+                                          color: const Color(0xFF4B8DD8),
+                                          character: widget.p2Character,
                                           count: count,
                                           selected:
                                               isGf && _selectedPieceId == e.key,
@@ -862,8 +998,10 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                           stackOffset: const Offset(10, 10),
                                         );
                                       }),
-                                    if (guideTarget != null)
-                                      _buildGuideMarker(boardSize, guideTarget),
+                                    ...guideOptions.map(
+                                      (option) =>
+                                          _buildGuideMarker(boardSize, option),
+                                    ),
                                   ],
                                 );
                               },
@@ -872,15 +1010,24 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                         ),
                       ),
                       Container(
-                        color: Colors.brown[800],
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFE4C58C),
+                          border: Border(
+                            top: BorderSide(color: Color(0xFFBA8A45), width: 1),
+                          ),
+                        ),
                         padding: const EdgeInsets.all(12),
                         child: Column(
                           children: [
                             Text(
-                              '이동 대기: ${widget.pendingMoves?.join(", ") ?? "-"}',
+                              widget.lastThrowNak
+                                  ? '낙 · 다음 차례로 넘어갑니다'
+                                  : '이동 대기: ${_pendingMoveText()}',
                               textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: Colors.yellowAccent,
+                              style: TextStyle(
+                                color: widget.lastThrowNak
+                                    ? const Color(0xFFB13B2E)
+                                    : const Color(0xFF5A3718),
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -893,13 +1040,17 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                         scale: _resultBounce,
                                         child: CircleAvatar(
                                           radius: 34,
-                                          backgroundColor: Colors.white,
+                                          backgroundColor: const Color(
+                                            0xFFFFF9EA,
+                                          ),
                                           child: Text(
-                                            widget.lastResultName!,
+                                            widget.lastThrowNak
+                                                ? '낙'
+                                                : widget.lastResultName!,
                                             style: const TextStyle(
                                               fontSize: 28,
                                               fontWeight: FontWeight.w900,
-                                              color: Colors.brown,
+                                              color: Color(0xFF6E3F1D),
                                             ),
                                           ),
                                         ),
@@ -907,7 +1058,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                     : const Icon(
                                         Icons.casino,
                                         size: 42,
-                                        color: Colors.white54,
+                                        color: Color(0xAA6E3F1D),
                                       ),
                               ),
                             ),
@@ -921,8 +1072,8 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                     vertical: 16,
                                   ),
                                   backgroundColor: canThrow
-                                      ? Colors.amber[700]
-                                      : Colors.grey,
+                                      ? const Color(0xFFFFCB4D)
+                                      : const Color(0xFFBDAE98),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(14),
                                   ),
@@ -932,7 +1083,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                   style: TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.black87,
+                                    color: Color(0xFF3D2A12),
                                   ),
                                 ),
                               ),
@@ -959,6 +1110,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
   Widget _buildProfileCard(
     String name,
     Color color,
+    String character,
     List<dynamic>? pieces,
     bool isActiveTurn,
     bool selectable,
@@ -968,23 +1120,44 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
 
     return Container(
       decoration: BoxDecoration(
-        color: isActiveTurn ? Colors.white24 : Colors.transparent,
+        color: isActiveTurn ? const Color(0xFFFFF4CF) : const Color(0x33FFFFFF),
         border: Border.all(
-          color: isActiveTurn ? Colors.amber : Colors.transparent,
+          color: isActiveTurn ? const Color(0xFFFFCB4D) : Colors.white24,
           width: 2,
         ),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
       ),
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
       child: Column(
         children: [
-          Text(
-            name,
-            style: TextStyle(
-              color: isActiveTurn ? Colors.amber : Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 28,
+                height: 28,
+                child: _CharacterToken(
+                  character: character,
+                  color: color,
+                  selected: isActiveTurn,
+                ),
+              ),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: isActiveTurn
+                        ? const Color(0xFF3D2A12)
+                        : Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           Wrap(
@@ -994,61 +1167,87 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
             children: safePieces.asMap().entries.map((entry) {
               final pieceId = entry.key;
               final pos = _getPos(entry.value);
-              final isFinished = pos == 20;
+              final isFinished = _isFinished(entry.value);
               final isWaiting = pos == 0;
               final canTap = selectable && _canSelectPiece(pieceId);
               final selected = selectable && _selectedPieceId == pieceId;
 
               return GestureDetector(
                 onTap: canTap ? () => onPieceTap?.call(pieceId) : null,
-                child: Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: isFinished ? Colors.grey : color,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: selected ? Colors.yellowAccent : Colors.white,
-                      width: selected ? 4 : 2,
-                    ),
-                    boxShadow: [
-                      if (canTap)
-                        const BoxShadow(
-                          color: Colors.yellowAccent,
-                          blurRadius: 8,
+                child: SizedBox(
+                  width: 38,
+                  height: 38,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned.fill(
+                        child: Opacity(
+                          opacity: isFinished ? 0.45 : 1,
+                          child: _CharacterToken(
+                            character: character,
+                            color: isFinished ? const Color(0xFF8E8E8E) : color,
+                            selected: selected || canTap,
+                          ),
                         ),
+                      ),
+                      Positioned(
+                        right: -2,
+                        bottom: -2,
+                        child: Container(
+                          height: 17,
+                          padding: const EdgeInsets.symmetric(horizontal: 3),
+                          alignment: Alignment.center,
+                          constraints: const BoxConstraints(minWidth: 17),
+                          decoration: BoxDecoration(
+                            color: isFinished
+                                ? const Color(0xFF61705B)
+                                : isWaiting
+                                ? const Color(0xFF5B4632)
+                                : const Color(0xFFFFCB4D),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.white, width: 1),
+                          ),
+                          child: Text(
+                            isFinished
+                                ? '✓'
+                                : isWaiting
+                                ? '${pieceId + 1}'
+                                : '$pos',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ),
                     ],
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    isFinished
-                        ? '✓'
-                        : isWaiting
-                        ? '${pieceId + 1}'
-                        : '$pos',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
                   ),
                 ),
               );
             }).toList(),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 7),
           Text(
-            '대기: ${_getRemaining(pieces)}개',
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
+            '대기 ${_getRemaining(pieces)} · 완주 ${safePieces.where(_isFinished).length}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: isActiveTurn
+                  ? const Color(0xFF5A3718)
+                  : Colors.white.withValues(alpha: 0.72),
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           if (isActiveTurn)
             Padding(
-              padding: const EdgeInsets.only(top: 4.0),
+              padding: const EdgeInsets.only(top: 3.0),
               child: Text(
                 widget.pendingMoves?.isNotEmpty == true ? '말 선택' : '윷 던지기',
                 style: const TextStyle(
-                  color: Colors.greenAccent,
-                  fontSize: 12,
+                  color: Color(0xFF1A7D4E),
+                  fontSize: 11,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -1059,6 +1258,229 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
   }
 }
 
+class _CharacterToken extends StatelessWidget {
+  final String character;
+  final Color color;
+  final bool selected;
+  final int? count;
+
+  const _CharacterToken({
+    required this.character,
+    required this.color,
+    this.selected = false,
+    this.count,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _CharacterTokenPainter(
+        character: character,
+        color: color,
+        selected: selected,
+      ),
+      child: count == null
+          ? const SizedBox.expand()
+          : Align(
+              alignment: Alignment.bottomRight,
+              child: Container(
+                height: 17,
+                alignment: Alignment.center,
+                constraints: const BoxConstraints(minWidth: 17),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2B2117),
+                  borderRadius: BorderRadius.circular(9),
+                  border: Border.all(color: Colors.white, width: 1),
+                ),
+                child: Text(
+                  'x$count',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 8,
+                    fontWeight: FontWeight.w900,
+                    height: 1,
+                  ),
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+class _CharacterTokenPainter extends CustomPainter {
+  final String character;
+  final Color color;
+  final bool selected;
+
+  const _CharacterTokenPainter({
+    required this.character,
+    required this.color,
+    required this.selected,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.shortestSide / 2;
+
+    final shadow = Paint()
+      ..color = Colors.black.withValues(alpha: 0.24)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
+    canvas.drawCircle(center.translate(1.5, 2), radius * 0.82, shadow);
+
+    final base = Paint()..color = color;
+    canvas.drawCircle(center, radius * 0.82, base);
+    canvas.drawCircle(
+      center,
+      radius * 0.82,
+      Paint()
+        ..color = selected ? const Color(0xFFFFE66B) : Colors.white
+        ..strokeWidth = selected ? 3 : 1.5
+        ..style = PaintingStyle.stroke,
+    );
+
+    switch (character) {
+      case 'nolbu':
+        _drawNolbu(canvas, center, radius);
+        break;
+      case 'miho':
+        _drawMiho(canvas, center, radius);
+        break;
+      default:
+        _drawHong(canvas, center, radius);
+    }
+  }
+
+  void _drawFace(Canvas canvas, Offset center, double radius, Color skin) {
+    canvas.drawCircle(
+      center.translate(0, radius * 0.02),
+      radius * 0.44,
+      Paint()..color = skin,
+    );
+    final eye = Paint()..color = const Color(0xFF2B2117);
+    canvas.drawCircle(
+      center.translate(-radius * 0.17, -radius * 0.04),
+      radius * 0.045,
+      eye,
+    );
+    canvas.drawCircle(
+      center.translate(radius * 0.17, -radius * 0.04),
+      radius * 0.045,
+      eye,
+    );
+    final smile = Paint()
+      ..color = const Color(0xFF7B2B22)
+      ..strokeWidth = radius * 0.045
+      ..style = PaintingStyle.stroke;
+    canvas.drawArc(
+      Rect.fromCenter(
+        center: center.translate(0, radius * 0.08),
+        width: radius * 0.34,
+        height: radius * 0.22,
+      ),
+      0.15,
+      pi - 0.3,
+      false,
+      smile,
+    );
+  }
+
+  void _drawHong(Canvas canvas, Offset center, double radius) {
+    _drawFace(canvas, center, radius, const Color(0xFFFFD7A8));
+    final hat = Paint()..color = const Color(0xFF1F6F54);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: center.translate(0, -radius * 0.42),
+          width: radius * 0.88,
+          height: radius * 0.26,
+        ),
+        Radius.circular(radius * 0.12),
+      ),
+      hat,
+    );
+    final sword = Paint()
+      ..color = const Color(0xFFECE7D7)
+      ..strokeWidth = radius * 0.08
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(
+      center.translate(radius * 0.34, radius * 0.34),
+      center.translate(radius * 0.62, -radius * 0.36),
+      sword,
+    );
+  }
+
+  void _drawNolbu(Canvas canvas, Offset center, double radius) {
+    _drawFace(canvas, center, radius, const Color(0xFFFFC98B));
+    final hat = Paint()..color = const Color(0xFF4D2E83);
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: center.translate(0, -radius * 0.42),
+        width: radius * 0.88,
+        height: radius * 0.34,
+      ),
+      hat,
+    );
+    final coin = Paint()..color = const Color(0xFFFFCF45);
+    canvas.drawCircle(
+      center.translate(radius * 0.42, radius * 0.27),
+      radius * 0.16,
+      coin,
+    );
+    canvas.drawCircle(
+      center.translate(radius * 0.42, radius * 0.27),
+      radius * 0.1,
+      Paint()
+        ..color = const Color(0xFFA86A10)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = radius * 0.025,
+    );
+  }
+
+  void _drawMiho(Canvas canvas, Offset center, double radius) {
+    final ear = Paint()..color = const Color(0xFFF28B35);
+    final innerEar = Paint()..color = const Color(0xFFFFD7D0);
+    final leftEar = Path()
+      ..moveTo(center.dx - radius * 0.38, center.dy - radius * 0.28)
+      ..lineTo(center.dx - radius * 0.2, center.dy - radius * 0.76)
+      ..lineTo(center.dx, center.dy - radius * 0.3)
+      ..close();
+    final rightEar = Path()
+      ..moveTo(center.dx + radius * 0.38, center.dy - radius * 0.28)
+      ..lineTo(center.dx + radius * 0.2, center.dy - radius * 0.76)
+      ..lineTo(center.dx, center.dy - radius * 0.3)
+      ..close();
+    canvas.drawPath(leftEar, ear);
+    canvas.drawPath(rightEar, ear);
+    canvas.drawPath(
+      Path()
+        ..moveTo(center.dx - radius * 0.28, center.dy - radius * 0.33)
+        ..lineTo(center.dx - radius * 0.2, center.dy - radius * 0.57)
+        ..lineTo(center.dx - radius * 0.04, center.dy - radius * 0.32)
+        ..close(),
+      innerEar,
+    );
+    canvas.drawPath(
+      Path()
+        ..moveTo(center.dx + radius * 0.28, center.dy - radius * 0.33)
+        ..lineTo(center.dx + radius * 0.2, center.dy - radius * 0.57)
+        ..lineTo(center.dx + radius * 0.04, center.dy - radius * 0.32)
+        ..close(),
+      innerEar,
+    );
+    _drawFace(canvas, center, radius, const Color(0xFFFFD2A3));
+    final nose = Paint()..color = const Color(0xFF4B2B20);
+    canvas.drawCircle(center.translate(0, radius * 0.08), radius * 0.06, nose);
+  }
+
+  @override
+  bool shouldRepaint(covariant _CharacterTokenPainter oldDelegate) {
+    return oldDelegate.character != character ||
+        oldDelegate.color != color ||
+        oldDelegate.selected != selected;
+  }
+}
+
 class HangameYutPainter extends CustomPainter {
   final double inset;
 
@@ -1066,24 +1488,79 @@ class HangameYutPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final linePaint = Paint()
-      ..color = const Color(0xFF5C3A21)
-      ..strokeWidth = 3
-      ..style = PaintingStyle.stroke;
-
-    final dotPaint = Paint()
-      ..color = const Color(0xFF5C3A21)
-      ..style = PaintingStyle.fill;
-    final bigDotPaint = Paint()
-      ..color = const Color(0xFF8B2500)
-      ..style = PaintingStyle.fill;
-
     final boardRect = Rect.fromLTWH(
       inset,
       inset,
       size.width - (inset * 2),
       size.height - (inset * 2),
     );
+    final background = RRect.fromRectAndRadius(
+      Rect.fromLTWH(6, 6, size.width - 12, size.height - 12),
+      const Radius.circular(20),
+    );
+
+    canvas.drawRRect(
+      background.shift(const Offset(0, 4)),
+      Paint()..color = Colors.black.withValues(alpha: 0.16),
+    );
+    canvas.drawRRect(
+      background,
+      Paint()
+        ..shader = const LinearGradient(
+          colors: [Color(0xFFF5E9D0), Color(0xFFD8B97A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ).createShader(background.outerRect),
+    );
+
+    final tilePaint = Paint()
+      ..color = const Color(0xFFB59663).withValues(alpha: 0.24)
+      ..strokeWidth = 1;
+    const tile = 34.0;
+    for (
+      double y = background.outerRect.top + 10;
+      y < background.outerRect.bottom;
+      y += tile * 0.62
+    ) {
+      final row = ((y - background.outerRect.top) / (tile * 0.62)).floor();
+      final stagger = row.isEven ? 0.0 : tile / 2;
+      for (
+        double x = background.outerRect.left + 10 - tile;
+        x < background.outerRect.right;
+        x += tile
+      ) {
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTWH(x + stagger, y, tile, tile * 0.5),
+            const Radius.circular(3),
+          ),
+          tilePaint..style = PaintingStyle.stroke,
+        );
+      }
+    }
+
+    final linePaint = Paint()
+      ..color = const Color(0xFF9D7B4A)
+      ..strokeWidth = 4
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    final dotPaint = Paint()
+      ..shader = const LinearGradient(
+        colors: [Color(0xFFF9F2DF), Color(0xFFC7A976)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ).createShader(boardRect);
+    final bigDotPaint = Paint()
+      ..shader = const LinearGradient(
+        colors: [Color(0xFFFFF2C5), Color(0xFFD68B2E)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ).createShader(boardRect);
+    final dotBorder = Paint()
+      ..color = const Color(0xFF8A6335)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
 
     Offset point(double x, double y) {
       return Offset(
@@ -1092,7 +1569,10 @@ class HangameYutPainter extends CustomPainter {
       );
     }
 
-    canvas.drawRect(boardRect, linePaint);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(boardRect, const Radius.circular(16)),
+      linePaint,
+    );
     canvas.drawLine(point(0, 0), point(1, 1), linePaint);
     canvas.drawLine(point(0, 1), point(1, 0), linePaint);
 
@@ -1106,20 +1586,30 @@ class HangameYutPainter extends CustomPainter {
         point(0, step),
         point(1, step),
       ]) {
-        bool isCorner =
+        final isCorner =
             (offset.dx == boardRect.left || offset.dx == boardRect.right) &&
             (offset.dy == boardRect.top || offset.dy == boardRect.bottom);
-        canvas.drawCircle(
+        _drawDot(
+          canvas,
           offset,
-          isCorner ? 12 : 6,
-          isCorner ? bigDotPaint : dotPaint,
+          isCorner ? 16 : 8,
+          isCorner,
+          dotPaint,
+          bigDotPaint,
+          dotBorder,
         );
-        if (isCorner) canvas.drawCircle(offset, 14, linePaint..strokeWidth = 2);
       }
     }
 
-    canvas.drawCircle(point(0.5, 0.5), 16, bigDotPaint);
-    canvas.drawCircle(point(0.5, 0.5), 18, linePaint..strokeWidth = 2);
+    _drawDot(
+      canvas,
+      point(0.5, 0.5),
+      20,
+      true,
+      dotPaint,
+      bigDotPaint,
+      dotBorder,
+    );
 
     for (final diagonalPoint in const [
       Offset(0.25, 0.25),
@@ -1128,8 +1618,46 @@ class HangameYutPainter extends CustomPainter {
       Offset(0.75, 0.75),
       Offset(0.75, 0.25),
       Offset(0.6, 0.4),
+      Offset(0.4, 0.6),
+      Offset(0.25, 0.75),
     ]) {
-      canvas.drawCircle(point(diagonalPoint.dx, diagonalPoint.dy), 6, dotPaint);
+      _drawDot(
+        canvas,
+        point(diagonalPoint.dx, diagonalPoint.dy),
+        8,
+        false,
+        dotPaint,
+        bigDotPaint,
+        dotBorder,
+      );
+    }
+  }
+
+  void _drawDot(
+    Canvas canvas,
+    Offset center,
+    double radius,
+    bool big,
+    Paint dotPaint,
+    Paint bigDotPaint,
+    Paint border,
+  ) {
+    canvas.drawCircle(
+      center.translate(1.5, 2),
+      radius,
+      Paint()..color = Colors.black.withValues(alpha: 0.18),
+    );
+    canvas.drawCircle(center, radius, big ? bigDotPaint : dotPaint);
+    canvas.drawCircle(center, radius, border);
+    if (big) {
+      canvas.drawCircle(
+        center,
+        radius * 0.62,
+        Paint()
+          ..color = Colors.white.withValues(alpha: 0.25)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2,
+      );
     }
   }
 
@@ -1161,7 +1689,7 @@ class _YutThrowOverlay extends StatelessWidget {
                 painter: _YutSticksPainter(t: t, resultName: resultName),
                 child: const SizedBox.expand(),
               ),
-              if (t > 0.82 && resultName != null)
+              if (t > 0.96 && resultName != null)
                 Center(
                   child: TweenAnimationBuilder<double>(
                     tween: Tween(begin: 0.0, end: 1.0),

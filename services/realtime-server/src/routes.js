@@ -36,6 +36,84 @@ const ensureSetlogTable = () => {
   return setlogReadyPromise;
 };
 
+// 누락된 테이블 자동 생성
+let _tablesReady = false;
+const ensureTables = async () => {
+  if (_tablesReady) return;
+  await query(`CREATE TABLE IF NOT EXISTS map_pins (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    place_name VARCHAR(200) NOT NULL,
+    latitude DECIMAL(10,8) NOT NULL DEFAULT 0,
+    longitude DECIMAL(11,8) NOT NULL DEFAULT 0,
+    category VARCHAR(50) NULL,
+    rating SMALLINT NULL,
+    visit_date DATE NULL,
+    memo TEXT NULL,
+    created_by VARCHAR(50) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  )`);
+  await query(`CREATE TABLE IF NOT EXISTS daily_questions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    question TEXT NOT NULL,
+    scheduled_date DATE NOT NULL UNIQUE,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+  await query(`CREATE TABLE IF NOT EXISTS question_answers (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    question_id INT NOT NULL,
+    user_id INT NOT NULL,
+    answer TEXT NOT NULL,
+    UserName VARCHAR(100) NULL,
+    answered_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_qa_question (question_id)
+  )`);
+  await query(`CREATE TABLE IF NOT EXISTS challenges (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(200) NOT NULL,
+    description TEXT NULL,
+    target_value DECIMAL(10,2) NOT NULL DEFAULT 1,
+    current_value DECIMAL(10,2) NOT NULL DEFAULT 0,
+    unit VARCHAR(20) NULL,
+    owner_id INT NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'active',
+    start_date DATE NOT NULL,
+    target_date DATE NULL,
+    completed_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  )`);
+  await query(`CREATE TABLE IF NOT EXISTS challenge_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    challenge_id INT NOT NULL,
+    value DECIMAL(10,2) NOT NULL,
+    note TEXT NULL,
+    logged_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_cl_challenge (challenge_id)
+  )`);
+  await query(`CREATE TABLE IF NOT EXISTS jukebox_tracks (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(200) NOT NULL,
+    artist VARCHAR(200) NULL,
+    file_url TEXT NOT NULL,
+    duration_sec INT NULL,
+    uploaded_by VARCHAR(50) NOT NULL,
+    uploaded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+  await query(`CREATE TABLE IF NOT EXISTS time_capsules (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(200) NOT NULL,
+    message TEXT NULL,
+    media_url VARCHAR(500) NULL,
+    created_by VARCHAR(100) NOT NULL,
+    open_date DATE NOT NULL,
+    is_opened TINYINT(1) NOT NULL DEFAULT 0,
+    opened_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+  _tablesReady = true;
+};
+
 const parseJsonArray = (value) => {
   if (!value) return [];
   if (Array.isArray(value)) return value;
@@ -247,15 +325,16 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ 
+const upload = multer({
   storage,
   limits: { fileSize: 30 * 1024 * 1024 }, // 30MB
   fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type'));
-    }
+    const ok = file.mimetype.startsWith('image/') ||
+                file.mimetype.startsWith('video/') ||
+                file.mimetype.startsWith('audio/') ||
+                file.mimetype === 'application/octet-stream';
+    if (ok) cb(null, true);
+    else cb(new Error('Invalid file type'));
   }
 });
 
@@ -388,6 +467,7 @@ router.delete('/setlog/:id', async (req, res) => {
 // 지도 핀 목록 조회
 router.get('/map', async (req, res) => {
   try {
+    await ensureTables();
     const result = await query('SELECT * FROM map_pins ORDER BY visit_date DESC');
     res.json({ ok: true, pins: result.rows });
   } catch (err) {
@@ -396,22 +476,23 @@ router.get('/map', async (req, res) => {
   }
 });
 
-// 지도 핀 생성
+// 지도 핀 생성 (lat/lng 선택사항)
 router.post('/map', async (req, res) => {
   try {
+    await ensureTables();
     const { place_name, latitude, longitude, category, rating, visit_date, memo, created_by } = req.body;
 
-    if (!place_name || !latitude || !longitude || !created_by) {
+    if (!place_name || !created_by) {
       return res.status(400).json({ ok: false, reason: 'missing_fields' });
     }
 
     const result = await query(
-      `INSERT INTO map_pins (place_name, latitude, longitude, category, rating, visit_date, memo, created_by) 
+      `INSERT INTO map_pins (place_name, latitude, longitude, category, rating, visit_date, memo, created_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [place_name, latitude, longitude, category, rating, visit_date, memo, created_by]
+      [place_name, latitude ?? 0, longitude ?? 0, category ?? null, rating ?? null, visit_date ?? null, memo ?? null, created_by]
     );
 
-    res.json({ ok: true, id: result.insertId });
+    res.json({ ok: true, id: result.rows.insertId });
   } catch (err) {
     console.error('[API] /map POST error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
@@ -440,22 +521,63 @@ router.patch('/map/:id', async (req, res) => {
 // 3. Q&A API (10시의 질문)
 // ============================================
 
-// 오늘의 질문 조회
+const QA_POOL = [
+  '오늘 하루 중 가장 좋았던 순간은?',
+  '요즘 가장 먹고 싶은 음식은?',
+  '지금 이 순간 나에게 하고 싶은 말은?',
+  '우리 둘이 꼭 가보고 싶은 여행지는?',
+  '서로에게 감사한 점 하나씩 말해볼까요?',
+  '요즘 나의 최대 관심사는?',
+  '우리가 처음 만났을 때 가장 인상 깊었던 건?',
+  '지금 가장 듣고 싶은 말은?',
+  '다음 데이트에서 뭐 하고 싶어?',
+  '우리만의 특별한 말이 있다면?',
+  '지금 이 순간 무슨 생각 하고 있어?',
+  '내가 제일 행복한 순간은 언제야?',
+  '나에 대해 아직 모르는 것 같은 게 있어?',
+  '우리가 닮은 점과 다른 점은?',
+  '버킷리스트 중 꼭 같이 하고 싶은 건?',
+  '오늘 나의 기분을 날씨로 표현한다면?',
+  '내가 가장 좋아하는 우리 둘만의 습관은?',
+  '지금 제일 하고 싶은 건 뭐야?',
+  '우리 커플만의 테마곡이 있다면?',
+  '10년 후 우리는 어떤 모습일까?',
+  '내가 힘들 때 제일 듣고 싶은 말은?',
+  '우리 첫 데이트 기억나?',
+  '나를 보면 떠오르는 색이 있다면?',
+  '지금 바로 어딘가로 떠난다면 어디로 가고 싶어?',
+  '우리가 함께하면서 가장 웃겼던 순간은?',
+  '상대방에게 배운 가장 좋은 점은?',
+  '같이 살게 된다면 꼭 지키고 싶은 규칙이 있어?',
+  '요즘 나를 보면서 어떤 생각이 들어?',
+  '오늘 하루 나의 하이라이트는?',
+  '우리만의 기념일을 만든다면?',
+];
+
+// 오늘의 질문 조회 (질문 없으면 자동 생성)
 router.get('/qa/today', async (req, res) => {
   try {
+    await ensureTables();
     const today = new Date().toISOString().split('T')[0];
-    const result = await query(
-      'SELECT * FROM daily_questions WHERE scheduled_date = ?',
-      [today]
-    );
+    let result = await query('SELECT * FROM daily_questions WHERE scheduled_date = ?', [today]);
 
     if (result.rows.length === 0) {
-      return res.json({ ok: true, question: null });
+      const dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
+      const question = QA_POOL[dayOfYear % QA_POOL.length];
+      try {
+        await query('INSERT IGNORE INTO daily_questions (question, scheduled_date) VALUES (?, ?)', [question, today]);
+      } catch {}
+      result = await query('SELECT * FROM daily_questions WHERE scheduled_date = ?', [today]);
     }
+
+    if (result.rows.length === 0) return res.json({ ok: true, question: null, answers: [] });
 
     const question = result.rows[0];
     const answers = await query(
-      'SELECT * FROM question_answers WHERE question_id = ?',
+      `SELECT qa.id, qa.question_id, qa.user_id, qa.answer, qa.answered_at, u.UserName
+       FROM question_answers qa
+       LEFT JOIN Users u ON qa.user_id = u.UserId
+       WHERE qa.question_id = ?`,
       [question.id]
     );
 
@@ -494,7 +616,8 @@ router.post('/qa/answer', async (req, res) => {
 // 활성 챌린지 목록
 router.get('/challenges', async (req, res) => {
   try {
-    const result = await query('SELECT * FROM active_challenges');
+    await ensureTables();
+    const result = await query("SELECT * FROM challenges WHERE status = 'active' ORDER BY created_at DESC");
     res.json({ ok: true, challenges: result.rows });
   } catch (err) {
     console.error('[API] /challenges GET error:', err);
@@ -505,6 +628,7 @@ router.get('/challenges', async (req, res) => {
 // 챌린지 생성
 router.post('/challenges', async (req, res) => {
   try {
+    await ensureTables();
     const { title, description, target_value, unit, owner_id, start_date, target_date } = req.body;
 
     if (!title || !target_value || !owner_id || !start_date) {
@@ -576,6 +700,7 @@ router.post('/challenges/:id/log', async (req, res) => {
 // 트랙 목록 조회
 router.get('/jukebox', async (req, res) => {
   try {
+    await ensureTables();
     const result = await query('SELECT * FROM jukebox_tracks ORDER BY uploaded_at DESC');
     res.json({ ok: true, tracks: result.rows });
   } catch (err) {
@@ -587,6 +712,7 @@ router.get('/jukebox', async (req, res) => {
 // 트랙 업로드
 router.post('/jukebox', upload.single('audio'), async (req, res) => {
   try {
+    await ensureTables();
     const { title, artist, duration_sec, uploaded_by } = req.body;
     const file_url = req.file ? `/uploads/${req.file.filename}` : null;
 
@@ -602,6 +728,147 @@ router.post('/jukebox', upload.single('audio'), async (req, res) => {
     res.json({ ok: true, id: result.insertId });
   } catch (err) {
     console.error('[API] /jukebox POST error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+// ============================================
+// 6. Couple Info API (D-Day / 기념일)
+// ============================================
+
+let _couplesColumnReady = false;
+const ensureCouplesStartDate = async () => {
+  if (_couplesColumnReady) return;
+  try {
+    await query('ALTER TABLE Couples ADD COLUMN IF NOT EXISTS StartDate DATE NULL');
+  } catch {}
+  _couplesColumnReady = true;
+};
+
+router.get('/couple/info', async (req, res) => {
+  try {
+    await ensureCouplesStartDate();
+    const { user_id } = req.query;
+    if (!user_id) return res.status(400).json({ ok: false, reason: 'missing_user_id' });
+
+    const uid = Number(user_id);
+    const result = await query(
+      `SELECT c.CoupleId, c.StartDate,
+              u1.UserId AS U1Id, u1.UserName AS U1Name, u1.UserCode AS U1Code,
+              u2.UserId AS U2Id, u2.UserName AS U2Name, u2.UserCode AS U2Code
+       FROM Couples c
+       JOIN Users u1 ON c.User1Id = u1.UserId
+       JOIN Users u2 ON c.User2Id = u2.UserId
+       WHERE c.User1Id = ? OR c.User2Id = ?`,
+      [uid, uid]
+    );
+
+    if (result.rows.length === 0) return res.status(404).json({ ok: false, reason: 'couple_not_found' });
+
+    const row = result.rows[0];
+    const isUser1 = Number(row.U1Id) === uid;
+    const partnerName = isUser1 ? row.U2Name : row.U1Name;
+    const partnerCode = isUser1 ? row.U2Code : row.U1Code;
+
+    let dDay = null;
+    let startDateStr = null;
+    if (row.StartDate) {
+      const start = new Date(row.StartDate);
+      start.setHours(0, 0, 0, 0);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      dDay = Math.floor((today - start) / 86400000) + 1;
+      startDateStr = start.toISOString().split('T')[0];
+    }
+
+    res.json({ ok: true, coupleId: row.CoupleId, startDate: startDateStr, dDay, partnerName, partnerCode });
+  } catch (err) {
+    console.error('[API] /couple/info GET error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.patch('/couple/info', async (req, res) => {
+  try {
+    await ensureCouplesStartDate();
+    const { user_id, start_date } = req.body;
+    if (!user_id || !start_date) return res.status(400).json({ ok: false, reason: 'missing_fields' });
+
+    await query(
+      'UPDATE Couples SET StartDate = ? WHERE User1Id = ? OR User2Id = ?',
+      [start_date, Number(user_id), Number(user_id)]
+    );
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[API] /couple/info PATCH error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+// ============================================
+// Time Capsule API
+// ============================================
+
+router.get('/capsules', async (req, res) => {
+  try {
+    await ensureTables();
+    const today = new Date().toISOString().split('T')[0];
+    const result = await query(
+      `SELECT *, (open_date <= ?) AS is_openable FROM time_capsules ORDER BY open_date ASC`,
+      [today]
+    );
+    res.json({ ok: true, capsules: result.rows });
+  } catch (err) {
+    console.error('[API] /capsules GET error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.post('/capsules', async (req, res) => {
+  try {
+    await ensureTables();
+    const { title, message, created_by, open_date } = req.body;
+    if (!title || !created_by || !open_date) {
+      return res.status(400).json({ ok: false, reason: 'missing_fields' });
+    }
+    const today = new Date().toISOString().split('T')[0];
+    if (open_date <= today) {
+      return res.status(400).json({ ok: false, reason: 'open_date_must_be_future' });
+    }
+    await query(
+      'INSERT INTO time_capsules (title, message, created_by, open_date) VALUES (?, ?, ?, ?)',
+      [title, message || null, created_by, open_date]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[API] /capsules POST error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.patch('/capsules/:id/open', async (req, res) => {
+  try {
+    await ensureTables();
+    const { id } = req.params;
+    const today = new Date().toISOString().split('T')[0];
+    const check = await query(
+      'SELECT id, is_opened, open_date FROM time_capsules WHERE id = ?',
+      [Number(id)]
+    );
+    if (!check.rows.length) return res.status(404).json({ ok: false, reason: 'not_found' });
+    const capsule = check.rows[0];
+    if (capsule.open_date > today) {
+      return res.status(403).json({ ok: false, reason: 'not_yet' });
+    }
+    if (capsule.is_opened) return res.json({ ok: true, already: true });
+    await query(
+      'UPDATE time_capsules SET is_opened = 1, opened_at = NOW() WHERE id = ?',
+      [Number(id)]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[API] /capsules/:id/open PATCH error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
   }
 });

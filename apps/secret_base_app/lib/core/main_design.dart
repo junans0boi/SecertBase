@@ -1,24 +1,45 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-const kMainBg = Color(0xFFFAF4EA);
-const kMainPaper = Color(0xFFFFFEFA);
-const kMainPaperSoft = Color(0xFFF7F0E6);
-const kMainLine = Color(0xFFE7DED1);
-const kMainInk = Color(0xFF4D4740);
-const kMainSub = Color(0xFF7C7368);
-const kMainMuted = Color(0xFFB3A899);
-const kMainRose = Color(0xFFE8A4A5);
-const kMainRoseSoft = Color(0xFFF8E5E3);
-const kMainSage = Color(0xFFA7B99A);
-const kMainSageSoft = Color(0xFFEAF0E3);
-const kMainSky = Color(0xFFAFC5CF);
-const kMainSkySoft = Color(0xFFE7EEF2);
-const kMainHoney = Color(0xFFE7CE8C);
-const kMainHoneySoft = Color(0xFFF8EFD0);
-const kMainPeach = Color(0xFFEAC1A7);
-const kMainPeachSoft = Color(0xFFF8E8DE);
+// ─── Neutral ───────────────────────────────────────────────────────
+const kMainBg        = Color(0xFFFFFFFF);
+const kMainPaper     = Color(0xFFFFFFFF);
+const kMainPaperSoft = Color(0xFFF7F7FA);
+const kMainLine      = Color(0xFFEBEBF0);
+const kMainInk       = Color(0xFF1E1E2E);
+const kMainSub       = Color(0xFF5A5A78);
+const kMainMuted     = Color(0xFFABABBC);
 
+// ─── Accent ────────────────────────────────────────────────────────
+const kMainRose      = Color(0xFFFF7B9C);
+const kMainRoseSoft  = Color(0xFFFFF0F5);
+const kMainSage      = Color(0xFF5EBF8A);
+const kMainSageSoft  = Color(0xFFEEFAF4);
+const kMainSky       = Color(0xFF5AAAD8);
+const kMainSkySoft   = Color(0xFFEBF5FF);
+const kMainHoney     = Color(0xFFFFC234);
+const kMainHoneySoft = Color(0xFFFFF8E6);
+const kMainPeach     = Color(0xFFFF9B71);
+const kMainPeachSoft = Color(0xFFFFF4EE);
+
+// ─── Gradients ─────────────────────────────────────────────────────
+const kRoseGrad = LinearGradient(
+  colors: [Color(0xFFFF7B9C), Color(0xFFFF9B71)],
+  begin: Alignment.topLeft,
+  end: Alignment.bottomRight,
+);
+const kSkyGrad = LinearGradient(
+  colors: [Color(0xFF5AAAD8), Color(0xFF7BC8F0)],
+  begin: Alignment.topLeft,
+  end: Alignment.bottomRight,
+);
+const kSageGrad = LinearGradient(
+  colors: [Color(0xFF5EBF8A), Color(0xFF7CDAAB)],
+  begin: Alignment.topLeft,
+  end: Alignment.bottomRight,
+);
+
+// ─── Typography ────────────────────────────────────────────────────
 TextStyle mainTitle({
   double size = 28,
   Color color = kMainInk,
@@ -49,6 +70,7 @@ TextStyle mainBody({
   );
 }
 
+// ─── Layout ────────────────────────────────────────────────────────
 class CozyPage extends StatelessWidget {
   final Widget child;
   final EdgeInsets padding;
@@ -63,150 +85,27 @@ class CozyPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return ColoredBox(
       color: kMainBg,
-      child: CustomPaint(
-        painter: const PaperTexturePainter(),
-        child: Padding(padding: padding, child: child),
-      ),
+      child: Padding(padding: padding, child: child),
     );
   }
-}
-
-class PaperTexturePainter extends CustomPainter {
-  const PaperTexturePainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final dotPaint = Paint()..color = const Color(0xFFD9CEC0).withAlpha(30);
-    for (double y = 8; y < size.height; y += 18) {
-      for (double x = 10; x < size.width; x += 22) {
-        final shift = ((x + y) % 7) * 0.18;
-        canvas.drawCircle(Offset(x + shift, y), 0.7, dotPaint);
-      }
-    }
-
-    final doodlePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.4
-      ..strokeCap = StrokeCap.round
-      ..color = kMainMuted.withAlpha(70);
-
-    _drawEnvelope(
-      canvas,
-      doodlePaint,
-      Offset(size.width * 0.12, size.height * 0.82),
-      38,
-    );
-    _drawHeart(
-      canvas,
-      kMainRose.withAlpha(65),
-      Offset(size.width * 0.78, size.height * 0.16),
-      12,
-    );
-    _drawHeart(
-      canvas,
-      kMainSky.withAlpha(45),
-      Offset(size.width * 0.2, size.height * 0.2),
-      20,
-    );
-    _drawSprout(
-      canvas,
-      doodlePaint,
-      Offset(size.width * 0.87, size.height * 0.72),
-      30,
-    );
-  }
-
-  void _drawEnvelope(Canvas canvas, Paint paint, Offset c, double w) {
-    final h = w * 0.56;
-    final rect = Rect.fromCenter(center: c, width: w, height: h);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(rect, const Radius.circular(4)),
-      paint,
-    );
-    canvas.drawLine(rect.topLeft, c, paint);
-    canvas.drawLine(rect.topRight, c, paint);
-    canvas.drawLine(rect.bottomLeft, c, paint);
-    canvas.drawLine(rect.bottomRight, c, paint);
-  }
-
-  void _drawHeart(Canvas canvas, Color color, Offset c, double r) {
-    final paint = Paint()..color = color;
-    final path = Path()
-      ..moveTo(c.dx, c.dy + r * 0.28)
-      ..cubicTo(
-        c.dx,
-        c.dy - r * 0.5,
-        c.dx - r,
-        c.dy - r * 0.42,
-        c.dx - r,
-        c.dy + r * 0.08,
-      )
-      ..cubicTo(
-        c.dx - r,
-        c.dy + r * 0.72,
-        c.dx,
-        c.dy + r * 1.1,
-        c.dx,
-        c.dy + r * 1.32,
-      )
-      ..cubicTo(
-        c.dx,
-        c.dy + r * 1.1,
-        c.dx + r,
-        c.dy + r * 0.72,
-        c.dx + r,
-        c.dy + r * 0.08,
-      )
-      ..cubicTo(
-        c.dx + r,
-        c.dy - r * 0.42,
-        c.dx,
-        c.dy - r * 0.5,
-        c.dx,
-        c.dy + r * 0.28,
-      )
-      ..close();
-    canvas.drawPath(path, paint);
-  }
-
-  void _drawSprout(Canvas canvas, Paint paint, Offset c, double h) {
-    canvas.drawLine(c, Offset(c.dx, c.dy - h), paint);
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: Offset(c.dx - 8, c.dy - h + 7),
-        width: 16,
-        height: 9,
-      ),
-      paint,
-    );
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: Offset(c.dx + 8, c.dy - h + 3),
-        width: 16,
-        height: 9,
-      ),
-      paint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class MainCard extends StatelessWidget {
   final Widget child;
   final EdgeInsets padding;
-  final Color color;
-  final Color borderColor;
+  final Color? color;
+  final Color? borderColor;
   final double radius;
+  final Gradient? gradient;
 
   const MainCard({
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(18),
-    this.color = kMainPaper,
-    this.borderColor = kMainLine,
+    this.color,
+    this.borderColor,
     this.radius = 22,
+    this.gradient,
   });
 
   @override
@@ -214,17 +113,79 @@ class MainCard extends StatelessWidget {
     return Container(
       padding: padding,
       decoration: BoxDecoration(
-        color: color,
+        color: gradient == null ? (color ?? kMainPaper) : null,
+        gradient: gradient,
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: borderColor),
+        border: borderColor != null
+            ? Border.all(color: borderColor!, width: 1)
+            : null,
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF8A7F70).withAlpha(16),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
+            color: const Color(0xFF000000).withAlpha(10),
+            blurRadius: 20,
+            offset: const Offset(0, 4),
+          ),
+          BoxShadow(
+            color: const Color(0xFF000000).withAlpha(5),
+            blurRadius: 6,
+            offset: const Offset(0, 1),
           ),
         ],
       ),
+      child: child,
+    );
+  }
+}
+
+class IconBadge extends StatelessWidget {
+  final Widget child;
+  final Color color;
+  final Color backgroundColor;
+  final double size;
+
+  const IconBadge({
+    super.key,
+    required this.child,
+    required this.color,
+    required this.backgroundColor,
+    this.size = 48,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(size * 0.35),
+      ),
+      child: Center(child: child),
+    );
+  }
+}
+
+// Keep DoodleBadge as alias for backward compat
+class DoodleBadge extends StatelessWidget {
+  final Widget child;
+  final Color color;
+  final Color backgroundColor;
+  final double size;
+
+  const DoodleBadge({
+    super.key,
+    required this.child,
+    required this.color,
+    required this.backgroundColor,
+    this.size = 48,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IconBadge(
+      color: color,
+      backgroundColor: backgroundColor,
+      size: size,
       child: child,
     );
   }
@@ -247,106 +208,37 @@ class CozyMascot extends StatelessWidget {
 
 class _MascotPainter extends CustomPainter {
   final bool blushing;
-
   const _MascotPainter({required this.blushing});
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final r = size.width * 0.32;
-    final shadow = Paint()..color = const Color(0xFFC9B9A5).withAlpha(65);
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: Offset(center.dx, center.dy + r + 7),
-        width: r * 1.25,
-        height: r * 0.23,
-      ),
-      shadow,
-    );
 
     final body = Paint()..color = kMainPaper;
     final outline = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
       ..strokeCap = StrokeCap.round
-      ..color = const Color(0xFF9E927F);
+      ..color = kMainMuted;
     canvas.drawCircle(center, r, body);
     canvas.drawCircle(center, r, outline);
 
     final eye = Paint()..color = kMainInk;
-    canvas.drawCircle(
-      Offset(center.dx - r * 0.35, center.dy - r * 0.04),
-      1.9,
-      eye,
-    );
-    canvas.drawCircle(
-      Offset(center.dx + r * 0.35, center.dy - r * 0.04),
-      1.9,
-      eye,
-    );
+    canvas.drawCircle(Offset(center.dx - r * 0.35, center.dy - r * 0.04), 1.9, eye);
+    canvas.drawCircle(Offset(center.dx + r * 0.35, center.dy - r * 0.04), 1.9, eye);
     canvas.drawArc(
-      Rect.fromCenter(
-        center: Offset(center.dx, center.dy + r * 0.18),
-        width: r * 0.32,
-        height: r * 0.2,
-      ),
-      0.15,
-      2.84,
-      false,
-      outline..strokeWidth = 1.3,
+      Rect.fromCenter(center: Offset(center.dx, center.dy + r * 0.18), width: r * 0.32, height: r * 0.2),
+      0.15, 2.84, false, outline..strokeWidth = 1.3,
     );
 
     if (blushing) {
       final blush = Paint()..color = kMainRose.withAlpha(88);
-      canvas.drawOval(
-        Rect.fromCenter(
-          center: Offset(center.dx - r * 0.55, center.dy + r * 0.22),
-          width: r * 0.24,
-          height: r * 0.13,
-        ),
-        blush,
-      );
-      canvas.drawOval(
-        Rect.fromCenter(
-          center: Offset(center.dx + r * 0.55, center.dy + r * 0.22),
-          width: r * 0.24,
-          height: r * 0.13,
-        ),
-        blush,
-      );
+      canvas.drawOval(Rect.fromCenter(center: Offset(center.dx - r * 0.55, center.dy + r * 0.22), width: r * 0.24, height: r * 0.13), blush);
+      canvas.drawOval(Rect.fromCenter(center: Offset(center.dx + r * 0.55, center.dy + r * 0.22), width: r * 0.24, height: r * 0.13), blush);
     }
   }
 
   @override
-  bool shouldRepaint(covariant _MascotPainter oldDelegate) =>
-      blushing != oldDelegate.blushing;
-}
-
-class DoodleBadge extends StatelessWidget {
-  final Widget child;
-  final Color color;
-  final Color backgroundColor;
-  final double size;
-
-  const DoodleBadge({
-    super.key,
-    required this.child,
-    required this.color,
-    required this.backgroundColor,
-    this.size = 48,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(size * 0.34),
-        border: Border.all(color: color.withAlpha(90)),
-      ),
-      child: Center(child: child),
-    );
-  }
+  bool shouldRepaint(covariant _MascotPainter oldDelegate) => blushing != oldDelegate.blushing;
 }
