@@ -13,6 +13,7 @@ This document outlines the current server configuration and deployment steps for
 - **Path:** `/home/junzzang/SecertBase/services/realtime-server`
 - **Environment:** Node.js
 - **Env File:** `/home/junzzang/SecertBase/services/realtime-server/.env` (not committed)
+- **Google Login:** requires `GOOGLE_CLIENT_ID` in `.env` and deploy-time `GOOGLE_CLIENT_ID`
 - **Service Name:** `secretbase-realtime` (PM2)
 - **Port:** 4100
 - **URL:** `https://secertbase.kro.kr/socket.io/`
@@ -52,7 +53,9 @@ Manual equivalent:
 
 ```bash
 cd /home/junzzang/SecertBase/apps/secret_base_app
-flutter build web --release --no-wasm-dry-run --dart-define=SOCKET_URL=https://secertbase.kro.kr
+flutter build web --release --no-wasm-dry-run \
+  --dart-define=SOCKET_URL=https://secertbase.kro.kr \
+  --dart-define=GOOGLE_CLIENT_ID=<google-web-client-id>
 sudo rsync -a --delete build/web/ /var/www/secretbase/
 
 sudo cp /home/junzzang/SecertBase/docs/deployment/nginx-secretbase-https.conf /etc/nginx/sites-available/secretbase

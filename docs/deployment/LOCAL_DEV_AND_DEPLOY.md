@@ -36,6 +36,7 @@ Required backend env keys:
 - `REDIS_URL`: Redis connection URL
 - `DATABASE_URL`: MariaDB/MySQL connection URL
 - `JWT_SECRET`: random 32+ character secret for login tokens
+- `GOOGLE_CLIENT_ID`: Google OAuth Web Client ID. Leave empty to disable Google login.
 - `ROOM_SECRET`: legacy room secret
 - `ALLOWED_USERS`: comma-separated pair for the legacy two-person room flow
 
@@ -44,7 +45,11 @@ Flutter app:
 ```bash
 cd apps/secret_base_app
 flutter pub get
-flutter run -d chrome --dart-define=SOCKET_URL=http://localhost:4100
+flutter run -d chrome \
+  --web-hostname localhost \
+  --web-port 7357 \
+  --dart-define=SOCKET_URL=http://localhost:4100 \
+  --dart-define=GOOGLE_CLIENT_ID=<google-web-client-id>
 ```
 
 For mobile device testing against a backend running on the local PC, replace `localhost` with the local PC LAN IP:
@@ -62,7 +67,9 @@ npm run check
 
 cd ../../apps/secret_base_app
 flutter analyze
-flutter build web --release --no-wasm-dry-run --dart-define=SOCKET_URL=https://secertbase.kro.kr
+flutter build web --release --no-wasm-dry-run \
+  --dart-define=SOCKET_URL=https://secertbase.kro.kr \
+  --dart-define=GOOGLE_CLIENT_ID=<google-web-client-id>
 ```
 
 `flutter analyze` currently reports existing lint warnings in unrelated files. Treat new errors as blockers.
@@ -95,6 +102,7 @@ The deploy script does this:
 - installs backend dependencies with `npm ci`
 - runs backend tests and syntax check
 - builds Flutter web with `SOCKET_URL=https://secertbase.kro.kr`
+- passes `GOOGLE_CLIENT_ID` into Flutter when the shell env var is set
 - syncs `build/web/` to `/var/www/secretbase`
 - restarts `secretbase-realtime` with PM2
 - verifies `http://localhost:4100/health`

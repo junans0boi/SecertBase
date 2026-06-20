@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
 import '../../core/main_design.dart';
 import '../../core/auth_service.dart';
+import '../../widgets/google_sign_in_button.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -18,6 +19,25 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _error;
 
   final _auth = AuthService();
+
+  @override
+  void initState() {
+    super.initState();
+    _auth.addListener(_onAuthChanged);
+  }
+
+  @override
+  void dispose() {
+    _auth.removeListener(_onAuthChanged);
+    _emailCtrl.dispose();
+    _passwordCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onAuthChanged() {
+    if (!mounted) return;
+    setState(() {});
+  }
 
   void _login() async {
     if (_loading) return;
@@ -41,6 +61,14 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  void _googleLogin() async {
+    setState(() => _error = null);
+    final success = await _auth.loginWithGoogle();
+    if (!success && mounted && _auth.googleError != null) {
+      setState(() => _error = _auth.googleError);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -59,11 +87,20 @@ class _LoginScreenState extends State<LoginScreen> {
                     Text('비밀기지 로그인', style: mainTitle(size: 28)),
                     const SizedBox(height: 32),
                     _form(),
+                    if (_auth.isGoogleLoginConfigured) ...[
+                      const SizedBox(height: 14),
+                      buildGoogleSignInButton(
+                        onPressed: _googleLogin,
+                        loading: _auth.googleLoading,
+                      ),
+                    ],
                     const SizedBox(height: 24),
                     TextButton(
                       onPressed: () => Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                        MaterialPageRoute(
+                          builder: (_) => const RegisterScreen(),
+                        ),
                       ),
                       child: Text(
                         '계정이 없으신가요? 회원가입',
@@ -91,7 +128,10 @@ class _LoginScreenState extends State<LoginScreen> {
           TextField(
             controller: _emailCtrl,
             keyboardType: TextInputType.emailAddress,
-            decoration: _inputDecoration('example@email.com', Icons.email_outlined),
+            decoration: _inputDecoration(
+              'example@email.com',
+              Icons.email_outlined,
+            ),
           ),
           const SizedBox(height: 16),
           _label('비밀번호'),
@@ -113,11 +153,27 @@ class _LoginScreenState extends State<LoginScreen> {
               onPressed: _loading ? null : _login,
               style: FilledButton.styleFrom(
                 backgroundColor: kMainInk,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
               ),
               child: _loading
-                  ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                  : Text('로그인', style: mainBody(size: 16, color: Colors.white, weight: FontWeight.w700)),
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : Text(
+                      '로그인',
+                      style: mainBody(
+                        size: 16,
+                        color: Colors.white,
+                        weight: FontWeight.w700,
+                      ),
+                    ),
             ),
           ),
         ],
@@ -125,7 +181,10 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _label(String text) => Text(text, style: mainBody(size: 13, color: kMainSub, weight: FontWeight.w700));
+  Widget _label(String text) => Text(
+    text,
+    style: mainBody(size: 13, color: kMainSub, weight: FontWeight.w700),
+  );
 
   InputDecoration _inputDecoration(String hint, IconData icon) {
     return InputDecoration(
@@ -133,7 +192,10 @@ class _LoginScreenState extends State<LoginScreen> {
       prefixIcon: Icon(icon, color: kMainMuted, size: 20),
       filled: true,
       fillColor: kMainPaperSoft,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide.none,
+      ),
     );
   }
 }

@@ -5,6 +5,7 @@ REPO_DIR="${REPO_DIR:-/home/junzzang/SecertBase}"
 BRANCH="${BRANCH:-main}"
 WEB_ROOT="${WEB_ROOT:-/var/www/secretbase}"
 SOCKET_URL="${SOCKET_URL:-https://secertbase.kro.kr}"
+GOOGLE_CLIENT_ID="${GOOGLE_CLIENT_ID:-}"
 PM2_NAME="${PM2_NAME:-secretbase-realtime}"
 
 cd "$REPO_DIR"
@@ -30,7 +31,9 @@ npm run check
 echo "==> Installing Flutter dependencies"
 cd "$REPO_DIR/apps/secret_base_app"
 flutter pub get
-flutter build web --release --no-wasm-dry-run --dart-define=SOCKET_URL="$SOCKET_URL"
+flutter build web --release --no-wasm-dry-run \
+  --dart-define=SOCKET_URL="$SOCKET_URL" \
+  --dart-define=GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID"
 
 echo "==> Syncing web build to $WEB_ROOT"
 rsync -a --delete build/web/ "$WEB_ROOT/"

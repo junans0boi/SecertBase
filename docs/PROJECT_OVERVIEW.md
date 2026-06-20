@@ -7,6 +7,7 @@ Last updated: 2026-06-20
 Secret Base is a private two-person realtime web/app service. It combines:
 
 - account login and partner pairing
+- Google login without Firebase
 - a shared couple home screen
 - realtime arcade games
 - archive features for daily records, maps, Q&A, challenges, jukebox, and capsules
@@ -79,6 +80,7 @@ Current screen flow:
 Important client services:
 
 - `core/auth_service.dart`: register, login, partner pairing, profile refresh
+- `widgets/google_sign_in_button.dart`: platform-specific Google login button wrapper
 - `core/socket_service.dart`: Socket.IO connection and game state
 - `core/server_config.dart`: server URL resolution
 - `core/uno_audio.dart`, `core/yut_audio.dart`: game sound playback
@@ -102,6 +104,11 @@ Backend entry: `services/realtime-server/src/index.js`
 - `bomb-engine.js`: bomb quiz/pass logic
 
 Required backend env keys are documented in `services/realtime-server/.env.example`.
+
+Google login requires the same OAuth Web Client ID in two places:
+
+- backend `.env`: `GOOGLE_CLIENT_ID`
+- Flutter build: `--dart-define=GOOGLE_CLIENT_ID=<client-id>`
 
 ## Realtime Games
 

@@ -23,6 +23,7 @@ const schema = z.object({
   REDIS_URL: z.string().url(),
   DATABASE_URL: z.string().url(),
   JWT_SECRET: z.string().min(32),
+  GOOGLE_CLIENT_ID: z.string().optional().default(""),
   ROOM_SECRET: z.string().min(4),
   ALLOWED_USERS: z
     .string()

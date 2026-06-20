@@ -7,10 +7,12 @@ import express from 'express';
 import multer from 'multer';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { OAuth2Client } from 'google-auth-library';
 import { query, transaction } from './db.js';
 import { config } from './config.js';
 
 const router = express.Router();
+const googleClient = new OAuth2Client();
 
 let setlogReadyPromise;
 const ensureSetlogTable = () => {
@@ -130,6 +132,74 @@ const parseJsonArray = (value) => {
   }
 };
 
+let googleAuthColumnsReadyPromise;
+const ensureGoogleAuthColumns = async () => {
+  if (googleAuthColumnsReadyPromise) return googleAuthColumnsReadyPromise;
+
+  googleAuthColumnsReadyPromise = (async () => {
+    const result = await query(
+      `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'Users'
+         AND COLUMN_NAME IN ('AuthProvider', 'GoogleSubject', 'GooglePictureUrl')`
+    );
+    const existing = new Set(result.rows.map((row) => row.COLUMN_NAME));
+
+    if (!existing.has('AuthProvider')) {
+      await query("ALTER TABLE Users ADD COLUMN AuthProvider VARCHAR(32) NULL DEFAULT 'password'");
+    }
+    if (!existing.has('GoogleSubject')) {
+      await query('ALTER TABLE Users ADD COLUMN GoogleSubject VARCHAR(255) NULL');
+      await query('CREATE UNIQUE INDEX idx_users_google_subject ON Users (GoogleSubject)');
+    }
+    if (!existing.has('GooglePictureUrl')) {
+      await query('ALTER TABLE Users ADD COLUMN GooglePictureUrl TEXT NULL');
+    }
+  })();
+
+  return googleAuthColumnsReadyPromise;
+};
+
+const createJwtForUser = (user) =>
+  jwt.sign(
+    { userId: user.UserId, email: user.Email, userCode: user.UserCode },
+    config.JWT_SECRET,
+    { expiresIn: '7d' }
+  );
+
+const normalizeAuthUser = (user) => ({
+  id: user.UserId,
+  UserId: user.UserId,
+  email: user.Email,
+  Email: user.Email,
+  userName: user.UserName,
+  UserName: user.UserName,
+  userCode: user.UserCode,
+  UserCode: user.UserCode,
+  PartnerCode: user.PartnerCode ?? null,
+  UserIcon: user.UserIcon ?? null,
+  RoomCode: user.RoomCode ?? null,
+  RoomSecret: user.RoomSecret ?? null,
+  AuthProvider: user.AuthProvider ?? null,
+  GooglePictureUrl: user.GooglePictureUrl ?? null,
+});
+
+const getProfileRowByUserId = async (userId) => {
+  const result = await query(
+    `SELECT u.UserId, u.Email, u.UserName, u.UserCode,
+            u.AuthProvider, u.GooglePictureUrl,
+            p.UserIcon, p.PartnerCode,
+            c.RoomCode, c.RoomSecret
+     FROM Users u
+     JOIN User_Preference p ON u.UserId = p.UserId
+     LEFT JOIN Couples c ON (u.UserId = c.User1Id OR u.UserId = c.User2Id)
+     WHERE u.UserId = ?`,
+    [userId]
+  );
+  return result.rows[0] ?? null;
+};
+
 const getCoupleIdForUser = async (userId) => {
   const result = await query(
     'SELECT CoupleId FROM Couples WHERE User1Id = ? OR User2Id = ? LIMIT 1',
@@ -211,26 +281,107 @@ router.post('/auth/login', async (req, res) => {
       return res.status(401).json({ ok: false, reason: 'invalid_credentials' });
     }
 
-    // JWT 토큰 생성
-    const token = jwt.sign(
-      { userId: user.UserId, email: user.Email, userCode: user.UserCode },
-      config.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    const token = createJwtForUser(user);
+    const profile = await getProfileRowByUserId(user.UserId);
 
     res.json({ 
       ok: true, 
       token, 
-      user: {
-        id: user.UserId,
-        email: user.Email,
-        userName: user.UserName,
-        userCode: user.UserCode
-      }
+      user: normalizeAuthUser(profile ?? user),
     });
   } catch (err) {
     console.error('[API] /auth/login error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.post('/auth/google', async (req, res) => {
+  try {
+    const { idToken } = req.body;
+    if (!idToken) {
+      return res.status(400).json({ ok: false, reason: 'missing_id_token' });
+    }
+    if (!config.GOOGLE_CLIENT_ID) {
+      return res.status(503).json({ ok: false, reason: 'google_login_not_configured' });
+    }
+
+    await ensureGoogleAuthColumns();
+
+    const ticket = await googleClient.verifyIdToken({
+      idToken,
+      audience: config.GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    const googleSubject = payload?.sub;
+    const email = payload?.email;
+    const emailVerified = payload?.email_verified;
+    const name = payload?.name || payload?.given_name || 'Google 사용자';
+    const picture = payload?.picture || null;
+
+    if (!googleSubject || !email || !emailVerified) {
+      return res.status(401).json({ ok: false, reason: 'invalid_google_token' });
+    }
+
+    let userId;
+    let existing = await query(
+      'SELECT UserId FROM Users WHERE GoogleSubject = ? OR Email = ? LIMIT 1',
+      [googleSubject, email]
+    );
+
+    if (existing.rows.length > 0) {
+      userId = existing.rows[0].UserId;
+      await query(
+        `UPDATE Users
+         SET GoogleSubject = COALESCE(GoogleSubject, ?),
+             GooglePictureUrl = ?,
+             AuthProvider = CASE
+               WHEN AuthProvider IS NULL OR AuthProvider = 'password' THEN AuthProvider
+               ELSE 'google'
+             END,
+             ModifiedBy = 'google',
+             ModifiedDateTime = NOW()
+         WHERE UserId = ?`,
+        [googleSubject, picture, userId]
+      );
+    } else {
+      await transaction(async (connection) => {
+        let userCode;
+        while (true) {
+          userCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+          const [codeRows] = await connection.execute(
+            'SELECT UserId FROM Users WHERE UserCode = ?',
+            [userCode]
+          );
+          if (codeRows.length === 0) break;
+        }
+
+        const [userResult] = await connection.execute(
+          `INSERT INTO Users
+           (Email, PasswordHash, PasswordSalt, UserName, UserCode, CreatedBy,
+            AuthProvider, GoogleSubject, GooglePictureUrl)
+           VALUES (?, NULL, NULL, ?, ?, 'google', 'google', ?, ?)`,
+          [email, name, userCode, googleSubject, picture]
+        );
+        userId = userResult.insertId;
+
+        await connection.execute(
+          'INSERT INTO User_Preference (UserId) VALUES (?)',
+          [userId]
+        );
+      });
+    }
+
+    const profile = await getProfileRowByUserId(userId);
+    const token = createJwtForUser(profile);
+
+    res.json({
+      ok: true,
+      token,
+      user: normalizeAuthUser(profile),
+    });
+  } catch (err) {
+    console.error('[API] /auth/google error:', err);
+    res.status(401).json({ ok: false, reason: 'google_auth_failed' });
   }
 });
 
@@ -307,7 +458,7 @@ router.get('/user/profile/:userId', async (req, res) => {
       return res.status(404).json({ ok: false, reason: 'user_not_found' });
     }
 
-    res.json({ ok: true, user: result.rows[0] });
+    res.json({ ok: true, user: normalizeAuthUser(result.rows[0]) });
   } catch (err) {
     console.error('[API] /user/profile error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });

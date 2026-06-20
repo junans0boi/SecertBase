@@ -86,6 +86,47 @@ invalid_credentials
 internal_error
 ```
 
+### POST `/auth/google`
+
+Verifies a Google ID token with `GOOGLE_CLIENT_ID`, creates or links a local user by email/Google subject, then returns the same app JWT format as email login.
+
+Request:
+
+```json
+{
+  "idToken": "google-id-token"
+}
+```
+
+Response:
+
+```json
+{
+  "ok": true,
+  "token": "jwt",
+  "user": {
+    "UserId": 1,
+    "Email": "user@gmail.com",
+    "UserName": "Google User",
+    "UserCode": "ABC123",
+    "PartnerCode": null,
+    "RoomCode": null,
+    "RoomSecret": null,
+    "AuthProvider": "google",
+    "GooglePictureUrl": "https://..."
+  }
+}
+```
+
+Failure reasons:
+
+```text
+missing_id_token
+google_login_not_configured
+invalid_google_token
+google_auth_failed
+```
+
 ## User / Partner
 
 ### POST `/user/partner`
