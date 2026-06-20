@@ -186,6 +186,7 @@ const normalizeAuthUser = (user) => ({
 });
 
 const getProfileRowByUserId = async (userId) => {
+  await ensureGoogleAuthColumns();
   const result = await query(
     `SELECT u.UserId, u.Email, u.UserName, u.UserCode,
             u.AuthProvider, u.GooglePictureUrl,
@@ -444,21 +445,13 @@ router.post('/user/partner', async (req, res) => {
 router.get('/user/profile/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
-    const result = await query(
-      `SELECT u.UserId, u.Email, u.UserName, u.UserCode, p.UserIcon, p.PartnerCode,
-              c.RoomCode, c.RoomSecret
-       FROM Users u 
-       JOIN User_Preference p ON u.UserId = p.UserId 
-       LEFT JOIN Couples c ON (u.UserId = c.User1Id OR u.UserId = c.User2Id)
-       WHERE u.UserId = ?`,
-      [userId]
-    );
+    const user = await getProfileRowByUserId(userId);
 
-    if (result.rows.length === 0) {
+    if (!user) {
       return res.status(404).json({ ok: false, reason: 'user_not_found' });
     }
 
-    res.json({ ok: true, user: normalizeAuthUser(result.rows[0]) });
+    res.json({ ok: true, user: normalizeAuthUser(user) });
   } catch (err) {
     console.error('[API] /user/profile error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
