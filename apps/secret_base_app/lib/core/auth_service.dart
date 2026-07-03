@@ -70,7 +70,13 @@ class AuthService extends ChangeNotifier {
     return _googleInitFuture!;
   }
 
-  Future<bool> register(String email, String password, String userName) async {
+  Future<bool> register(
+    String email,
+    String password,
+    String fullName,
+    String nickname,
+    String birthDate,
+  ) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/api/auth/register'),
@@ -78,7 +84,10 @@ class AuthService extends ChangeNotifier {
         body: jsonEncode({
           'email': email,
           'password': password,
-          'user_name': userName,
+          'user_name': nickname,
+          'full_name': fullName,
+          'nickname': nickname,
+          'birth_date': birthDate,
         }),
       );
 
@@ -263,6 +272,75 @@ class AuthService extends ChangeNotifier {
     } catch (e) {
       print('[Auth] Get profile error: $e');
       return null;
+    }
+  }
+
+  Future<bool> updateProfile({
+    required String fullName,
+    required String nickname,
+    required String birthDate,
+  }) async {
+    if (_token == null || _user == null) return false;
+    final uid = _user!['UserId'] ?? _user!['id'];
+    try {
+      final response = await http.patch(
+        Uri.parse('$baseUrl/api/user/profile/$uid'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({
+          'fullName': fullName,
+          'nickname': nickname,
+          'birthDate': birthDate,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        _user = data['user'];
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('user_data', jsonEncode(_user));
+        notifyListeners();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print('[Auth] Update profile error: $e');
+      return false;
+    }
+  }
+
+  Future<String?> updatePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    if (_token == null || _user == null) return '로그인이 필요합니다.';
+    final uid = _user!['UserId'] ?? _user!['id'];
+    try {
+      final response = await http.patch(
+        Uri.parse('$baseUrl/api/user/password/$uid'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({
+          'currentPassword': currentPassword,
+          'newPassword': newPassword,
+        }),
+      );
+
+      if (response.statusCode == 200) return null;
+      final data = jsonDecode(response.body);
+      return switch (data['reason']) {
+        'invalid_current_password' => '현재 비밀번호가 맞지 않습니다.',
+        'weak_password' => '새 비밀번호는 6자 이상이어야 합니다.',
+        'password_login_not_enabled' => '소셜 로그인 계정에는 아직 비밀번호가 없습니다.',
+        _ => '비밀번호 변경에 실패했습니다.',
+      };
+    } catch (e) {
+      print('[Auth] Update password error: $e');
+      return '비밀번호 변경 중 오류가 발생했습니다.';
     }
   }
 

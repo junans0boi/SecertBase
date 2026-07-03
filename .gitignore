@@ -28,3 +28,10 @@ Thumbs.db
 # Logs
 *.log
 uploads/
+
+# Sensitive
+docs/google_auth_info.md
+
+# Temp/Trash
+trash/
+uno/

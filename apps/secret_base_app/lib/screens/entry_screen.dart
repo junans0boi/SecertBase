@@ -28,7 +28,7 @@ class _EntryScreenState extends State<EntryScreen>
   @override
   void initState() {
     super.initState();
-    
+
     // Auto-fill from auth
     final myCode = _auth.user?['UserCode'] as String?;
     if (myCode != null) {
@@ -216,7 +216,12 @@ class _EntryScreenState extends State<EntryScreen>
           if (_auth.user?['UserCode'] != null)
             _userBadge(
               _auth.user!['UserCode'] as String,
-              (_auth.user!['UserName'] ?? _auth.user!['userName'] ?? '') as String,
+              (_auth.user!['Nickname'] ??
+                      _auth.user!['nickname'] ??
+                      _auth.user!['UserName'] ??
+                      _auth.user!['userName'] ??
+                      '')
+                  as String,
             )
           else
             Row(
@@ -324,7 +329,11 @@ class _EntryScreenState extends State<EntryScreen>
           ),
           Text(
             '로그인됨',
-            style: mainBody(size: 11, color: kMainSage, weight: FontWeight.w600),
+            style: mainBody(
+              size: 11,
+              color: kMainSage,
+              weight: FontWeight.w600,
+            ),
           ),
         ],
       ),

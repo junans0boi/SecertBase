@@ -30,7 +30,10 @@ Request:
 {
   "email": "user@example.com",
   "password": "password",
-  "user_name": "Jun"
+  "user_name": "junnie",
+  "full_name": "Jun",
+  "nickname": "junnie",
+  "birth_date": "2000-01-01"
 }
 ```
 
@@ -47,6 +50,7 @@ Failure reasons:
 
 ```text
 missing_fields
+invalid_birth_date
 email_already_exists
 internal_error
 ```
@@ -74,6 +78,9 @@ Response:
     "id": 1,
     "email": "user@example.com",
     "userName": "Jun",
+    "fullName": "Jun",
+    "nickname": "junnie",
+    "birthDate": "2000-01-01",
     "userCode": "ABC123"
   }
 }
@@ -108,11 +115,15 @@ Response:
     "UserId": 1,
     "Email": "user@gmail.com",
     "UserName": "Google User",
+    "FullName": "Google User",
+    "Nickname": "Google",
+    "BirthDate": "2000-01-01",
     "UserCode": "ABC123",
     "PartnerCode": null,
     "RoomCode": null,
     "RoomSecret": null,
     "AuthProvider": "google",
+    "GoogleLinked": true,
     "GooglePictureUrl": "https://..."
   }
 }
@@ -128,6 +139,189 @@ google_auth_failed
 ```
 
 ## User / Partner
+
+### GET `/today?user_id=1`
+
+Returns the Home Today Hub state for the current couple.
+
+Response:
+
+```json
+{
+  "ok": true,
+  "date": "2026-06-21",
+  "coupleId": 1,
+  "streak": {
+    "current": 7,
+    "longest": 12,
+    "completedToday": false,
+    "myCompleted": true,
+    "partnerCompleted": false
+  },
+  "question": {
+    "id": 10,
+    "text": "오늘 상대에게 고마웠던 순간은?",
+    "scheduledDate": "2026-06-21",
+    "myAnswered": true,
+    "partnerAnswered": false,
+    "revealAvailable": false,
+    "answerCount": 1
+  },
+  "mission": {
+    "instanceId": 3,
+    "missionId": 2,
+    "title": "칭찬 하나 남기기",
+    "description": "오늘 상대에게 고마웠던 점이나 예뻤던 점을 하나 말해줘요.",
+    "status": "active",
+    "myCompleted": false,
+    "partnerCompleted": true,
+    "completed": false
+  },
+  "pending": {
+    "wishTickets": 0,
+    "capsulesToOpen": 0
+  }
+}
+```
+
+Failure reasons:
+
+```text
+missing_user_id
+internal_error
+```
+
+### POST `/missions/:instanceId/complete`
+
+Marks the current user's daily mission as complete and updates the couple streak if both partners have completed a qualifying daily action.
+
+Request:
+
+```json
+{
+  "user_id": 1
+}
+```
+
+Response:
+
+```json
+{ "ok": true }
+```
+
+Failure reasons:
+
+```text
+missing_fields
+mission_not_found
+forbidden_user
+internal_error
+```
+
+### GET `/timeline?user_id=1&limit=30`
+
+Returns recent automatic couple timeline events.
+
+Events are written by retention actions such as question answers, mission completions, and streak completion.
+
+Response:
+
+```json
+{
+  "ok": true,
+  "events": [
+    {
+      "id": 1,
+      "couple_id": 1,
+      "event_type": "question_answered",
+      "actor_user_id": 1,
+      "ActorName": "Jun",
+      "title": "오늘의 질문 답변 완료",
+      "body": "한 사람이 오늘의 질문에 답했어요.",
+      "event_date": "2026-06-21T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+Failure reasons:
+
+```text
+missing_user_id
+internal_error
+```
+
+### GET `/user/profile/:userId`
+
+Returns the user profile, partner code, and room credentials used for Socket.IO.
+
+The display name for games should use `Nickname` first. `UserName` is retained for older client compatibility and is updated to the same value as `Nickname`.
+
+### PATCH `/user/profile/:userId`
+
+Updates editable profile fields.
+
+Request:
+
+```json
+{
+  "fullName": "Jun",
+  "nickname": "junnie",
+  "birthDate": "2000-01-01"
+}
+```
+
+Response:
+
+```json
+{
+  "ok": true,
+  "user": {
+    "UserId": 1,
+    "Email": "user@example.com",
+    "FullName": "Jun",
+    "Nickname": "junnie",
+    "BirthDate": "2000-01-01",
+    "UserCode": "ABC123",
+    "AuthProvider": "password",
+    "GoogleLinked": false
+  }
+}
+```
+
+Failure reasons:
+
+```text
+missing_fields
+invalid_length
+invalid_birth_date
+user_not_found
+internal_error
+```
+
+### PATCH `/user/password/:userId`
+
+Changes the password for password-login accounts.
+
+Request:
+
+```json
+{
+  "currentPassword": "old-password",
+  "newPassword": "new-password"
+}
+```
+
+Failure reasons:
+
+```text
+missing_fields
+weak_password
+password_login_not_enabled
+invalid_current_password
+user_not_found
+internal_error
+```
 
 ### POST `/user/partner`
 
@@ -155,28 +349,6 @@ missing_fields
 partner_not_found
 cannot_pair_with_self
 internal_error
-```
-
-### GET `/user/profile/:userId`
-
-Returns the user profile, partner code, and room credentials used for Socket.IO.
-
-Response:
-
-```json
-{
-  "ok": true,
-  "user": {
-    "UserId": 1,
-    "Email": "user@example.com",
-    "UserName": "Jun",
-    "UserCode": "ABC123",
-    "UserIcon": null,
-    "PartnerCode": "XYZ789",
-    "RoomCode": "room_1_2",
-    "RoomSecret": "secret"
-  }
-}
 ```
 
 ## Couple

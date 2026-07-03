@@ -14,6 +14,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
+  final _nicknameCtrl = TextEditingController();
+  DateTime? _birthDate;
   bool _loading = false;
   String? _error;
 
@@ -21,6 +23,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   void _register() async {
     if (_loading) return;
+    if (_emailCtrl.text.trim().isEmpty ||
+        _passwordCtrl.text.trim().isEmpty ||
+        _nameCtrl.text.trim().isEmpty ||
+        _nicknameCtrl.text.trim().isEmpty ||
+        _birthDate == null) {
+      setState(() => _error = '이름, 닉네임, 생년월일, 이메일, 비밀번호를 모두 입력해주세요.');
+      return;
+    }
     setState(() {
       _loading = true;
       _error = null;
@@ -30,13 +40,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _emailCtrl.text.trim(),
       _passwordCtrl.text.trim(),
       _nameCtrl.text.trim(),
+      _nicknameCtrl.text.trim(),
+      _dateOnly(_birthDate),
     );
 
     if (success) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('회원가입 성공! 로그인해주세요.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('회원가입 성공! 로그인해주세요.')));
         Navigator.pop(context);
       }
     } else {
@@ -45,6 +57,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
         _error = '회원가입에 실패했습니다. 이미 사용 중인 이메일일 수 있습니다.';
       });
     }
+  }
+
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    _passwordCtrl.dispose();
+    _nameCtrl.dispose();
+    _nicknameCtrl.dispose();
+    super.dispose();
   }
 
   @override
@@ -94,12 +115,39 @@ class _RegisterScreenState extends State<RegisterScreen> {
             decoration: _inputDecoration('이름 입력', Icons.person_outline),
           ),
           const SizedBox(height: 16),
+          _label('닉네임'),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _nicknameCtrl,
+            decoration: _inputDecoration('게임에서 보일 이름', Icons.badge_outlined),
+          ),
+          const SizedBox(height: 16),
+          _label('생년월일'),
+          const SizedBox(height: 8),
+          InkWell(
+            onTap: _pickBirthDate,
+            borderRadius: BorderRadius.circular(14),
+            child: InputDecorator(
+              decoration: _inputDecoration('생년월일 선택', Icons.cake_outlined),
+              child: Text(
+                _birthDate == null ? 'YYYY-MM-DD' : _dateOnly(_birthDate),
+                style: mainBody(
+                  size: 14,
+                  color: _birthDate == null ? kMainMuted : kMainInk,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
           _label('이메일'),
           const SizedBox(height: 8),
           TextField(
             controller: _emailCtrl,
             keyboardType: TextInputType.emailAddress,
-            decoration: _inputDecoration('example@email.com', Icons.email_outlined),
+            decoration: _inputDecoration(
+              'example@email.com',
+              Icons.email_outlined,
+            ),
           ),
           const SizedBox(height: 16),
           _label('비밀번호'),
@@ -121,11 +169,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
               onPressed: _loading ? null : _register,
               style: FilledButton.styleFrom(
                 backgroundColor: kMainInk,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
               ),
               child: _loading
-                  ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                  : Text('회원가입', style: mainBody(size: 16, color: Colors.white, weight: FontWeight.w700)),
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : Text(
+                      '회원가입',
+                      style: mainBody(
+                        size: 16,
+                        color: Colors.white,
+                        weight: FontWeight.w700,
+                      ),
+                    ),
             ),
           ),
         ],
@@ -133,7 +197,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  Widget _label(String text) => Text(text, style: mainBody(size: 13, color: kMainSub, weight: FontWeight.w700));
+  Widget _label(String text) => Text(
+    text,
+    style: mainBody(size: 13, color: kMainSub, weight: FontWeight.w700),
+  );
+
+  String _dateOnly(DateTime? value) {
+    if (value == null) return '';
+    return '${value.year}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _pickBirthDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _birthDate ?? DateTime(now.year - 20, now.month, now.day),
+      firstDate: DateTime(1900),
+      lastDate: now,
+    );
+    if (picked != null && mounted) {
+      setState(() => _birthDate = picked);
+    }
+  }
 
   InputDecoration _inputDecoration(String hint, IconData icon) {
     return InputDecoration(
@@ -141,7 +226,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       prefixIcon: Icon(icon, color: kMainMuted, size: 20),
       filled: true,
       fillColor: kMainPaperSoft,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide.none,
+      ),
     );
   }
 }

@@ -160,6 +160,22 @@ class SocketService extends ChangeNotifier {
   bool? bombLastAnswerCorrect;
   int bombPassCount = 0;
 
+  // catch mind (그림퀴즈)
+  bool catchActive = false;
+  String? catchDrawer;
+  String? catchWord;      // 내가 출제자일 때만 set
+  int catchWordLen = 0;
+  int catchRound = 0;
+  int catchMaxRounds = 6;
+  Map<String, int> catchScores = {};
+  String? catchPhase;     // 'drawing' | 'guessed' | 'timeout' | 'gameover'
+  String? catchGameWinner;
+  String? catchHint;
+  List<Map<String, dynamic>> catchGuessLog = [];
+  // 드로잉 데이터는 콜백으로 직접 처리 (ChangeNotifier 우회 → 성능)
+  Function(Map<String, dynamic>)? _onCatchDraw;
+  VoidCallback? _onCatchClear;
+
   final List<String> _logs = [];
   List<String> get logs => List.unmodifiable(_logs);
 
@@ -726,6 +742,109 @@ class SocketService extends ChangeNotifier {
       notifyListeners();
     });
 
+    // ── catch mind listeners ──────────────────────────────────────────────
+    void applyRoundStart(Map map) {
+      catchActive = true;
+      catchDrawer = map['drawer'] as String?;
+      catchWord = null; // word comes separately via game:catch:word
+      catchWordLen = (map['wordLen'] as int?) ?? 0;
+      catchRound = (map['round'] as int?) ?? 1;
+      catchMaxRounds = (map['maxRounds'] as int?) ?? 6;
+      catchScores = _intMap(map['scores']);
+      catchPhase = 'drawing';
+      catchHint = null;
+      catchGuessLog = [];
+      final nicks = _m(map['nicknames']);
+      if (nicks.isNotEmpty) {
+        presenceNicknames = {...presenceNicknames, ...nicks.map((k, v) => MapEntry(k, '$v'))};
+      }
+    }
+
+    socket.on('game:catch:started', (data) {
+      final map = _m(data);
+      applyRoundStart(map);
+      _log('캐치마인드 시작 round=${catchRound}, drawer=$catchDrawer');
+      notifyListeners();
+    });
+
+    socket.on('game:catch:round_start', (data) {
+      final map = _m(data);
+      applyRoundStart(map);
+      _onCatchClear?.call(); // 새 라운드 = 캔버스 클리어
+      _log('캐치마인드 라운드 시작 round=$catchRound, drawer=$catchDrawer');
+      notifyListeners();
+    });
+
+    socket.on('game:catch:word', (data) {
+      catchWord = _m(data)['word'] as String?;
+      _log('내 단어: $catchWord');
+      notifyListeners();
+    });
+
+    socket.on('game:catch:draw', (data) {
+      _onCatchDraw?.call(_m(data));
+      // notifyListeners 호출 안 함 — 콜백으로 직접 canvas 업데이트
+    });
+
+    socket.on('game:catch:clear', (_) {
+      _onCatchClear?.call();
+      notifyListeners();
+    });
+
+    socket.on('game:catch:guess_log', (data) {
+      final map = _m(data);
+      catchGuessLog = [...catchGuessLog, map];
+      notifyListeners();
+    });
+
+    socket.on('game:catch:correct', (data) {
+      final map = _m(data);
+      catchPhase = 'guessed';
+      catchWord = map['word'] as String?; // 정답자에게도 공개
+      catchScores = _intMap(map['scores']);
+      _log('정답! word=${catchWord}, guesser=${map['guesser']}');
+      notifyListeners();
+    });
+
+    socket.on('game:catch:timeout_result', (data) {
+      final map = _m(data);
+      catchPhase = 'timeout';
+      catchWord = map['word'] as String?; // 타임아웃 시 단어 공개
+      _log('타임아웃. word=$catchWord');
+      notifyListeners();
+    });
+
+    socket.on('game:catch:hint', (data) {
+      catchHint = _m(data)['hint'] as String?;
+      _log('힌트: $catchHint');
+      notifyListeners();
+    });
+
+    socket.on('game:catch:gameover', (data) {
+      final map = _m(data);
+      catchPhase = 'gameover';
+      catchGameWinner = map['winner'] as String?;
+      catchScores = _intMap(map['scores']);
+      catchActive = false;
+      _log('게임 종료. winner=$catchGameWinner');
+      notifyListeners();
+    });
+
+    socket.on('game:catch:reset_done', (_) {
+      catchActive = false;
+      catchDrawer = null;
+      catchWord = null;
+      catchWordLen = 0;
+      catchRound = 0;
+      catchScores = {};
+      catchPhase = null;
+      catchGameWinner = null;
+      catchHint = null;
+      catchGuessLog = [];
+      _onCatchClear?.call();
+      notifyListeners();
+    });
+
     socket.connect();
     _socket = socket;
   }
@@ -848,6 +967,18 @@ class SocketService extends ChangeNotifier {
     lobbyStartedYutBgm = null;
     if (me != null) {
       profileEmojis = {...profileEmojis, me: profileEmoji};
+    }
+    if (gameType == 'catch') {
+      catchActive = false;
+      catchDrawer = null;
+      catchWord = null;
+      catchWordLen = 0;
+      catchRound = 0;
+      catchScores = {};
+      catchPhase = null;
+      catchGameWinner = null;
+      catchHint = null;
+      catchGuessLog = [];
     }
     // RPS 게임 로비 재진입 시 이전 게임 상태 초기화
     if (gameType == 'rps') {
@@ -1036,6 +1167,66 @@ class SocketService extends ChangeNotifier {
     _socket?.emit('game:pirate:reset', {});
   }
 
+  // ── catch mind ────────────────────────────────────────────────────────────
+
+  void registerCatchCallbacks(
+    Function(Map<String, dynamic>) onDraw,
+    VoidCallback onClear,
+  ) {
+    _onCatchDraw = onDraw;
+    _onCatchClear = onClear;
+  }
+
+  void unregisterCatchCallbacks() {
+    _onCatchDraw = null;
+    _onCatchClear = null;
+  }
+
+  void startCatch({int maxRounds = 6}) {
+    _socket?.emit('game:catch:start', {'maxRounds': maxRounds});
+  }
+
+  void sendCatchDraw(double x, double y, bool newStroke, int colorIdx, int sizeIdx) {
+    _socket?.emit('game:catch:draw', {
+      'x': x, 'y': y, 's': newStroke, 'c': colorIdx, 'sz': sizeIdx,
+    });
+  }
+
+  void sendCatchClear() {
+    _socket?.emit('game:catch:clear');
+  }
+
+  void guessCatch(String text) {
+    _socket?.emit('game:catch:guess', {'text': text});
+  }
+
+  void requestCatchHint() {
+    _socket?.emit('game:catch:hint_req');
+  }
+
+  void timeoutCatch() {
+    _socket?.emit('game:catch:timeout');
+  }
+
+  void nextCatchRound() {
+    _socket?.emit('game:catch:next');
+  }
+
+  void resetCatch() {
+    catchActive = false;
+    catchDrawer = null;
+    catchWord = null;
+    catchWordLen = 0;
+    catchRound = 0;
+    catchScores = {};
+    catchPhase = null;
+    catchGameWinner = null;
+    catchHint = null;
+    catchGuessLog = [];
+    notifyListeners();
+    _socket?.emit('game:catch:reset');
+  }
+
   void newYutGame({Map<String, String>? characters, String? bgm}) {
     final payload = <String, dynamic>{};
     if (characters != null && characters.isNotEmpty) {
@@ -1220,6 +1411,11 @@ class SocketService extends ChangeNotifier {
   static Map<String, String> _stringMap(dynamic v) {
     final map = _m(v);
     return map.map((key, value) => MapEntry(key, '$value'));
+  }
+
+  static Map<String, int> _intMap(dynamic v) {
+    final map = _m(v);
+    return map.map((key, value) => MapEntry(key, (value as num?)?.toInt() ?? 0));
   }
 
   String _currentNickname() {

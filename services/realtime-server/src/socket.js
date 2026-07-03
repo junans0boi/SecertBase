@@ -56,6 +56,7 @@ const gameTypes = [
   "uno_classic",
   "uno_go_wild",
   "bomb",
+  "catch",
 ];
 
 const lobbySchema = z.object({
@@ -1951,6 +1952,259 @@ export const registerSocketHandlers = (io) => {
       if (!roomCode) return ack({ ok: false });
       socket.to(roomCode).emit("heart:received", { from: userId });
       ack({ ok: true });
+    });
+
+    // ── 캐치마인드 ────────────────────────────────────────────────────────────
+
+    socket.on("game:catch:start", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      try {
+        const { roomCode, userId } = socket.data;
+        if (!roomCode) return ack({ error: "not_in_room" });
+
+        // 로비 키는 game:lobby:start 처리 시 삭제되므로 presence에서 직접 players를 가져옴
+        const players = await getOrderedPlayers(roomCode, getPresence(io, roomCode));
+        if (players.length < 2) return ack({ error: "need_two_players" });
+
+        const maxRounds = Number.isInteger(payload?.maxRounds) && payload.maxRounds >= 2 && payload.maxRounds <= 20
+          ? payload.maxRounds : 6;
+
+        const { default: WORDS } = await import("./catch_words.js");
+        const shuffled = [...WORDS].sort(() => Math.random() - 0.5);
+        const word = shuffled[0];
+
+        const drawerIdx = Math.floor(Math.random() * players.length);
+        const drawer = players[drawerIdx] || userId;
+
+        const scores = {};
+        for (const p of players) scores[p] = 0;
+
+        const state = {
+          drawer,
+          word,
+          round: 1,
+          maxRounds,
+          scores,
+          phase: "drawing",
+          hintRevealed: [],
+          usedWords: [word],
+        };
+        await redis.set(`game:${roomCode}:catch`, JSON.stringify(state), "EX", 86400);
+
+        const nicknames = await getPresenceNicknames(io, roomCode);
+
+        // 모두에게 게임 시작 알림 (단어 제외)
+        io.to(roomCode).emit("game:catch:started", {
+          drawer,
+          round: 1,
+          maxRounds,
+          scores,
+          wordLen: [...word].length,
+          nicknames,
+        });
+
+        // drawer에게만 단어 전송
+        const drawerSocket = [...(io.sockets.adapter.rooms.get(roomCode) || [])]
+          .map((sid) => io.sockets.sockets.get(sid))
+          .find((s) => s?.data?.userId === drawer);
+        drawerSocket?.emit("game:catch:word", { word });
+
+        ack({ ok: true });
+      } catch (err) {
+        console.error("game:catch:start error", err);
+        ack({ error: "server_error" });
+      }
+    });
+
+    // draw relay — no ack for performance
+    socket.on("game:catch:draw", (payload) => {
+      const { roomCode } = socket.data;
+      if (!roomCode) return;
+      socket.to(roomCode).emit("game:catch:draw", payload);
+    });
+
+    // clear relay
+    socket.on("game:catch:clear", () => {
+      const { roomCode } = socket.data;
+      if (!roomCode) return;
+      socket.to(roomCode).emit("game:catch:clear");
+    });
+
+    socket.on("game:catch:guess", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      try {
+        const { roomCode, userId } = socket.data;
+        if (!roomCode) return ack({ ok: false });
+
+        const text = String(payload?.text || "").trim();
+        if (!text) return ack({ ok: false });
+
+        const raw = await redis.get(`game:${roomCode}:catch`);
+        if (!raw) return ack({ ok: false });
+        const state = JSON.parse(raw);
+
+        if (state.phase !== "drawing") return ack({ ok: false });
+        if (userId === state.drawer) return ack({ ok: false }); // drawer는 추측 불가
+
+        // 모두에게 추측 로그
+        io.to(roomCode).emit("game:catch:guess_log", { text, userId });
+
+        // 정답 판정 (공백·대소문자 무시)
+        const normalize = (s) => s.replace(/\s/g, "").toLowerCase();
+        if (normalize(text) === normalize(state.word)) {
+          state.scores[userId] = (state.scores[userId] || 0) + 2;
+          state.scores[state.drawer] = (state.scores[state.drawer] || 0) + 1;
+          state.phase = "guessed";
+          await redis.set(`game:${roomCode}:catch`, JSON.stringify(state), "EX", 86400);
+
+          io.to(roomCode).emit("game:catch:correct", {
+            word: state.word,
+            scores: state.scores,
+            guesser: userId,
+          });
+        }
+
+        ack({ ok: true });
+      } catch (err) {
+        console.error("game:catch:guess error", err);
+        ack({ ok: false });
+      }
+    });
+
+    socket.on("game:catch:hint_req", async (_, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      try {
+        const { roomCode, userId } = socket.data;
+        if (!roomCode) return ack({ ok: false });
+
+        const raw = await redis.get(`game:${roomCode}:catch`);
+        if (!raw) return ack({ ok: false });
+        const state = JSON.parse(raw);
+
+        if (state.phase !== "drawing" || userId === state.drawer) return ack({ ok: false });
+
+        const chars = [...state.word];
+        const hidden = chars.map((_, i) => i).filter((i) => !state.hintRevealed.includes(i));
+        if (hidden.length === 0) return ack({ ok: false });
+
+        const revealIdx = hidden[Math.floor(Math.random() * hidden.length)];
+        state.hintRevealed.push(revealIdx);
+        await redis.set(`game:${roomCode}:catch`, JSON.stringify(state), "EX", 86400);
+
+        const hint = chars.map((c, i) => (state.hintRevealed.includes(i) ? c : "_")).join("");
+
+        // guesser(본인)에게만 전송
+        socket.emit("game:catch:hint", { hint });
+        ack({ ok: true });
+      } catch (err) {
+        console.error("game:catch:hint_req error", err);
+        ack({ ok: false });
+      }
+    });
+
+    socket.on("game:catch:timeout", async (_, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      try {
+        const { roomCode, userId } = socket.data;
+        if (!roomCode) return ack({ ok: false });
+
+        const raw = await redis.get(`game:${roomCode}:catch`);
+        if (!raw) return ack({ ok: false });
+        const state = JSON.parse(raw);
+
+        if (state.phase !== "drawing") return ack({ ok: false });
+        state.phase = "timeout";
+        await redis.set(`game:${roomCode}:catch`, JSON.stringify(state), "EX", 86400);
+
+        io.to(roomCode).emit("game:catch:timeout_result", { word: state.word });
+        ack({ ok: true });
+      } catch (err) {
+        console.error("game:catch:timeout error", err);
+        ack({ ok: false });
+      }
+    });
+
+    socket.on("game:catch:next", async (_, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      try {
+        const { roomCode, userId } = socket.data;
+        if (!roomCode) return ack({ ok: false });
+
+        const raw = await redis.get(`game:${roomCode}:catch`);
+        if (!raw) return ack({ ok: false });
+        const state = JSON.parse(raw);
+
+        const nextRound = state.round + 1;
+
+        if (nextRound > state.maxRounds) {
+          // 게임 종료
+          state.phase = "gameover";
+          await redis.set(`game:${roomCode}:catch`, JSON.stringify(state), "EX", 86400);
+
+          const entries = Object.entries(state.scores);
+          const maxScore = Math.max(...entries.map(([, s]) => s));
+          const winners = entries.filter(([, s]) => s === maxScore).map(([uid]) => uid);
+          const winner = winners.length === 1 ? winners[0] : "draw";
+
+          io.to(roomCode).emit("game:catch:gameover", { winner, scores: state.scores });
+          return ack({ ok: true });
+        }
+
+        // 다음 라운드: 역할 교대
+        const players = Object.keys(state.scores); // start에서 저장된 players
+        const prevDrawerIdx = players.indexOf(state.drawer);
+        const nextDrawer = players[(prevDrawerIdx + 1) % players.length];
+
+        const { default: WORDS } = await import("./catch_words.js");
+        const available = WORDS.filter((w) => !state.usedWords.includes(w));
+        const pool = available.length > 0 ? available : WORDS;
+        const word = pool[Math.floor(Math.random() * pool.length)];
+
+        state.drawer = nextDrawer;
+        state.word = word;
+        state.round = nextRound;
+        state.phase = "drawing";
+        state.hintRevealed = [];
+        state.usedWords.push(word);
+        await redis.set(`game:${roomCode}:catch`, JSON.stringify(state), "EX", 86400);
+
+        const nicknames = await getPresenceNicknames(io, roomCode);
+
+        io.to(roomCode).emit("game:catch:round_start", {
+          drawer: nextDrawer,
+          round: nextRound,
+          maxRounds: state.maxRounds,
+          scores: state.scores,
+          wordLen: [...word].length,
+          nicknames,
+        });
+
+        // 새 drawer에게만 단어 전송
+        const drawerSocket = [...(io.sockets.adapter.rooms.get(roomCode) || [])]
+          .map((sid) => io.sockets.sockets.get(sid))
+          .find((s) => s?.data?.userId === nextDrawer);
+        drawerSocket?.emit("game:catch:word", { word });
+
+        ack({ ok: true });
+      } catch (err) {
+        console.error("game:catch:next error", err);
+        ack({ ok: false });
+      }
+    });
+
+    socket.on("game:catch:reset", async (_, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      try {
+        const { roomCode, userId } = socket.data;
+        if (!roomCode) return ack({ ok: false });
+
+        await redis.del(`game:${roomCode}:catch`);
+        io.to(roomCode).emit("game:catch:reset_done");
+        ack({ ok: true });
+      } catch (err) {
+        console.error("game:catch:reset error", err);
+        ack({ ok: false });
+      }
     });
 
     socket.on("disconnect", () => {

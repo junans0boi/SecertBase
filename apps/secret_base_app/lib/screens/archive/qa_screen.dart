@@ -18,6 +18,7 @@ class _QaScreenState extends State<QaScreen> {
 
   Map<String, dynamic>? _question;
   List<Map<String, dynamic>> _answers = [];
+  Map<String, dynamic>? _status;
   bool _loading = true;
   bool _submitting = false;
   String? _error;
@@ -40,12 +41,20 @@ class _QaScreenState extends State<QaScreen> {
       _error = null;
     });
     try {
-      final res = await http.get(Uri.parse('${_auth.baseUrl}/api/qa/today'));
+      final uid = _auth.user?['UserId'] ?? _auth.user?['id'];
+      final uri = uid == null
+          ? Uri.parse('${_auth.baseUrl}/api/qa/today')
+          : Uri.parse('${_auth.baseUrl}/api/qa/today?user_id=$uid');
+      final res = await http.get(uri);
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       if (data['ok'] == true) {
         setState(() {
           _question = data['question'] as Map<String, dynamic>?;
-          _answers = (data['answers'] as List?)
+          _status = data['status'] == null
+              ? null
+              : Map<String, dynamic>.from(data['status'] as Map);
+          _answers =
+              (data['answers'] as List?)
                   ?.map((e) => Map<String, dynamic>.from(e as Map))
                   .toList() ??
               [];
@@ -87,9 +96,13 @@ class _QaScreenState extends State<QaScreen> {
   }
 
   bool get _myAnswered {
+    if (_status?['myAnswered'] == true) return true;
     final myId = _auth.user?['UserId']?.toString();
     return _answers.any((a) => a['user_id']?.toString() == myId);
   }
+
+  bool get _partnerAnswered => _status?['partnerAnswered'] == true;
+  bool get _revealAvailable => _status?['revealAvailable'] == true;
 
   @override
   Widget build(BuildContext context) {
@@ -102,7 +115,10 @@ class _QaScreenState extends State<QaScreen> {
           icon: const Icon(Icons.arrow_back_ios_new, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('❓ 오늘의 질문', style: mainBody(size: 17, color: kMainInk, weight: FontWeight.w700)),
+        title: Text(
+          '❓ 오늘의 질문',
+          style: mainBody(size: 17, color: kMainInk, weight: FontWeight.w700),
+        ),
         elevation: 0,
       ),
       body: CozyPage(
@@ -120,9 +136,18 @@ class _QaScreenState extends State<QaScreen> {
                       _questionCard(),
                       const SizedBox(height: 20),
                       if (!_myAnswered) _answerInput(),
+                      if (_myAnswered && !_revealAvailable)
+                        _waitingRevealCard(),
                       if (_answers.isNotEmpty) ...[
                         const SizedBox(height: 20),
-                        Text('답변', style: mainBody(size: 14, color: kMainSub, weight: FontWeight.w700)),
+                        Text(
+                          _revealAvailable ? '공개된 답변' : '내 답변',
+                          style: mainBody(
+                            size: 14,
+                            color: kMainSub,
+                            weight: FontWeight.w700,
+                          ),
+                        ),
                         const SizedBox(height: 10),
                         ..._answers.map(_answerCard),
                       ],
@@ -146,7 +171,10 @@ class _QaScreenState extends State<QaScreen> {
         child: Center(
           child: Padding(
             padding: const EdgeInsets.all(8),
-            child: Text('오늘의 질문이 없어요', style: mainBody(size: 15, color: kMainSub)),
+            child: Text(
+              '오늘의 질문이 없어요',
+              style: mainBody(size: 15, color: kMainSub),
+            ),
           ),
         ),
       );
@@ -157,7 +185,14 @@ class _QaScreenState extends State<QaScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('오늘의 질문', style: mainBody(size: 12, color: kMainHoney, weight: FontWeight.w700)),
+          Text(
+            '오늘의 질문',
+            style: mainBody(
+              size: 12,
+              color: kMainHoney,
+              weight: FontWeight.w700,
+            ),
+          ),
           const SizedBox(height: 12),
           Text(
             _question!['question'] ?? '',
@@ -173,7 +208,10 @@ class _QaScreenState extends State<QaScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('내 답변', style: mainBody(size: 13, color: kMainSub, weight: FontWeight.w700)),
+          Text(
+            '내 답변',
+            style: mainBody(size: 13, color: kMainSub, weight: FontWeight.w700),
+          ),
           const SizedBox(height: 10),
           TextField(
             controller: _answerCtrl,
@@ -200,11 +238,43 @@ class _QaScreenState extends State<QaScreen> {
               style: FilledButton.styleFrom(
                 backgroundColor: kMainHoney,
                 foregroundColor: kMainInk,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
               ),
               child: _submitting
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                  : Text('답변 제출', style: mainBody(size: 15, color: kMainInk, weight: FontWeight.w700)),
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(
+                      '답변 제출',
+                      style: mainBody(
+                        size: 15,
+                        color: kMainInk,
+                        weight: FontWeight.w700,
+                      ),
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _waitingRevealCard() {
+    return MainCard(
+      color: kMainSkySoft,
+      borderColor: kMainSky.withAlpha(100),
+      child: Row(
+        children: [
+          const Icon(Icons.lock_clock_outlined, color: kMainSky, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              _partnerAnswered ? '곧 답변이 열려요' : '상대가 답하면 서로의 답변이 열려요',
+              style: mainBody(size: 14, color: kMainSub, height: 1.4),
             ),
           ),
         ],
@@ -215,7 +285,12 @@ class _QaScreenState extends State<QaScreen> {
   Widget _answerCard(Map<String, dynamic> answer) {
     final myId = _auth.user?['UserId']?.toString();
     final isMe = answer['user_id']?.toString() == myId;
-    final userName = isMe ? (_auth.user?['UserName'] ?? '나') : (answer['UserName'] ?? '상대방');
+    final userName = isMe
+        ? (_auth.user?['Nickname'] ??
+              _auth.user?['nickname'] ??
+              _auth.user?['UserName'] ??
+              '나')
+        : (answer['Nickname'] ?? answer['UserName'] ?? '상대방');
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -234,7 +309,10 @@ class _QaScreenState extends State<QaScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            Text(answer['answer'] ?? '', style: mainBody(size: 14, color: kMainInk, height: 1.5)),
+            Text(
+              answer['answer'] ?? '',
+              style: mainBody(size: 14, color: kMainInk, height: 1.5),
+            ),
           ],
         ),
       ),

@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import '../../core/main_design.dart';
 import '../../core/socket_service.dart';
+import '../archive/balance_screen.dart';
+import '../archive/wish_ticket_screen.dart';
+import '../archive/qa_screen.dart';
 import 'game_lobby_screen.dart';
 import 'games/dice_screen.dart';
 import 'games/roulette_screen.dart';
+import 'games/catch_screen.dart';
 import 'games/rps_screen.dart';
 import 'games/telepathy_screen.dart';
 import 'games/pirate_screen.dart';
@@ -53,6 +57,10 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     _GameInfo('yut', '🀄', '윷놀이', '턴제 보드게임', kMainSky, kMainSkySoft),
     _GameInfo('uno', '🃏', 'UNO', '카드 대결', kMainRose, kMainRoseSoft),
     _GameInfo('bomb', '💣', '폭탄 돌리기', '퀴즈 + 타이머', kMainHoney, kMainHoneySoft),
+    _GameInfo('catch', '🎨', '캐치마인드', '그림으로 맞춰봐', kMainSage, kMainSageSoft),
+    _GameInfo('balance', '⚖️', '커플 밸런스', '오늘의 취향 매칭 게임', kMainPeach, kMainPeachSoft),
+    _GameInfo('wish', '🎟️', '소원권', '미션 및 약속 쿠폰', kMainRose, kMainRoseSoft),
+    _GameInfo('qa', '❓', '10시의 질문', '매일 밤 마음 확인 문답', kMainHoney, kMainHoneySoft),
   ];
 
   Widget _screen(int i) {
@@ -71,13 +79,36 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
         return const YutScreen();
       case 6:
         return const UnoScreen();
-      default:
+      case 7:
         return const BombScreen();
+      default:
+        return const CatchScreen();
     }
   }
 
   void _open(int i) {
     final info = _games[i];
+    if (info.gameType == 'balance') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const BalanceScreen()),
+      );
+      return;
+    }
+    if (info.gameType == 'wish') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const WishTicketScreen()),
+      );
+      return;
+    }
+    if (info.gameType == 'qa') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const QaScreen()),
+      );
+      return;
+    }
     if (info.gameType == 'uno') {
       Navigator.push(
         context,
