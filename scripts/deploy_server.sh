@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_DIR="${REPO_DIR:-/home/junzzang/SecertBase}"
+REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 BRANCH="${BRANCH:-main}"
 WEB_ROOT="${WEB_ROOT:-/var/www/secretbase}"
 SOCKET_URL="${SOCKET_URL:-https://secertbase.kro.kr}"
