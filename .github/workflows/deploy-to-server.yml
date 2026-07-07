@@ -1,0 +1,29 @@
+name: Deploy to Production Server
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to Server 2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: SSH Remote Commands
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: 22
+          script: |
+            cd ~/SecertBase
+            echo "==> Pulling latest changes from main"
+            git pull origin main
+            
+            echo "==> Running deploy script"
+            # Google Client ID와 함께 배포 스크립트 실행
+            export GOOGLE_CLIENT_ID="999734545507-blrukf3rd81kse4j5bjhm93ppsoaniat.apps.googleusercontent.com"
+            ./scripts/deploy_server.sh
