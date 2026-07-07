@@ -10,6 +10,9 @@ PM2_NAME="${PM2_NAME:-secretbase-realtime}"
 
 cd "$REPO_DIR"
 
+echo "==> Restoring flutter-modified files"
+git checkout -- apps/secret_base_app/analysis_options.yaml apps/secret_base_app/pubspec.lock 2>/dev/null || true
+
 echo "==> Checking server working tree"
 if ! git diff --quiet || ! git diff --cached --quiet; then
   echo "Server working tree is dirty. Commit and push from local PC, then deploy on server."
