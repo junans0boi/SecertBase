@@ -1,144 +1,322 @@
--- Secret Base PostgreSQL Schema
--- Phase 3: 아카이빙 존 (Archiving Zone)
+-- Secret Base MariaDB/MySQL Schema
 
--- 1. 셋로그 (Setlog) - OOTD & 데이트 사진 폴라로이드 앨범
-CREATE TABLE setlog_posts (
-  id SERIAL PRIMARY KEY,
-  user_id VARCHAR(50) NOT NULL,  -- 'jun' or 'gf'
-  photo_url TEXT NOT NULL,        -- S3/로컬 스토리지 경로
-  caption TEXT,                   -- 사진 설명
-  tags TEXT[],                    -- 해시태그 배열: ['#데이트', '#한강']
-  taken_at DATE NOT NULL,         -- 사진 촬영일 (달력 그리드용)
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
+-- 1. 사용자 및 커플 정보 테이블
+CREATE TABLE IF NOT EXISTS Users (
+  UserId INT AUTO_INCREMENT PRIMARY KEY,
+  Email VARCHAR(255) UNIQUE NOT NULL,
+  PasswordHash VARCHAR(255) NOT NULL,
+  PasswordSalt VARCHAR(255) NOT NULL,
+  UserName VARCHAR(100) NOT NULL,
+  FullName VARCHAR(100) NOT NULL,
+  Nickname VARCHAR(50) NOT NULL,
+  BirthDate DATE NOT NULL,
+  UserCode VARCHAR(10) UNIQUE NOT NULL,
+  AuthProvider VARCHAR(32) NULL DEFAULT 'password',
+  GoogleSubject VARCHAR(255) NULL,
+  GooglePictureUrl TEXT NULL,
+  is_premium TINYINT(1) DEFAULT 0,
+  premium_expires_at DATETIME NULL,
+  CreatedBy VARCHAR(50) DEFAULT 'system',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY idx_users_google_subject (GoogleSubject)
 );
 
-CREATE INDEX idx_setlog_taken_at ON setlog_posts(taken_at);
-CREATE INDEX idx_setlog_tags ON setlog_posts USING GIN(tags);
+CREATE TABLE IF NOT EXISTS User_Preference (
+  UserId INT PRIMARY KEY,
+  UserIcon VARCHAR(255) NULL,
+  PartnerCode VARCHAR(10) NULL,
+  FOREIGN KEY (UserId) REFERENCES Users(UserId) ON DELETE CASCADE
+);
 
--- 2. 비밀 지도 (Secret Map) - 데이트 장소 핀
-CREATE TABLE map_pins (
-  id SERIAL PRIMARY KEY,
-  place_name VARCHAR(200) NOT NULL,   -- '을지로 술집', '한강 피크닉'
-  latitude DECIMAL(10, 8) NOT NULL,
-  longitude DECIMAL(11, 8) NOT NULL,
-  category VARCHAR(50),               -- 'restaurant', 'cafe', 'activity'
-  rating SMALLINT CHECK (rating BETWEEN 1 AND 5),
-  visit_date DATE,
-  memo TEXT,                          -- 방문 후기
-  photos TEXT[],                      -- 사진 URL 배열
+CREATE TABLE IF NOT EXISTS Couples (
+  CoupleId INT AUTO_INCREMENT PRIMARY KEY,
+  RoomCode VARCHAR(50) UNIQUE NOT NULL,
+  RoomSecret VARCHAR(100) NOT NULL,
+  User1Id INT NOT NULL,
+  User2Id INT NOT NULL,
+  StartDate DATE NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (User1Id) REFERENCES Users(UserId),
+  FOREIGN KEY (User2Id) REFERENCES Users(UserId)
+);
+
+-- 2. 셋로그 (Setlog)
+CREATE TABLE IF NOT EXISTS setlog_posts (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  couple_id INT NULL,
+  user_id INT NOT NULL,
+  user_code VARCHAR(32) NULL,
+  media_type ENUM('text', 'image', 'video') NOT NULL DEFAULT 'text',
+  media_url TEXT NULL,
+  caption TEXT NULL,
+  tags JSON NULL,
+  taken_at DATE NOT NULL,
+  captured_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_setlog_couple_taken (couple_id, taken_at),
+  INDEX idx_setlog_user_taken (user_id, taken_at)
+);
+
+-- 3. 비밀 지도 (Secret Map)
+CREATE TABLE IF NOT EXISTS map_pins (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  place_name VARCHAR(200) NOT NULL,
+  latitude DECIMAL(10,8) NOT NULL DEFAULT 0,
+  longitude DECIMAL(11,8) NOT NULL DEFAULT 0,
+  category VARCHAR(50) NULL,
+  rating SMALLINT NULL,
+  visit_date DATE NULL,
+  memo TEXT NULL,
   created_by VARCHAR(50) NOT NULL,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_map_coords ON map_pins(latitude, longitude);
-CREATE INDEX idx_map_visit_date ON map_pins(visit_date);
-
--- 3. 10시의 Q&A (Daily Questions)
-CREATE TABLE daily_questions (
-  id SERIAL PRIMARY KEY,
+-- 4. 10시의 Q&A (Daily Questions)
+CREATE TABLE IF NOT EXISTS daily_questions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
   question TEXT NOT NULL,
-  scheduled_date DATE NOT NULL UNIQUE, -- 매일 10시에 푸시할 날짜
-  created_at TIMESTAMP DEFAULT NOW()
+  scheduled_date DATE NOT NULL UNIQUE,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE question_answers (
-  id SERIAL PRIMARY KEY,
-  question_id INT REFERENCES daily_questions(id) ON DELETE CASCADE,
-  user_id VARCHAR(50) NOT NULL,
+CREATE TABLE IF NOT EXISTS question_answers (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  question_id INT NOT NULL,
+  user_id INT NOT NULL,
   answer TEXT NOT NULL,
-  answered_at TIMESTAMP DEFAULT NOW()
+  UserName VARCHAR(100) NULL,
+  answered_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_qa_question (question_id)
 );
 
-CREATE INDEX idx_answers_question ON question_answers(question_id);
-CREATE INDEX idx_answers_user ON question_answers(user_id);
-
--- 4. 목표 챌린지 (Goal Challenge)
-CREATE TABLE challenges (
-  id SERIAL PRIMARY KEY,
-  title VARCHAR(200) NOT NULL,        -- '벤치프레스 100kg', '5km 달리기'
-  description TEXT,
-  target_value DECIMAL(10, 2),        -- 목표 수치
-  current_value DECIMAL(10, 2) DEFAULT 0,
-  unit VARCHAR(20),                   -- 'kg', 'km', 'reps'
-  owner_id VARCHAR(50) NOT NULL,      -- 'jun' or 'gf'
-  status VARCHAR(20) DEFAULT 'active', -- 'active', 'completed', 'abandoned'
-  start_date DATE NOT NULL,
-  target_date DATE,
-  completed_at TIMESTAMP,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE TABLE challenge_logs (
-  id SERIAL PRIMARY KEY,
-  challenge_id INT REFERENCES challenges(id) ON DELETE CASCADE,
-  value DECIMAL(10, 2) NOT NULL,
-  note TEXT,
-  logged_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE INDEX idx_challenge_owner ON challenges(owner_id);
-CREATE INDEX idx_challenge_status ON challenges(status);
-
--- 5. 프라이빗 주크박스 (Jukebox) - 음원 메타데이터
-CREATE TABLE jukebox_tracks (
-  id SERIAL PRIMARY KEY,
+-- 5. 목표 챌린지 (Goal Challenge)
+CREATE TABLE IF NOT EXISTS challenges (
+  id INT AUTO_INCREMENT PRIMARY KEY,
   title VARCHAR(200) NOT NULL,
-  artist VARCHAR(100),                -- 'Cover by Jun', 'Original Mix'
-  file_url TEXT NOT NULL,             -- 서버 내 MP3 경로
-  duration_sec INT,                   -- 재생 시간 (초)
-  cover_art_url TEXT,                 -- 앨범 커버 이미지
+  description TEXT NULL,
+  target_value DECIMAL(10,2) NOT NULL DEFAULT 1,
+  current_value DECIMAL(10,2) NOT NULL DEFAULT 0,
+  unit VARCHAR(20) NULL,
+  owner_id INT NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'active',
+  start_date DATE NOT NULL,
+  target_date DATE NULL,
+  completed_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS challenge_logs (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  challenge_id INT NOT NULL,
+  value DECIMAL(10,2) NOT NULL,
+  note TEXT NULL,
+  logged_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_cl_challenge (challenge_id)
+);
+
+-- 6. 프라이빗 주크박스 (Jukebox)
+CREATE TABLE IF NOT EXISTS jukebox_tracks (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(200) NOT NULL,
+  artist VARCHAR(200) NULL,
+  file_url TEXT NOT NULL,
+  duration_sec INT NULL,
   uploaded_by VARCHAR(50) NOT NULL,
-  uploaded_at TIMESTAMP DEFAULT NOW()
+  uploaded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- 6. 사용자 프로필 (간단한 설정 저장)
-CREATE TABLE user_profiles (
-  user_id VARCHAR(50) PRIMARY KEY,
-  display_name VARCHAR(100),
-  avatar_url TEXT,
-  push_token TEXT,                    -- FCM/APNS 푸시 토큰
-  notification_enabled BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
+-- 7. 타임캡슐
+CREATE TABLE IF NOT EXISTS time_capsules (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(200) NOT NULL,
+  message TEXT NULL,
+  media_url VARCHAR(500) NULL,
+  created_by VARCHAR(100) NOT NULL,
+  open_date DATE NOT NULL,
+  is_opened TINYINT(1) NOT NULL DEFAULT 0,
+  opened_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- 샘플 데이터 (개발용)
+-- 8. 앨범
+CREATE TABLE IF NOT EXISTS album_folders (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  couple_id INT NULL,
+  title VARCHAR(200) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS album_photos (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  folder_id INT NOT NULL,
+  user_id INT NOT NULL,
+  user_code VARCHAR(32) NOT NULL,
+  photo_url TEXT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_album_photos_folder (folder_id)
+);
+
+-- 9. 개인 회고
+CREATE TABLE IF NOT EXISTS private_reflections (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  content TEXT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_reflections_user (user_id)
+);
+
+-- 10. 리텐션 & 기타 테이블
+CREATE TABLE IF NOT EXISTS daily_engagement_days (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  couple_id INT NOT NULL,
+  date DATE NOT NULL,
+  question_id INT NULL,
+  mission_id INT NULL,
+  streak_count_after INT NOT NULL DEFAULT 0,
+  completed_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_daily_engagement_day (couple_id, date)
+);
+
+CREATE TABLE IF NOT EXISTS daily_engagement_actions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  couple_id INT NULL,
+  user_id INT NOT NULL,
+  date DATE NOT NULL,
+  action_type VARCHAR(50) NOT NULL,
+  target_id INT NULL,
+  payload_json JSON NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_daily_actions_couple_date (couple_id, date),
+  INDEX idx_daily_actions_user_date (user_id, date)
+);
+
+CREATE TABLE IF NOT EXISTS daily_missions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(200) NOT NULL,
+  description TEXT NULL,
+  mission_type VARCHAR(50) NOT NULL DEFAULT 'confirm',
+  requirement_type VARCHAR(50) NOT NULL DEFAULT 'both_confirm',
+  active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_daily_mission_title (title)
+);
+
+CREATE TABLE IF NOT EXISTS couple_mission_instances (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  couple_id INT NOT NULL,
+  mission_id INT NOT NULL,
+  date DATE NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'active',
+  completed_by_user1 TINYINT(1) NOT NULL DEFAULT 0,
+  completed_by_user2 TINYINT(1) NOT NULL DEFAULT 0,
+  completed_at DATETIME NULL,
+  payload_json JSON NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_couple_mission_date (couple_id, date)
+);
+
+CREATE TABLE IF NOT EXISTS couple_streaks (
+  couple_id INT PRIMARY KEY,
+  current_count INT NOT NULL DEFAULT 0,
+  longest_count INT NOT NULL DEFAULT 0,
+  last_completed_date DATE NULL,
+  last_grace_used_date DATE NULL,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS couple_timeline_events (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  couple_id INT NOT NULL,
+  event_type VARCHAR(50) NOT NULL,
+  actor_user_id INT NULL,
+  target_user_id INT NULL,
+  title VARCHAR(200) NOT NULL,
+  body TEXT NULL,
+  payload_json JSON NULL,
+  event_date DATE NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_timeline_couple_date (couple_id, event_date, id)
+);
+
+CREATE TABLE IF NOT EXISTS notification_tokens (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  platform VARCHAR(32) NOT NULL,
+  token TEXT NOT NULL,
+  token_hash VARCHAR(128) NOT NULL,
+  device_label VARCHAR(100) NULL,
+  enabled TINYINT(1) NOT NULL DEFAULT 1,
+  last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_notification_token_hash (token_hash),
+  INDEX idx_notification_user (user_id)
+);
+
+CREATE TABLE IF NOT EXISTS notification_events (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  couple_id INT NULL,
+  event_type VARCHAR(50) NOT NULL,
+  title VARCHAR(200) NOT NULL,
+  body TEXT NULL,
+  payload_json JSON NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'queued',
+  sent_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_notification_events_user (user_id, created_at)
+);
+
+CREATE TABLE IF NOT EXISTS wish_tickets (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  couple_id INT NOT NULL,
+  owner_user_id INT NOT NULL,
+  issuer_user_id INT NULL,
+  source_type VARCHAR(50) NULL,
+  source_id INT NULL,
+  title VARCHAR(200) NOT NULL,
+  description TEXT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'available',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  used_at DATETIME NULL,
+  expires_at DATETIME NULL,
+  INDEX idx_wish_tickets_couple_status (couple_id, status),
+  INDEX idx_wish_tickets_owner (owner_user_id, status)
+);
+
+CREATE TABLE IF NOT EXISTS balance_questions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  option_a VARCHAR(120) NOT NULL,
+  option_b VARCHAR(120) NOT NULL,
+  active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_balance_options (option_a, option_b)
+);
+
+CREATE TABLE IF NOT EXISTS couple_balance_answers (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  couple_id INT NOT NULL,
+  user_id INT NOT NULL,
+  question_id INT NOT NULL,
+  date DATE NOT NULL,
+  choice CHAR(1) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_balance_answer (couple_id, user_id, date)
+);
+
+-- 샘플 질문 및 프로필 데이터
 INSERT INTO daily_questions (question, scheduled_date) VALUES
   ('오늘 가장 행복했던 순간은?', '2026-06-18'),
   ('내일 하고 싶은 한 가지는?', '2026-06-19'),
-  ('가장 좋아하는 음식은?', '2026-06-20');
-
-INSERT INTO user_profiles (user_id, display_name) VALUES
-  ('jun', '준'),
-  ('gf', '여친');
-
--- 뷰: 최근 셋로그 (달력 뷰용)
-CREATE VIEW recent_setlog AS
-SELECT 
-  DATE_TRUNC('month', taken_at) AS month,
-  ARRAY_AGG(
-    JSON_BUILD_OBJECT(
-      'id', id,
-      'photo_url', photo_url,
-      'caption', caption,
-      'tags', tags,
-      'taken_at', taken_at
-    ) ORDER BY taken_at DESC
-  ) AS posts
-FROM setlog_posts
-GROUP BY month
-ORDER BY month DESC;
-
--- 뷰: 진행 중인 챌린지
-CREATE VIEW active_challenges AS
-SELECT 
-  c.*,
-  (c.current_value / NULLIF(c.target_value, 0) * 100) AS progress_pct,
-  COUNT(cl.id) AS log_count
-FROM challenges c
-LEFT JOIN challenge_logs cl ON c.id = cl.challenge_id
-WHERE c.status = 'active'
-GROUP BY c.id;
+  ('가장 좋아하는 음식은?', '2026-06-20')
+ON DUPLICATE KEY UPDATE question=VALUES(question);
