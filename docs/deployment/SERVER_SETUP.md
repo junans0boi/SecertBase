@@ -6,13 +6,13 @@ This document outlines the current server configuration and deployment steps for
 - **Operating System:** Ubuntu 24.04 LTS
 - **Database:** MariaDB (Database: `secretbase`, User: `junzzang`)
 - **Cache/Store:** Redis (Local instance)
-- **Web Server:** Nginx (Reverse Proxy)
+- **Web Server:** Caddy on Server 2, nginx legacy config retained for Server 1 reference
 - **Process Manager:** PM2
 
 ## Backend (realtime-server)
-- **Path:** `/home/junzzang/SecertBase/services/realtime-server`
+- **Path:** `/home/ubuntu/SecertBase/services/realtime-server` on Server 2
 - **Environment:** Node.js
-- **Env File:** `/home/junzzang/SecertBase/services/realtime-server/.env` (not committed)
+- **Env File:** `/home/ubuntu/SecertBase/services/realtime-server/.env` on Server 2 (not committed)
 - **Google Login:** requires `GOOGLE_CLIENT_ID` in `.env` and deploy-time `GOOGLE_CLIENT_ID`
 - **Service Name:** `secretbase-realtime` (PM2)
 - **Port:** 4100
@@ -29,7 +29,7 @@ This document outlines the current server configuration and deployment steps for
 - **Technology:** Flutter Web
 - **Injected URL:** `SOCKET_URL=https://secertbase.kro.kr`
 
-## Nginx Configuration
+## Nginx Configuration (Server 1 / legacy)
 - **Config Path:** `/etc/nginx/sites-available/secretbase`
 - **Template:** `docs/deployment/nginx-secretbase-https.conf`
 - **Domain:** `secertbase.kro.kr`
@@ -40,12 +40,32 @@ This document outlines the current server configuration and deployment steps for
   - `/api/` -> Proxied to `http://localhost:4100/api/`
   - `/health` -> Proxied to `http://localhost:4100/health`
 
+## Caddy Configuration (Server 2)
+- **Config Path:** `/etc/caddy/Caddyfile`
+- **Template:** `docs/deployment/Caddyfile`
+- **Domain:** `secertbase.kro.kr`
+- **HTTPS:** Handled automatically by Caddy. It provisions and renews Let's Encrypt certificates without manual cert paths.
+- **Proxying:**
+  - `/` -> Served from `/var/www/secretbase` with SPA fallback to `index.html`
+  - `/api/*`, `/uploads/*`, `/health`, `/socket.io/*` -> Proxied to `http://127.0.0.1:4100`
+
+Setup on Server 2:
+
+```bash
+sudo cp /home/ubuntu/SecertBase/docs/deployment/Caddyfile /etc/caddy/Caddyfile
+sudo caddy fmt --overwrite /etc/caddy/Caddyfile
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+```
+
+The DNS record for `secertbase.kro.kr` must point at Server 2's public IP, and ports 80/443 must be reachable so Caddy can complete the HTTP-01 challenge.
+
 ## Deployment Commands
 
 Preferred deployment command:
 
 ```bash
-cd /home/junzzang/SecertBase
+cd /home/ubuntu/SecertBase
 ./scripts/deploy_server.sh
 ```
 
@@ -58,7 +78,7 @@ flutter build web --release --no-wasm-dry-run \
   --dart-define=GOOGLE_CLIENT_ID=<google-web-client-id>
 sudo rsync -a --delete build/web/ /var/www/secretbase/
 
-sudo cp /home/junzzang/SecertBase/docs/deployment/nginx-secretbase-https.conf /etc/nginx/sites-available/secretbase
+sudo cp /home/ubuntu/SecertBase/docs/deployment/nginx-secretbase-https.conf /etc/nginx/sites-available/secretbase
 sudo ln -sf /etc/nginx/sites-available/secretbase /etc/nginx/sites-enabled/secretbase
 sudo nginx -t
 sudo systemctl reload nginx
@@ -72,20 +92,20 @@ HTTPS is enabled with Let's Encrypt. Port 80 should redirect to `https://secertb
 ## Firewall (UFW)
 - Public access required: 80, 443
 - SSH from outside should use Tailscale where possible.
-- Current Tailscale server IP: `100.82.126.57`
+- Current Server 2 Tailscale IP: `100.97.58.29`
 
 ## SSH / Terminal Access
 
 Preferred external SSH:
 
 ```bash
-ssh -t junzzang@100.82.126.57 'cd ~/SecertBase && exec bash -l'
+ssh -i /Users/junzzang/Downloads/ssh-key-2026-07-06.key -t ubuntu@100.97.58.29 'cd ~/SecertBase && exec bash -l'
 ```
 
 DB/Redis tunnel for local development:
 
 ```bash
-ssh -L 3307:127.0.0.1:3306 -L 6380:127.0.0.1:6379 junzzang@100.82.126.57
+ssh -i /Users/junzzang/Downloads/ssh-key-2026-07-06.key -L 3307:127.0.0.1:3306 -L 6380:127.0.0.1:6379 ubuntu@100.97.58.29
 ```
 
 Public domain SSH requires router/NAT port forwarding for TCP 22. As of the latest check, public `124.58.75.93:22` was not reachable, while Tailscale SSH was reachable.
@@ -93,6 +113,6 @@ Public domain SSH requires router/NAT port forwarding for TCP 22. As of the late
 ## Current Notes
 
 - HTTPS is active with Let's Encrypt.
-- nginx serves the Flutter build from `/var/www/secretbase`.
+- Caddy serves the Flutter build from `/var/www/secretbase` on Server 2.
 - PM2 owns the backend process `secretbase-realtime`.
 - The server currently keeps local-only reference folders such as `trash/` and `uno/` untracked.

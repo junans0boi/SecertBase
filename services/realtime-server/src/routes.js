@@ -319,16 +319,18 @@ const ensureUserColumns = async () => {
 
   userColumnsReadyPromise = (async () => {
     const result = await query(
-      `SELECT COLUMN_NAME
+      `SELECT COLUMN_NAME, IS_NULLABLE
        FROM INFORMATION_SCHEMA.COLUMNS
        WHERE TABLE_SCHEMA = DATABASE()
          AND TABLE_NAME = 'Users'
          AND COLUMN_NAME IN (
            'AuthProvider', 'GoogleSubject', 'GooglePictureUrl',
-           'FullName', 'Nickname', 'BirthDate'
+           'FullName', 'Nickname', 'BirthDate',
+           'PasswordHash', 'PasswordSalt'
          )`
     );
     const existing = new Set(result.rows.map((row) => row.COLUMN_NAME));
+    const nullableByColumn = new Map(result.rows.map((row) => [row.COLUMN_NAME, row.IS_NULLABLE]));
 
     if (!existing.has('AuthProvider')) {
       await query("ALTER TABLE Users ADD COLUMN AuthProvider VARCHAR(32) NULL DEFAULT 'password'");
@@ -354,6 +356,12 @@ const ensureUserColumns = async () => {
       await query('ALTER TABLE Users ADD COLUMN BirthDate DATE NULL');
       await query("UPDATE Users SET BirthDate = '2000-01-01' WHERE BirthDate IS NULL");
       await query("ALTER TABLE Users MODIFY COLUMN BirthDate DATE NOT NULL");
+    }
+    if (existing.has('PasswordHash') && nullableByColumn.get('PasswordHash') === 'NO') {
+      await query('ALTER TABLE Users MODIFY COLUMN PasswordHash VARCHAR(255) NULL');
+    }
+    if (existing.has('PasswordSalt') && nullableByColumn.get('PasswordSalt') === 'NO') {
+      await query('ALTER TABLE Users MODIFY COLUMN PasswordSalt VARCHAR(255) NULL');
     }
   })();
 

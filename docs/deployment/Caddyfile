@@ -1,0 +1,14 @@
+secertbase.kro.kr {
+	root * /var/www/secretbase
+	encode zstd gzip
+
+	@backend path /api/* /uploads/* /health /socket.io/*
+	handle @backend {
+		reverse_proxy 127.0.0.1:4100
+	}
+
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
+}
