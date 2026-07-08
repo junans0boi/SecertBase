@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../core/main_design.dart';
 
 class HeartOverlay extends StatefulWidget {
   final VoidCallback onComplete;
@@ -92,7 +93,7 @@ class _HeartOverlayState extends State<HeartOverlay> with TickerProviderStateMix
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text('💓', style: TextStyle(fontSize: 72)),
+                      const Icon(Icons.favorite_rounded, size: 64, color: kMainRose),
                       const SizedBox(height: 10),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -101,11 +102,11 @@ class _HeartOverlayState extends State<HeartOverlay> with TickerProviderStateMix
                           borderRadius: BorderRadius.circular(30),
                         ),
                         child: const Text(
-                          '하트를 받았어요!',
+                          '하트를 받았어요',
                           style: TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w700,
-                            color: Color(0xFFFF7B9C),
+                            color: kMainRose,
                           ),
                         ),
                       ),
@@ -138,14 +139,14 @@ class _HeartConfig {
         color = _heartColors[i % _heartColors.length];
 
   static const _heartColors = [
-    Color(0xFFFF7B9C),
-    Color(0xFFFF9B9B),
-    Color(0xFFFFB3C6),
-    Color(0xFFFF7B9C),
-    Color(0xFFFFAD8A),
-    Color(0xFFFF7B9C),
-    Color(0xFFFFB3C6),
-    Color(0xFFFF9B9B),
-    Color(0xFFFF7B9C),
+    kMainRose,
+    kMainPeach,
+    Color(0xFFB06478),
+    kMainRose,
+    kMainHoney,
+    kMainRose,
+    Color(0xFFB06478),
+    kMainPeach,
+    kMainRose,
   ];
 }

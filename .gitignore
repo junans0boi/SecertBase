@@ -6,6 +6,7 @@ npm-debug.log*
 # Environment
 .env
 .env.local
+.env_dev
 
 # Flutter/Dart
 .dart_tool/

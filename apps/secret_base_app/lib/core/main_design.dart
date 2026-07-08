@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 // ─── Neutral ───────────────────────────────────────────────────────
-const kMainBg        = Color(0xFFFFFFFF);
+const kMainBg        = Color(0xFFFAF7F5);
 const kMainPaper     = Color(0xFFFFFFFF);
 const kMainPaperSoft = Color(0xFFF7F7FA);
 const kMainLine      = Color(0xFFEBEBF0);
@@ -11,30 +11,30 @@ const kMainSub       = Color(0xFF5A5A78);
 const kMainMuted     = Color(0xFFABABBC);
 
 // ─── Accent ────────────────────────────────────────────────────────
-const kMainRose      = Color(0xFFFF7B9C);
-const kMainRoseSoft  = Color(0xFFFFF0F5);
-const kMainSage      = Color(0xFF5EBF8A);
-const kMainSageSoft  = Color(0xFFEEFAF4);
-const kMainSky       = Color(0xFF5AAAD8);
-const kMainSkySoft   = Color(0xFFEBF5FF);
-const kMainHoney     = Color(0xFFFFC234);
-const kMainHoneySoft = Color(0xFFFFF8E6);
-const kMainPeach     = Color(0xFFFF9B71);
-const kMainPeachSoft = Color(0xFFFFF4EE);
+const kMainRose      = Color(0xFF8C3A52);
+const kMainRoseSoft  = Color(0xFFF1ECED);
+const kMainSage      = Color(0xFF5E9B79);
+const kMainSageSoft  = Color(0xFFEAEEEB);
+const kMainSky       = Color(0xFF4C7FA0);
+const kMainSkySoft   = Color(0xFFE9ECEF);
+const kMainHoney     = Color(0xFFC08A3E);
+const kMainHoneySoft = Color(0xFFF2EEE6);
+const kMainPeach     = Color(0xFFC97A5C);
+const kMainPeachSoft = Color(0xFFF1ECE9);
 
 // ─── Gradients ─────────────────────────────────────────────────────
 const kRoseGrad = LinearGradient(
-  colors: [Color(0xFFFF7B9C), Color(0xFFFF9B71)],
+  colors: [Color(0xFF5C2436), Color(0xFF8C3A52)],
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
 );
 const kSkyGrad = LinearGradient(
-  colors: [Color(0xFF5AAAD8), Color(0xFF7BC8F0)],
+  colors: [Color(0xFF4C7FA0), Color(0xFF6FA0BE)],
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
 );
 const kSageGrad = LinearGradient(
-  colors: [Color(0xFF5EBF8A), Color(0xFF7CDAAB)],
+  colors: [Color(0xFF5E9B79), Color(0xFF7CB89B)],
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
 );
@@ -46,12 +46,12 @@ TextStyle mainTitle({
   FontWeight weight = FontWeight.w700,
   double letterSpacing = 0,
 }) {
-  return GoogleFonts.gaegu(
+  return GoogleFonts.notoSerifKr(
     fontSize: size,
     fontWeight: weight,
     color: color,
     letterSpacing: letterSpacing,
-    height: 1.08,
+    height: 1.2,
   );
 }
 
@@ -104,7 +104,7 @@ class MainCard extends StatelessWidget {
     this.padding = const EdgeInsets.all(18),
     this.color,
     this.borderColor,
-    this.radius = 22,
+    this.radius = 16,
     this.gradient,
   });
 
@@ -193,52 +193,38 @@ class DoodleBadge extends StatelessWidget {
 
 class CozyMascot extends StatelessWidget {
   final double size;
-  final bool blushing;
 
-  const CozyMascot({super.key, this.size = 96, this.blushing = true});
+  const CozyMascot({super.key, this.size = 96});
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      size: Size.square(size),
-      painter: _MascotPainter(blushing: blushing),
-    );
+    return CustomPaint(size: Size.square(size), painter: _MascotPainter());
   }
 }
 
+// Two interlocked rings — a quiet mark for "the two of us," not a character.
 class _MascotPainter extends CustomPainter {
-  final bool blushing;
-  const _MascotPainter({required this.blushing});
+  const _MascotPainter();
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final r = size.width * 0.32;
+    final r = size.width * 0.22;
+    final offset = r * 0.62;
 
-    final body = Paint()..color = kMainPaper;
-    final outline = Paint()
+    final ink = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2
-      ..strokeCap = StrokeCap.round
-      ..color = kMainMuted;
-    canvas.drawCircle(center, r, body);
-    canvas.drawCircle(center, r, outline);
+      ..strokeWidth = size.width * 0.028
+      ..color = kMainInk;
+    final gold = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size.width * 0.028
+      ..color = kMainHoney;
 
-    final eye = Paint()..color = kMainInk;
-    canvas.drawCircle(Offset(center.dx - r * 0.35, center.dy - r * 0.04), 1.9, eye);
-    canvas.drawCircle(Offset(center.dx + r * 0.35, center.dy - r * 0.04), 1.9, eye);
-    canvas.drawArc(
-      Rect.fromCenter(center: Offset(center.dx, center.dy + r * 0.18), width: r * 0.32, height: r * 0.2),
-      0.15, 2.84, false, outline..strokeWidth = 1.3,
-    );
-
-    if (blushing) {
-      final blush = Paint()..color = kMainRose.withAlpha(88);
-      canvas.drawOval(Rect.fromCenter(center: Offset(center.dx - r * 0.55, center.dy + r * 0.22), width: r * 0.24, height: r * 0.13), blush);
-      canvas.drawOval(Rect.fromCenter(center: Offset(center.dx + r * 0.55, center.dy + r * 0.22), width: r * 0.24, height: r * 0.13), blush);
-    }
+    canvas.drawCircle(Offset(center.dx - offset, center.dy), r, ink);
+    canvas.drawCircle(Offset(center.dx + offset, center.dy), r, gold);
   }
 
   @override
-  bool shouldRepaint(covariant _MascotPainter oldDelegate) => blushing != oldDelegate.blushing;
+  bool shouldRepaint(covariant _MascotPainter oldDelegate) => false;
 }

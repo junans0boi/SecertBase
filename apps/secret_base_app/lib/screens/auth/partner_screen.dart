@@ -43,7 +43,7 @@ class _PartnerScreenState extends State<PartnerScreen> {
   void _copyMyCode(String code) {
     Clipboard.setData(ClipboardData(text: code));
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('회원코드가 복사되었습니다. 애인에게 보내주세요!')),
+      const SnackBar(content: Text('회원코드가 복사되었습니다. 상대방에게 전달해 주세요.')),
     );
   }
 
@@ -74,16 +74,7 @@ class _PartnerScreenState extends State<PartnerScreen> {
                     const SizedBox(height: 32),
                     _myCodeCard(myCode),
                     const SizedBox(height: 24),
-                    const Row(
-                      children: [
-                        Expanded(child: Divider(color: kMainLine)),
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16),
-                          child: Icon(Icons.favorite, color: kMainRose, size: 20),
-                        ),
-                        Expanded(child: Divider(color: kMainLine)),
-                      ],
-                    ),
+                    const Divider(color: kMainLine),
                     const SizedBox(height: 24),
                     _partnerForm(),
                     const SizedBox(height: 40),
@@ -168,7 +159,7 @@ class _PartnerScreenState extends State<PartnerScreen> {
               ),
               child: _loading
                   ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                  : Text('연결 시작!', style: mainBody(size: 16, color: Colors.white, weight: FontWeight.w700)),
+                  : Text('연결하기', style: mainBody(size: 16, color: Colors.white, weight: FontWeight.w700)),
             ),
           ),
         ],

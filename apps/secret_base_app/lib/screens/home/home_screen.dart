@@ -23,7 +23,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Map<String, dynamic>? _today;
 
   bool _heartCooldown = false;
-  late final AnimationController _pulseCtrl;
   late final AnimationController _heartPressCtrl;
 
   @override
@@ -31,11 +30,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     super.initState();
     _socket.addListener(_rebuild);
     _load();
-
-    _pulseCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1400),
-    )..repeat(reverse: true);
 
     _heartPressCtrl = AnimationController(
       vsync: this,
@@ -46,7 +40,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   @override
   void dispose() {
     _socket.removeListener(_rebuild);
-    _pulseCtrl.dispose();
     _heartPressCtrl.dispose();
     super.dispose();
   }
@@ -175,8 +168,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           const SizedBox(height: 14),
           if (dDay != null) ...[
             Text(
-              '❤️ ${dDay}일째',
-              style: GoogleFontsGaegu(
+              '${dDay}일째',
+              style: _dDayNumberStyle(
                 size: 44,
                 color: Colors.white,
                 weight: FontWeight.w700,
@@ -196,7 +189,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ],
           ] else ...[
             Text(
-              '✨ 기념일을 설정해보세요',
+              '기념일을 설정해보세요',
               style: mainBody(
                 size: 16,
                 color: Colors.white,
@@ -215,75 +208,51 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _heartSection() {
-    final pulseAnim = Tween<double>(
-      begin: 0.96,
-      end: 1.04,
-    ).animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
     final pressAnim = Tween<double>(
       begin: 1.0,
-      end: 1.25,
+      end: 1.04,
     ).animate(CurvedAnimation(parent: _heartPressCtrl, curve: Curves.easeOut));
 
-    return Column(
-      children: [
-        AnimatedBuilder(
-          animation: Listenable.merge([_pulseCtrl, _heartPressCtrl]),
-          builder: (_, __) {
-            final scale = _heartCooldown
-                ? 0.95
-                : pulseAnim.value * pressAnim.value;
-            return Transform.scale(
-              scale: scale,
-              child: GestureDetector(
-                onTap: _sendHeart,
-                child: Container(
-                  width: 130,
-                  height: 130,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: _heartCooldown
-                        ? const LinearGradient(
-                            colors: [Color(0xFFDDDDDD), Color(0xFFCCCCCC)],
-                          )
-                        : kRoseGrad,
-                    boxShadow: _heartCooldown
-                        ? []
-                        : [
-                            BoxShadow(
-                              color: kMainRose.withAlpha(80),
-                              blurRadius: 30,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
+    return AnimatedBuilder(
+      animation: _heartPressCtrl,
+      builder: (_, __) {
+        return Transform.scale(
+          scale: _heartCooldown ? 1.0 : pressAnim.value,
+          child: GestureDetector(
+            onTap: _sendHeart,
+            child: MainCard(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+              color: _heartCooldown ? kMainPaperSoft : kMainRoseSoft,
+              borderColor: _heartCooldown ? kMainLine : kMainRose.withAlpha(70),
+              child: Row(
+                children: [
+                  Icon(
+                    _heartCooldown ? Icons.favorite_border : Icons.favorite,
+                    color: _heartCooldown ? kMainMuted : kMainRose,
+                    size: 20,
                   ),
-                  child: const Icon(
-                    Icons.favorite_rounded,
-                    color: Colors.white,
-                    size: 60,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _heartCooldown ? '상대방에게 전달됐어요' : '지금 이 순간을 전해요',
+                      style: mainBody(
+                        size: 14,
+                        color: kMainInk,
+                        weight: FontWeight.w600,
+                      ),
+                    ),
                   ),
-                ),
+                  if (!_socket.isConnected)
+                    Text(
+                      '연결 필요',
+                      style: mainBody(size: 11, color: kMainMuted),
+                    ),
+                ],
               ),
-            );
-          },
-        ),
-        const SizedBox(height: 10),
-        Text(
-          _heartCooldown ? '상대방에게 전달됐어요 💕' : '지금 이 순간을 전해요',
-          style: mainBody(
-            size: 13,
-            color: _heartCooldown ? kMainSage : kMainSub,
-            weight: FontWeight.w600,
-          ),
-        ),
-        if (!_socket.isConnected)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              '소켓 연결 필요',
-              style: mainBody(size: 11, color: kMainMuted),
             ),
           ),
-      ],
+        );
+      },
     );
   }
 
@@ -292,7 +261,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       children: [
         Expanded(
           child: _QuickCard(
-            emoji: '🎲',
+            icon: Icons.casino_outlined,
             label: '데이트 룰렛',
             color: kMainSky,
             bgColor: kMainSkySoft,
@@ -305,7 +274,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         const SizedBox(width: 12),
         Expanded(
           child: _QuickCard(
-            emoji: '🕯️',
+            icon: Icons.inventory_2_outlined,
             label: '타임캡슐',
             color: kMainHoney,
             bgColor: kMainHoneySoft,
@@ -535,7 +504,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  isOnline ? '지금 비밀기지에 있어요 🌿' : '자리를 비웠어요',
+                  isOnline ? '지금 비밀기지에 있어요' : '자리를 비웠어요',
                   style: mainBody(
                     size: 12,
                     color: isOnline ? kMainSage : kMainMuted,
@@ -559,14 +528,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 }
 
 class _QuickCard extends StatelessWidget {
-  final String emoji;
+  final IconData icon;
   final String label;
   final Color color;
   final Color bgColor;
   final VoidCallback onTap;
 
   const _QuickCard({
-    required this.emoji,
+    required this.icon,
     required this.label,
     required this.color,
     required this.bgColor,
@@ -582,7 +551,7 @@ class _QuickCard extends StatelessWidget {
         color: bgColor,
         child: Row(
           children: [
-            Text(emoji, style: const TextStyle(fontSize: 22)),
+            Icon(icon, color: color, size: 22),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -601,8 +570,7 @@ class _QuickCard extends StatelessWidget {
   }
 }
 
-// Helper so home_screen doesn't need a separate import
-TextStyle GoogleFontsGaegu({
+TextStyle _dDayNumberStyle({
   double size = 28,
   Color color = kMainInk,
   FontWeight weight = FontWeight.w700,

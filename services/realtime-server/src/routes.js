@@ -562,9 +562,7 @@ router.post('/auth/google', async (req, res) => {
              AuthProvider = CASE
                WHEN AuthProvider IS NULL OR AuthProvider = 'password' THEN AuthProvider
                ELSE 'google'
-             END,
-             ModifiedBy = 'google',
-             ModifiedDateTime = NOW()
+             END
          WHERE UserId = ?`,
         [googleSubject, picture, userId]
       );
@@ -631,8 +629,7 @@ router.patch('/user/profile/:userId', async (req, res) => {
 
     const result = await query(
       `UPDATE Users
-       SET FullName = ?, Nickname = ?, BirthDate = ?, UserName = ?,
-           ModifiedBy = 'profile', ModifiedDateTime = NOW()
+       SET FullName = ?, Nickname = ?, BirthDate = ?, UserName = ?
        WHERE UserId = ?`,
       [fullName, nickname, birthDate, nickname, userId]
     );
@@ -682,8 +679,7 @@ router.patch('/user/password/:userId', async (req, res) => {
     const hash = await bcrypt.hash(newPassword, salt);
     await query(
       `UPDATE Users
-       SET PasswordHash = ?, PasswordSalt = ?,
-           ModifiedBy = 'password', ModifiedDateTime = NOW()
+       SET PasswordHash = ?, PasswordSalt = ?
        WHERE UserId = ?`,
       [hash, salt, userId]
     );

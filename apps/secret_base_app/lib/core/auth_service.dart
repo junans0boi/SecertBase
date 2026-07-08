@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
@@ -51,7 +52,10 @@ class AuthService extends ChangeNotifier {
     }
 
     _googleInitFuture ??= GoogleSignIn.instance
-        .initialize(clientId: googleClientId, serverClientId: googleClientId)
+        .initialize(
+          clientId: googleClientId,
+          serverClientId: kIsWeb ? null : googleClientId,
+        )
         .then((_) {
           _googleSub ??= GoogleSignIn.instance.authenticationEvents.listen(
             (event) {

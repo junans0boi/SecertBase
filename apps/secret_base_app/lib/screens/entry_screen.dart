@@ -110,68 +110,16 @@ class _EntryScreenState extends State<EntryScreen>
         ),
         const SizedBox(height: 6),
         Text('두 분만의 비밀기지', style: mainTitle(size: 34)),
-        const SizedBox(height: 22),
-        SizedBox(
-          height: 152,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Positioned(left: 40, top: 22, child: _softHeart(kMainSky, 18)),
-              Positioned(right: 48, top: 18, child: _softHeart(kMainRose, 14)),
-              Positioned(
-                left: 82,
-                bottom: 20,
-                child: _softHeart(kMainRose, 10),
-              ),
-              Positioned(
-                right: 74,
-                bottom: 30,
-                child: _softHeart(kMainSage, 12),
-              ),
-              const CozyMascot(size: 124),
-              Positioned(
-                left: 34,
-                bottom: 12,
-                child: Transform.rotate(
-                  angle: -0.12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: kMainHoneySoft,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: kMainHoney),
-                    ),
-                    child: Text(
-                      'Secret',
-                      style: mainBody(
-                        size: 11,
-                        color: kMainSub,
-                        weight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text('짜잔!', style: mainTitle(size: 22)),
-        const SizedBox(height: 6),
+        const SizedBox(height: 28),
+        const CozyMascot(size: 100),
+        const SizedBox(height: 20),
         Text(
-          '안녕하세요. 오늘의 비밀기지로 들어가 볼까요?',
+          '오늘의 비밀기지로 들어가 볼까요?',
           style: mainBody(size: 13),
           textAlign: TextAlign.center,
         ),
       ],
     );
-  }
-
-  Widget _softHeart(Color color, double size) {
-    return Icon(Icons.favorite, color: color.withAlpha(120), size: size);
   }
 
   Widget _form() {

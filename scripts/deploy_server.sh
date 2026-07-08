@@ -34,9 +34,14 @@ npm run check
 echo "==> Installing Flutter dependencies"
 cd "$REPO_DIR/apps/secret_base_app"
 flutter pub get
-flutter build web --release --no-wasm-dry-run \
-  --dart-define=SOCKET_URL="$SOCKET_URL" \
-  --dart-define=GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID"
+if [ -f .env ]; then
+  echo "==> Using apps/secret_base_app/.env for build config"
+  flutter build web --release --no-wasm-dry-run --dart-define-from-file=.env
+else
+  flutter build web --release --no-wasm-dry-run \
+    --dart-define=SOCKET_URL="$SOCKET_URL" \
+    --dart-define=GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID"
+fi
 
 echo "==> Syncing web build to $WEB_ROOT"
 rsync -a --delete build/web/ "$WEB_ROOT/"
