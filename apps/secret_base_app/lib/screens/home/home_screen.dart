@@ -117,20 +117,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           slivers: [
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                padding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
                 child: _dDayCard(),
               ),
             ),
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+              padding: const EdgeInsets.fromLTRB(18, 14, 18, 34),
               sliver: SliverList.list(
                 children: [
-                  _todayHubCard(),
-                  const SizedBox(height: 18),
                   _heartSection(),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 12),
+                  _todayHubCard(),
+                  const SizedBox(height: 12),
                   _quickRow(),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 12),
                   _partnerCard(),
                 ],
               ),
@@ -152,56 +152,69 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         '나';
 
     return MainCard(
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.fromLTRB(20, 18, 18, 18),
       gradient: kRoseGrad,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(
-            '$myName & $partnerName',
-            style: mainBody(
-              size: 14,
-              color: Colors.white.withAlpha(220),
-              weight: FontWeight.w600,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$myName & $partnerName',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: mainBody(
+                    size: 13,
+                    color: Colors.white.withAlpha(225),
+                    weight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                if (dDay != null) ...[
+                  Text(
+                    'D+$dDay',
+                    style: _dDayNumberStyle(
+                      size: 50,
+                      color: Colors.white,
+                      weight: FontWeight.w800,
+                    ),
+                  ),
+                  Text(
+                    startDate != null ? '$startDate 부터 함께' : '함께한 날들',
+                    style: mainBody(
+                      size: 13,
+                      color: Colors.white.withAlpha(210),
+                    ),
+                  ),
+                ] else ...[
+                  Text(
+                    '우리의 첫날을\n등록해보세요',
+                    style: mainTitle(size: 34, color: Colors.white),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'D-day가 홈에 바로 보여요',
+                    style: mainBody(
+                      size: 13,
+                      color: Colors.white.withAlpha(210),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
-          const SizedBox(height: 14),
-          if (dDay != null) ...[
-            Text(
-              '${dDay}일째',
-              style: _dDayNumberStyle(
-                size: 44,
-                color: Colors.white,
-                weight: FontWeight.w700,
-              ),
+          const SizedBox(width: 14),
+          Container(
+            width: 88,
+            height: 88,
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(235),
+              borderRadius: BorderRadius.circular(30),
             ),
-            const SizedBox(height: 4),
-            Text(
-              '함께한 날들',
-              style: mainBody(size: 14, color: Colors.white.withAlpha(200)),
-            ),
-            if (startDate != null) ...[
-              const SizedBox(height: 2),
-              Text(
-                '$startDate 부터',
-                style: mainBody(size: 12, color: Colors.white.withAlpha(160)),
-              ),
-            ],
-          ] else ...[
-            Text(
-              '기념일을 설정해보세요',
-              style: mainBody(
-                size: 16,
-                color: Colors.white,
-                weight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '사귄 날을 등록하면 D-Day를 알려드려요',
-              style: mainBody(size: 13, color: Colors.white.withAlpha(200)),
-            ),
-          ],
+            child: const Center(child: CozyMascot(size: 66)),
+          ),
         ],
       ),
     );
@@ -215,38 +228,66 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     return AnimatedBuilder(
       animation: _heartPressCtrl,
-      builder: (_, __) {
-        return Transform.scale(
-          scale: _heartCooldown ? 1.0 : pressAnim.value,
-          child: GestureDetector(
-            onTap: _sendHeart,
-            child: MainCard(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-              color: _heartCooldown ? kMainPaperSoft : kMainRoseSoft,
-              borderColor: _heartCooldown ? kMainLine : kMainRose.withAlpha(70),
+      builder: (context, child) {
+        return GestureDetector(
+          onTap: _sendHeart,
+          child: Transform.scale(
+            scale: _heartCooldown ? 1.0 : pressAnim.value,
+            child: Container(
+              height: 64,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                gradient: _heartCooldown ? null : kRoseGrad,
+                color: _heartCooldown ? kMainPaperSoft : null,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: _heartCooldown ? kMainLine : kMainRose.withAlpha(70),
+                ),
+                boxShadow: _heartCooldown
+                    ? []
+                    : [
+                        BoxShadow(
+                          color: kMainRose.withAlpha(42),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+              ),
               child: Row(
                 children: [
-                  Icon(
-                    _heartCooldown ? Icons.favorite_border : Icons.favorite,
-                    color: _heartCooldown ? kMainMuted : kMainRose,
-                    size: 20,
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withAlpha(_heartCooldown ? 0 : 235),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      _heartCooldown ? Icons.favorite_border : Icons.favorite,
+                      color: _heartCooldown ? kMainMuted : kMainRose,
+                      size: 22,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      _heartCooldown ? '상대방에게 전달됐어요' : '지금 이 순간을 전해요',
+                      _socket.isConnected
+                          ? (_heartCooldown ? '마음이 도착했어요' : '하트 보내기')
+                          : '연결되면 하트를 보낼 수 있어요',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: mainBody(
-                        size: 14,
-                        color: kMainInk,
-                        weight: FontWeight.w600,
+                        size: 16,
+                        color: _heartCooldown ? kMainInk : Colors.white,
+                        weight: FontWeight.w800,
                       ),
                     ),
                   ),
-                  if (!_socket.isConnected)
-                    Text(
-                      '연결 필요',
-                      style: mainBody(size: 11, color: kMainMuted),
-                    ),
+                  Icon(
+                    Icons.arrow_forward_rounded,
+                    color: _heartCooldown ? kMainMuted : Colors.white,
+                    size: 20,
+                  ),
                 ],
               ),
             ),
@@ -303,7 +344,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         : '오늘 질문 답하기';
 
     return MainCard(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
       color: completedToday ? kMainSageSoft : kMainHoneySoft,
       borderColor: (completedToday ? kMainSage : kMainHoney).withAlpha(110),
       child: Column(
@@ -323,115 +364,136 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               _miniBadge(completedToday ? '오늘 완료' : '$streakCount일 스트릭'),
             ],
           ),
-          const SizedBox(height: 10),
-          Text(primaryText, style: mainTitle(size: 24, color: kMainInk)),
           const SizedBox(height: 8),
+          Text(primaryText, style: mainTitle(size: 27, color: kMainInk)),
+          const SizedBox(height: 6),
           Text(
             question?['text'] ?? '오늘의 질문을 불러오는 중...',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: mainBody(size: 15, color: kMainInk, height: 1.5),
           ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+          const SizedBox(height: 13),
+          Row(
             children: [
-              _chip(myAnswered ? '내 답변 완료' : '내 답변 대기', myAnswered),
-              _chip(partnerAnswered ? '상대 답변 완료' : '상대 답변 대기', partnerAnswered),
-              _chip(completedToday ? '오늘 루프 완료' : '스트릭 대기', completedToday),
+              Expanded(
+                child: _statusPill(
+                  myAnswered ? '나는 완료' : '내 답변 대기',
+                  myAnswered,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _statusPill(
+                  partnerAnswered ? '상대 완료' : '상대 대기',
+                  partnerAnswered,
+                ),
+              ),
             ],
           ),
+          if (mission != null) ...[
+            const SizedBox(height: 10),
+            _missionLine(
+              '${mission['title'] ?? '오늘의 미션'}',
+              myMissionCompleted,
+              partnerMissionCompleted,
+            ),
+          ],
           const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const QaScreen()),
-              ).then((_) => _loadToday()),
-              icon: const Icon(Icons.question_answer_outlined, size: 18),
-              label: Text(myAnswered ? '답변 확인' : '질문 답하기'),
+          FilledButton.icon(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const QaScreen()),
+            ).then((_) => _loadToday()),
+            icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
+            label: Text(myAnswered ? '답변 보기' : '바로 답하기'),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(48),
+              backgroundColor: kMainInk,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+          ),
+          if (mission != null && !myMissionCompleted) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _completeMission,
+              icon: const Icon(Icons.check_rounded, size: 18),
+              label: const Text('미션 완료 표시'),
               style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(44),
                 foregroundColor: kMainInk,
                 backgroundColor: kMainPaper.withAlpha(180),
                 side: const BorderSide(color: kMainLine),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(16),
                 ),
               ),
             ),
-          ),
-          if (mission != null) ...[
-            const SizedBox(height: 14),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: kMainPaper.withAlpha(170),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: kMainLine),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '오늘의 미션',
-                    style: mainBody(
-                      size: 12,
-                      color: kMainSub,
-                      weight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '${mission['title'] ?? ''}',
-                    style: mainBody(
-                      size: 16,
-                      color: kMainInk,
-                      weight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${mission['description'] ?? ''}',
-                    style: mainBody(size: 13, color: kMainSub, height: 1.4),
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _chip(
-                        myMissionCompleted ? '내 미션 완료' : '내 미션 대기',
-                        myMissionCompleted,
-                      ),
-                      _chip(
-                        partnerMissionCompleted ? '상대 미션 완료' : '상대 미션 대기',
-                        partnerMissionCompleted,
-                      ),
-                    ],
-                  ),
-                  if (!myMissionCompleted) ...[
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: _completeMission,
-                        icon: const Icon(Icons.check_rounded, size: 18),
-                        label: const Text('내 미션 완료'),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: kMainInk,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _statusPill(String label, bool done) {
+    return Container(
+      height: 34,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: done ? kMainSageSoft : kMainPaper.withAlpha(180),
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: done ? kMainSage.withAlpha(120) : kMainLine),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: mainBody(
+          size: 12,
+          color: done ? kMainSage : kMainMuted,
+          weight: FontWeight.w800,
+          height: 1,
+        ),
+      ),
+    );
+  }
+
+  Widget _missionLine(String title, bool mineDone, bool partnerDone) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      decoration: BoxDecoration(
+        color: kMainPaper.withAlpha(175),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: kMainLine),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.flag_outlined, size: 18, color: kMainPeach),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: mainBody(
+                size: 13,
+                color: kMainInk,
+                weight: FontWeight.w800,
               ),
             ),
-          ],
+          ),
+          const SizedBox(width: 8),
+          Text(
+            mineDone && partnerDone ? '둘 다 완료' : '진행 중',
+            style: mainBody(
+              size: 12,
+              color: kMainMuted,
+              weight: FontWeight.w800,
+            ),
+          ),
         ],
       ),
     );
@@ -448,21 +510,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       child: Text(
         label,
         style: mainBody(size: 11, color: kMainInk, weight: FontWeight.w800),
-      ),
-    );
-  }
-
-  Widget _chip(String label, bool done) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: done ? kMainSageSoft : kMainPaperSoft,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: done ? kMainSage : kMainLine),
-      ),
-      child: Text(
-        label,
-        style: mainBody(size: 11, color: done ? kMainSage : kMainMuted),
       ),
     );
   }

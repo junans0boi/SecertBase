@@ -2,28 +2,30 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 // ─── Color palette ─────────────────────────────────────────────────
-const kBg        = Color(0xFFFAF7F5);   // 웜 아이보리
-const kSurface   = Color(0xFFFFFFFF);
-const kCard      = Color(0xFFFFFFFF);
-const kBorder    = Color(0xFFE6DEE1);   // 뮤트 톤 테두리
-const kPrimary   = Color(0xFF7A2E42);   // 딥 와인
-const kPrimaryL  = Color(0xFFB06478);   // 더스티 로즈
-const kAccent    = Color(0xFF8C3A52);
-const kGold      = Color(0xFFC08A3E);   // 앤틱 골드
-const kTeal      = Color(0xFF3E8E7E);
-const kText      = Color(0xFF1E1418);
-const kTextSub   = Color(0xFF5A4A54);
-const kTextMuted = Color(0xFFA8969F);
-const kSuccess   = Color(0xFF2EB872);
-const kError     = Color(0xFFE53935);
+const kBg = Color(0xFFFFFBFD);
+const kSurface = Color(0xFFFFFFFF);
+const kCard = Color(0xFFFFFFFF);
+const kBorder = Color(0xFFF3DCE6);
+const kPrimary = Color(0xFFFF6F9F);
+const kPrimaryL = Color(0xFFFFA7C3);
+const kAccent = Color(0xFFFF9670);
+const kGold = Color(0xFFFFBE32);
+const kTeal = Color(0xFF55BF8A);
+const kText = Color(0xFF1E1E2E);
+const kTextSub = Color(0xFF5A5A78);
+const kTextMuted = Color(0xFFABABBC);
+const kSuccess = Color(0xFF2EB872);
+const kError = Color(0xFFE53935);
 
 final kPrimaryGrad = const LinearGradient(
-  colors: [Color(0xFF7A2E42), Color(0xFFC08A3E)],
-  begin: Alignment.topLeft, end: Alignment.bottomRight,
+  colors: [Color(0xFFFF6F9F), Color(0xFFFF9670)],
+  begin: Alignment.topLeft,
+  end: Alignment.bottomRight,
 );
 final kWarmGrad = const LinearGradient(
-  colors: [Color(0xFF8C3A52), Color(0xFFC97A5C)],
-  begin: Alignment.topLeft, end: Alignment.bottomRight,
+  colors: [Color(0xFFFF9670), Color(0xFFFFBE32)],
+  begin: Alignment.topLeft,
+  end: Alignment.bottomRight,
 );
 
 ThemeData buildAppTheme() {
@@ -47,12 +49,14 @@ ThemeData buildAppTheme() {
       elevation: 0,
       centerTitle: true,
       titleTextStyle: GoogleFonts.notoSans(
-        color: kText, fontSize: 17, fontWeight: FontWeight.w700,
+        color: kText,
+        fontSize: 17,
+        fontWeight: FontWeight.w700,
       ),
     ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: kSurface,
-      indicatorColor: kPrimary.withAlpha(30),
+      indicatorColor: kPrimary.withAlpha(24),
       shadowColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
       iconTheme: WidgetStateProperty.resolveWith((s) {
@@ -70,7 +74,7 @@ ThemeData buildAppTheme() {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: const Color(0xFFF7F7FA),
+      fillColor: const Color(0xFFFFF5F8),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
         borderSide: const BorderSide(color: kBorder),
