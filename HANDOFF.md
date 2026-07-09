@@ -309,6 +309,88 @@ KAKAO_REVIEW_PASSWORD=<심사용 계정 비밀번호>
 - 자동 로그인 실패/계정 미설정 시에도 로그인 폼을 보여주지 않고 `비밀기지로 입장하는 중...` 화면과 재시도 버튼만 보여준다.
 - 심사 종료 후에는 반드시 `KAKAO_REVIEW_AUTO_LOGIN=false`로 되돌릴 것.
 
+### Push/Deploy 상태 (2026-07-09)
+
+현재 원격 상태:
+
+```text
+origin/main = ef258bb update app surfaces and agent docs
+이전 주요 커밋 = d2f3adf feat: add secret map place search and review login
+```
+
+`d2f3adf`에는 비밀지도, 장소 검색, Kakao 심사용 자동 로그인, Kakao 비즈 아이콘, 관련 문서/HANDOFF가 포함됐다.
+`ef258bb`에는 앱 표면 UI/agent docs 갱신이 포함됐다.
+
+주의할 로컬 미커밋 파일:
+
+```text
+.github/workflows/deploy-flutter-web.yml   # 로컬 수정분, 아직 커밋/푸시하지 않음
+.github/workflows/ci.yml                   # 새 CI workflow, 아직 커밋/푸시하지 않음
+```
+
+이 두 workflow 파일은 GitHub OAuth 토큰에 `workflow` scope가 없어서 push가 거절됐기 때문에 의도적으로 커밋에서 제외했다.
+운영 서버 배포는 GitHub Pages workflow가 아니라 `.github/workflows/deploy-to-server.yml`이 담당한다.
+
+배포 실패 로그:
+
+```text
+Deploy to Server 2
+2026/07/09 07:05:32 Error: missing server host
+```
+
+원인:
+
+- `deploy-to-server.yml`의 `appleboy/ssh-action`이 `host: ${{ secrets.SERVER_HOST }}`를 사용한다.
+- GitHub Actions repository secret `SERVER_HOST`가 비어 있어서 SSH 액션이 시작되기 전에 실패했다.
+
+필요한 GitHub Actions secrets:
+
+```text
+SERVER_HOST=100.97.58.29
+SERVER_USER=ubuntu
+SERVER_SSH_KEY=< /Users/junzzang/Downloads/ssh-key-2026-07-06.key 파일 내용 전체 >
+```
+
+`SERVER_SSH_KEY`는 파일 경로가 아니라 `-----BEGIN OPENSSH PRIVATE KEY-----`부터 `-----END OPENSSH PRIVATE KEY-----`까지 전체 내용이다.
+
+주의:
+
+- `100.97.58.29`는 Tailscale IP다.
+- GitHub hosted runner가 Tailscale 네트워크에 붙어 있지 않으면 다음 실패는 `missing server host`가 아니라 SSH timeout일 수 있다.
+- timeout이 나면 workflow에 Tailscale 연결 단계를 추가해야 한다. 이 workflow 수정은 `workflow` scope가 있는 GitHub token/권한으로 push해야 한다.
+
+GitHub Pages 관련 실패:
+
+```text
+Branch "main" is not allowed to deploy to github-pages due to environment protection rules.
+The deployment was rejected or didn't satisfy other protection rules.
+```
+
+이 실패는 운영 서버 배포와 별개다.
+`deploy-flutter-web.yml`은 GitHub Pages 배포용이고, 운영 도메인 `https://secertbase.kro.kr` 배포는 `deploy-to-server.yml` → `scripts/deploy_server.sh`가 담당한다.
+
+GitHub Pages도 쓰려면 GitHub repo settings에서:
+
+```text
+Settings -> Environments -> github-pages -> Deployment branches and tags
+```
+
+에서 `main` 배포를 허용하거나 required reviewer를 승인해야 한다.
+
+운영 서버 수동 배포 명령:
+
+```bash
+ssh -i /Users/junzzang/Downloads/ssh-key-2026-07-06.key -t ubuntu@100.97.58.29 'cd ~/SecertBase && exec bash -l'
+git pull origin main
+./scripts/deploy_server.sh
+```
+
+현재 확인:
+
+```text
+https://secertbase.kro.kr/health => {"ok":true}
+```
+
 1. Kakao Developers에서 Open Map and Local / 카카오맵 로컬 API 활성화 후 Kakao 검색 재확인.
 2. Naver Maps Geocoding 구독/권한 활성화 후 geocode fallback 재확인.
 3. `/api/places/search`를 운영 서버에 배포하고, 운영 `.env`에 API 키 4개 입력.
