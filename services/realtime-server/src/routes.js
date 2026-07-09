@@ -10,6 +10,7 @@ import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import { query, transaction } from './db.js';
 import { config } from './config.js';
+import { providerState, searchPlaces } from './place-search.js';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const archiver = require('archiver');
@@ -922,6 +923,43 @@ router.delete('/setlog/:id', async (req, res) => {
 // ============================================
 // 2. Map API (데이트 장소 핀)
 // ============================================
+
+// 장소 검색 프록시 (Kakao Local 우선, Naver Local 보강)
+router.get('/places/search', async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    const limitRaw = Number(req.query.limit ?? 10);
+    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 15) : 10;
+    const latitude = Number(req.query.lat);
+    const longitude = Number(req.query.lng);
+    const providers = providerState(config);
+
+    if (!q) {
+      return res.status(400).json({ ok: false, reason: 'missing_query' });
+    }
+
+    if (!providers.kakao.enabled && !providers.naver.enabled) {
+      return res.status(503).json({ ok: false, reason: 'place_search_not_configured', providers });
+    }
+
+    const result = await searchPlaces({
+      query: q,
+      latitude: Number.isFinite(latitude) ? latitude : undefined,
+      longitude: Number.isFinite(longitude) ? longitude : undefined,
+      limit,
+      config,
+    });
+
+    if (result.places.length === 0 && Object.keys(result.errors || {}).length > 0) {
+      return res.status(502).json({ ok: false, reason: 'place_search_failed', providers });
+    }
+
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error('[API] /places/search GET error:', err);
+    res.status(502).json({ ok: false, reason: 'place_search_failed' });
+  }
+});
 
 // 지도 핀 목록 조회
 router.get('/map', async (req, res) => {

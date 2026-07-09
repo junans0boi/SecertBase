@@ -11,6 +11,18 @@ const googleClientId = String.fromEnvironment(
   'GOOGLE_CLIENT_ID',
   defaultValue: '',
 );
+const kakaoReviewAutoLogin = bool.fromEnvironment(
+  'KAKAO_REVIEW_AUTO_LOGIN',
+  defaultValue: false,
+);
+const kakaoReviewEmail = String.fromEnvironment(
+  'KAKAO_REVIEW_EMAIL',
+  defaultValue: '',
+);
+const kakaoReviewPassword = String.fromEnvironment(
+  'KAKAO_REVIEW_PASSWORD',
+  defaultValue: '',
+);
 
 class AuthService extends ChangeNotifier {
   static final AuthService _instance = AuthService._internal();
@@ -24,6 +36,8 @@ class AuthService extends ChangeNotifier {
   bool _googleLoading = false;
   bool _googleCompleting = false;
   String? _googleError;
+  bool _reviewAutoLoginLoading = false;
+  String? _reviewAutoLoginError;
 
   String get baseUrl => serverBaseUrl;
 
@@ -32,6 +46,9 @@ class AuthService extends ChangeNotifier {
   bool get googleLoading => _googleLoading;
   String? get googleError => _googleError;
   bool get isGoogleLoginConfigured => googleClientId.isNotEmpty;
+  bool get isKakaoReviewAutoLoginEnabled => kakaoReviewAutoLogin;
+  bool get reviewAutoLoginLoading => _reviewAutoLoginLoading;
+  String? get reviewAutoLoginError => _reviewAutoLoginError;
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
@@ -41,6 +58,9 @@ class AuthService extends ChangeNotifier {
       _user = jsonDecode(userJson);
       // Refresh profile and await it to ensure we have latest room info
       await getProfile();
+    }
+    if (kakaoReviewAutoLogin) {
+      await loginForKakaoReview();
     }
     await initGoogleSignIn();
     notifyListeners();
@@ -97,7 +117,7 @@ class AuthService extends ChangeNotifier {
 
       return response.statusCode == 200;
     } catch (e) {
-      print('[Auth] Register error: $e');
+      debugPrint('[Auth] Register error: $e');
       return false;
     }
   }
@@ -127,9 +147,33 @@ class AuthService extends ChangeNotifier {
       }
       return false;
     } catch (e) {
-      print('[Auth] Login error: $e');
+      debugPrint('[Auth] Login error: $e');
       return false;
     }
+  }
+
+  Future<bool> loginForKakaoReview() async {
+    if (!kakaoReviewAutoLogin || _reviewAutoLoginLoading) {
+      return _token != null;
+    }
+
+    if (kakaoReviewEmail.isEmpty || kakaoReviewPassword.isEmpty) {
+      _reviewAutoLoginError = '심사용 계정 설정이 비어 있습니다.';
+      notifyListeners();
+      return false;
+    }
+
+    _reviewAutoLoginLoading = true;
+    _reviewAutoLoginError = null;
+    notifyListeners();
+
+    final success = await login(kakaoReviewEmail, kakaoReviewPassword);
+    _reviewAutoLoginLoading = false;
+    if (!success) {
+      _reviewAutoLoginError = '심사용 계정 자동 로그인에 실패했습니다.';
+    }
+    notifyListeners();
+    return success;
   }
 
   Future<bool> loginWithGoogle() async {
@@ -204,7 +248,7 @@ class AuthService extends ChangeNotifier {
       _googleCompleting = false;
       _googleLoading = false;
       _googleError = 'Google 로그인 중 오류가 발생했습니다.';
-      print('[Auth] Google login error: $e');
+      debugPrint('[Auth] Google login error: $e');
       notifyListeners();
       return false;
     }
@@ -250,7 +294,7 @@ class AuthService extends ChangeNotifier {
       }
       return false;
     } catch (e) {
-      print('[Auth] Set partner error: $e');
+      debugPrint('[Auth] Set partner error: $e');
       return false;
     }
   }
@@ -274,7 +318,7 @@ class AuthService extends ChangeNotifier {
       }
       return null;
     } catch (e) {
-      print('[Auth] Get profile error: $e');
+      debugPrint('[Auth] Get profile error: $e');
       return null;
     }
   }
@@ -310,7 +354,7 @@ class AuthService extends ChangeNotifier {
       }
       return false;
     } catch (e) {
-      print('[Auth] Update profile error: $e');
+      debugPrint('[Auth] Update profile error: $e');
       return false;
     }
   }
@@ -343,7 +387,7 @@ class AuthService extends ChangeNotifier {
         _ => '비밀번호 변경에 실패했습니다.',
       };
     } catch (e) {
-      print('[Auth] Update password error: $e');
+      debugPrint('[Auth] Update password error: $e');
       return '비밀번호 변경 중 오류가 발생했습니다.';
     }
   }

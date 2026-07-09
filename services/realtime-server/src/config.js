@@ -24,6 +24,11 @@ const schema = z.object({
   DATABASE_URL: z.string().url(),
   JWT_SECRET: z.string().min(32),
   GOOGLE_CLIENT_ID: z.string().optional().default(""),
+  KAKAO_REST_API_KEY: z.string().optional().default(""),
+  NAVER_SEARCH_CLIENT_ID: z.string().optional().default(""),
+  NAVER_SEARCH_CLIENT_SECRET: z.string().optional().default(""),
+  NAVER_MAPS_CLIENT_ID: z.string().optional().default(""),
+  NAVER_MAPS_CLIENT_SECRET: z.string().optional().default(""),
   ROOM_SECRET: z.string().min(4),
   ALLOWED_USERS: z
     .string()

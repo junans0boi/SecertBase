@@ -9,14 +9,33 @@ String get serverBaseUrl {
   if (kIsWeb) {
     final origin = Uri.base.origin;
     final host = Uri.base.host;
-    // localhost/127.0.0.1 은 Flutter dev 서버 — SOCKET_URL dart-define 사용
-    // 실제 도메인이면 같은 오리진에 백엔드가 있는 프로덕션 배포
+    // Local/LAN/Tailscale Flutter dev servers use SOCKET_URL.
+    // Production web uses the same origin because the web server proxies /api and /socket.io.
     if ((origin.startsWith('http://') || origin.startsWith('https://')) &&
-        host != 'localhost' &&
-        host != '127.0.0.1') {
+        !_isDevHost(host)) {
       return origin;
     }
   }
 
   return configuredServerUrl;
+}
+
+bool _isDevHost(String host) {
+  if (host == 'localhost' || host == '127.0.0.1' || host == '::1') {
+    return true;
+  }
+  if (host.startsWith('192.168.') || host.startsWith('10.')) {
+    return true;
+  }
+
+  final parts = host.split('.');
+  if (parts.length != 4) return false;
+
+  final first = int.tryParse(parts[0]);
+  final second = int.tryParse(parts[1]);
+  if (first == null || second == null) return false;
+
+  final isPrivate172 = first == 172 && second >= 16 && second <= 31;
+  final isTailscale = first == 100 && second >= 64 && second <= 127;
+  return isPrivate172 || isTailscale;
 }

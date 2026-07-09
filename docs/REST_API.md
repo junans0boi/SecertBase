@@ -461,6 +461,60 @@ Response:
 
 ## Map
 
+### GET `/places/search`
+
+Searches external place providers through the backend. Kakao Local is preferred when configured. NAVER API HUB Search Local is used for Naver Local place search when `NAVER_SEARCH_CLIENT_ID` and `NAVER_SEARCH_CLIENT_SECRET` are configured. Naver Cloud Maps keys are separate and can be used for reverse geocoding/geocoding fallback.
+
+When `lat` and `lng` are provided, the backend calculates `distanceMeters` for returned places and sorts nearby places first. Because NAVER Local does not natively support coordinate-biased local search, the backend may reverse-geocode the coordinate into region hints and merge region-augmented searches such as `강서구 철길부산집` with the original query.
+
+Query parameters:
+
+```text
+q=성수 카페
+limit=10
+lat=37.544
+lng=127.055
+```
+
+Response:
+
+```json
+{
+  "ok": true,
+  "places": [
+    {
+      "provider": "kakao",
+      "providerPlaceId": "123",
+      "name": "성수 카페",
+      "category": "카페",
+      "categoryCode": "CE7",
+      "address": "서울 성동구 성수동",
+      "roadAddress": "서울 성동구 성수이로",
+      "phone": "02-123-4567",
+      "placeUrl": "https://place.map.kakao.com/123",
+      "latitude": 37.544,
+      "longitude": 127.055,
+      "distanceMeters": 140
+    }
+  ],
+  "providers": {
+    "kakao": { "enabled": false },
+    "naver": { "enabled": true },
+    "naverMaps": { "enabled": false }
+  },
+  "regionHints": ["마곡지구도시개발지구", "가양1동", "강서구", "서울특별시"],
+  "errors": {}
+}
+```
+
+Failure reasons:
+
+```text
+missing_query
+place_search_not_configured
+place_search_failed
+```
+
 ### GET `/map`
 
 Returns all map pins ordered by visit date.

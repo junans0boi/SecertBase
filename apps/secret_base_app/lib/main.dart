@@ -6,7 +6,6 @@ import 'core/socket_service.dart';
 import 'core/auth_service.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/partner_screen.dart';
-import 'screens/entry_screen.dart';
 import 'screens/home_shell.dart';
 
 Future<void> main() async {
@@ -110,6 +109,13 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
   Widget _buildCurrentScreen() {
     // 1. Check Login
     if (_auth.token == null) {
+      if (_auth.isKakaoReviewAutoLoginEnabled) {
+        return _ReviewAutoLoginScreen(
+          loading: _auth.reviewAutoLoginLoading,
+          error: _auth.reviewAutoLoginError,
+          onRetry: _auth.loginForKakaoReview,
+        );
+      }
       return const LoginScreen(key: ValueKey('login'));
     }
 
@@ -137,7 +143,7 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
               Text('비밀기지로 입장하는 중...', style: mainTitle(size: 24)),
               const SizedBox(height: 12),
               Text(
-                'v1.0.4 - ' + _socket.status,
+                'v1.0.4 - ${_socket.status}',
                 style: mainBody(size: 14, color: kMainSub),
               ),
               if (_socket.status == '연결 실패' || _socket.status == '연결 끊김') ...[
@@ -166,6 +172,62 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
                   ),
                 ),
               ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ReviewAutoLoginScreen extends StatelessWidget {
+  final bool loading;
+  final String? error;
+  final Future<bool> Function() onRetry;
+
+  const _ReviewAutoLoginScreen({
+    required this.loading,
+    required this.error,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: kMainBg,
+      body: CozyPage(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CozyMascot(size: 116),
+              const SizedBox(height: 24),
+              Text('비밀기지로 입장하는 중...', style: mainTitle(size: 24)),
+              const SizedBox(height: 10),
+              Text(
+                error ?? '심사용 계정으로 자동 로그인하고 있어요',
+                style: mainBody(size: 14, color: kMainSub),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 28),
+              if (loading)
+                const CircularProgressIndicator(color: kMainRose)
+              else if (error != null)
+                SizedBox(
+                  width: 180,
+                  height: 46,
+                  child: FilledButton(
+                    onPressed: () => onRetry(),
+                    style: FilledButton.styleFrom(backgroundColor: kMainInk),
+                    child: Text(
+                      '다시 입장',
+                      style: mainBody(
+                        color: Colors.white,
+                        weight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

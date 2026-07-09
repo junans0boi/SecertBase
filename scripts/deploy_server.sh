@@ -6,6 +6,9 @@ BRANCH="${BRANCH:-main}"
 WEB_ROOT="${WEB_ROOT:-/var/www/secretbase}"
 SOCKET_URL="${SOCKET_URL:-https://secertbase.kro.kr}"
 GOOGLE_CLIENT_ID="${GOOGLE_CLIENT_ID:-}"
+KAKAO_REVIEW_AUTO_LOGIN="${KAKAO_REVIEW_AUTO_LOGIN:-false}"
+KAKAO_REVIEW_EMAIL="${KAKAO_REVIEW_EMAIL:-}"
+KAKAO_REVIEW_PASSWORD="${KAKAO_REVIEW_PASSWORD:-}"
 PM2_NAME="${PM2_NAME:-secretbase-realtime}"
 
 cd "$REPO_DIR"
@@ -40,7 +43,10 @@ if [ -f .env ]; then
 else
   flutter build web --release --no-wasm-dry-run \
     --dart-define=SOCKET_URL="$SOCKET_URL" \
-    --dart-define=GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID"
+    --dart-define=GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
+    --dart-define=KAKAO_REVIEW_AUTO_LOGIN="$KAKAO_REVIEW_AUTO_LOGIN" \
+    --dart-define=KAKAO_REVIEW_EMAIL="$KAKAO_REVIEW_EMAIL" \
+    --dart-define=KAKAO_REVIEW_PASSWORD="$KAKAO_REVIEW_PASSWORD"
 fi
 
 echo "==> Syncing web build to $WEB_ROOT"
