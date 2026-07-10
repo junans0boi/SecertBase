@@ -373,7 +373,7 @@ const ensureGoogleAuthColumns = ensureUserColumns;
 
 const createJwtForUser = (user) =>
   jwt.sign(
-    { userId: user.UserId, email: user.Email, userCode: user.UserCode },
+    { userId: user.UserId, userCode: user.UserCode },
     config.JWT_SECRET,
     { expiresIn: '7d' }
   );
@@ -387,8 +387,6 @@ const dateOnly = (value) => {
 const normalizeAuthUser = (user) => ({
   id: user.UserId,
   UserId: user.UserId,
-  email: user.Email,
-  Email: user.Email,
   userName: user.UserName,
   UserName: user.UserName,
   fullName: user.FullName,
@@ -524,6 +522,36 @@ router.post('/auth/login', async (req, res) => {
     });
   } catch (err) {
     console.error('[API] /auth/login error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.post('/auth/review-login', async (req, res) => {
+  try {
+    if (!config.KAKAO_REVIEW_AUTO_LOGIN || !config.KAKAO_REVIEW_EMAIL) {
+      return res.status(404).json({ ok: false, reason: 'not_found' });
+    }
+
+    await ensureUserColumns();
+
+    const result = await query('SELECT * FROM Users WHERE Email = ?', [
+      config.KAKAO_REVIEW_EMAIL,
+    ]);
+    if (result.rows.length === 0) {
+      return res.status(503).json({ ok: false, reason: 'review_account_not_ready' });
+    }
+
+    const user = result.rows[0];
+    const token = createJwtForUser(user);
+    const profile = await getProfileRowByUserId(user.UserId);
+
+    res.json({
+      ok: true,
+      token,
+      user: normalizeAuthUser(profile ?? user),
+    });
+  } catch (err) {
+    console.error('[API] /auth/review-login error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
   }
 });

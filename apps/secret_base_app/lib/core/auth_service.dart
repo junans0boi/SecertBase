@@ -15,14 +15,6 @@ const kakaoReviewAutoLogin = bool.fromEnvironment(
   'KAKAO_REVIEW_AUTO_LOGIN',
   defaultValue: false,
 );
-const kakaoReviewEmail = String.fromEnvironment(
-  'KAKAO_REVIEW_EMAIL',
-  defaultValue: '',
-);
-const kakaoReviewPassword = String.fromEnvironment(
-  'KAKAO_REVIEW_PASSWORD',
-  defaultValue: '',
-);
 
 class AuthService extends ChangeNotifier {
   static final AuthService _instance = AuthService._internal();
@@ -132,17 +124,7 @@ class AuthService extends ChangeNotifier {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        _token = data['token'];
-        _user = data['user'];
-
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('auth_token', _token!);
-        await prefs.setString('user_data', jsonEncode(_user));
-
-        // Final verification of profile to ensure all fields like UserCode are mapped correctly
-        await getProfile();
-
-        notifyListeners();
+        await _storeAuthData(data);
         return true;
       }
       return false;
@@ -157,23 +139,32 @@ class AuthService extends ChangeNotifier {
       return _token != null;
     }
 
-    if (kakaoReviewEmail.isEmpty || kakaoReviewPassword.isEmpty) {
-      _reviewAutoLoginError = '심사용 계정 설정이 비어 있습니다.';
-      notifyListeners();
-      return false;
-    }
-
     _reviewAutoLoginLoading = true;
     _reviewAutoLoginError = null;
     notifyListeners();
 
-    final success = await login(kakaoReviewEmail, kakaoReviewPassword);
-    _reviewAutoLoginLoading = false;
-    if (!success) {
-      _reviewAutoLoginError = '심사용 계정 자동 로그인에 실패했습니다.';
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/auth/review-login'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        await _storeAuthData(data);
+        return true;
+      }
+
+      _reviewAutoLoginError = '심사용 자동 입장 준비가 필요합니다.';
+      return false;
+    } catch (e) {
+      debugPrint('[Auth] Review login error: $e');
+      _reviewAutoLoginError = '심사용 자동 입장 중 오류가 발생했습니다.';
+      return false;
+    } finally {
+      _reviewAutoLoginLoading = false;
+      notifyListeners();
     }
-    notifyListeners();
-    return success;
   }
 
   Future<bool> loginWithGoogle() async {
@@ -223,19 +214,10 @@ class AuthService extends ChangeNotifier {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        _token = data['token'];
-        _user = data['user'];
-
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('auth_token', _token!);
-        await prefs.setString('user_data', jsonEncode(_user));
-
-        await getProfile();
-
+        await _storeAuthData(data);
         _googleCompleting = false;
         _googleLoading = false;
         _googleError = null;
-        notifyListeners();
         return true;
       }
 
@@ -270,6 +252,18 @@ class AuthService extends ChangeNotifier {
         } catch (_) {}
       }
     }
+    notifyListeners();
+  }
+
+  Future<void> _storeAuthData(Map<String, dynamic> data) async {
+    _token = data['token'];
+    _user = data['user'];
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('auth_token', _token!);
+    await prefs.setString('user_data', jsonEncode(_user));
+
+    await getProfile();
     notifyListeners();
   }
 

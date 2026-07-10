@@ -128,10 +128,7 @@ class _LoginScreenState extends State<LoginScreen> {
           TextField(
             controller: _emailCtrl,
             keyboardType: TextInputType.emailAddress,
-            decoration: _inputDecoration(
-              'example@email.com',
-              Icons.email_outlined,
-            ),
+            decoration: _inputDecoration('이메일 입력', Icons.email_outlined),
           ),
           const SizedBox(height: 16),
           _label('비밀번호'),

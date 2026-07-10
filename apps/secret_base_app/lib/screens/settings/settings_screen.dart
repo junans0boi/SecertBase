@@ -167,14 +167,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         const SizedBox(height: 10),
         _InfoRow(
-          Icons.person_outline,
-          kMainSub,
-          '내 이메일',
-          _auth.user?['Email'] ?? '-',
-          null,
-        ),
-        const SizedBox(height: 10),
-        _InfoRow(
           Icons.qr_code_scanner_outlined,
           kMainInk,
           '내 회원코드',
@@ -911,7 +903,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required ValueChanged<int> onChanged,
   }) {
     return DropdownButtonFormField<int>(
-      value: value,
+      initialValue: value,
       isExpanded: true,
       decoration: InputDecoration(
         filled: true,

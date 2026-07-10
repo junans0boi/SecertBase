@@ -285,29 +285,50 @@ GET /api/places/search?q=트레이더스&limit=5&lat=37.5668&lng=126.8279
 
 ### Kakao 심사용 자동 로그인 모드
 
-Kakao Map/Local 심사에서 로그인 화면이 없어야 하는 경우를 위해 Flutter 빌드 플래그 기반 자동 로그인 모드를 추가했다.
+Kakao Map/Local 심사에서 로그인 화면이 없어야 하는 경우를 위해 자동 로그인 모드를 추가했다.
+초기 구현은 Flutter `dart-define`에 심사용 이메일/비밀번호를 넣는 방식이었는데, Kakao 심사에서 서비스 웹에 이메일 주소가 노출된다고 반려되어 구조를 변경했다.
+
+현재 구조:
+
+- 프론트 빌드에는 `KAKAO_REVIEW_AUTO_LOGIN=true`만 들어간다.
+- 심사용 계정 이메일은 백엔드 `services/realtime-server/.env`에만 둔다.
+- 프론트는 `/api/auth/review-login`을 호출한다.
+- 백엔드가 내부 `.env`의 `KAKAO_REVIEW_EMAIL`로 사용자를 찾아 JWT를 발급한다.
+- 클라이언트 응답/JWT payload/설정 화면에서 실제 이메일 노출을 제거했다.
 
 반영 파일:
 
 - `apps/secret_base_app/lib/core/auth_service.dart`
 - `apps/secret_base_app/lib/main.dart`
 - `apps/secret_base_app/.env.example`
+- `apps/secret_base_app/lib/screens/settings/settings_screen.dart`
+- `apps/secret_base_app/lib/screens/auth/login_screen.dart`
+- `apps/secret_base_app/lib/screens/auth/register_screen.dart`
+- `services/realtime-server/src/routes.js`
+- `services/realtime-server/src/config.js`
+- `services/realtime-server/.env.example`
 - `scripts/deploy_server.sh`
 
-빌드 환경값:
+프론트 빌드 환경값:
+
+```text
+KAKAO_REVIEW_AUTO_LOGIN=true
+```
+
+백엔드 환경값:
 
 ```text
 KAKAO_REVIEW_AUTO_LOGIN=true
 KAKAO_REVIEW_EMAIL=<심사용 계정 이메일>
-KAKAO_REVIEW_PASSWORD=<심사용 계정 비밀번호>
 ```
 
 동작:
 
 - `KAKAO_REVIEW_AUTO_LOGIN=false` 또는 미설정이면 기존 로그인/회원가입 화면이 그대로 나온다.
-- `true`이면 앱 시작 시 심사용 계정으로 자동 로그인한다.
+- 프론트가 `true`이면 앱 시작 시 `/api/auth/review-login`으로 심사용 계정 자동 입장을 시도한다.
 - 자동 로그인 실패/계정 미설정 시에도 로그인 폼을 보여주지 않고 `비밀기지로 입장하는 중...` 화면과 재시도 버튼만 보여준다.
 - 심사 종료 후에는 반드시 `KAKAO_REVIEW_AUTO_LOGIN=false`로 되돌릴 것.
+- `scripts/deploy_server.sh`는 Flutter 빌드용 `.env`에서 `SOCKET_URL`, `GOOGLE_CLIENT_ID`, `KAKAO_REVIEW_AUTO_LOGIN`만 넘기도록 필터링한다. 이메일/비밀번호류 값은 프론트 build artifact에 들어가면 안 된다.
 
 ### Push/Deploy 상태 (2026-07-09)
 

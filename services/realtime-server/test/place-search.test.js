@@ -393,5 +393,5 @@ test('searchPlaces uses Naver Maps geocode when only Maps keys are configured', 
   assert.equal(result.providers.naverMaps.enabled, true);
   assert.equal(result.places.length, 1);
   assert.equal(result.places[0].provider, 'naver_maps');
-  assert.ok(seenUrls[0].startsWith('https://naveropenapi.apigw.ntruss.com/map-geocode'));
+  assert.ok(seenUrls[0].startsWith('https://maps.apigw.ntruss.com/map-geocode'));
 });

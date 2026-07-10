@@ -7,8 +7,6 @@ WEB_ROOT="${WEB_ROOT:-/var/www/secretbase}"
 SOCKET_URL="${SOCKET_URL:-https://secertbase.kro.kr}"
 GOOGLE_CLIENT_ID="${GOOGLE_CLIENT_ID:-}"
 KAKAO_REVIEW_AUTO_LOGIN="${KAKAO_REVIEW_AUTO_LOGIN:-false}"
-KAKAO_REVIEW_EMAIL="${KAKAO_REVIEW_EMAIL:-}"
-KAKAO_REVIEW_PASSWORD="${KAKAO_REVIEW_PASSWORD:-}"
 PM2_NAME="${PM2_NAME:-secretbase-realtime}"
 
 cd "$REPO_DIR"
@@ -39,14 +37,15 @@ cd "$REPO_DIR/apps/secret_base_app"
 flutter pub get
 if [ -f .env ]; then
   echo "==> Using apps/secret_base_app/.env for build config"
-  flutter build web --release --no-wasm-dry-run --dart-define-from-file=.env
+  BUILD_ENV_FILE="$(mktemp)"
+  grep -E '^(SOCKET_URL|GOOGLE_CLIENT_ID|KAKAO_REVIEW_AUTO_LOGIN)=' .env > "$BUILD_ENV_FILE" || true
+  flutter build web --release --no-wasm-dry-run --dart-define-from-file="$BUILD_ENV_FILE"
+  rm -f "$BUILD_ENV_FILE"
 else
   flutter build web --release --no-wasm-dry-run \
     --dart-define=SOCKET_URL="$SOCKET_URL" \
     --dart-define=GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
-    --dart-define=KAKAO_REVIEW_AUTO_LOGIN="$KAKAO_REVIEW_AUTO_LOGIN" \
-    --dart-define=KAKAO_REVIEW_EMAIL="$KAKAO_REVIEW_EMAIL" \
-    --dart-define=KAKAO_REVIEW_PASSWORD="$KAKAO_REVIEW_PASSWORD"
+    --dart-define=KAKAO_REVIEW_AUTO_LOGIN="$KAKAO_REVIEW_AUTO_LOGIN"
 fi
 
 echo "==> Syncing web build to $WEB_ROOT"

@@ -1,8 +1,8 @@
 const KAKAO_SEARCH_URL = 'https://dapi.kakao.com/v2/local/search/keyword.json';
 const NAVER_SEARCH_URL = 'https://naverapihub.apigw.ntruss.com/search/v1/local';
-const NAVER_GEOCODE_URL = 'https://naveropenapi.apigw.ntruss.com/map-geocode/v2/geocode';
+const NAVER_GEOCODE_URL = 'https://maps.apigw.ntruss.com/map-geocode/v2/geocode';
 const NAVER_REVERSE_GEOCODE_URL =
-  'https://naveropenapi.apigw.ntruss.com/map-reversegeocode/v2/gc';
+  'https://maps.apigw.ntruss.com/map-reversegeocode/v2/gc';
 const NOMINATIM_REVERSE_URL = 'https://nominatim.openstreetmap.org/reverse';
 const regionHintCache = new Map();
 
