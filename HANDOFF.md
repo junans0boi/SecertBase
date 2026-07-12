@@ -1,8 +1,129 @@
-# 세션 핸드오프 노트 (2026-07-09)
+# 세션 핸드오프 노트 (2026-07-12)
 
-Claude Code 세션에서 진행한 작업 요약. Codex에서 이어서 작업하기 위한 컨텍스트 정리.
+Claude/Codex/Gemini 같은 다음 에이전트가 이어받기 위한 컨텍스트 정리.
 
-## 0. Codex 최신 업데이트 (2026-07-09, 비밀지도 1차 개발)
+## 0. Codex 최신 업데이트 (2026-07-12, Kakao 심사용 운영 도메인 분리)
+
+### 요청 배경
+
+- `https://secertbase.kro.kr`가 Kakao Developers 심사 대상 도메인이다.
+- 심사 중에는 로그인 화면이 나오면 안 된다는 요구 때문에 운영 도메인을 로그인 없는 심사용 빌드로 유지해야 한다.
+- 그 상태에서는 친구/타인과 정상 로그인/페어링 플로우를 테스트할 수 없어서 별도 테스트 도메인이 필요했다.
+
+### 완료된 서버 작업
+
+DNS:
+
+- 사용자가 `test.secertbase.kro.kr` A 레코드를 기존 운영 서버와 같은 IP로 열어둔 상태였다.
+
+서버 접속:
+
+```bash
+ssh -i /Users/junzzang/Downloads/ssh-key-2026-07-06.key -t ubuntu@100.97.58.29 'cd ~/SecertBase && exec bash -l'
+```
+
+Caddy:
+
+- `/etc/caddy/Caddyfile`에 `test.secertbase.kro.kr` 블록을 추가했다.
+- `secertbase.kro.kr`은 `/var/www/secretbase`를 서빙한다.
+- `test.secertbase.kro.kr`은 `/var/www/secretbase-test`를 서빙한다.
+- 두 도메인 모두 `/api/*`, `/uploads/*`, `/health`, `/socket.io/*`를 `127.0.0.1:4100`으로 프록시한다.
+- `sudo caddy validate --config /etc/caddy/Caddyfile` 통과 후 `sudo systemctl reload caddy` 완료.
+
+Backend env:
+
+- `services/realtime-server/.env`의 `CORS_ORIGIN`을 아래 값으로 변경했다.
+
+```text
+CORS_ORIGIN=https://secertbase.kro.kr,https://test.secertbase.kro.kr
+```
+
+- 변경 전 `.env` 백업은 서버의 `~/secretbase-env-backups/.env.backup-before-test-domain-<timestamp>` 형태로 옮겨두었다.
+- `pm2 restart secretbase-realtime --update-env` 및 `pm2 save` 완료.
+
+Tester web build:
+
+- 서버의 `apps/secret_base_app/.env`에는 Kakao 심사용으로 `KAKAO_REVIEW_AUTO_LOGIN=true`가 들어 있다.
+- 그래서 `scripts/deploy_server.sh`를 그대로 쓰지 않고 임시 dart-define 파일로 테스트 빌드를 수동 생성했다.
+- 테스트 빌드는 `KAKAO_REVIEW_AUTO_LOGIN=false`로 빌드되어 정상 로그인/페어링 플로우를 보여준다.
+
+사용한 명령:
+
+```bash
+cd ~/SecertBase
+git checkout -- apps/secret_base_app/analysis_options.yaml apps/secret_base_app/pubspec.lock 2>/dev/null || true
+cd apps/secret_base_app
+flutter pub get
+BUILD_ENV_FILE=$(mktemp)
+{
+  echo "SOCKET_URL=https://test.secertbase.kro.kr"
+  grep -E "^GOOGLE_CLIENT_ID=" .env || true
+  echo "KAKAO_REVIEW_AUTO_LOGIN=false"
+} > "$BUILD_ENV_FILE"
+flutter build web --release --no-wasm-dry-run --dart-define-from-file="$BUILD_ENV_FILE"
+rm -f "$BUILD_ENV_FILE"
+rsync -a --delete build/web/ /var/www/secretbase-test/
+```
+
+### 검증 결과
+
+```text
+https://test.secertbase.kro.kr/health => {"ok":true}
+https://secertbase.kro.kr/health => {"ok":true}
+https://test.secertbase.kro.kr/ => HTTP/2 200, server: Caddy
+```
+
+빌드 산출물 확인:
+
+```text
+/var/www/secretbase-test/main.dart.js contains https://test.secertbase.kro.kr
+/var/www/secretbase/main.dart.js does not contain https://test.secertbase.kro.kr
+```
+
+현재 역할:
+
+```text
+https://secertbase.kro.kr       Kakao Developers 심사용, 로그인 없는/자동 로그인 빌드 유지
+https://test.secertbase.kro.kr  친구/테스터용, 정상 로그인/페어링 빌드
+```
+
+Kakao Developers 설정 주의:
+
+- `test.secertbase.kro.kr`에서 Kakao SDK 또는 Kakao Maps JavaScript 키를 직접 쓰려면 Kakao Developers의 웹 도메인/JavaScript SDK 도메인에 `https://test.secertbase.kro.kr`도 추가해야 한다.
+- Kakao Local/Open Map 서비스 심사가 아직 끝나지 않았다면 테스트 도메인에서도 Kakao provider는 실패할 수 있고, NAVER/OSM fallback 중심으로 테스트해야 한다.
+
+### 발견한 운영 문제
+
+PM2 로그에서 배포와 별개인 DB 스키마 문제를 발견했다.
+
+```text
+SELECT * FROM album_folders WHERE couple_id = ? ORDER BY sort_order ASC, created_at DESC
+Unknown column 'sort_order' in 'ORDER BY'
+```
+
+의미:
+
+- 현재 백엔드 코드는 `album_folders.sort_order` 컬럼을 기대한다.
+- 운영 MariaDB의 `album_folders` 테이블에는 해당 컬럼이 없는 것으로 보인다.
+- `/api/album/folders` GET 요청이 실패한다.
+
+다음 조치:
+
+- `services/realtime-server/schema.sql` 및 관련 migration 부재 여부 확인.
+- 운영 DB에 `sort_order` 컬럼을 추가하는 migration을 만들거나, 백엔드 쿼리를 현재 스키마와 호환되게 수정한다.
+- 수정 전에는 앨범 폴더 기능을 신뢰하지 말 것.
+
+### 문서 업데이트
+
+이번 세션에서 다음 문서를 현재 서버 상태에 맞게 갱신했다.
+
+- `CONTEXT.md`
+- `docs/deployment/Caddyfile`
+- `docs/deployment/SERVER_SETUP.md`
+- `docs/deployment/LOCAL_DEV_AND_DEPLOY.md`
+- `HANDOFF.md`
+
+## 1. Codex 업데이트 (2026-07-09, 비밀지도 1차 개발)
 
 ### 비밀지도 1차 UX 구현 완료
 

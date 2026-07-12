@@ -1,6 +1,6 @@
 # Secret Base Agent Context
 
-Last updated: 2026-07-09
+Last updated: 2026-07-12
 
 This file is the first project context document for Claude, Codex, or any AI coding agent.
 Read this before planning, editing, debugging, or reviewing code in this repository.
@@ -14,10 +14,11 @@ Secret Base is a private two-person couple app. It combines:
 - realtime two-player arcade games
 - archive features for shared memories, Q&A, maps, challenges, jukebox, and capsules
 
-Production URL:
+Production and staging URLs:
 
 ```text
-https://secertbase.kro.kr
+https://secertbase.kro.kr       Kakao review build, temporarily loginless/auto-login for map review
+https://test.secertbase.kro.kr  tester build, normal login and partner pairing enabled
 ```
 
 ## Current Architecture
@@ -42,6 +43,12 @@ services/realtime-server/    Node.js Express + Socket.IO backend
 services/realtime-server/schema.sql
 docs/                        Product, API, socket, deployment docs
 scripts/deploy_server.sh     Production deploy script
+```
+
+Current Server 2 access:
+
+```bash
+ssh -i /Users/junzzang/Downloads/ssh-key-2026-07-06.key -t ubuntu@100.97.58.29 'cd ~/SecertBase && exec bash -l'
 ```
 
 ## Source Of Truth
@@ -76,9 +83,48 @@ Known stale docs:
 - Realtime game state: ephemeral Redis-backed state for active games.
 - Production DB: the MariaDB database used by the deployed service. Local tests against it mutate real data.
 
+## Current Deployment State
+
+As of 2026-07-12:
+
+- DNS for `test.secertbase.kro.kr` points at the same Server 2 IP as `secertbase.kro.kr`.
+- Caddy serves `secertbase.kro.kr` from `/var/www/secretbase`.
+- Caddy serves `test.secertbase.kro.kr` from `/var/www/secretbase-test`.
+- Both domains proxy `/api/*`, `/uploads/*`, `/health`, and `/socket.io/*` to `127.0.0.1:4100`.
+- Backend `CORS_ORIGIN` on the server must include both `https://secertbase.kro.kr` and `https://test.secertbase.kro.kr`.
+- Server `apps/secret_base_app/.env` currently has `KAKAO_REVIEW_AUTO_LOGIN=true` for the Kakao review build. Do not use the deploy script blindly for the tester build unless you override or bypass that `.env`.
+
+Tester build command used on Server 2:
+
+```bash
+cd ~/SecertBase/apps/secret_base_app
+flutter pub get
+BUILD_ENV_FILE=$(mktemp)
+{
+  echo "SOCKET_URL=https://test.secertbase.kro.kr"
+  grep -E "^GOOGLE_CLIENT_ID=" .env || true
+  echo "KAKAO_REVIEW_AUTO_LOGIN=false"
+} > "$BUILD_ENV_FILE"
+flutter build web --release --no-wasm-dry-run --dart-define-from-file="$BUILD_ENV_FILE"
+rm -f "$BUILD_ENV_FILE"
+rsync -a --delete build/web/ /var/www/secretbase-test/
+```
+
 ## Current Operational Risk
 
-The previous deployment divergence risk has been resolved:
+Kakao review and staging:
+
+- `secertbase.kro.kr` is under Kakao Developers review, so it is intentionally kept as the review-accessible build for now.
+- `test.secertbase.kro.kr` is the working tester URL with normal login. Use it for friends and external testers until Kakao review is complete.
+- Add `https://test.secertbase.kro.kr` in Kakao Developers web domain and JavaScript SDK domain settings before testing Kakao SDK calls there.
+
+Production schema issue found on 2026-07-12:
+
+- PM2 logs show `/api/album/folders` fails with `Unknown column 'sort_order' in 'ORDER BY'`.
+- The backend query expects `album_folders.sort_order`, but the production MariaDB schema appears not to have that column.
+- Fix with a schema migration or compatibility query before relying on the album folder feature.
+
+Resolved deployment divergence:
 
 - server-only commit `e792dc7` was recovered into `origin/main` as `b190e9a`
 - production server `main` and `origin/main` were aligned at `b190e9a`

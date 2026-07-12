@@ -88,12 +88,21 @@ Do not commit temporary folders such as `trash/` or raw reference asset folders 
 ## Deploy on Server
 
 ```bash
-ssh -t junzzang@100.82.126.57 'cd ~/SecertBase && exec bash -l'
-cd /home/junzzang/SecertBase
+ssh -i /Users/junzzang/Downloads/ssh-key-2026-07-06.key -t ubuntu@100.97.58.29 'cd ~/SecertBase && exec bash -l'
+cd /home/ubuntu/SecertBase
 ./scripts/deploy_server.sh
 ```
 
 The server keeps its own `services/realtime-server/.env`. Do not commit that file. If new env keys are added, update the server `.env` from `.env.example` before restarting PM2.
+
+As of 2026-07-12, the server also has `test.secertbase.kro.kr` for friend/tester access while `secertbase.kro.kr` is used for Kakao Developers review. The tester build is served from `/var/www/secretbase-test` and should be built with:
+
+```text
+SOCKET_URL=https://test.secertbase.kro.kr
+KAKAO_REVIEW_AUTO_LOGIN=false
+```
+
+The server's `apps/secret_base_app/.env` may contain `KAKAO_REVIEW_AUTO_LOGIN=true` for the Kakao review build. `scripts/deploy_server.sh` prefers that file when it exists, so a tester build currently needs a temporary dart-define file or an explicit script change before using the normal deploy script.
 
 The deploy script does this:
 
@@ -123,12 +132,14 @@ kill <pid>
 BRANCH=main WEB_ROOT=/var/www/secretbase SOCKET_URL=https://secertbase.kro.kr ./scripts/deploy_server.sh
 ```
 
+Do not rely on `SOCKET_URL` or `KAKAO_REVIEW_AUTO_LOGIN` environment overrides when `apps/secret_base_app/.env` exists, because the deploy script reads the `.env` file first.
+
 ## Production DB/Redis From Local PC
 
 Use Tailscale SSH tunneling rather than opening MariaDB/Redis publicly:
 
 ```bash
-ssh -L 3307:127.0.0.1:3306 -L 6380:127.0.0.1:6379 junzzang@100.82.126.57
+ssh -i /Users/junzzang/Downloads/ssh-key-2026-07-06.key -L 3307:127.0.0.1:3306 -L 6380:127.0.0.1:6379 ubuntu@100.97.58.29
 ```
 
 Then local `services/realtime-server/.env` can use:

@@ -25,9 +25,11 @@ This document outlines the current server configuration and deployment steps for
 - **GET `/api/user/profile/:userId`:** Fetch user profile and partner info.
 
 ## Frontend (secret_base_app)
-- **Path:** `/var/www/secretbase` (Static build from `SecertBase/apps/secret_base_app/build/web`)
+- **Production/review path:** `/var/www/secretbase` (Static build from `SecertBase/apps/secret_base_app/build/web`)
+- **Tester path:** `/var/www/secretbase-test`
 - **Technology:** Flutter Web
-- **Injected URL:** `SOCKET_URL=https://secertbase.kro.kr`
+- **Review injected URL:** `SOCKET_URL=https://secertbase.kro.kr`
+- **Tester injected URL:** `SOCKET_URL=https://test.secertbase.kro.kr`
 
 ## Nginx Configuration (Server 1 / legacy)
 - **Config Path:** `/etc/nginx/sites-available/secretbase`
@@ -43,10 +45,12 @@ This document outlines the current server configuration and deployment steps for
 ## Caddy Configuration (Server 2)
 - **Config Path:** `/etc/caddy/Caddyfile`
 - **Template:** `docs/deployment/Caddyfile`
-- **Domain:** `secertbase.kro.kr`
+- **Review domain:** `secertbase.kro.kr`
+- **Tester domain:** `test.secertbase.kro.kr`
 - **HTTPS:** Handled automatically by Caddy. It provisions and renews Let's Encrypt certificates without manual cert paths.
 - **Proxying:**
-  - `/` -> Served from `/var/www/secretbase` with SPA fallback to `index.html`
+  - `secertbase.kro.kr/` -> Served from `/var/www/secretbase` with SPA fallback to `index.html`
+  - `test.secertbase.kro.kr/` -> Served from `/var/www/secretbase-test` with SPA fallback to `index.html`
   - `/api/*`, `/uploads/*`, `/health`, `/socket.io/*` -> Proxied to `http://127.0.0.1:4100`
 
 Setup on Server 2:
@@ -58,7 +62,7 @@ sudo caddy validate --config /etc/caddy/Caddyfile
 sudo systemctl reload caddy
 ```
 
-The DNS record for `secertbase.kro.kr` must point at Server 2's public IP, and ports 80/443 must be reachable so Caddy can complete the HTTP-01 challenge.
+The DNS records for `secertbase.kro.kr` and `test.secertbase.kro.kr` must point at Server 2's public IP, and ports 80/443 must be reachable so Caddy can complete the HTTP-01 challenge.
 
 ## Deployment Commands
 
@@ -67,6 +71,30 @@ Preferred deployment command:
 ```bash
 cd /home/ubuntu/SecertBase
 ./scripts/deploy_server.sh
+```
+
+The server currently keeps `apps/secret_base_app/.env` with `KAKAO_REVIEW_AUTO_LOGIN=true` for the Kakao review build. Because `scripts/deploy_server.sh` prefers that `.env` file when it exists, do not use the normal deploy script for the tester build unless the `.env` behavior has been changed.
+
+Tester build command used on 2026-07-12:
+
+```bash
+cd /home/ubuntu/SecertBase/apps/secret_base_app
+flutter pub get
+BUILD_ENV_FILE=$(mktemp)
+{
+  echo "SOCKET_URL=https://test.secertbase.kro.kr"
+  grep -E "^GOOGLE_CLIENT_ID=" .env || true
+  echo "KAKAO_REVIEW_AUTO_LOGIN=false"
+} > "$BUILD_ENV_FILE"
+flutter build web --release --no-wasm-dry-run --dart-define-from-file="$BUILD_ENV_FILE"
+rm -f "$BUILD_ENV_FILE"
+rsync -a --delete build/web/ /var/www/secretbase-test/
+```
+
+Backend CORS must allow both deployed origins:
+
+```text
+CORS_ORIGIN=https://secertbase.kro.kr,https://test.secertbase.kro.kr
 ```
 
 Manual equivalent:
@@ -113,6 +141,8 @@ Public domain SSH requires router/NAT port forwarding for TCP 22. As of the late
 ## Current Notes
 
 - HTTPS is active with Let's Encrypt.
-- Caddy serves the Flutter build from `/var/www/secretbase` on Server 2.
+- Caddy serves the Kakao review Flutter build from `/var/www/secretbase` on Server 2.
+- Caddy serves the normal tester Flutter build from `/var/www/secretbase-test` on Server 2.
 - PM2 owns the backend process `secretbase-realtime`.
 - The server currently keeps local-only reference folders such as `trash/` and `uno/` untracked.
+- `secertbase.kro.kr` is reserved for Kakao Developers review until approval. Use `test.secertbase.kro.kr` for friend/tester access.
