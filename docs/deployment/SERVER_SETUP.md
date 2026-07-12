@@ -73,22 +73,13 @@ cd /home/ubuntu/SecertBase
 ./scripts/deploy_server.sh
 ```
 
-The server currently keeps `apps/secret_base_app/.env` with `KAKAO_REVIEW_AUTO_LOGIN=true` for the Kakao review build. Because `scripts/deploy_server.sh` prefers that `.env` file when it exists, do not use the normal deploy script for the tester build unless the `.env` behavior has been changed.
+The server currently keeps `apps/secret_base_app/.env` with `KAKAO_REVIEW_AUTO_LOGIN=true` for the Kakao review build. Because `scripts/deploy_server.sh` prefers that `.env` file when it exists, use the dedicated tester deploy script for `test.secertbase.kro.kr`.
 
-Tester build command used on 2026-07-12:
+Tester deploy command:
 
 ```bash
-cd /home/ubuntu/SecertBase/apps/secret_base_app
-flutter pub get
-BUILD_ENV_FILE=$(mktemp)
-{
-  echo "SOCKET_URL=https://test.secertbase.kro.kr"
-  grep -E "^GOOGLE_CLIENT_ID=" .env || true
-  echo "KAKAO_REVIEW_AUTO_LOGIN=false"
-} > "$BUILD_ENV_FILE"
-flutter build web --release --no-wasm-dry-run --dart-define-from-file="$BUILD_ENV_FILE"
-rm -f "$BUILD_ENV_FILE"
-rsync -a --delete build/web/ /var/www/secretbase-test/
+cd /home/ubuntu/SecertBase
+./scripts/deploy_test_server.sh
 ```
 
 Backend CORS must allow both deployed origins:
@@ -97,21 +88,17 @@ Backend CORS must allow both deployed origins:
 CORS_ORIGIN=https://secertbase.kro.kr,https://test.secertbase.kro.kr
 ```
 
-Manual equivalent:
+Production/review manual equivalent for Server 2:
 
 ```bash
-cd /home/junzzang/SecertBase/apps/secret_base_app
+cd /home/ubuntu/SecertBase/apps/secret_base_app
 flutter build web --release --no-wasm-dry-run \
   --dart-define=SOCKET_URL=https://secertbase.kro.kr \
-  --dart-define=GOOGLE_CLIENT_ID=<google-web-client-id>
-sudo rsync -a --delete build/web/ /var/www/secretbase/
+  --dart-define=GOOGLE_CLIENT_ID=<google-web-client-id> \
+  --dart-define=KAKAO_REVIEW_AUTO_LOGIN=true
+rsync -a --delete build/web/ /var/www/secretbase/
 
-sudo cp /home/ubuntu/SecertBase/docs/deployment/nginx-secretbase-https.conf /etc/nginx/sites-available/secretbase
-sudo ln -sf /etc/nginx/sites-available/secretbase /etc/nginx/sites-enabled/secretbase
-sudo nginx -t
-sudo systemctl reload nginx
-
-cd /home/junzzang/SecertBase/services/realtime-server
+cd /home/ubuntu/SecertBase/services/realtime-server
 pm2 restart secretbase-realtime --update-env
 ```
 

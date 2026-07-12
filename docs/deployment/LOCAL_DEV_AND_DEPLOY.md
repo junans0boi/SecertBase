@@ -95,14 +95,21 @@ cd /home/ubuntu/SecertBase
 
 The server keeps its own `services/realtime-server/.env`. Do not commit that file. If new env keys are added, update the server `.env` from `.env.example` before restarting PM2.
 
-As of 2026-07-12, the server also has `test.secertbase.kro.kr` for friend/tester access while `secertbase.kro.kr` is used for Kakao Developers review. The tester build is served from `/var/www/secretbase-test` and should be built with:
+As of 2026-07-12, the server also has `test.secertbase.kro.kr` for friend/tester access while `secertbase.kro.kr` is used for Kakao Developers review. The tester build is served from `/var/www/secretbase-test` and should be deployed with:
+
+```bash
+cd /home/ubuntu/SecertBase
+./scripts/deploy_test_server.sh
+```
+
+The tester script builds with:
 
 ```text
 SOCKET_URL=https://test.secertbase.kro.kr
 KAKAO_REVIEW_AUTO_LOGIN=false
 ```
 
-The server's `apps/secret_base_app/.env` may contain `KAKAO_REVIEW_AUTO_LOGIN=true` for the Kakao review build. `scripts/deploy_server.sh` prefers that file when it exists, so a tester build currently needs a temporary dart-define file or an explicit script change before using the normal deploy script.
+The server's `apps/secret_base_app/.env` may contain `KAKAO_REVIEW_AUTO_LOGIN=true` for the Kakao review build. `scripts/deploy_server.sh` prefers that file when it exists, so use `scripts/deploy_test_server.sh` for the tester domain.
 
 The deploy script does this:
 
@@ -110,8 +117,8 @@ The deploy script does this:
 - pulls `origin/main`
 - installs backend dependencies with `npm ci`
 - runs backend tests and syntax check
-- builds Flutter web with `SOCKET_URL=https://secertbase.kro.kr`
-- passes `GOOGLE_CLIENT_ID` into Flutter when the shell env var is set
+- if `apps/secret_base_app/.env` exists, builds Flutter web from `SOCKET_URL`, `GOOGLE_CLIENT_ID`, and `KAKAO_REVIEW_AUTO_LOGIN` in that file
+- otherwise, builds Flutter web from the shell `SOCKET_URL`, `GOOGLE_CLIENT_ID`, and `KAKAO_REVIEW_AUTO_LOGIN` values
 - syncs `build/web/` to `/var/www/secretbase`
 - restarts `secretbase-realtime` with PM2
 - verifies `http://localhost:4100/health`

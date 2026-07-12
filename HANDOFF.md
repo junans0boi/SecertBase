@@ -46,8 +46,16 @@ Tester web build:
 - 서버의 `apps/secret_base_app/.env`에는 Kakao 심사용으로 `KAKAO_REVIEW_AUTO_LOGIN=true`가 들어 있다.
 - 그래서 `scripts/deploy_server.sh`를 그대로 쓰지 않고 임시 dart-define 파일로 테스트 빌드를 수동 생성했다.
 - 테스트 빌드는 `KAKAO_REVIEW_AUTO_LOGIN=false`로 빌드되어 정상 로그인/페어링 플로우를 보여준다.
+- 이후 이 절차를 `scripts/deploy_test_server.sh`로 고정했다. 다음부터는 수동 명령 대신 이 스크립트를 사용한다.
 
-사용한 명령:
+다음부터 사용할 명령:
+
+```bash
+cd ~/SecertBase
+./scripts/deploy_test_server.sh
+```
+
+2026-07-12 최초 배포에 사용한 수동 명령:
 
 ```bash
 cd ~/SecertBase
@@ -72,6 +80,12 @@ https://test.secertbase.kro.kr/health => {"ok":true}
 https://secertbase.kro.kr/health => {"ok":true}
 https://test.secertbase.kro.kr/ => HTTP/2 200, server: Caddy
 ```
+
+추가 검증:
+
+- `Origin: https://test.secertbase.kro.kr` 요청에 backend CORS가 `access-control-allow-origin: https://test.secertbase.kro.kr`를 반환해야 한다.
+- 서버는 Socket.IO를 `transports: ["websocket"]`로 제한하므로 polling curl은 `Transport unknown`이 정상이다.
+- `wss://test.secertbase.kro.kr/socket.io/?EIO=4&transport=websocket` WebSocket handshake가 `0{"sid":...}` 형태의 open packet을 반환해야 한다.
 
 빌드 산출물 확인:
 
@@ -121,6 +135,7 @@ Unknown column 'sort_order' in 'ORDER BY'
 - `docs/deployment/Caddyfile`
 - `docs/deployment/SERVER_SETUP.md`
 - `docs/deployment/LOCAL_DEV_AND_DEPLOY.md`
+- `scripts/deploy_test_server.sh`
 - `HANDOFF.md`
 
 ## 1. Codex 업데이트 (2026-07-09, 비밀지도 1차 개발)

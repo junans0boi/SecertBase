@@ -94,20 +94,19 @@ As of 2026-07-12:
 - Backend `CORS_ORIGIN` on the server must include both `https://secertbase.kro.kr` and `https://test.secertbase.kro.kr`.
 - Server `apps/secret_base_app/.env` currently has `KAKAO_REVIEW_AUTO_LOGIN=true` for the Kakao review build. Do not use the deploy script blindly for the tester build unless you override or bypass that `.env`.
 
-Tester build command used on Server 2:
+Deployment matrix:
+
+```text
+Purpose       Domain                         Web root                  Socket URL                         Review auto-login
+Kakao review  https://secertbase.kro.kr      /var/www/secretbase       https://secertbase.kro.kr          true on current server .env
+Tester        https://test.secertbase.kro.kr /var/www/secretbase-test  https://test.secertbase.kro.kr     false
+```
+
+Tester deploy command on Server 2:
 
 ```bash
-cd ~/SecertBase/apps/secret_base_app
-flutter pub get
-BUILD_ENV_FILE=$(mktemp)
-{
-  echo "SOCKET_URL=https://test.secertbase.kro.kr"
-  grep -E "^GOOGLE_CLIENT_ID=" .env || true
-  echo "KAKAO_REVIEW_AUTO_LOGIN=false"
-} > "$BUILD_ENV_FILE"
-flutter build web --release --no-wasm-dry-run --dart-define-from-file="$BUILD_ENV_FILE"
-rm -f "$BUILD_ENV_FILE"
-rsync -a --delete build/web/ /var/www/secretbase-test/
+cd ~/SecertBase
+./scripts/deploy_test_server.sh
 ```
 
 ## Current Operational Risk
