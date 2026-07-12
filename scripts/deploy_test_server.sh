@@ -53,4 +53,8 @@ curl -fsS "$SOCKET_URL/health"
 echo
 curl -fsSI "$SOCKET_URL/" >/dev/null
 
+echo "==> Restoring flutter-modified files after build"
+cd "$REPO_DIR"
+git checkout -- apps/secret_base_app/analysis_options.yaml apps/secret_base_app/pubspec.lock 2>/dev/null || true
+
 echo "Tester deploy complete."
