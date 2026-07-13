@@ -16,6 +16,14 @@ const kakaoReviewAutoLogin = bool.fromEnvironment(
   defaultValue: false,
 );
 
+bool get isKakaoReviewHost {
+  if (!kIsWeb) return false;
+  return Uri.base.host.toLowerCase() == 'secertbase.kro.kr';
+}
+
+bool get shouldUseKakaoReviewAutoLogin =>
+    kakaoReviewAutoLogin && isKakaoReviewHost;
+
 class AuthService extends ChangeNotifier {
   static final AuthService _instance = AuthService._internal();
   factory AuthService() => _instance;
@@ -38,7 +46,7 @@ class AuthService extends ChangeNotifier {
   bool get googleLoading => _googleLoading;
   String? get googleError => _googleError;
   bool get isGoogleLoginConfigured => googleClientId.isNotEmpty;
-  bool get isKakaoReviewAutoLoginEnabled => kakaoReviewAutoLogin;
+  bool get isKakaoReviewAutoLoginEnabled => shouldUseKakaoReviewAutoLogin;
   bool get reviewAutoLoginLoading => _reviewAutoLoginLoading;
   String? get reviewAutoLoginError => _reviewAutoLoginError;
 
@@ -51,7 +59,7 @@ class AuthService extends ChangeNotifier {
       // Refresh profile and await it to ensure we have latest room info
       await getProfile();
     }
-    if (kakaoReviewAutoLogin) {
+    if (shouldUseKakaoReviewAutoLogin) {
       await loginForKakaoReview();
     }
     await initGoogleSignIn();
@@ -135,7 +143,7 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<bool> loginForKakaoReview() async {
-    if (!kakaoReviewAutoLogin || _reviewAutoLoginLoading) {
+    if (!shouldUseKakaoReviewAutoLogin || _reviewAutoLoginLoading) {
       return _token != null;
     }
 

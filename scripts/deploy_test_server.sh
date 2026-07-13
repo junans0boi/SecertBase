@@ -6,7 +6,6 @@ BRANCH="${BRANCH:-main}"
 WEB_ROOT="${WEB_ROOT:-/var/www/secretbase-test}"
 SOCKET_URL="${SOCKET_URL:-https://test.secertbase.kro.kr}"
 GOOGLE_CLIENT_ID="${GOOGLE_CLIENT_ID:-}"
-KAKAO_REVIEW_AUTO_LOGIN="${KAKAO_REVIEW_AUTO_LOGIN:-false}"
 
 cd "$REPO_DIR"
 
@@ -40,10 +39,16 @@ trap 'rm -f "$BUILD_ENV_FILE"' EXIT
   elif [ -f .env ]; then
     grep -E '^GOOGLE_CLIENT_ID=' .env || true
   fi
-  echo "KAKAO_REVIEW_AUTO_LOGIN=$KAKAO_REVIEW_AUTO_LOGIN"
+  echo "KAKAO_REVIEW_AUTO_LOGIN=false"
 } > "$BUILD_ENV_FILE"
 
 flutter build web --release --no-wasm-dry-run --dart-define-from-file="$BUILD_ENV_FILE"
+
+BUILD_ID="$(date +%Y%m%d%H%M%S)"
+sed -i.bak "s/flutter_bootstrap.js?v=[^']*/flutter_bootstrap.js?v=$BUILD_ID/" build/web/index.html
+rm -f build/web/index.html.bak
+sed -i.bak "s/\"main.dart.js\"/\"main.dart.js?v=$BUILD_ID\"/" build/web/flutter_bootstrap.js
+rm -f build/web/flutter_bootstrap.js.bak
 
 echo "==> Syncing tester web build to $WEB_ROOT"
 rsync -a --delete build/web/ "$WEB_ROOT/"
