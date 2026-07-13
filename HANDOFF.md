@@ -127,6 +127,37 @@ Unknown column 'sort_order' in 'ORDER BY'
 - 운영 DB에 `sort_order` 컬럼을 추가하는 migration을 만들거나, 백엔드 쿼리를 현재 스키마와 호환되게 수정한다.
 - 수정 전에는 앨범 폴더 기능을 신뢰하지 말 것.
 
+### 2026-07-13 Kakao API 확인
+
+Kakao REST Local:
+
+- 사용자가 제공한 Kakao REST API 키로 직접 `https://dapi.kakao.com/v2/local/search/keyword.json` 호출을 확인했다.
+- `성수 카페` 검색이 HTTP 200으로 성공했다.
+- Server 2 `/home/ubuntu/SecertBase/services/realtime-server/.env`에 `KAKAO_REST_API_KEY`를 설정하고 `pm2 restart secretbase-realtime --update-env`를 실행했다.
+- 이전 `.env`는 `~/secretbase-env-backups/.env.backup-before-kakao-rest-<timestamp>`에 백업했다.
+- 키 값은 문서/코드에 기록하지 말 것.
+
+배포 API 확인:
+
+```text
+https://test.secertbase.kro.kr/api/places/search?q=성수%20카페&limit=5&lat=37.544&lng=127.055
+=> ok: true, providers.kakao.enabled: true, first provider: kakao
+
+https://secertbase.kro.kr/api/places/search?q=철길부산집&limit=5&lat=37.5668&lng=126.8279
+=> ok: true, providers.kakao.enabled: true, first result: 철길부산집 마곡나루점
+```
+
+Kakao JavaScript Maps SDK:
+
+- 사용자가 제공한 JavaScript 퍼블릭 키로 SDK 스크립트 로딩을 확인했다.
+- `Referer: https://secertbase.kro.kr/`와 `Referer: https://test.secertbase.kro.kr/` 모두 HTTP 401 `domain mismatched`를 반환했다.
+- Kakao Developers 앱 설정의 플랫폼 웹 도메인/JavaScript SDK 허용 도메인에 두 도메인을 추가해야 브라우저 SDK 로딩이 가능하다.
+
+Security note:
+
+- Default Admin Key는 앱/프론트/문서/서버 테스트에 사용하지 않았다.
+- 채팅에 노출됐으므로 Kakao Developers에서 Admin Key 회전 또는 재발급을 권장한다.
+
 ### 문서 업데이트
 
 이번 세션에서 다음 문서를 현재 서버 상태에 맞게 갱신했다.
