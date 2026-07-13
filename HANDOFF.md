@@ -226,8 +226,8 @@ https://secertbase.kro.kr/api/places/search?q=철길부산집&limit=5&lat=37.566
 Kakao JavaScript Maps SDK:
 
 - 사용자가 제공한 JavaScript 퍼블릭 키로 SDK 스크립트 로딩을 확인했다.
-- `Referer: https://secertbase.kro.kr/`와 `Referer: https://test.secertbase.kro.kr/` 모두 HTTP 401 `domain mismatched`를 반환했다.
-- Kakao Developers 앱 설정의 플랫폼 웹 도메인/JavaScript SDK 허용 도메인에 두 도메인을 추가해야 브라우저 SDK 로딩이 가능하다.
+- **2026-07-13 기준 200 OK 정상 동작 확인.** Kakao Developers 앱 설정에 두 도메인이 정상 등록된 것으로 보인다.
+- `secertbase.kro.kr` 로그인 포함 전체 기능 사용 가능. 이전에 있던 401 `domain mismatched` 문제는 해소됐다.
 
 Security note:
 

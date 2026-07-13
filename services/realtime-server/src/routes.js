@@ -144,6 +144,41 @@ const ensureTables = async () => {
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_reflections_user (user_id)
   )`);
+  await query(`CREATE TABLE IF NOT EXISTS premium_subscriptions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    plan VARCHAR(20) NOT NULL DEFAULT 'monthly',
+    status VARCHAR(20) NOT NULL DEFAULT 'active',
+    amount_krw INT NULL,
+    started_at DATETIME NULL,
+    expires_at DATETIME NULL,
+    payment_key VARCHAR(200) NULL,
+    payment_method VARCHAR(50) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_premium_sub_user (user_id)
+  )`);
+
+  // album_folders 누락 컬럼 추가 (기존 테이블 대응)
+  await query(`ALTER TABLE album_folders ADD COLUMN IF NOT EXISTS description TEXT NULL`);
+  await query(`ALTER TABLE album_folders ADD COLUMN IF NOT EXISTS cover_url TEXT NULL`);
+  await query(`ALTER TABLE album_folders ADD COLUMN IF NOT EXISTS sort_order INT NOT NULL DEFAULT 0`);
+
+  // album_photos 누락 컬럼 추가
+  await query(`ALTER TABLE album_photos ADD COLUMN IF NOT EXISTS caption TEXT NULL`);
+  await query(`ALTER TABLE album_photos ADD COLUMN IF NOT EXISTS is_premium_quality TINYINT(1) NOT NULL DEFAULT 0`);
+  await query(`ALTER TABLE album_photos ADD COLUMN IF NOT EXISTS file_size_kb INT NULL`);
+
+  // private_reflections 누락 컬럼 추가
+  await query(`ALTER TABLE private_reflections ADD COLUMN IF NOT EXISTS mood_tag VARCHAR(50) NULL`);
+  await query(`ALTER TABLE private_reflections ADD COLUMN IF NOT EXISTS category VARCHAR(50) NOT NULL DEFAULT 'general'`);
+
+  // map_pins couple/user 스코핑 컬럼 추가
+  await query(`ALTER TABLE map_pins ADD COLUMN IF NOT EXISTS couple_id INT NULL`);
+  await query(`ALTER TABLE map_pins ADD COLUMN IF NOT EXISTS user_id INT NULL`);
+  await query(`ALTER TABLE map_pins ADD COLUMN IF NOT EXISTS status VARCHAR(20) NULL`);
+  await query(`ALTER TABLE map_pins ADD COLUMN IF NOT EXISTS emotion_tags JSON NULL`);
+
   _tablesReady = true;
 };
 
@@ -364,6 +399,11 @@ const ensureUserColumns = async () => {
     if (existing.has('PasswordSalt') && nullableByColumn.get('PasswordSalt') === 'NO') {
       await query('ALTER TABLE Users MODIFY COLUMN PasswordSalt VARCHAR(255) NULL');
     }
+
+    // 프리미엄 컬럼
+    await query(`ALTER TABLE Users ADD COLUMN IF NOT EXISTS is_premium TINYINT(1) NOT NULL DEFAULT 0`);
+    await query(`ALTER TABLE Users ADD COLUMN IF NOT EXISTS premium_since DATETIME NULL`);
+    await query(`ALTER TABLE Users ADD COLUMN IF NOT EXISTS premium_expires_at DATETIME NULL`);
   })();
 
   return userColumnsReadyPromise;
@@ -989,11 +1029,27 @@ router.get('/places/search', async (req, res) => {
   }
 });
 
-// 지도 핀 목록 조회
+// 지도 핀 목록 조회 (couple_id 스코핑)
 router.get('/map', async (req, res) => {
   try {
     await ensureTables();
-    const result = await query('SELECT * FROM map_pins ORDER BY visit_date DESC');
+    const userId = Number(req.query.user_id);
+    if (!userId) {
+      return res.status(400).json({ ok: false, reason: 'missing_user_id' });
+    }
+    const coupleId = await getCoupleIdForUser(userId);
+    let result;
+    if (coupleId) {
+      result = await query(
+        'SELECT * FROM map_pins WHERE couple_id = ? ORDER BY visit_date DESC, created_at DESC',
+        [coupleId]
+      );
+    } else {
+      result = await query(
+        'SELECT * FROM map_pins WHERE user_id = ? ORDER BY visit_date DESC, created_at DESC',
+        [userId]
+      );
+    }
     res.json({ ok: true, pins: result.rows });
   } catch (err) {
     console.error('[API] /map GET error:', err);
@@ -1001,20 +1057,41 @@ router.get('/map', async (req, res) => {
   }
 });
 
-// 지도 핀 생성 (lat/lng 선택사항)
+// 지도 핀 생성 (lat/lng 선택사항, couple_id 자동 설정)
 router.post('/map', async (req, res) => {
   try {
     await ensureTables();
-    const { place_name, latitude, longitude, category, rating, visit_date, memo, created_by } = req.body;
+    const { place_name, latitude, longitude, category, rating, visit_date, memo, created_by, user_id, status, emotion_tags } = req.body;
 
     if (!place_name || !created_by) {
       return res.status(400).json({ ok: false, reason: 'missing_fields' });
     }
 
+    // user_id 우선, 없으면 created_by(UserCode)로 조회
+    let uid = user_id ? Number(user_id) : null;
+    if (!uid && created_by) {
+      const userRes = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [created_by]);
+      uid = userRes.rows[0]?.UserId ?? null;
+    }
+    const coupleId = uid ? await getCoupleIdForUser(uid) : null;
+
     const result = await query(
-      `INSERT INTO map_pins (place_name, latitude, longitude, category, rating, visit_date, memo, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [place_name, latitude ?? 0, longitude ?? 0, category ?? null, rating ?? null, visit_date ?? null, memo ?? null, created_by]
+      `INSERT INTO map_pins (place_name, latitude, longitude, category, rating, visit_date, memo, created_by, user_id, couple_id, status, emotion_tags)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        place_name,
+        latitude ?? 0,
+        longitude ?? 0,
+        category ?? null,
+        rating ?? null,
+        visit_date ?? null,
+        memo ?? null,
+        created_by,
+        uid,
+        coupleId,
+        status ?? null,
+        emotion_tags ? JSON.stringify(emotion_tags) : null,
+      ]
     );
 
     res.json({ ok: true, id: result.rows.insertId });
@@ -2098,7 +2175,7 @@ router.post('/challenges', async (req, res) => {
       [title, description, target_value, unit, owner_id, start_date, target_date]
     );
 
-    res.json({ ok: true, id: result.insertId });
+    res.json({ ok: true, id: result.rows.insertId });
   } catch (err) {
     console.error('[API] /challenges POST error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
@@ -2182,7 +2259,7 @@ router.post('/jukebox', upload.single('audio'), async (req, res) => {
       [title, artist, file_url, duration_sec, uploaded_by]
     );
 
-    res.json({ ok: true, id: result.insertId });
+    res.json({ ok: true, id: result.rows.insertId });
   } catch (err) {
     console.error('[API] /jukebox POST error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
@@ -2487,12 +2564,12 @@ router.get('/album/folders/:id/download-all', async (req, res) => {
     
     // 폴더 이름 확인
     const folderRows = await query('SELECT title FROM album_folders WHERE id = ?', [Number(id)]);
-    if (folderRows.length === 0) return res.status(404).json({ ok: false, reason: 'folder_not_found' });
-    const folderTitle = folderRows[0].title || 'album';
+    if (folderRows.rows.length === 0) return res.status(404).json({ ok: false, reason: 'folder_not_found' });
+    const folderTitle = folderRows.rows[0].title || 'album';
 
     // 사진 목록 가져오기
     const photos = await query('SELECT photo_url FROM album_photos WHERE folder_id = ?', [Number(id)]);
-    if (photos.length === 0) return res.status(404).json({ ok: false, reason: 'no_photos' });
+    if (photos.rows.length === 0) return res.status(404).json({ ok: false, reason: 'no_photos' });
 
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(folderTitle)}.zip"`);
@@ -2501,8 +2578,8 @@ router.get('/album/folders/:id/download-all', async (req, res) => {
     archive.on('error', (err) => { throw err; });
     archive.pipe(res);
 
-    for (let i = 0; i < photos.length; i++) {
-      const p = photos[i];
+    for (let i = 0; i < photos.rows.length; i++) {
+      const p = photos.rows[i];
       if (p.photo_url) {
         // url is like /uploads/album/...
         // The static files are served from realtime-server directory if starting there, usually 'uploads' folder

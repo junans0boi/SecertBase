@@ -78,7 +78,11 @@ class _MapScreenState extends State<MapScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final res = await http.get(Uri.parse('${_auth.baseUrl}/api/map'));
+      final userId = _auth.user?['UserId'] ?? _auth.user?['id'];
+      final mapUrl = userId != null
+          ? '${_auth.baseUrl}/api/map?user_id=$userId'
+          : '${_auth.baseUrl}/api/map?user_id=0';
+      final res = await http.get(Uri.parse(mapUrl));
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       if (data['ok'] == true) {
         setState(() {
