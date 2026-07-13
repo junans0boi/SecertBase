@@ -95,7 +95,7 @@ cd /home/ubuntu/SecertBase
 
 The server keeps its own `services/realtime-server/.env`. Do not commit that file. If new env keys are added, update the server `.env` from `.env.example` before restarting PM2.
 
-As of 2026-07-12, the server also has `test.secertbase.kro.kr` for friend/tester access while `secertbase.kro.kr` is used for Kakao Developers review. The tester build is served from `/var/www/secretbase-test` and should be deployed with:
+As of 2026-07-13, `secertbase.kro.kr` is back to the normal production/login build. The server also has `test.secertbase.kro.kr` for friend/tester access. The tester build is served from `/var/www/secretbase-test` and should be deployed with:
 
 ```bash
 cd /home/ubuntu/SecertBase
@@ -109,7 +109,7 @@ SOCKET_URL=https://test.secertbase.kro.kr
 KAKAO_REVIEW_AUTO_LOGIN=false
 ```
 
-The server's `apps/secret_base_app/.env` may contain `KAKAO_REVIEW_AUTO_LOGIN=true` for the Kakao review build. `scripts/deploy_server.sh` prefers that file when it exists, so use `scripts/deploy_test_server.sh` for the tester domain.
+The server's `apps/secret_base_app/.env` should keep `KAKAO_REVIEW_AUTO_LOGIN=false` for the normal production build. `scripts/deploy_server.sh` prefers that file when it exists, so check it before production deploys.
 
 The deploy script does this:
 

@@ -73,7 +73,7 @@ cd /home/ubuntu/SecertBase
 ./scripts/deploy_server.sh
 ```
 
-The server currently keeps `apps/secret_base_app/.env` with `KAKAO_REVIEW_AUTO_LOGIN=true` for the Kakao review build. Because `scripts/deploy_server.sh` prefers that `.env` file when it exists, use the dedicated tester deploy script for `test.secertbase.kro.kr`.
+The server currently keeps `apps/secret_base_app/.env` with `KAKAO_REVIEW_AUTO_LOGIN=false` for the normal production build. Because `scripts/deploy_server.sh` prefers that `.env` file when it exists, check it before production deploys.
 
 Tester deploy command:
 
@@ -95,7 +95,7 @@ cd /home/ubuntu/SecertBase/apps/secret_base_app
 flutter build web --release --no-wasm-dry-run \
   --dart-define=SOCKET_URL=https://secertbase.kro.kr \
   --dart-define=GOOGLE_CLIENT_ID=<google-web-client-id> \
-  --dart-define=KAKAO_REVIEW_AUTO_LOGIN=true
+  --dart-define=KAKAO_REVIEW_AUTO_LOGIN=false
 rsync -a --delete build/web/ /var/www/secretbase/
 
 cd /home/ubuntu/SecertBase/services/realtime-server
@@ -128,8 +128,8 @@ Public domain SSH requires router/NAT port forwarding for TCP 22. As of the late
 ## Current Notes
 
 - HTTPS is active with Let's Encrypt.
-- Caddy serves the Kakao review Flutter build from `/var/www/secretbase` on Server 2.
+- Caddy serves the normal production Flutter build from `/var/www/secretbase` on Server 2.
 - Caddy serves the normal tester Flutter build from `/var/www/secretbase-test` on Server 2.
 - PM2 owns the backend process `secretbase-realtime`.
 - The server currently keeps local-only reference folders such as `trash/` and `uno/` untracked.
-- `secertbase.kro.kr` is reserved for Kakao Developers review until approval. Use `test.secertbase.kro.kr` for friend/tester access.
+- `secertbase.kro.kr` is the normal production/login domain. Use `test.secertbase.kro.kr` for friend/tester access.

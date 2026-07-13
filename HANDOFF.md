@@ -2,7 +2,83 @@
 
 Claude/Codex/Gemini 같은 다음 에이전트가 이어받기 위한 컨텍스트 정리.
 
-## 0. Codex 최신 업데이트 (2026-07-12, Kakao 심사용 운영 도메인 분리)
+## 0. Codex 최신 업데이트 (2026-07-13, 운영 로그인 빌드 복구 및 지도 타입 안정화)
+
+### 현재 배포 상태
+
+사용자가 Kakao Local REST API가 정상 동작하는 것을 확인했고, `secertbase.kro.kr`도 로그인 포함 전체 기능을 열어도 된다고 결정했다.
+
+현재 역할:
+
+```text
+https://secertbase.kro.kr       정상 운영/로그인 빌드
+https://test.secertbase.kro.kr  테스트/친구 공유용 정상 로그인 빌드
+```
+
+서버 `apps/secret_base_app/.env`는 현재 아래 방향이어야 한다.
+
+```text
+SOCKET_URL=https://secertbase.kro.kr
+KAKAO_REVIEW_AUTO_LOGIN=false
+```
+
+`/api/auth/review-login`은 현재 직접 호출하면 404가 정상이다. 심사용 자동 로그인 모드는 더 이상 현재 운영 플로우가 아니다.
+
+### 배포
+
+2026-07-13에 다음을 배포했다.
+
+- `test.secertbase.kro.kr`: `./scripts/deploy_test_server.sh`
+- `secertbase.kro.kr`: `./scripts/deploy_server.sh`
+
+검증:
+
+```text
+https://secertbase.kro.kr/health => {"ok":true}
+https://test.secertbase.kro.kr/health => {"ok":true}
+https://secertbase.kro.kr/api/places/search?q=철길부산집... => provider kakao, 철길부산집 마곡나루점
+```
+
+운영 캐시버스트:
+
+```text
+/var/www/secretbase/index.html => flutter_bootstrap.js?v=20260713084836
+/var/www/secretbase/flutter_bootstrap.js => main.dart.js?v=20260713084836
+```
+
+### 수정한 문제
+
+브라우저 콘솔에서 Flutter web runtime stack trace가 반복됐다. 직전에는 Kakao 좌표 문자열로 인해 `String is not a subtype of num?`가 났고, 추가로 저장된 map pin 값도 DB/API에서 문자열로 들어오면 같은 문제가 날 수 있었다.
+
+수정:
+
+- `apps/secret_base_app/lib/screens/archive/map_screen.dart`
+  - 검색 결과, 저장 핀, 마커, 지도 중심, 공유, 길찾기, rating, 거리 표시에서 숫자 파싱을 `placeDoubleForMap`/`placeIntForMap`으로 통일.
+  - `as num?` 직접 캐스팅을 지도 화면 주요 경로에서 제거.
+- `apps/secret_base_app/test/map_screen_test.dart`
+  - Kakao 문자열 좌표와 DB 문자열 numeric 값 회귀 테스트 추가.
+- `scripts/deploy_server.sh`
+  - 운영 배포도 `flutter_bootstrap.js`/`main.dart.js` 캐시버스트 적용.
+  - Flutter가 자동 수정하는 tracked 파일을 빌드 후 복구.
+
+검증:
+
+```text
+cd apps/secret_base_app && flutter test test/map_screen_test.dart
+cd apps/secret_base_app && flutter analyze lib/core/auth_service.dart lib/screens/archive/map_screen.dart test/map_screen_test.dart
+cd services/realtime-server && npm test && npm run check
+```
+
+커밋:
+
+```text
+612fb95 fix: parse map pin numeric strings
+c2c910e fix: harden map numeric parsing
+```
+
+## 1. Codex 업데이트 (2026-07-12, Kakao 심사용 운영 도메인 분리)
+
+This section is historical. The current 2026-07-13 state is documented above: `secertbase.kro.kr` is back to the normal production/login build.
 
 ### 요청 배경
 
@@ -94,7 +170,7 @@ https://test.secertbase.kro.kr/ => HTTP/2 200, server: Caddy
 /var/www/secretbase/main.dart.js does not contain https://test.secertbase.kro.kr
 ```
 
-현재 역할:
+당시 역할:
 
 ```text
 https://secertbase.kro.kr       Kakao Developers 심사용, 로그인 없는/자동 로그인 빌드 유지
@@ -169,7 +245,7 @@ Security note:
 - `scripts/deploy_test_server.sh`
 - `HANDOFF.md`
 
-## 1. Codex 업데이트 (2026-07-09, 비밀지도 1차 개발)
+## 2. Codex 업데이트 (2026-07-09, 비밀지도 1차 개발)
 
 ### 비밀지도 1차 UX 구현 완료
 

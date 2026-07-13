@@ -17,7 +17,7 @@ Secret Base is a private two-person couple app. It combines:
 Production and staging URLs:
 
 ```text
-https://secertbase.kro.kr       Kakao review build, temporarily loginless/auto-login for map review
+https://secertbase.kro.kr       production build, normal login and partner pairing enabled
 https://test.secertbase.kro.kr  tester build, normal login and partner pairing enabled
 ```
 
@@ -85,21 +85,21 @@ Known stale docs:
 
 ## Current Deployment State
 
-As of 2026-07-12:
+As of 2026-07-13:
 
 - DNS for `test.secertbase.kro.kr` points at the same Server 2 IP as `secertbase.kro.kr`.
 - Caddy serves `secertbase.kro.kr` from `/var/www/secretbase`.
 - Caddy serves `test.secertbase.kro.kr` from `/var/www/secretbase-test`.
 - Both domains proxy `/api/*`, `/uploads/*`, `/health`, and `/socket.io/*` to `127.0.0.1:4100`.
 - Backend `CORS_ORIGIN` on the server must include both `https://secertbase.kro.kr` and `https://test.secertbase.kro.kr`.
-- Server `apps/secret_base_app/.env` currently has `KAKAO_REVIEW_AUTO_LOGIN=true` for the Kakao review build. Do not use the deploy script blindly for the tester build unless you override or bypass that `.env`.
+- Server `apps/secret_base_app/.env` currently has `KAKAO_REVIEW_AUTO_LOGIN=false`; both production and tester builds should show normal login.
 
 Deployment matrix:
 
 ```text
-Purpose       Domain                         Web root                  Socket URL                         Review auto-login
-Kakao review  https://secertbase.kro.kr      /var/www/secretbase       https://secertbase.kro.kr          true on current server .env
-Tester        https://test.secertbase.kro.kr /var/www/secretbase-test  https://test.secertbase.kro.kr     false
+Purpose     Domain                         Web root                  Socket URL                         Review auto-login
+Production  https://secertbase.kro.kr      /var/www/secretbase       https://secertbase.kro.kr          false
+Tester      https://test.secertbase.kro.kr /var/www/secretbase-test  https://test.secertbase.kro.kr     false
 ```
 
 Tester deploy command on Server 2:
@@ -111,10 +111,10 @@ cd ~/SecertBase
 
 ## Current Operational Risk
 
-Kakao review and staging:
+Production and staging:
 
-- `secertbase.kro.kr` is under Kakao Developers review, so it is intentionally kept as the review-accessible build for now.
-- `test.secertbase.kro.kr` is the working tester URL with normal login. Use it for friends and external testers until Kakao review is complete.
+- `secertbase.kro.kr` is back to the normal production/login build as of 2026-07-13.
+- `test.secertbase.kro.kr` remains the tester URL with normal login.
 - Add `https://test.secertbase.kro.kr` in Kakao Developers web domain and JavaScript SDK domain settings before testing Kakao SDK calls there.
 
 Production schema issue found on 2026-07-12:
