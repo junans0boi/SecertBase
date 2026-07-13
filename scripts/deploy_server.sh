@@ -48,8 +48,18 @@ else
     --dart-define=KAKAO_REVIEW_AUTO_LOGIN="$KAKAO_REVIEW_AUTO_LOGIN"
 fi
 
+BUILD_ID="$(date +%Y%m%d%H%M%S)"
+sed -i.bak "s/flutter_bootstrap.js?v=[^']*/flutter_bootstrap.js?v=$BUILD_ID/" build/web/index.html
+rm -f build/web/index.html.bak
+sed -i.bak "s/\"main.dart.js\"/\"main.dart.js?v=$BUILD_ID\"/" build/web/flutter_bootstrap.js
+rm -f build/web/flutter_bootstrap.js.bak
+
 echo "==> Syncing web build to $WEB_ROOT"
 rsync -a --delete build/web/ "$WEB_ROOT/"
+
+echo "==> Restoring flutter-modified files after build"
+cd "$REPO_DIR"
+git checkout -- apps/secret_base_app/analysis_options.yaml apps/secret_base_app/pubspec.lock 2>/dev/null || true
 
 echo "==> Restarting realtime server with PM2"
 cd "$REPO_DIR/services/realtime-server"
