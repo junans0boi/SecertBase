@@ -237,22 +237,28 @@ The design language should be warm, restrained, and proud in a quiet way. The ap
 
 ## Map Provider Direction
 
-The short-term direction is to keep the current low-cost stack:
+Current decision:
 
-- `flutter_map`
-- OSM/Carto tiles
-- Nominatim-style search
+- Keep map rendering in Flutter. Do not replace the main map with Kakao Maps JavaScript SDK or Naver Maps SDK for now.
+- Use Kakao Local REST API as the primary place search provider through the backend `/api/places/search` proxy.
+- Use NAVER API HUB Search Local as a fallback or supplemental place search provider when configured.
+- Use Naver Maps Geocoding/Reverse Geocoding only for coordinate/address hints when configured.
+- Use Kakao/Naver/TMAP URL schemes for external directions, not as the in-app map renderer.
 
-However, Nominatim direct client usage can have policy, rate-limit, and quality issues, especially for Korean place search.
+Why:
 
-Recommended path:
+- Secret Base ships as Flutter Web and Android, so a web-only map SDK would split the map implementation.
+- The user-facing value right now is accurate place search, saved couple places, filters, custom pins, and directions.
+- Backend proxying keeps provider keys off the Flutter client and lets the app normalize Kakao/NAVER/OSM responses into one place shape.
 
-1. Keep the current map stack while UX is being shaped.
-2. Start with Kakao Local once OPEN_MAP_AND_LOCAL is enabled for the Kakao app.
-3. Use NAVER API HUB Search Local keys for Naver Local place search.
-4. Use Naver Cloud Maps keys only for geocoding/directions fallback, not full local business search.
-5. Add a backend search proxy and cache before usage grows.
-6. Keep map tile costs low unless product quality clearly requires a provider change.
+Provider path:
+
+1. Keep the current Flutter map stack while UX is being shaped.
+2. Keep Kakao Local enabled as the first provider in `/api/places/search`.
+3. Add NAVER Local keys when needed for fallback/coverage checks.
+4. Add Naver Maps geocoding keys only if region-hint quality needs improvement.
+5. Keep direct Nominatim usage as a last fallback, not the primary Korean place search path.
+6. Revisit Kakao/Naver map SDK rendering only if a review requirement or product quality issue proves that Flutter map rendering is insufficient.
 
 ## Pin Design Direction
 

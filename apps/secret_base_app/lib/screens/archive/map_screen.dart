@@ -2007,7 +2007,7 @@ class _SearchResultPanel extends StatelessWidget {
                   final item = results[idx];
                   final address =
                       '${item['roadAddress'] ?? item['address'] ?? ''}';
-                  final provider = '${item['provider'] ?? ''}'.toUpperCase();
+                  final provider = _placeProviderLabel(item['provider']);
                   final distance = _formatDistanceMeters(
                     item['distanceMeters'],
                   );
@@ -2683,6 +2683,16 @@ String? _formatDistanceMeters(dynamic value) {
   if (meters < 1000) return '${meters}m';
   final km = meters / 1000;
   return km < 10 ? '${km.toStringAsFixed(1)}km' : '${km.round()}km';
+}
+
+String _placeProviderLabel(dynamic value) {
+  return switch ('${value ?? ''}'.toLowerCase()) {
+    'kakao' => '카카오',
+    'naver' => '네이버',
+    'naver_maps' => '네이버 지도',
+    'osm' => 'OSM',
+    _ => '',
+  };
 }
 
 Map<String, dynamic> _normalizePlaceResult(Map<String, dynamic> place) {
