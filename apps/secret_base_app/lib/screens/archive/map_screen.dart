@@ -135,7 +135,9 @@ class _MapScreenState extends State<MapScreen> {
           _searchResults = places
               .map(
                 (e) =>
-                    _normalizePlaceResult(Map<String, dynamic>.from(e as Map)),
+                    normalizePlaceResultForMap(
+                      Map<String, dynamic>.from(e as Map),
+                    ),
               )
               .toList();
         });
@@ -2695,11 +2697,11 @@ String _placeProviderLabel(dynamic value) {
   };
 }
 
-Map<String, dynamic> _normalizePlaceResult(Map<String, dynamic> place) {
-  final lat = (place['latitude'] as num?)?.toDouble() ?? 37.5665;
-  final lng = (place['longitude'] as num?)?.toDouble() ?? 126.9780;
+Map<String, dynamic> normalizePlaceResultForMap(Map<String, dynamic> place) {
+  final lat = _placeDouble(place['latitude']) ?? 37.5665;
+  final lng = _placeDouble(place['longitude']) ?? 126.9780;
   final name = '${place['name'] ?? ''}'.trim();
-  final distanceMeters = (place['distanceMeters'] as num?)?.toDouble();
+  final distanceMeters = _placeDouble(place['distanceMeters']);
   final categoryText = [
     place['categoryCode'],
     place['category'],
@@ -2714,6 +2716,12 @@ Map<String, dynamic> _normalizePlaceResult(Map<String, dynamic> place) {
     'distanceMeters': distanceMeters,
     'category': _mapPlaceCategory(categoryText),
   };
+}
+
+double? _placeDouble(dynamic value) {
+  if (value is num) return value.toDouble();
+  if (value is String) return double.tryParse(value);
+  return null;
 }
 
 String _mapPlaceCategory(String categoryText) {
