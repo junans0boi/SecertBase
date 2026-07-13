@@ -191,10 +191,10 @@ class _MapScreenState extends State<MapScreen> {
                 .toList()
               ..sort((a, b) {
                 final aDistance =
-                    (a['distanceMeters'] as num?)?.toDouble() ??
+                    placeDoubleForMap(a['distanceMeters']) ??
                     double.infinity;
                 final bDistance =
-                    (b['distanceMeters'] as num?)?.toDouble() ??
+                    placeDoubleForMap(b['distanceMeters']) ??
                     double.infinity;
                 return aDistance.compareTo(bDistance);
               });
@@ -326,7 +326,7 @@ class _MapScreenState extends State<MapScreen> {
 
   Future<void> _markVisited(Map<String, dynamic> pin) async {
     DateTime selectedDate = DateTime.now();
-    int selectedRating = (pin['rating'] as num?)?.toInt() ?? 5;
+    int selectedRating = placeIntForMap(pin['rating']) ?? 5;
     final selectedTags = <String>{..._extractTags(pin)};
     final memoCtrl = TextEditingController(text: _cleanMemo(pin['memo']));
 
@@ -685,8 +685,8 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _moveToPin(Map<String, dynamic> pin, {double zoom = 15.0}) {
-    final lat = (pin['latitude'] as num?)?.toDouble() ?? 37.5665;
-    final lng = (pin['longitude'] as num?)?.toDouble() ?? 126.9780;
+    final lat = placeDoubleForMap(pin['latitude']) ?? 37.5665;
+    final lng = placeDoubleForMap(pin['longitude']) ?? 126.9780;
     _mapController.move(LatLng(lat, lng), zoom);
   }
 
@@ -718,7 +718,7 @@ class _MapScreenState extends State<MapScreen> {
         final emoji = _categoryEmojis[category] ?? '📍';
         final status = _pinStatus(pin);
         final isVisited = status == 'visited';
-        final rating = (pin['rating'] as num?)?.toInt() ?? 0;
+        final rating = placeIntForMap(pin['rating']) ?? 0;
         final tags = _extractTags(pin);
         final memo = _cleanMemo(pin['memo']);
         final date = _formattedDate(pin['visit_date']);
@@ -1063,8 +1063,8 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _sharePin(Map<String, dynamic> pin) async {
-    final lat = (pin['latitude'] as num?)?.toDouble() ?? 0;
-    final lng = (pin['longitude'] as num?)?.toDouble() ?? 0;
+    final lat = placeDoubleForMap(pin['latitude']) ?? 0;
+    final lng = placeDoubleForMap(pin['longitude']) ?? 0;
     final text = [
       'Secret Base 비밀지도',
       pin['place_name'] ?? '우리 장소',
@@ -1164,8 +1164,8 @@ class _MapScreenState extends State<MapScreen> {
     Map<String, dynamic> pin,
     _DirectionsProvider provider,
   ) async {
-    final lat = (pin['latitude'] as num?)?.toDouble() ?? 0;
-    final lng = (pin['longitude'] as num?)?.toDouble() ?? 0;
+    final lat = placeDoubleForMap(pin['latitude']) ?? 0;
+    final lng = placeDoubleForMap(pin['longitude']) ?? 0;
     final name = '${pin['place_name'] ?? '목적지'}';
     final encodedName = Uri.encodeComponent(name);
     final fallback = Uri.parse(
@@ -1217,8 +1217,8 @@ class _MapScreenState extends State<MapScreen> {
     final pins = _filteredPins;
     final centerLatLng = pins.isNotEmpty
         ? LatLng(
-            (pins.first['latitude'] as num?)?.toDouble() ?? 37.5665,
-            (pins.first['longitude'] as num?)?.toDouble() ?? 126.9780,
+            placeDoubleForMap(pins.first['latitude']) ?? 37.5665,
+            placeDoubleForMap(pins.first['longitude']) ?? 126.9780,
           )
         : _userLatLng ?? _koreaCenter;
     final initialZoom = pins.isNotEmpty
@@ -1267,9 +1267,9 @@ class _MapScreenState extends State<MapScreen> {
                           final i = entry.key;
                           final pin = entry.value;
                           final lat =
-                              (pin['latitude'] as num?)?.toDouble() ?? 0.0;
+                              placeDoubleForMap(pin['latitude']) ?? 0.0;
                           final lng =
-                              (pin['longitude'] as num?)?.toDouble() ?? 0.0;
+                              placeDoubleForMap(pin['longitude']) ?? 0.0;
                           final category = pin['category'] ?? '기타';
                           final emoji = _categoryEmojis[category] ?? '📍';
                           final status = _pinStatus(pin);
@@ -1680,7 +1680,7 @@ class _MapScreenState extends State<MapScreen> {
   Widget _pinCard(Map<String, dynamic> pin) {
     final category = pin['category'] ?? '기타';
     final emoji = _categoryEmojis[category] ?? '📍';
-    final rating = (pin['rating'] as num?)?.toInt() ?? 0;
+    final rating = placeIntForMap(pin['rating']) ?? 0;
     final status = _pinStatus(pin);
     final isVisited = status == 'visited';
     final tags = _extractTags(pin);
@@ -2680,7 +2680,7 @@ String? _formattedDate(dynamic value) {
 }
 
 String? _formatDistanceMeters(dynamic value) {
-  final meters = (value as num?)?.round();
+  final meters = placeDoubleForMap(value)?.round();
   if (meters == null || meters < 0) return null;
   if (meters < 1000) return '${meters}m';
   final km = meters / 1000;
@@ -2698,10 +2698,10 @@ String _placeProviderLabel(dynamic value) {
 }
 
 Map<String, dynamic> normalizePlaceResultForMap(Map<String, dynamic> place) {
-  final lat = _placeDouble(place['latitude']) ?? 37.5665;
-  final lng = _placeDouble(place['longitude']) ?? 126.9780;
+  final lat = placeDoubleForMap(place['latitude']) ?? 37.5665;
+  final lng = placeDoubleForMap(place['longitude']) ?? 126.9780;
   final name = '${place['name'] ?? ''}'.trim();
-  final distanceMeters = _placeDouble(place['distanceMeters']);
+  final distanceMeters = placeDoubleForMap(place['distanceMeters']);
   final categoryText = [
     place['categoryCode'],
     place['category'],
@@ -2718,10 +2718,15 @@ Map<String, dynamic> normalizePlaceResultForMap(Map<String, dynamic> place) {
   };
 }
 
-double? _placeDouble(dynamic value) {
+double? placeDoubleForMap(dynamic value) {
   if (value is num) return value.toDouble();
   if (value is String) return double.tryParse(value);
   return null;
+}
+
+int? placeIntForMap(dynamic value) {
+  final parsed = placeDoubleForMap(value);
+  return parsed?.round();
 }
 
 String _mapPlaceCategory(String categoryText) {

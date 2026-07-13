@@ -15,4 +15,12 @@ void main() {
     expect(result['lon'], 126.8279012);
     expect(result['distanceMeters'], 132);
   });
+
+  test('map value parsers accept database string values', () {
+    expect(placeDoubleForMap('37.55878289'), 37.55878289);
+    expect(placeDoubleForMap('126.8279012'), 126.8279012);
+    expect(placeDoubleForMap(132), 132);
+    expect(placeIntForMap('4'), 4);
+    expect(placeIntForMap(4.0), 4);
+  });
 }
