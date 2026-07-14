@@ -65,7 +65,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       '✊',
       '가위바위보',
       '가장 빠른 승부가 필요할 때',
-      '3판선승, 묵찌빠, 하나빼기까지 같이 즐길 수 있는 기본기 탄탄한 커플 승부예요.',
+      '3판선승, 묵찌빠, 제로까지 같이 즐길 수 있는 기본기 탄탄한 커플 승부예요.',
       '동시 선택 · 모드 지원',
       kMainSage,
       kMainSageSoft,

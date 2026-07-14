@@ -78,6 +78,7 @@ class SocketService extends ChangeNotifier {
   int? rpsLastTotal;
   String? rpsRoundWinner;
   String? rpsGameWinner;
+  List<Map<String, dynamic>> rpsRoundHistory = [];
 
   // pirate roulette (turn-based)
   bool pirateActive = false;
@@ -360,6 +361,7 @@ class SocketService extends ChangeNotifier {
       rpsLastTotal = null;
       rpsRoundWinner = null;
       rpsGameWinner = null;
+      rpsRoundHistory = [];
       notifyListeners();
     });
 
@@ -404,6 +406,13 @@ class SocketService extends ChangeNotifier {
         if (sc is Map) {
           rpsScores = sc.map((k, v) => MapEntry('$k', (v as num).toInt()));
         }
+        final history = map['history'];
+        if (history is List) {
+          rpsRoundHistory = history
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+        }
         rpsRound = (map['round'] as num?)?.toInt() ?? rpsRound;
       }
 
@@ -425,6 +434,7 @@ class SocketService extends ChangeNotifier {
       rpsLastTotal = null;
       rpsRoundWinner = null;
       rpsGameWinner = null;
+      rpsRoundHistory = [];
       notifyListeners();
     });
 
@@ -1010,6 +1020,7 @@ class SocketService extends ChangeNotifier {
       rpsLastTotal = null;
       rpsRoundWinner = null;
       rpsGameWinner = null;
+      rpsRoundHistory = [];
       rpsResult = null;
       rpsChoices = null;
     }
@@ -1148,6 +1159,7 @@ class SocketService extends ChangeNotifier {
     rpsLastTotal = null;
     rpsRoundWinner = null;
     rpsGameWinner = null;
+    rpsRoundHistory = [];
     notifyListeners();
     _socket?.emit('game:rps:reset');
   }

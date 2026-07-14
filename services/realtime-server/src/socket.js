@@ -734,6 +734,7 @@ export const registerSocketHandlers = (io) => {
         scores: { [players[0]]: 0, [players[1]]: 0 },
         round: 1,
         picks: {},
+        history: [],
         // mukjippa specific
         phase: mode === "mukjippa" ? "determine" : "play",
         attacker: null,
@@ -866,12 +867,23 @@ export const registerSocketHandlers = (io) => {
         if (roundWinner !== "draw" && game.scores[roundWinner] >= 3) {
           game.gameWinner = roundWinner;
         }
+        const roundRecord = {
+          round: game.round,
+          fingers: { [p1]: pick1.fingers, [p2]: pick2.fingers },
+          guesses: { [p1]: pick1.guess, [p2]: pick2.guess },
+          total,
+          roundWinner,
+          scores: { ...game.scores },
+        };
+        game.history = [...(game.history || []), roundRecord];
         game.round++;
         const event = {
           mode: "hanabagi", round: game.round - 1,
           fingers: { [p1]: pick1.fingers, [p2]: pick2.fingers },
           guesses: { [p1]: pick1.guess, [p2]: pick2.guess },
-          total, roundWinner, scores: { ...game.scores }, gameWinner: game.gameWinner,
+          total, roundWinner, scores: { ...game.scores },
+          history: game.history,
+          gameWinner: game.gameWinner,
         };
         game.picks = {};
         await redis.set(rpsGameKey(roomCode), JSON.stringify(game), "EX", 600);
