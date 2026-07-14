@@ -43,6 +43,7 @@ class _RpsScreenState extends State<RpsScreen> with TickerProviderStateMixin {
 
   // ── tap block (prevent double-tap on choice buttons) ─────────────────────
   bool _tapped = false;
+  bool _fixedModeStartRequested = false;
 
   @override
   void initState() {
@@ -109,7 +110,7 @@ class _RpsScreenState extends State<RpsScreen> with TickerProviderStateMixin {
     }
 
     if (!active && mode == null && fixedMode != null && _isHost) {
-      Future.microtask(() => _startMode(fixedMode));
+      _ensureFixedModeStarted();
       return;
     }
 
@@ -227,10 +228,21 @@ class _RpsScreenState extends State<RpsScreen> with TickerProviderStateMixin {
 
   void _startMode(String mode) {
     _mukCarryover = null;
+    if (widget.fixedMode != null) _fixedModeStartRequested = true;
     _socket.startRpsGame(mode);
     setState(() {
       _tapped = false;
       _phase = _Phase.idle;
+    });
+  }
+
+  void _ensureFixedModeStarted() {
+    final fixedMode = widget.fixedMode;
+    if (fixedMode == null || !_isHost || _fixedModeStartRequested) return;
+    _fixedModeStartRequested = true;
+    Future.microtask(() {
+      if (!mounted || _socket.rpsMode != null || _socket.rpsActive) return;
+      _startMode(fixedMode);
     });
   }
 
@@ -256,6 +268,7 @@ class _RpsScreenState extends State<RpsScreen> with TickerProviderStateMixin {
 
   void _resetGame() {
     _mukCarryover = null;
+    _fixedModeStartRequested = false;
     _socket.resetRpsGame();
   }
 
@@ -312,6 +325,7 @@ class _RpsScreenState extends State<RpsScreen> with TickerProviderStateMixin {
           // ── 모드 미선택 ────────────────────────────────────────────────────
           if (mode == null && !active && gameWinner == null) {
             if (widget.fixedMode != null) {
+              _ensureFixedModeStarted();
               return _FixedModeWaitingView(
                 compact: compact,
                 pad: pad,
