@@ -73,6 +73,16 @@ test('movePiece follows shortcut and backdo routes', () => {
     lastPos: 27,
     finished: false,
   });
+  assert.deepEqual(movePiece({ position: 27, lastPos: 26 }, 1), {
+    position: 20,
+    lastPos: 27,
+    finished: false,
+  });
+  assert.deepEqual(movePiece({ position: 27, lastPos: 26 }, 2), {
+    position: 20,
+    lastPos: 20,
+    finished: true,
+  });
   assert.deepEqual(movePiece({ position: 23, lastPos: 25 }, 2), {
     position: 27,
     lastPos: 26,

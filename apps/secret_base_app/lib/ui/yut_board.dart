@@ -67,7 +67,7 @@ class _MoveGuideOption {
 
 class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
   static const double _boardInset = 28;
-  static const double _pieceSize = 36;
+  static const double _pieceSize = 44;
   static const double _guideSize = 56;
 
   // Responsive computed values (set each build from MediaQuery)
@@ -537,7 +537,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     Offset offset = Offset.zero,
     bool selected = false,
   }) {
-    final inner = (_cPieceSize - 4).clamp(22.0, 36.0);
+    final inner = (_cPieceSize - 4).clamp(28.0, 44.0);
     return Transform.translate(
       offset: offset,
       child: Stack(
@@ -583,6 +583,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
       width: _cPieceSize,
       height: _cPieceSize,
       child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: _buildGroupedPiece(
           color,
@@ -807,8 +808,8 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     _compact = screenWidth < 430;
     if (_compact) {
       _cBoardInset = 14.0;
-      _cPieceSize = 28.0;
-      _cGuideSize = 42.0;
+      _cPieceSize = 34.0;
+      _cGuideSize = 48.0;
     } else {
       _cBoardInset = _boardInset;
       _cPieceSize = _pieceSize;
@@ -1139,7 +1140,15 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     void Function(int)? onPieceTap,
   ) {
     final safePieces = pieces ?? List.generate(4, (_) => 0);
-    final tokenSize = _compact ? 28.0 : 38.0;
+    final holdingPieces = safePieces.asMap().entries.where((entry) {
+      final pos = _getPos(entry.value);
+      return pos == 0 || _isFinished(entry.value);
+    }).toList();
+    final inPlayCount = safePieces.where((piece) {
+      final pos = _getPos(piece);
+      return pos > 0 && !_isFinished(piece);
+    }).length;
+    final tokenSize = _compact ? 34.0 : 46.0;
     final charSize = _compact ? 22.0 : 28.0;
     final spacing = _compact ? 4.0 : 6.0;
     final hPad = _compact ? 6.0 : 8.0;
@@ -1188,79 +1197,104 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
             ],
           ),
           SizedBox(height: _compact ? 4 : 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: safePieces.asMap().entries.map((entry) {
-              final pieceId = entry.key;
-              final pos = _getPos(entry.value);
-              final isFinished = _isFinished(entry.value);
-              final isWaiting = pos == 0;
-              final canTap = selectable && _canSelectPiece(pieceId);
-              final selected = selectable && _selectedPieceId == pieceId;
-
-              return Padding(
-                padding: EdgeInsets.only(right: pieceId < 3 ? spacing : 0),
-                child: GestureDetector(
-                  onTap: canTap ? () => onPieceTap?.call(pieceId) : null,
-                  child: SizedBox(
-                    width: tokenSize,
-                    height: tokenSize,
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        Positioned.fill(
-                          child: Opacity(
-                            opacity: isFinished ? 0.45 : 1,
-                            child: _CharacterToken(
-                              character: character,
-                              color: isFinished ? const Color(0xFF8E8E8E) : color,
-                              selected: selected || canTap,
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          right: -2,
-                          bottom: -2,
-                          child: Container(
-                            height: _compact ? 14 : 17,
-                            padding: EdgeInsets.symmetric(
-                                horizontal: _compact ? 2 : 3),
-                            alignment: Alignment.center,
-                            constraints: BoxConstraints(
-                                minWidth: _compact ? 14 : 17),
-                            decoration: BoxDecoration(
-                              color: isFinished
-                                  ? const Color(0xFF61705B)
-                                  : isWaiting
-                                  ? const Color(0xFF5B4632)
-                                  : const Color(0xFFFFCB4D),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.white, width: 1),
-                            ),
-                            child: Text(
-                              isFinished
-                                  ? '✓'
-                                  : isWaiting
-                                  ? '${pieceId + 1}'
-                                  : '$pos',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: _compact ? 8 : 9,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+          SizedBox(
+            height: tokenSize,
+            child: holdingPieces.isEmpty
+                ? Center(
+                    child: Text(
+                      '모든 말이 판 위에 있어요',
+                      style: TextStyle(
+                        color: isActiveTurn
+                            ? const Color(0xFF5A3718)
+                            : Colors.white.withValues(alpha: 0.72),
+                        fontSize: _compact ? 9 : 11,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: holdingPieces.map((entry) {
+                      final pieceId = entry.key;
+                      final pos = _getPos(entry.value);
+                      final isFinished = _isFinished(entry.value);
+                      final isWaiting = pos == 0;
+                      final canTap = selectable && _canSelectPiece(pieceId);
+                      final selected =
+                          selectable && _selectedPieceId == pieceId;
+
+                      return Padding(
+                        padding: EdgeInsets.only(
+                          right: entry == holdingPieces.last ? 0 : spacing,
+                        ),
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: canTap
+                              ? () => onPieceTap?.call(pieceId)
+                              : null,
+                          child: SizedBox(
+                            width: tokenSize,
+                            height: tokenSize,
+                            child: Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                Positioned.fill(
+                                  child: Opacity(
+                                    opacity: isFinished ? 0.5 : 1,
+                                    child: _CharacterToken(
+                                      character: character,
+                                      color: isFinished
+                                          ? const Color(0xFF555555)
+                                          : color,
+                                      selected: selected || canTap,
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  right: -2,
+                                  bottom: -2,
+                                  child: Container(
+                                    height: _compact ? 15 : 18,
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: _compact ? 3 : 4,
+                                    ),
+                                    alignment: Alignment.center,
+                                    constraints: BoxConstraints(
+                                      minWidth: _compact ? 15 : 18,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isFinished
+                                          ? const Color(0xFF3A3A3A)
+                                          : isWaiting
+                                          ? const Color(0xFF5B4632)
+                                          : const Color(0xFFFFCB4D),
+                                      borderRadius: BorderRadius.circular(9),
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      isFinished ? '✓' : '${pieceId + 1}',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: _compact ? 8 : 9,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
                   ),
-                ),
-              );
-            }).toList(),
           ),
           SizedBox(height: _compact ? 4 : 7),
           Text(
-            '대기 ${_getRemaining(pieces)} · 완주 ${safePieces.where(_isFinished).length}',
+            '대기 ${_getRemaining(pieces)} · 판 위 $inPlayCount · 완주 ${safePieces.where(_isFinished).length}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
