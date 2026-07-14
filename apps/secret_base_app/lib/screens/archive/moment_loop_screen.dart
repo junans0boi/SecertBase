@@ -19,6 +19,7 @@ class MomentLoopScreen extends StatefulWidget {
 
 class _MomentLoopScreenState extends State<MomentLoopScreen> {
   final _auth = AuthService();
+  final _imagePicker = ImagePicker();
   List<Map<String, dynamic>> _posts = [];
   bool _loading = true;
   String? _error;
@@ -90,19 +91,38 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     }
   }
 
-  void _showCreatePostSheet() {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => _CreateMomentSheet(
-        auth: _auth,
-        onPostCreated: () {
-          Navigator.pop(ctx);
-          _loadPosts();
-        },
-      ),
-    );
+  Future<void> _startCreatePostFlow() async {
+    try {
+      final files = await _imagePicker.pickMultiImage(imageQuality: 86);
+      if (files.isEmpty || !mounted) return;
+
+      final media = <_PickedMomentMedia>[];
+      for (final file in files) {
+        media.add(
+          _PickedMomentMedia(
+            name: file.name,
+            bytes: await file.readAsBytes(),
+            isVideo: false,
+          ),
+        );
+      }
+
+      if (!mounted) return;
+      final created = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) => _CreateMomentPage(auth: _auth, initialMedia: media),
+        ),
+      );
+      if (created == true) _loadPosts();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('사진을 불러오지 못했어요', style: mainBody(color: Colors.white)),
+        ),
+      );
+    }
   }
 
   @override
@@ -136,7 +156,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
                         videoCount: _posts
                             .where((post) => post['media_type'] == 'video')
                             .length,
-                        onCreate: _showCreatePostSheet,
+                        onCreate: _startCreatePostFlow,
                       ),
                     ),
                     if (_posts.isEmpty)
@@ -147,7 +167,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
                           title: '아직 남긴 순간이 없어요',
                           body: '사진 한 장이나 짧은 문장으로 오늘의 분위기를 남겨보세요.',
                           actionLabel: '첫 순간 남기기',
-                          onAction: _showCreatePostSheet,
+                          onAction: _startCreatePostFlow,
                         ),
                       )
                     else
@@ -177,7 +197,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
               ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _showCreatePostSheet,
+        onPressed: _startCreatePostFlow,
         backgroundColor: kMainInk,
         foregroundColor: Colors.white,
         elevation: 2,
@@ -686,20 +706,20 @@ class _PickedMomentMedia {
   });
 }
 
-class _CreateMomentSheet extends StatefulWidget {
+class _CreateMomentPage extends StatefulWidget {
   final AuthService auth;
-  final VoidCallback onPostCreated;
+  final List<_PickedMomentMedia> initialMedia;
 
-  const _CreateMomentSheet({required this.auth, required this.onPostCreated});
+  const _CreateMomentPage({required this.auth, required this.initialMedia});
 
   @override
-  State<_CreateMomentSheet> createState() => _CreateMomentSheetState();
+  State<_CreateMomentPage> createState() => _CreateMomentPageState();
 }
 
-class _CreateMomentSheetState extends State<_CreateMomentSheet> {
+class _CreateMomentPageState extends State<_CreateMomentPage> {
   final _captionCtrl = TextEditingController();
   final _imagePicker = ImagePicker();
-  _PickedMomentMedia? _pickedMedia;
+  late final List<_PickedMomentMedia> _pickedMedia;
   bool _saving = false;
 
   int? get _userId {
@@ -709,32 +729,37 @@ class _CreateMomentSheetState extends State<_CreateMomentSheet> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _pickedMedia = List<_PickedMomentMedia>.of(widget.initialMedia);
+  }
+
+  @override
   void dispose() {
     _captionCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _pickMedia(bool isVideo) async {
+  Future<void> _addPhotos() async {
     try {
-      final file = isVideo
-          ? await _imagePicker.pickVideo(source: ImageSource.gallery)
-          : await _imagePicker.pickImage(
-              source: ImageSource.gallery,
-              imageQuality: 86,
-            );
+      final files = await _imagePicker.pickMultiImage(imageQuality: 86);
+      if (files.isEmpty) return;
 
-      if (file == null) return;
-      final bytes = await file.readAsBytes();
-      if (!mounted) return;
-      setState(() {
-        _pickedMedia = _PickedMomentMedia(
-          name: file.name,
-          bytes: bytes,
-          isVideo: isVideo,
+      final media = <_PickedMomentMedia>[];
+      for (final file in files) {
+        media.add(
+          _PickedMomentMedia(
+            name: file.name,
+            bytes: await file.readAsBytes(),
+            isVideo: false,
+          ),
         );
-      });
+      }
+
+      if (!mounted) return;
+      setState(() => _pickedMedia.addAll(media));
     } catch (_) {
-      _toast('파일을 불러오지 못했어요');
+      _toast('사진을 불러오지 못했어요');
     }
   }
 
@@ -743,8 +768,12 @@ class _CreateMomentSheetState extends State<_CreateMomentSheet> {
     if (_saving || userId == null) return;
 
     final caption = _captionCtrl.text.trim();
-    if (caption.isEmpty && _pickedMedia == null) {
-      _toast('사진이나 글을 입력해주세요');
+    if (_pickedMedia.isEmpty) {
+      _toast('공유할 사진을 선택해주세요');
+      return;
+    }
+    if (caption.isEmpty) {
+      _toast('오늘 남기고 싶은 장면을 적어주세요');
       return;
     }
 
@@ -752,24 +781,7 @@ class _CreateMomentSheetState extends State<_CreateMomentSheet> {
     final now = DateTime.now();
 
     try {
-      http.Response response;
-
-      if (_pickedMedia == null) {
-        response = await http.post(
-          Uri.parse('${widget.auth.baseUrl}/api/setlog'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'user_id': userId,
-            'user_code': widget.auth.user?['UserCode'],
-            'media_type': 'text',
-            'caption': caption,
-            'tags': ['#momentloop'],
-            'taken_at': _dateOnly(now),
-            'captured_at': _mysqlDateTime(now),
-          }),
-        );
-      } else {
-        final media = _pickedMedia!;
+      for (final media in _pickedMedia) {
         final request = http.MultipartRequest(
           'POST',
           Uri.parse('${widget.auth.baseUrl}/api/setlog'),
@@ -790,15 +802,16 @@ class _CreateMomentSheetState extends State<_CreateMomentSheet> {
             contentType: MediaType.parse(_mimeFor(media.name, media.isVideo)),
           ),
         );
-        response = await http.Response.fromStream(await request.send());
+        final response = await http.Response.fromStream(await request.send());
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+        if (response.statusCode != 200 || data['ok'] != true) {
+          _toast('저장하지 못했어요');
+          return;
+        }
       }
 
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode == 200 && data['ok'] == true) {
-        widget.onPostCreated();
-      } else {
-        _toast('저장하지 못했어요');
-      }
+      if (mounted) Navigator.pop(context, true);
     } catch (_) {
       _toast('네트워크 연결을 확인해주세요');
     } finally {
@@ -817,116 +830,104 @@ class _CreateMomentSheetState extends State<_CreateMomentSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.9,
+    return Scaffold(
+      backgroundColor: kMainPaper,
+      appBar: AppBar(
+        backgroundColor: kMainPaper,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: IconButton(
+          onPressed: _saving ? null : () => Navigator.pop(context, false),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          color: kMainInk,
+          tooltip: '뒤로가기',
+        ),
+        centerTitle: true,
+        title: Text(
+          '새 게시물',
+          style: mainBody(size: 17, weight: FontWeight.w900),
+        ),
       ),
-      decoration: const BoxDecoration(
-        color: kMainPaper,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-      ),
-      padding: EdgeInsets.only(
-        left: 18,
-        right: 18,
-        top: 10,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 18,
-      ),
-      child: SingleChildScrollView(
+      body: SafeArea(
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: kMainLine,
-                  borderRadius: BorderRadius.circular(99),
-                ),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(18, 8, 18, 20),
+                children: [
+                  _PickedMediaStrip(
+                    media: _pickedMedia,
+                    onAdd: _saving ? null : _addPhotos,
+                    onRemove: _saving
+                        ? null
+                        : (index) =>
+                              setState(() => _pickedMedia.removeAt(index)),
+                  ),
+                  const SizedBox(height: 18),
+                  TextField(
+                    controller: _captionCtrl,
+                    minLines: 5,
+                    maxLines: 10,
+                    textInputAction: TextInputAction.newline,
+                    style: mainBody(size: 16, color: kMainInk, height: 1.55),
+                    decoration: InputDecoration(
+                      hintText: '오늘 남기고 싶은 장면을 적어주세요',
+                      hintStyle: mainBody(size: 16, color: kMainMuted),
+                      filled: true,
+                      fillColor: kMainPaperSoft,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.all(18),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  _LocationAddButton(
+                    onTap: _saving ? null : () => _toast('위치 추가는 준비 중이에요'),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                Expanded(child: Text('순간 남기기', style: mainTitle(size: 24))),
-                TextButton(
-                  onPressed: _saving ? null : () => Navigator.pop(context),
-                  child: Text('닫기', style: mainBody(color: kMainMuted)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: _captionCtrl,
-              minLines: 4,
-              maxLines: 8,
-              style: mainBody(size: 15, color: kMainInk, height: 1.5),
-              decoration: InputDecoration(
-                hintText: '오늘 남기고 싶은 장면을 적어주세요',
-                hintStyle: mainBody(size: 15, color: kMainMuted),
-                filled: true,
-                fillColor: kMainPaperSoft,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.all(16),
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                18,
+                10,
+                18,
+                MediaQuery.of(context).viewInsets.bottom + 16,
               ),
-            ),
-            if (_pickedMedia != null) ...[
-              const SizedBox(height: 14),
-              _PickedPreview(
-                media: _pickedMedia!,
-                onRemove: () => setState(() => _pickedMedia = null),
-              ),
-            ],
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                _SheetToolButton(
-                  icon: Icons.image_outlined,
-                  label: '사진',
-                  onTap: () => _pickMedia(false),
-                ),
-                const SizedBox(width: 8),
-                _SheetToolButton(
-                  icon: Icons.play_circle_outline_rounded,
-                  label: '영상',
-                  onTap: () => _pickMedia(true),
-                ),
-                const Spacer(),
-                FilledButton(
+              child: SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: FilledButton(
                   onPressed: _saving ? null : _saveMoment,
                   style: FilledButton.styleFrom(
                     backgroundColor: kMainInk,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 18,
-                      vertical: 12,
-                    ),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(14),
                     ),
                   ),
                   child: _saving
                       ? const SizedBox(
-                          width: 18,
-                          height: 18,
+                          width: 20,
+                          height: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             color: Colors.white,
                           ),
                         )
                       : Text(
-                          '저장',
+                          '공유하기',
                           style: mainBody(
                             color: Colors.white,
+                            size: 16,
                             weight: FontWeight.w900,
                           ),
                         ),
                 ),
-              ],
+              ),
             ),
           ],
         ),
@@ -935,87 +936,173 @@ class _CreateMomentSheetState extends State<_CreateMomentSheet> {
   }
 }
 
-class _PickedPreview extends StatelessWidget {
-  final _PickedMomentMedia media;
-  final VoidCallback onRemove;
+class _PickedMediaStrip extends StatelessWidget {
+  final List<_PickedMomentMedia> media;
+  final VoidCallback? onAdd;
+  final ValueChanged<int>? onRemove;
 
-  const _PickedPreview({required this.media, required this.onRemove});
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        Container(
-          height: 180,
-          width: double.infinity,
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: kMainPaperSoft,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: kMainLine),
-          ),
-          child: media.isVideo
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.play_circle_outline_rounded,
-                        color: kMainPeach,
-                        size: 36,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        media.name,
-                        style: mainBody(size: 12, color: kMainMuted),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                )
-              : Image.memory(media.bytes, fit: BoxFit.cover),
-        ),
-        Positioned(
-          top: 8,
-          right: 8,
-          child: IconButton.filled(
-            onPressed: onRemove,
-            icon: const Icon(Icons.close_rounded, size: 16),
-            style: IconButton.styleFrom(
-              backgroundColor: Colors.black.withAlpha(120),
-              foregroundColor: Colors.white,
-              fixedSize: const Size(32, 32),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _SheetToolButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  const _SheetToolButton({
-    required this.icon,
-    required this.label,
-    required this.onTap,
+  const _PickedMediaStrip({
+    required this.media,
+    required this.onAdd,
+    required this.onRemove,
   });
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: onTap,
-      icon: Icon(icon, size: 17),
-      label: Text(label),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: kMainInk,
-        backgroundColor: kMainPaperSoft,
-        side: const BorderSide(color: kMainLine),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    return SizedBox(
+      height: 152,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: media.length + 1,
+        separatorBuilder: (_, _) => const SizedBox(width: 10),
+        itemBuilder: (context, index) {
+          if (index == media.length) {
+            return _AddPhotoTile(onTap: onAdd);
+          }
+
+          return _PickedPhotoTile(
+            media: media[index],
+            label: '#${index + 1}',
+            onRemove: onRemove == null ? null : () => onRemove!(index),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _PickedPhotoTile extends StatelessWidget {
+  final _PickedMomentMedia media;
+  final String label;
+  final VoidCallback? onRemove;
+
+  const _PickedPhotoTile({
+    required this.media,
+    required this.label,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 138,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Container(
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                color: kMainPaperSoft,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: kMainLine),
+              ),
+              child: Image.memory(media.bytes, fit: BoxFit.cover),
+            ),
+          ),
+          Positioned(
+            left: 8,
+            bottom: 8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black.withAlpha(135),
+                borderRadius: BorderRadius.circular(99),
+              ),
+              child: Text(
+                label,
+                style: mainBody(
+                  size: 12,
+                  color: Colors.white,
+                  weight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 7,
+            right: 7,
+            child: IconButton.filled(
+              onPressed: onRemove,
+              icon: const Icon(Icons.close_rounded, size: 16),
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.black.withAlpha(125),
+                foregroundColor: Colors.white,
+                fixedSize: const Size(30, 30),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AddPhotoTile extends StatelessWidget {
+  final VoidCallback? onTap;
+
+  const _AddPhotoTile({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 138,
+      child: OutlinedButton(
+        onPressed: onTap,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: kMainInk,
+          backgroundColor: kMainPaperSoft,
+          side: const BorderSide(color: kMainLine),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.add_photo_alternate_outlined, size: 30),
+            const SizedBox(height: 8),
+            Text('사진 추가', style: mainBody(size: 13, weight: FontWeight.w900)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LocationAddButton extends StatelessWidget {
+  final VoidCallback? onTap;
+
+  const _LocationAddButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        decoration: BoxDecoration(
+          color: kMainPaperSoft,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: kMainLine),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.location_on_outlined, color: kMainInk, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '위치 추가',
+                style: mainBody(
+                  size: 15,
+                  color: kMainInk,
+                  weight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: kMainMuted),
+          ],
+        ),
       ),
     );
   }
