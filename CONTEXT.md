@@ -113,15 +113,25 @@ cd ~/SecertBase
 
 Production and staging:
 
-- `secertbase.kro.kr` is back to the normal production/login build as of 2026-07-13.
-- `test.secertbase.kro.kr` remains the tester URL with normal login.
-- Add `https://test.secertbase.kro.kr` in Kakao Developers web domain and JavaScript SDK domain settings before testing Kakao SDK calls there.
+- `secertbase.kro.kr` is the primary production build with full login and all features enabled as of 2026-07-14.
+- `test.secertbase.kro.kr` remains available as a tester URL.
+- Kakao JavaScript Maps SDK: 200 OK on both domains (domains registered in Kakao Developers).
+- Kakao REST Local API: working, key set in server `.env`.
 
-Production schema issue found on 2026-07-12:
+DB migrations applied 2026-07-14 (via `ensureTables` ALTER TABLE on server restart):
 
-- PM2 logs show `/api/album/folders` fails with `Unknown column 'sort_order' in 'ORDER BY'`.
-- The backend query expects `album_folders.sort_order`, but the production MariaDB schema appears not to have that column.
-- Fix with a schema migration or compatibility query before relying on the album folder feature.
+- `album_folders`: `sort_order`, `description`, `cover_url` added ✅
+- `album_photos`: `caption`, `is_premium_quality`, `file_size_kb` added ✅
+- `private_reflections`: `mood_tag`, `category` added ✅
+- `map_pins`: `couple_id`, `user_id`, `status`, `emotion_tags` added ✅
+- `Users`: `is_premium`, `premium_since`, `premium_expires_at` added ✅
+- `premium_subscriptions` table created ✅
+- Existing `map_pins` backfilled with `couple_id`/`user_id` from `created_by` UserCode ✅
+
+Active next vertical slice:
+
+- MomentLoop ↔ 비밀지도 setlog 연결 미구현 (`map_screen.dart:892` placeholder)
+- `map_pins` PATCH: 여전히 ownership check 없음 (작성자만 수정 가능하도록 추가 필요)
 
 Resolved deployment divergence:
 

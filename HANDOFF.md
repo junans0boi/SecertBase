@@ -1,8 +1,82 @@
-# 세션 핸드오프 노트 (2026-07-12)
+# 세션 핸드오프 노트 (2026-07-14)
 
 Claude/Codex/Gemini 같은 다음 에이전트가 이어받기 위한 컨텍스트 정리.
 
-## 0. Codex 최신 업데이트 (2026-07-13, 운영 로그인 빌드 복구 및 지도 타입 안정화)
+## 0. 최신 업데이트 (2026-07-14, 운영 DB 마이그레이션 및 전면 버그 수정)
+
+### 배포 상태 (2026-07-14)
+
+커밋 `6238e09` 기준으로 `secertbase.kro.kr`에 배포 완료.
+
+### 수정한 문제
+
+백엔드 `routes.js`에서 발견·수정한 버그 목록:
+
+| 항목 | 증상 | 수정 |
+|---|---|---|
+| `album_folders.sort_order` 컬럼 누락 | GET 500 | `ensureTables`에 `ALTER TABLE … ADD COLUMN IF NOT EXISTS` 추가 |
+| `album_folders.description`, `cover_url` 누락 | POST/PATCH 실패 | 동일 |
+| `album_photos.caption`, `is_premium_quality`, `file_size_kb` 누락 | POST 500 | 동일 |
+| `private_reflections.mood_tag`, `category` 누락 | POST/GET 500 | 동일 |
+| `map_pins.couple_id`, `user_id`, `status`, `emotion_tags` 누락 | 프라이버시 버그 | 동일 |
+| `Users.is_premium`, `premium_since`, `premium_expires_at` 누락 | 앨범 한도 항상 무료 | `ensureUserColumns`에 추가 |
+| `premium_subscriptions` 테이블 없음 | `/premium/*` 500 | `ensureTables`에 CREATE 추가 |
+| `download-all`: `.length` vs `.rows.length` | crash | 수정 |
+| `challenges`/`jukebox` POST: `result.insertId` | 반환 undefined | `result.rows.insertId`로 수정 |
+| `/api/map` GET: 모든 사용자 핀 전체 노출 | 프라이버시 | `user_id` 필수 쿼리 파라미터로 변경, couple scope |
+| `/api/map` POST: couple_id 미저장 | 데이터 고아 | `created_by` UserCode로 user/couple 역산 후 저장 |
+
+Flutter 수정:
+- `map_screen.dart`: GET 요청에 `?user_id=$userId` 추가
+
+DB 백필:
+- 기존 `map_pins`의 `couple_id/user_id = NULL` 핀들을 `created_by(UserCode)` 기준으로 역산하여 채움 (운영 DB에서 직접 UPDATE)
+
+검증:
+```text
+npm test: 25/25 pass
+npm run check: pass
+flutter analyze map_screen.dart: no issues
+curl http://localhost:4100/api/album/folders?user_id=1 => {"ok":true,"folders":[]}
+curl http://localhost:4100/api/map?user_id=4 => {"ok":true,"pins":[{...couple_id:3, user_id:4}]}
+https://secertbase.kro.kr/health => {"ok":true}
+```
+
+### MomentLoop ↔ 비밀지도 연결 현황
+
+- **MomentLoop**: `GET /api/setlog?user_id=...`로 setlog 데이터 로드, 독립 동작 정상.
+- **비밀지도**: couple-scoped 핀 저장/조회 정상.
+- **연결**: `map_screen.dart:892`에 `"MomentLoop 기록과 연결될 자리"` placeholder만 있음. 실제 setlog ↔ map_pin 연동 미구현. 다음 vertical slice 필요.
+
+### 서버 SSH 접속
+
+```bash
+ssh -i /Users/junzzang/Downloads/ssh-key-2026-07-06.key -o StrictHostKeyChecking=no ubuntu@100.97.58.29
+```
+
+서버 내 주요 경로:
+```text
+~/SecertBase                      — 프로젝트 루트
+~/SecertBase/services/realtime-server/.env  — 백엔드 환경변수 (API 키 포함, 코드에 커밋 금지)
+/var/www/secretbase               — secertbase.kro.kr Flutter 빌드
+/var/www/secretbase-test          — test.secertbase.kro.kr Flutter 빌드
+/etc/caddy/Caddyfile              — Caddy 설정
+```
+
+배포 명령:
+```bash
+cd ~/SecertBase && ./scripts/deploy_server.sh       # secertbase.kro.kr
+cd ~/SecertBase && ./scripts/deploy_test_server.sh  # test.secertbase.kro.kr
+```
+
+DB 접속 (서버 내):
+```bash
+mysql -u junzzang -p0427 secretbase
+```
+
+---
+
+## 이전: Codex 최신 업데이트 (2026-07-13, 운영 로그인 빌드 복구 및 지도 타입 안정화)
 
 ### 현재 배포 상태
 
