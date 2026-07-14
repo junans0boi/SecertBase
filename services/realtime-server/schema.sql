@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS setlog_posts (
   id INT AUTO_INCREMENT PRIMARY KEY,
   couple_id INT NULL,
   user_id INT NOT NULL,
+  map_pin_id INT NULL,
   user_code VARCHAR(32) NULL,
   media_type ENUM('text', 'image', 'video') NOT NULL DEFAULT 'text',
   media_url TEXT NULL,
@@ -56,7 +57,8 @@ CREATE TABLE IF NOT EXISTS setlog_posts (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_setlog_couple_taken (couple_id, taken_at),
-  INDEX idx_setlog_user_taken (user_id, taken_at)
+  INDEX idx_setlog_user_taken (user_id, taken_at),
+  INDEX idx_setlog_map_pin (map_pin_id)
 );
 
 -- 3. 비밀 지도 (Secret Map)

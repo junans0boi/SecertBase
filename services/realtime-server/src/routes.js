@@ -24,11 +24,13 @@ const googleClient = new OAuth2Client();
 
 let setlogReadyPromise;
 const ensureSetlogTable = () => {
-  setlogReadyPromise ??= query(`
+  setlogReadyPromise ??= (async () => {
+    await query(`
     CREATE TABLE IF NOT EXISTS setlog_posts (
       id INT AUTO_INCREMENT PRIMARY KEY,
       couple_id INT NULL,
       user_id INT NOT NULL,
+      map_pin_id INT NULL,
       user_code VARCHAR(32) NULL,
       media_type ENUM('text', 'image', 'video') NOT NULL DEFAULT 'text',
       media_url TEXT NULL,
@@ -39,9 +41,13 @@ const ensureSetlogTable = () => {
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_setlog_couple_taken (couple_id, taken_at),
-      INDEX idx_setlog_user_taken (user_id, taken_at)
+      INDEX idx_setlog_user_taken (user_id, taken_at),
+      INDEX idx_setlog_map_pin (map_pin_id)
     )
   `);
+    await query(`ALTER TABLE setlog_posts ADD COLUMN IF NOT EXISTS map_pin_id INT NULL`);
+    await query(`ALTER TABLE setlog_posts ADD INDEX IF NOT EXISTS idx_setlog_map_pin (map_pin_id)`);
+  })();
 
   return setlogReadyPromise;
 };
@@ -966,6 +972,28 @@ router.get('/setlog', async (req, res) => {
   }
 });
 
+const resolveSetlogMapPinId = async (mapPinId, userId, coupleId) => {
+  if (!mapPinId) return null;
+
+  const pinId = Number(mapPinId);
+  if (!Number.isInteger(pinId) || pinId <= 0) {
+    return { error: 'invalid_map_pin' };
+  }
+
+  const result = await query(
+    'SELECT id, user_id, couple_id FROM map_pins WHERE id = ? LIMIT 1',
+    [pinId]
+  );
+  const pin = result.rows[0];
+  if (!pin) return { error: 'map_pin_not_found' };
+
+  const sameCouple = coupleId && Number(pin.couple_id) === Number(coupleId);
+  const sameUser = Number(pin.user_id) === Number(userId);
+  if (!sameCouple && !sameUser) return { error: 'map_pin_forbidden' };
+
+  return { id: pinId };
+};
+
 // 셋로그 생성
 router.post('/setlog', upload.single('media'), async (req, res) => {
   try {
@@ -980,6 +1008,7 @@ router.post('/setlog', upload.single('media'), async (req, res) => {
       taken_at,
       captured_at,
       media_type,
+      map_pin_id,
     } = req.body;
     const mediaUrl = req.file ? `/uploads/${req.file.filename}` : null;
     const uploadedMediaType = req.file?.mimetype.startsWith('video/') ? 'video' : 'image';
@@ -999,15 +1028,20 @@ router.post('/setlog', upload.single('media'), async (req, res) => {
 
     const userId = Number(user_id);
     const coupleId = await getCoupleIdForUser(userId);
+    const resolvedMapPin = await resolveSetlogMapPinId(map_pin_id, userId, coupleId);
+    if (resolvedMapPin?.error) {
+      return res.status(400).json({ ok: false, reason: resolvedMapPin.error });
+    }
     const tagsArray = parseJsonArray(tags);
     
     const result = await query(
       `INSERT INTO setlog_posts
-       (couple_id, user_id, user_code, media_type, media_url, caption, tags, taken_at, captured_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, NOW()))`,
+       (couple_id, user_id, map_pin_id, user_code, media_type, media_url, caption, tags, taken_at, captured_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, NOW()))`,
       [
         coupleId,
         userId,
+        resolvedMapPin?.id ?? null,
         user_code || null,
         normalizedMediaType,
         mediaUrl,

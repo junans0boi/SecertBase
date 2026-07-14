@@ -436,6 +436,7 @@ Response:
       "id": 1,
       "couple_id": 1,
       "user_id": 1,
+      "map_pin_id": 12,
       "user_code": "ABC123",
       "media_type": "image",
       "media_url": "/uploads/media-1781760000000.png",
@@ -467,6 +468,7 @@ Fields:
 - `taken_at`: required `YYYY-MM-DD`
 - `captured_at`: optional timestamp
 - `media_type`: optional `text`, `image`, `video`
+- `map_pin_id`: optional Secret Map pin id. The pin must belong to the same user or couple scope.
 
 Response:
 

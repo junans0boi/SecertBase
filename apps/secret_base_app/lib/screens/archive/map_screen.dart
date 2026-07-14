@@ -2806,6 +2806,19 @@ List<Map<String, dynamic>> linkedSetlogPostsForMap(
   Map<String, dynamic> pin,
   List<Map<String, dynamic>> posts,
 ) {
+  final pinId = '${pin['id'] ?? ''}';
+  final directlyLinked = pinId.isEmpty
+      ? <Map<String, dynamic>>[]
+      : posts.where((post) => '${post['map_pin_id'] ?? ''}' == pinId).toList();
+  if (directlyLinked.isNotEmpty) {
+    directlyLinked.sort((a, b) {
+      final aDate = '${a['captured_at'] ?? a['taken_at'] ?? ''}';
+      final bDate = '${b['captured_at'] ?? b['taken_at'] ?? ''}';
+      return bDate.compareTo(aDate);
+    });
+    return directlyLinked;
+  }
+
   final pinDate = _dateKey(pin['visit_date']);
   final placeName = _matchText(pin['place_name']);
 

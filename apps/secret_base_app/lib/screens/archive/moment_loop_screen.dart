@@ -706,6 +706,20 @@ class _PickedMomentMedia {
   });
 }
 
+class _SelectedMapLocation {
+  final int? id;
+  final String name;
+  final String? category;
+
+  const _SelectedMapLocation({
+    required this.id,
+    required this.name,
+    this.category,
+  });
+
+  bool get isNew => id == null;
+}
+
 class _CreateMomentPage extends StatefulWidget {
   final AuthService auth;
   final List<_PickedMomentMedia> initialMedia;
@@ -720,12 +734,23 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
   final _captionCtrl = TextEditingController();
   final _imagePicker = ImagePicker();
   late final List<_PickedMomentMedia> _pickedMedia;
+  List<Map<String, dynamic>> _mapPins = [];
+  _SelectedMapLocation? _selectedLocation;
   bool _saving = false;
+  bool _loadingLocations = false;
 
   int? get _userId {
     final value = widget.auth.user?['UserId'] ?? widget.auth.user?['id'];
     if (value is int) return value;
     return int.tryParse('$value');
+  }
+
+  Map<String, String> _jsonHeaders({bool includeAuth = false}) {
+    return {
+      'Content-Type': 'application/json',
+      if (includeAuth && widget.auth.token != null)
+        'Authorization': 'Bearer ${widget.auth.token}',
+    };
   }
 
   @override
@@ -763,6 +788,91 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
     }
   }
 
+  Future<void> _loadMapPins() async {
+    final userId = _userId;
+    if (userId == null || _loadingLocations) return;
+
+    setState(() => _loadingLocations = true);
+    try {
+      final uri = Uri.parse(
+        '${widget.auth.baseUrl}/api/map',
+      ).replace(queryParameters: {'user_id': '$userId'});
+      final response = await http.get(uri);
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      if (response.statusCode == 200 && data['ok'] == true) {
+        final pins = data['pins'];
+        if (!mounted) return;
+        setState(() {
+          _mapPins = pins is List
+              ? pins
+                    .map((pin) => Map<String, dynamic>.from(pin as Map))
+                    .toList()
+              : [];
+        });
+      }
+    } catch (_) {
+      _toast('비밀지도 위치를 불러오지 못했어요');
+    } finally {
+      if (mounted) setState(() => _loadingLocations = false);
+    }
+  }
+
+  Future<void> _pickLocation() async {
+    await _loadMapPins();
+    if (!mounted) return;
+
+    final newPlaceCtrl = TextEditingController();
+    final picked = await showModalBottomSheet<_SelectedMapLocation?>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _MapLocationPickerSheet(
+        pins: _mapPins,
+        selected: _selectedLocation,
+        newPlaceCtrl: newPlaceCtrl,
+        loading: _loadingLocations,
+      ),
+    );
+    newPlaceCtrl.dispose();
+
+    if (!mounted || picked == null) return;
+    setState(() => _selectedLocation = picked);
+  }
+
+  Future<int?> _ensureMapPinId({
+    required _SelectedMapLocation location,
+    required String caption,
+    required DateTime now,
+  }) async {
+    if (!location.isNew) return location.id;
+
+    final userId = _userId;
+    final userCode =
+        widget.auth.user?['UserCode'] ?? widget.auth.user?['userCode'];
+    if (userId == null || userCode == null) return null;
+
+    final response = await http.post(
+      Uri.parse('${widget.auth.baseUrl}/api/map'),
+      headers: _jsonHeaders(includeAuth: true),
+      body: jsonEncode({
+        'place_name': location.name,
+        'category': location.category ?? 'MomentLoop',
+        'rating': null,
+        'visit_date': _dateOnly(now),
+        'memo': caption,
+        'created_by': userCode,
+        'user_id': userId,
+        'latitude': 0,
+        'longitude': 0,
+        'status': 'visited',
+        'emotion_tags': <String>[],
+      }),
+    );
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode != 200 || data['ok'] != true) return null;
+    return int.tryParse('${data['id']}');
+  }
+
   Future<void> _saveMoment() async {
     final userId = _userId;
     if (_saving || userId == null) return;
@@ -781,6 +891,19 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
     final now = DateTime.now();
 
     try {
+      final location = _selectedLocation;
+      final mapPinId = location == null
+          ? null
+          : await _ensureMapPinId(
+              location: location,
+              caption: caption,
+              now: now,
+            );
+      if (location != null && mapPinId == null) {
+        _toast('비밀지도 위치를 연결하지 못했어요');
+        return;
+      }
+
       for (final media in _pickedMedia) {
         final request = http.MultipartRequest(
           'POST',
@@ -793,6 +916,7 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
           'tags': jsonEncode(['#momentloop']),
           'taken_at': _dateOnly(now),
           'captured_at': _mysqlDateTime(now),
+          if (mapPinId != null) 'map_pin_id': '$mapPinId',
         });
         request.files.add(
           http.MultipartFile.fromBytes(
@@ -885,7 +1009,12 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
                   ),
                   const SizedBox(height: 14),
                   _LocationAddButton(
-                    onTap: _saving ? null : () => _toast('위치 추가는 준비 중이에요'),
+                    location: _selectedLocation,
+                    loading: _loadingLocations,
+                    onTap: _saving ? null : _pickLocation,
+                    onClear: _saving
+                        ? null
+                        : () => setState(() => _selectedLocation = null),
                   ),
                 ],
               ),
@@ -1070,12 +1199,22 @@ class _AddPhotoTile extends StatelessWidget {
 }
 
 class _LocationAddButton extends StatelessWidget {
+  final _SelectedMapLocation? location;
+  final bool loading;
   final VoidCallback? onTap;
+  final VoidCallback? onClear;
 
-  const _LocationAddButton({required this.onTap});
+  const _LocationAddButton({
+    required this.location,
+    required this.loading,
+    required this.onTap,
+    required this.onClear,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final selected = location;
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -1091,16 +1230,242 @@ class _LocationAddButton extends StatelessWidget {
             const Icon(Icons.location_on_outlined, color: kMainInk, size: 20),
             const SizedBox(width: 10),
             Expanded(
-              child: Text(
-                '위치 추가',
-                style: mainBody(
-                  size: 15,
-                  color: kMainInk,
-                  weight: FontWeight.w800,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    selected?.name ?? '위치 추가',
+                    style: mainBody(
+                      size: 15,
+                      color: kMainInk,
+                      weight: FontWeight.w800,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (selected != null) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      selected.isNew ? '비밀지도에 새 위치로 저장돼요' : '비밀지도와 연결돼요',
+                      style: mainBody(size: 12, color: kMainMuted),
+                    ),
+                  ],
+                ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: kMainMuted),
+            if (loading)
+              const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            else if (selected != null)
+              IconButton(
+                onPressed: onClear,
+                icon: const Icon(Icons.close_rounded, size: 18),
+                color: kMainMuted,
+                tooltip: '위치 제거',
+                style: IconButton.styleFrom(
+                  fixedSize: const Size(34, 34),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              )
+            else
+              const Icon(Icons.chevron_right_rounded, color: kMainMuted),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MapLocationPickerSheet extends StatefulWidget {
+  final List<Map<String, dynamic>> pins;
+  final _SelectedMapLocation? selected;
+  final TextEditingController newPlaceCtrl;
+  final bool loading;
+
+  const _MapLocationPickerSheet({
+    required this.pins,
+    required this.selected,
+    required this.newPlaceCtrl,
+    required this.loading,
+  });
+
+  @override
+  State<_MapLocationPickerSheet> createState() =>
+      _MapLocationPickerSheetState();
+}
+
+class _MapLocationPickerSheetState extends State<_MapLocationPickerSheet> {
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.82,
+      ),
+      decoration: const BoxDecoration(
+        color: kMainPaper,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.fromLTRB(18, 12, 18, bottom + 18),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: kMainLine,
+                borderRadius: BorderRadius.circular(99),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Text('비밀지도 위치', style: mainTitle(size: 22)),
+          const SizedBox(height: 6),
+          Text(
+            '게시물이 선택한 지도 위치와 바로 연결돼요.',
+            style: mainBody(size: 13, color: kMainMuted),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: widget.newPlaceCtrl,
+            textInputAction: TextInputAction.done,
+            style: mainBody(size: 15, color: kMainInk),
+            onSubmitted: (_) => _createNewPlace(),
+            decoration: InputDecoration(
+              hintText: '새 위치 이름 입력',
+              hintStyle: mainBody(size: 14, color: kMainMuted),
+              filled: true,
+              fillColor: kMainPaperSoft,
+              prefixIcon: const Icon(Icons.add_location_alt_outlined),
+              suffixIcon: IconButton(
+                onPressed: _createNewPlace,
+                icon: const Icon(Icons.check_rounded),
+                tooltip: '새 위치 선택',
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Flexible(
+            child: widget.loading
+                ? const Center(child: CircularProgressIndicator())
+                : widget.pins.isEmpty
+                ? Center(
+                    child: Text(
+                      '비밀지도에 저장된 위치가 없어요',
+                      style: mainBody(size: 14, color: kMainMuted),
+                    ),
+                  )
+                : ListView.separated(
+                    itemCount: widget.pins.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final pin = widget.pins[index];
+                      final id = int.tryParse('${pin['id']}');
+                      final name = '${pin['place_name'] ?? '이름 없는 위치'}';
+                      final category = '${pin['category'] ?? '비밀지도'}';
+                      final selected = widget.selected?.id == id;
+
+                      return _MapLocationTile(
+                        name: name,
+                        category: category,
+                        selected: selected,
+                        onTap: () => Navigator.pop(
+                          context,
+                          _SelectedMapLocation(
+                            id: id,
+                            name: name,
+                            category: category,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _createNewPlace() {
+    final name = widget.newPlaceCtrl.text.trim();
+    if (name.isEmpty) return;
+    Navigator.pop(
+      context,
+      _SelectedMapLocation(id: null, name: name, category: 'MomentLoop'),
+    );
+  }
+}
+
+class _MapLocationTile extends StatelessWidget {
+  final String name;
+  final String category;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _MapLocationTile({
+    required this.name,
+    required this.category,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        decoration: BoxDecoration(
+          color: selected ? kMainRoseSoft : kMainPaperSoft,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: selected ? kMainRose : kMainLine),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              selected
+                  ? Icons.radio_button_checked_rounded
+                  : Icons.place_outlined,
+              color: selected ? kMainRose : kMainInk,
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: mainBody(
+                      size: 15,
+                      color: kMainInk,
+                      weight: FontWeight.w900,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    category,
+                    style: mainBody(size: 12, color: kMainMuted),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),

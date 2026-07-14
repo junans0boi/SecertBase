@@ -43,6 +43,23 @@ void main() {
     },
   );
 
+  test('linkedSetlogPostsForMap prefers direct map_pin_id links', () {
+    final linked = linkedSetlogPostsForMap(
+      {'id': 12, 'place_name': '성수 카페', 'visit_date': '2026-07-14'},
+      [
+        {
+          'id': 1,
+          'map_pin_id': 12,
+          'taken_at': '2026-07-13',
+          'caption': '직접 연결',
+        },
+        {'id': 2, 'taken_at': '2026-07-14', 'caption': '같은 날 기록'},
+      ],
+    );
+
+    expect(linked.map((post) => post['id']), [1]);
+  });
+
   test('linkedSetlogPostsForMap falls back to same-day posts', () {
     final linked = linkedSetlogPostsForMap(
       {'place_name': '성수 카페', 'visit_date': '2026-07-14'},
