@@ -34,7 +34,9 @@ const _emotionTags = [
 final _koreaCenter = LatLng(36.35, 127.85);
 
 class MapScreen extends StatefulWidget {
-  const MapScreen({super.key});
+  final bool closeAsModal;
+
+  const MapScreen({super.key, this.closeAsModal = false});
 
   @override
   State<MapScreen> createState() => _MapScreenState();
@@ -1355,7 +1357,9 @@ class _MapScreenState extends State<MapScreen> {
                   Row(
                     children: [
                       _RoundIconButton(
-                        icon: Icons.arrow_back_ios_new_rounded,
+                        icon: widget.closeAsModal
+                            ? Icons.close_rounded
+                            : Icons.arrow_back_ios_new_rounded,
                         onTap: () => Navigator.pop(context),
                       ),
                       const SizedBox(width: 8),

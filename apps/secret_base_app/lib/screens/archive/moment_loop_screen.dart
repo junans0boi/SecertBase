@@ -9,6 +9,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../core/auth_service.dart';
 import '../../core/main_design.dart';
+import 'map_screen.dart';
 
 class MomentLoopScreen extends StatefulWidget {
   const MomentLoopScreen({super.key});
@@ -235,6 +236,20 @@ class _MomentHeader extends StatelessWidget {
         children: [
           Row(
             children: [
+              IconButton.filled(
+                onPressed: () => Navigator.maybePop(context),
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 17),
+                style: IconButton.styleFrom(
+                  backgroundColor: kMainPaper,
+                  foregroundColor: kMainInk,
+                  fixedSize: const Size(42, 42),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    side: const BorderSide(color: kMainLine),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -720,6 +735,14 @@ class _SelectedMapLocation {
   bool get isNew => id == null;
 }
 
+class _MapLocationPickerResult {
+  final _SelectedMapLocation? location;
+  final bool openMap;
+
+  const _MapLocationPickerResult.location(this.location) : openMap = false;
+  const _MapLocationPickerResult.openMap() : location = null, openMap = true;
+}
+
 class _CreateMomentPage extends StatefulWidget {
   final AuthService auth;
   final List<_PickedMomentMedia> initialMedia;
@@ -821,22 +844,40 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
     await _loadMapPins();
     if (!mounted) return;
 
-    final newPlaceCtrl = TextEditingController();
-    final picked = await showModalBottomSheet<_SelectedMapLocation?>(
+    final picked = await showModalBottomSheet<_MapLocationPickerResult?>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => _MapLocationPickerSheet(
         pins: _mapPins,
         selected: _selectedLocation,
-        newPlaceCtrl: newPlaceCtrl,
         loading: _loadingLocations,
       ),
     );
-    newPlaceCtrl.dispose();
 
     if (!mounted || picked == null) return;
-    setState(() => _selectedLocation = picked);
+    if (picked.openMap) {
+      await _openSecretMapForLocationAdd();
+      if (!mounted) return;
+      await _loadMapPins();
+      if (!mounted) return;
+      await _pickLocation();
+      return;
+    }
+
+    final location = picked.location;
+    if (location != null) {
+      setState(() => _selectedLocation = location);
+    }
+  }
+
+  Future<void> _openSecretMapForLocationAdd() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => const MapScreen(closeAsModal: true),
+      ),
+    );
   }
 
   Future<int?> _ensureMapPinId({
@@ -1282,13 +1323,11 @@ class _LocationAddButton extends StatelessWidget {
 class _MapLocationPickerSheet extends StatefulWidget {
   final List<Map<String, dynamic>> pins;
   final _SelectedMapLocation? selected;
-  final TextEditingController newPlaceCtrl;
   final bool loading;
 
   const _MapLocationPickerSheet({
     required this.pins,
     required this.selected,
-    required this.newPlaceCtrl,
     required this.loading,
   });
 
@@ -1298,9 +1337,28 @@ class _MapLocationPickerSheet extends StatefulWidget {
 }
 
 class _MapLocationPickerSheetState extends State<_MapLocationPickerSheet> {
+  final _searchCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  List<Map<String, dynamic>> get _filteredPins {
+    final query = _searchCtrl.text.trim().toLowerCase();
+    if (query.isEmpty) return widget.pins;
+    return widget.pins.where((pin) {
+      final name = '${pin['place_name'] ?? ''}'.toLowerCase();
+      final category = '${pin['category'] ?? ''}'.toLowerCase();
+      return name.contains(query) || category.contains(query);
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.of(context).viewInsets.bottom;
+    final pins = _filteredPins;
 
     return Container(
       constraints: BoxConstraints(
@@ -1329,48 +1387,93 @@ class _MapLocationPickerSheetState extends State<_MapLocationPickerSheet> {
           Text('비밀지도 위치', style: mainTitle(size: 22)),
           const SizedBox(height: 6),
           Text(
-            '게시물이 선택한 지도 위치와 바로 연결돼요.',
+            '이미 등록한 위치를 검색하거나 비밀지도에서 새로 추가하세요.',
             style: mainBody(size: 13, color: kMainMuted),
           ),
           const SizedBox(height: 16),
-          TextField(
-            controller: widget.newPlaceCtrl,
-            textInputAction: TextInputAction.done,
-            style: mainBody(size: 15, color: kMainInk),
-            onSubmitted: (_) => _createNewPlace(),
-            decoration: InputDecoration(
-              hintText: '새 위치 이름 입력',
-              hintStyle: mainBody(size: 14, color: kMainMuted),
-              filled: true,
-              fillColor: kMainPaperSoft,
-              prefixIcon: const Icon(Icons.add_location_alt_outlined),
-              suffixIcon: IconButton(
-                onPressed: _createNewPlace,
-                icon: const Icon(Icons.check_rounded),
-                tooltip: '새 위치 선택',
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _searchCtrl,
+                  textInputAction: TextInputAction.search,
+                  style: mainBody(size: 15, color: kMainInk),
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    hintText: '등록한 위치 검색',
+                    hintStyle: mainBody(size: 14, color: kMainMuted),
+                    filled: true,
+                    fillColor: kMainPaperSoft,
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    suffixIcon: _searchCtrl.text.isEmpty
+                        ? null
+                        : IconButton(
+                            onPressed: () {
+                              _searchCtrl.clear();
+                              setState(() {});
+                            },
+                            icon: const Icon(Icons.close_rounded),
+                            tooltip: '검색 지우기',
+                          ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
               ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
+              const SizedBox(width: 10),
+              IconButton.filled(
+                onPressed: () => Navigator.pop(
+                  context,
+                  const _MapLocationPickerResult.openMap(),
+                ),
+                icon: const Icon(Icons.add_location_alt_outlined),
+                tooltip: '비밀지도에서 추가',
+                style: IconButton.styleFrom(
+                  backgroundColor: kMainInk,
+                  foregroundColor: Colors.white,
+                  fixedSize: const Size(48, 48),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
           const SizedBox(height: 14),
           Flexible(
             child: widget.loading
                 ? const Center(child: CircularProgressIndicator())
-                : widget.pins.isEmpty
+                : pins.isEmpty
                 ? Center(
-                    child: Text(
-                      '비밀지도에 저장된 위치가 없어요',
-                      style: mainBody(size: 14, color: kMainMuted),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.map_outlined,
+                            color: kMainMuted,
+                            size: 34,
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            widget.pins.isEmpty
+                                ? '비밀지도에 저장된 위치가 없어요'
+                                : '검색 결과가 없어요',
+                            style: mainBody(size: 14, color: kMainMuted),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
                     ),
                   )
                 : ListView.separated(
-                    itemCount: widget.pins.length,
+                    itemCount: pins.length,
                     separatorBuilder: (_, _) => const SizedBox(height: 8),
                     itemBuilder: (context, index) {
-                      final pin = widget.pins[index];
+                      final pin = pins[index];
                       final id = int.tryParse('${pin['id']}');
                       final name = '${pin['place_name'] ?? '이름 없는 위치'}';
                       final category = '${pin['category'] ?? '비밀지도'}';
@@ -1382,10 +1485,12 @@ class _MapLocationPickerSheetState extends State<_MapLocationPickerSheet> {
                         selected: selected,
                         onTap: () => Navigator.pop(
                           context,
-                          _SelectedMapLocation(
-                            id: id,
-                            name: name,
-                            category: category,
+                          _MapLocationPickerResult.location(
+                            _SelectedMapLocation(
+                              id: id,
+                              name: name,
+                              category: category,
+                            ),
                           ),
                         ),
                       );
@@ -1394,15 +1499,6 @@ class _MapLocationPickerSheetState extends State<_MapLocationPickerSheet> {
           ),
         ],
       ),
-    );
-  }
-
-  void _createNewPlace() {
-    final name = widget.newPlaceCtrl.text.trim();
-    if (name.isEmpty) return;
-    Navigator.pop(
-      context,
-      _SelectedMapLocation(id: null, name: name, category: 'MomentLoop'),
     );
   }
 }
