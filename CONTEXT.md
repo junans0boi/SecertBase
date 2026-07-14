@@ -134,6 +134,12 @@ Recently completed Secret Map slice:
 - `map_pins` PATCH/DELETE ownership check: both now require JWT `Authorization`; only the original author can update/delete, with legacy `created_by` UserCode fallback for old rows.
 - `PATCH /api/map/:id` now persists `rating`, `memo`, `visit_date`, `status`, and `emotion_tags`.
 
+Recently completed relationship management slice:
+
+- Users can disconnect from a partner via `DELETE /api/user/partner` with JWT `Authorization`.
+- Disconnect clears both users' `PartnerCode` values and deletes the active `Couples` row so either user can pair again later.
+- Existing archive rows tied to the old `couple_id` are preserved but no longer appear under a future new couple.
+
 Resolved deployment divergence:
 
 - server-only commit `e792dc7` was recovered into `origin/main` as `b190e9a`

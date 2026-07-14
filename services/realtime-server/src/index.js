@@ -35,6 +35,7 @@ const io = new Server(server, {
   },
   transports: ["websocket"],
 });
+app.locals.io = io;
 
 registerSocketHandlers(io);
 

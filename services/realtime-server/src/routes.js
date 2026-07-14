@@ -12,6 +12,7 @@ import { query, transaction } from './db.js';
 import { config } from './config.js';
 import { providerState, searchPlaces } from './place-search.js';
 import { canEditMapPin, normalizeMapEditorUserId } from './map-ownership.js';
+import { partnerIdForCouple } from './couple-separation.js';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const archiver = require('archiver');
@@ -833,6 +834,50 @@ router.post('/user/partner', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     console.error('[API] /user/partner error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+// 애인 연결 해제
+router.delete('/user/partner', async (req, res) => {
+  try {
+    await ensureUserColumns();
+    const userId = getAuthenticatedUserId(req);
+    if (!userId) {
+      return res.status(401).json({ ok: false, reason: 'unauthorized' });
+    }
+
+    const coupleRes = await query(
+      `SELECT CoupleId, User1Id, User2Id, RoomCode
+       FROM Couples
+       WHERE User1Id = ? OR User2Id = ?
+       LIMIT 1`,
+      [userId, userId]
+    );
+    const couple = coupleRes.rows[0] ?? null;
+    const partnerId = partnerIdForCouple(couple, userId);
+
+    if (!couple || !partnerId) {
+      return res.status(404).json({ ok: false, reason: 'couple_not_found' });
+    }
+
+    await transaction(async (connection) => {
+      await connection.execute(
+        'UPDATE User_Preference SET PartnerCode = NULL WHERE UserId IN (?, ?)',
+        [userId, partnerId]
+      );
+      await connection.execute(
+        'DELETE FROM Couples WHERE CoupleId = ?',
+        [couple.CoupleId]
+      );
+    });
+
+    req.app.locals.io?.to(couple.RoomCode).emit('partner:disconnected', {
+      reason: 'partner_disconnected',
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[API] /user/partner DELETE error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
   }
 });

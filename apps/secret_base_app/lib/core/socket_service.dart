@@ -163,12 +163,12 @@ class SocketService extends ChangeNotifier {
   // catch mind (그림퀴즈)
   bool catchActive = false;
   String? catchDrawer;
-  String? catchWord;      // 내가 출제자일 때만 set
+  String? catchWord; // 내가 출제자일 때만 set
   int catchWordLen = 0;
   int catchRound = 0;
   int catchMaxRounds = 6;
   Map<String, int> catchScores = {};
-  String? catchPhase;     // 'drawing' | 'guessed' | 'timeout' | 'gameover'
+  String? catchPhase; // 'drawing' | 'guessed' | 'timeout' | 'gameover'
   String? catchGameWinner;
   String? catchHint;
   List<Map<String, dynamic>> catchGuessLog = [];
@@ -288,7 +288,9 @@ class SocketService extends ChangeNotifier {
       final emojis = _stringMap(map['profileEmojis']);
       if (emojis.isNotEmpty) profileEmojis = emojis;
       final nicks = _stringMap(map['nicknames']);
-      if (nicks.isNotEmpty) presenceNicknames = {...presenceNicknames, ...nicks};
+      if (nicks.isNotEmpty) {
+        presenceNicknames = {...presenceNicknames, ...nicks};
+      }
       _log('대기방 업데이트: $lobbyGameType / ${lobbyPlayers.join(', ')}');
       notifyListeners();
     });
@@ -305,7 +307,9 @@ class SocketService extends ChangeNotifier {
       final emojis = _stringMap(map['profileEmojis']);
       if (emojis.isNotEmpty) profileEmojis = emojis;
       final nicks = _stringMap(map['nicknames']);
-      if (nicks.isNotEmpty) presenceNicknames = {...presenceNicknames, ...nicks};
+      if (nicks.isNotEmpty) {
+        presenceNicknames = {...presenceNicknames, ...nicks};
+      }
       _log('대기방 게임 시작: $lobbyStartedGameType');
       notifyListeners();
     });
@@ -371,8 +375,9 @@ class SocketService extends ChangeNotifier {
           rpsLastChoices = choices.map((k, v) => MapEntry('$k', '$v'));
         }
         final sc = map['scores'];
-        if (sc is Map)
+        if (sc is Map) {
           rpsScores = sc.map((k, v) => MapEntry('$k', (v as num).toInt()));
+        }
         rpsRound = (map['round'] as num?)?.toInt() ?? rpsRound;
       } else if (mode == 'mukjippa') {
         final choices = map['choices'];
@@ -396,8 +401,9 @@ class SocketService extends ChangeNotifier {
         }
         rpsLastTotal = (map['total'] as num?)?.toInt();
         final sc = map['scores'];
-        if (sc is Map)
+        if (sc is Map) {
           rpsScores = sc.map((k, v) => MapEntry('$k', (v as num).toInt()));
+        }
         rpsRound = (map['round'] as num?)?.toInt() ?? rpsRound;
       }
 
@@ -453,7 +459,7 @@ class SocketService extends ChangeNotifier {
       final slot = (map['slot'] as num?)?.toInt();
       if (slot != null) piratePickedSlots = [...piratePickedSlots, slot];
       pirateCurrentTurn = map['nextTurn'] as String?;
-      _log('해적룰렛 선택: $slot → 다음 ${pirateCurrentTurn}');
+      _log('해적룰렛 선택: $slot → 다음 $pirateCurrentTurn');
       notifyListeners();
     });
 
@@ -756,14 +762,17 @@ class SocketService extends ChangeNotifier {
       catchGuessLog = [];
       final nicks = _m(map['nicknames']);
       if (nicks.isNotEmpty) {
-        presenceNicknames = {...presenceNicknames, ...nicks.map((k, v) => MapEntry(k, '$v'))};
+        presenceNicknames = {
+          ...presenceNicknames,
+          ...nicks.map((k, v) => MapEntry(k, '$v')),
+        };
       }
     }
 
     socket.on('game:catch:started', (data) {
       final map = _m(data);
       applyRoundStart(map);
-      _log('캐치마인드 시작 round=${catchRound}, drawer=$catchDrawer');
+      _log('캐치마인드 시작 round=$catchRound, drawer=$catchDrawer');
       notifyListeners();
     });
 
@@ -802,7 +811,7 @@ class SocketService extends ChangeNotifier {
       catchPhase = 'guessed';
       catchWord = map['word'] as String?; // 정답자에게도 공개
       catchScores = _intMap(map['scores']);
-      _log('정답! word=${catchWord}, guesser=${map['guesser']}');
+      _log('정답! word=$catchWord, guesser=${map['guesser']}');
       notifyListeners();
     });
 
@@ -818,6 +827,12 @@ class SocketService extends ChangeNotifier {
       catchHint = _m(data)['hint'] as String?;
       _log('힌트: $catchHint');
       notifyListeners();
+    });
+
+    socket.on('partner:disconnected', (_) {
+      _log('애인 연결 해제 이벤트 수신');
+      unawaited(AuthService().getProfile());
+      disconnect();
     });
 
     socket.on('game:catch:gameover', (data) {
@@ -1186,9 +1201,19 @@ class SocketService extends ChangeNotifier {
     _socket?.emit('game:catch:start', {'maxRounds': maxRounds});
   }
 
-  void sendCatchDraw(double x, double y, bool newStroke, int colorIdx, int sizeIdx) {
+  void sendCatchDraw(
+    double x,
+    double y,
+    bool newStroke,
+    int colorIdx,
+    int sizeIdx,
+  ) {
     _socket?.emit('game:catch:draw', {
-      'x': x, 'y': y, 's': newStroke, 'c': colorIdx, 'sz': sizeIdx,
+      'x': x,
+      'y': y,
+      's': newStroke,
+      'c': colorIdx,
+      'sz': sizeIdx,
     });
   }
 
@@ -1415,7 +1440,9 @@ class SocketService extends ChangeNotifier {
 
   static Map<String, int> _intMap(dynamic v) {
     final map = _m(v);
-    return map.map((key, value) => MapEntry(key, (value as num?)?.toInt() ?? 0));
+    return map.map(
+      (key, value) => MapEntry(key, (value as num?)?.toInt() ?? 0),
+    );
   }
 
   String _currentNickname() {
@@ -1426,7 +1453,9 @@ class SocketService extends ChangeNotifier {
   /// userId → 닉네임. 없으면 userId 그대로.
   String nameOf(String? uid) {
     if (uid == null) return '';
-    if (uid == userId) return _currentNickname().isNotEmpty ? _currentNickname() : uid;
+    if (uid == userId) {
+      return _currentNickname().isNotEmpty ? _currentNickname() : uid;
+    }
     return presenceNicknames[uid] ?? uid;
   }
 }

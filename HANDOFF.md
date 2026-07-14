@@ -2,7 +2,55 @@
 
 Claude/Codex/Gemini 같은 다음 에이전트가 이어받기 위한 컨텍스트 정리.
 
-## 0. 최신 업데이트 (2026-07-14, MomentLoop 지도 연결 및 map ownership)
+## 0. 최신 업데이트 (2026-07-14, 이별/애인 연결 해제)
+
+이번 세션에서 이별/연결 해제 MVP를 구현했다.
+
+### 완료
+
+- `DELETE /api/user/partner`
+  - JWT `Authorization`으로 현재 사용자를 식별한다.
+  - 현재 `Couples` row에서 상대 user id를 찾는다.
+  - 트랜잭션으로 양쪽 `User_Preference.PartnerCode`를 `NULL` 처리하고 해당 `Couples` row를 삭제한다.
+  - 기존 room에 `partner:disconnected` socket event를 emit해 상대 클라이언트도 프로필 refresh/소켓 해제를 수행한다.
+  - 이후 각 사용자는 다른 사람과 다시 연결할 수 있다.
+- `apps/secret_base_app/lib/core/auth_service.dart`
+  - `disconnectPartner()` 추가.
+- `apps/secret_base_app/lib/screens/settings/settings_screen.dart`
+  - 설정 > 계정 및 연결에 `애인 연결 해제` 버튼 추가.
+  - 확인 다이얼로그 후 해제 성공 시 socket disconnect, couple info 초기화, AuthService profile refresh.
+- `apps/secret_base_app/lib/core/socket_service.dart`
+  - `partner:disconnected` 수신 시 AuthService profile refresh 후 socket disconnect.
+- `services/realtime-server/src/couple-separation.js`
+  - couple member/partner id 판정 helper 추가.
+- `docs/REST_API.md`, `CONTEXT.md`, `HANDOFF.md`
+  - 연결 해제 계약과 데이터 보존 방침 반영.
+
+데이터 방침:
+
+- 연결 해제는 활성 연결만 끊는다.
+- 기존 archive/setlog/map 등 old `couple_id`에 묶인 기록은 삭제하지 않는다.
+- 새 커플로 다시 연결하면 새 `Couples.CoupleId`가 생기므로 과거 old couple 기록은 새 커플 scope에서 보이지 않는다.
+
+검증:
+
+```text
+cd services/realtime-server && npm test
+pass, 31 tests
+
+cd services/realtime-server && npm run check
+pass
+
+cd apps/secret_base_app && flutter analyze lib/core/auth_service.dart lib/core/socket_service.dart lib/screens/settings/settings_screen.dart
+pass
+
+cd apps/secret_base_app && flutter test
+fails on existing dart:html VM-test incompatibility in uno_audio.dart / jukebox_screen.dart
+```
+
+---
+
+## 1. 이전 최신 업데이트 (2026-07-14, MomentLoop 지도 연결 및 map ownership)
 
 이번 세션에서 남은 Secret Map vertical slice 2개를 처리했다.
 

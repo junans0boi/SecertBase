@@ -27,6 +27,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _profileSaving = false;
   bool _passwordSaving = false;
   bool _anniversarySaving = false;
+  bool _partnerDisconnecting = false;
   String? _profileMessage;
   String? _passwordMessage;
   String? _anniversaryMessage;
@@ -99,6 +100,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
+  }
+
+  void _confirmDisconnectPartner() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: kMainPaper,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('애인 연결 해제', style: mainTitle(size: 24)),
+        content: Text(
+          '현재 애인과의 연결을 해제할까요?\n서로의 앱이 연결 전 상태로 돌아가고, 이후 다른 사람과 다시 연결할 수 있어요.',
+          style: mainBody(size: 14, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('취소', style: mainBody(size: 14, color: kMainMuted)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _disconnectPartner();
+            },
+            child: Text(
+              '해제하기',
+              style: mainBody(size: 14, color: kError, weight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _disconnectPartner() async {
+    if (_partnerDisconnecting) return;
+    setState(() => _partnerDisconnecting = true);
+    final ok = await _auth.disconnectPartner();
+    if (ok) _socket.disconnect();
+    if (!mounted) return;
+    setState(() {
+      _partnerDisconnecting = false;
+      if (ok) {
+        _coupleInfo = null;
+        _anniversaryDate = null;
+      }
+    });
+
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('애인 연결을 해제했어요', style: mainBody(color: Colors.white)),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('연결 해제에 실패했어요', style: mainBody(color: Colors.white)),
+        ),
+      );
+    }
   }
 
   @override
@@ -205,6 +266,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ],
         ),
+        if (_auth.user?['PartnerCode'] != null) ...[
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _partnerDisconnecting
+                  ? null
+                  : _confirmDisconnectPartner,
+              icon: const Icon(Icons.heart_broken_outlined, size: 17),
+              label: Text(_partnerDisconnecting ? '해제 중...' : '애인 연결 해제'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: kError,
+                backgroundColor: kMainPaperSoft,
+                side: BorderSide(color: kError.withAlpha(120)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+          ),
+        ],
       ],
     ),
   );

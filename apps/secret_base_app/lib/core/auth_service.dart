@@ -301,6 +301,25 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  Future<bool> disconnectPartner() async {
+    if (_token == null || _user == null) return false;
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/api/user/partner'),
+        headers: {'Authorization': 'Bearer $_token'},
+      );
+
+      if (response.statusCode == 200) {
+        await getProfile();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint('[Auth] Disconnect partner error: $e');
+      return false;
+    }
+  }
+
   Future<Map<String, dynamic>?> getProfile() async {
     if (_token == null || _user == null) return null;
     final uid = _user!['UserId'] ?? _user!['id'];

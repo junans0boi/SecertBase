@@ -351,6 +351,32 @@ cannot_pair_with_self
 internal_error
 ```
 
+### DELETE `/user/partner`
+
+Disconnects the current user from their partner. The editor is derived from the JWT `Authorization` header. The server clears both users' `PartnerCode` values and removes the current `Couples` row so each user can pair with someone else later.
+
+Historical archive rows that already reference the old `couple_id` are not deleted.
+
+Headers:
+
+```text
+Authorization: Bearer <jwt>
+```
+
+Response:
+
+```json
+{ "ok": true }
+```
+
+Failure reasons:
+
+```text
+unauthorized
+couple_not_found
+internal_error
+```
+
 ## Couple
 
 ### GET `/couple/info?user_id=1`
