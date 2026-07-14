@@ -64,7 +64,7 @@ class SocketService extends ChangeNotifier {
   Map<String, String>? telepathyChoices;
 
   // RPS multi-mode
-  String? rpsMode; // 'rps3' | 'mukjippa' | 'hanabagi'
+  String? rpsMode; // 'single' | 'rps3' | 'mukjippa' | 'hanabagi'
   bool rpsActive = false;
   List<String> rpsPlayers = [];
   Map<String, int> rpsScores = {};
@@ -371,7 +371,7 @@ class SocketService extends ChangeNotifier {
       rpsRoundWinner = map['roundWinner'] as String?;
       rpsGameWinner = map['gameWinner'] as String?;
 
-      if (mode == 'rps3') {
+      if (mode == 'single' || mode == 'rps3') {
         final choices = map['choices'];
         if (choices is Map) {
           rpsLastChoices = choices.map((k, v) => MapEntry('$k', '$v'));
@@ -1006,7 +1006,7 @@ class SocketService extends ChangeNotifier {
       catchGuessLog = [];
     }
     // RPS 게임 로비 재진입 시 이전 게임 상태 초기화
-    if (gameType == 'rps') {
+    if (gameType == 'rps' || gameType == 'zero') {
       rpsMode = null;
       rpsActive = false;
       rpsPlayers = [];

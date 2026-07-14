@@ -49,6 +49,7 @@ const gameTypes = [
   "dice",
   "roulette",
   "rps",
+  "zero",
   "telepathy",
   "pirate",
   "yut",
@@ -94,7 +95,7 @@ const rpsSchema = z.object({
 });
 
 const rpsStartSchema = z.object({
-  mode: z.enum(["rps3", "mukjippa", "hanabagi"]),
+  mode: z.enum(["single", "rps3", "mukjippa", "hanabagi"]),
 });
 
 const rpsPickSchema = z.object({
@@ -780,7 +781,25 @@ export const registerSocketHandlers = (io) => {
       // Both picked — resolve round
       let roundWinner = null; // userId or "draw"
 
-      if (game.mode === "rps3") {
+      if (game.mode === "single") {
+        const c1 = game.picks[p1], c2 = game.picks[p2];
+        const rel = rpsWinner(c1, c2);
+        roundWinner = rel === "draw" ? "draw" : rel === "p1" ? p1 : p2;
+        if (roundWinner !== "draw") {
+          game.scores[roundWinner] = (game.scores[roundWinner] || 0) + 1;
+          game.gameWinner = roundWinner;
+        }
+        game.round++;
+        const event = {
+          mode: "single", round: game.round - 1,
+          choices: { [p1]: c1, [p2]: c2 },
+          roundWinner, scores: { ...game.scores }, gameWinner: game.gameWinner,
+        };
+        game.picks = {};
+        await redis.set(rpsGameKey(roomCode), JSON.stringify(game), "EX", 600);
+        io.to(roomCode).emit("game:rps:round_result", event);
+
+      } else if (game.mode === "rps3") {
         const c1 = game.picks[p1], c2 = game.picks[p2];
         const rel = rpsWinner(c1, c2);
         roundWinner = rel === "draw" ? "draw" : rel === "p1" ? p1 : p2;

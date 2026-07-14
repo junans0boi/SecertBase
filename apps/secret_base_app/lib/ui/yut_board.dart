@@ -84,9 +84,11 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
   int? _animThrowAt;
   int? _notifiedThrowAt;
   Timer? _countdownTimer;
+  Timer? _moveUnlockTimer;
   int _countdownSeconds = 0;
 
   int? _selectedPieceId;
+  bool _moveInFlight = false;
 
   @override
   void initState() {
@@ -137,6 +139,8 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
         widget.phase != oldWidget.phase ||
         widget.pendingMoves != oldWidget.pendingMoves) {
       _selectedPieceId = null;
+      _moveUnlockTimer?.cancel();
+      _moveInFlight = false;
     }
     if (widget.phase != oldWidget.phase ||
         widget.orderCountdownUntil != oldWidget.orderCountdownUntil) {
@@ -147,6 +151,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
   @override
   void dispose() {
     _countdownTimer?.cancel();
+    _moveUnlockTimer?.cancel();
     _resultBounceCtrl.dispose();
     _stickThrowCtrl.dispose();
     super.dispose();
@@ -478,6 +483,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     final pieces = widget.currentUser == 'gf'
         ? widget.p2Pieces
         : widget.p1Pieces;
+    if (_moveInFlight) return false;
     if (!isMyTurn || !hasMove || !isMovePhase || pieces == null) return false;
     if (pieceId < 0 || pieceId >= pieces.length) return false;
     return _hasMoveOptionFor(pieces[pieceId]);
@@ -504,6 +510,11 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
           if (pieceId == null) return;
           setState(() {
             _selectedPieceId = null;
+            _moveInFlight = true;
+          });
+          _moveUnlockTimer?.cancel();
+          _moveUnlockTimer = Timer(const Duration(seconds: 2), () {
+            if (mounted) setState(() => _moveInFlight = false);
           });
           widget.onMovePiece(pieceId, option.index);
         },

@@ -65,10 +65,20 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       '✊',
       '가위바위보',
       '가장 빠른 승부가 필요할 때',
-      '3판선승, 묵찌빠, 제로까지 같이 즐길 수 있는 기본기 탄탄한 커플 승부예요.',
+      '단판, 3판선승, 묵찌빠를 골라 빠르게 승부를 낼 수 있어요.',
       '동시 선택 · 모드 지원',
       kMainSage,
       kMainSageSoft,
+    ),
+    _GameInfo(
+      'zero',
+      '0️⃣',
+      '제로',
+      '숫자와 합을 동시에 읽는 승부',
+      '내 숫자와 합계 예측을 동시에 고르고 하나~둘~ 후 결과를 확인해요. 먼저 3점을 따면 승리예요.',
+      '동시 선택 · 3점 선승',
+      kMainHoney,
+      kMainHoneySoft,
     ),
     _GameInfo(
       'telepathy',
@@ -141,14 +151,16 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       case 2:
         return const RpsScreen();
       case 3:
-        return const TelepathyScreen();
+        return const RpsScreen(fixedMode: 'hanabagi');
       case 4:
-        return const PirateScreen();
+        return const TelepathyScreen();
       case 5:
-        return const YutScreen();
+        return const PirateScreen();
       case 6:
-        return const UnoScreen();
+        return const YutScreen();
       case 7:
+        return const UnoScreen();
+      case 8:
         return const BombScreen();
       default:
         return const CatchScreen();

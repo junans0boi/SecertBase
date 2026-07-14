@@ -18,17 +18,15 @@ enum _Phase {
 
 // ── Screen ───────────────────────────────────────────────────────────────────
 class RpsScreen extends StatefulWidget {
-  const RpsScreen({super.key});
+  final String? fixedMode;
+
+  const RpsScreen({super.key, this.fixedMode});
   @override
   State<RpsScreen> createState() => _RpsScreenState();
 }
 
 class _RpsScreenState extends State<RpsScreen> with TickerProviderStateMixin {
   final _socket = SocketService();
-
-  // ── legacy single-round ───────────────────────────────────────────────────
-  String? _myChoice;
-  bool _waiting = false;
 
   // ── multi-mode ────────────────────────────────────────────────────────────
   _Phase _phase = _Phase.idle;
@@ -68,6 +66,7 @@ class _RpsScreenState extends State<RpsScreen> with TickerProviderStateMixin {
     final active = _socket.rpsActive;
     final roundWinner = _socket.rpsRoundWinner;
     final gameWinner = _socket.rpsGameWinner;
+    final fixedMode = widget.fixedMode;
 
     // 게임 종료
     if (gameWinner != null) {
@@ -99,10 +98,22 @@ class _RpsScreenState extends State<RpsScreen> with TickerProviderStateMixin {
       return;
     }
 
-    // 단판 가위바위보 대기 상태
-    setState(() {
-      _waiting = _socket.rpsResult == null && _myChoice != null;
-    });
+    if (active &&
+        (mode == 'single' || mode == 'rps3' || mode == 'mukjippa') &&
+        _phase == _Phase.idle) {
+      setState(() {
+        _phase = _Phase.picking;
+        _tapped = false;
+      });
+      return;
+    }
+
+    if (!active && mode == null && fixedMode != null && _isHost) {
+      Future.microtask(() => _startMode(fixedMode));
+      return;
+    }
+
+    setState(() {});
   }
 
   // ── post-chant (결과 공개 전 챈트) ────────────────────────────────────────
@@ -211,24 +222,6 @@ class _RpsScreenState extends State<RpsScreen> with TickerProviderStateMixin {
 
   // ── picks ─────────────────────────────────────────────────────────────────
 
-  void _legacyPick(String choice) {
-    if (_waiting) return;
-    setState(() {
-      _myChoice = choice;
-      _waiting = true;
-    });
-    _socket.playRps(choice);
-  }
-
-  void _legacyReset() {
-    setState(() {
-      _myChoice = null;
-      _waiting = false;
-    });
-    _socket.rpsResult = null;
-    _socket.rpsChoices = null;
-  }
-
   bool get _isHost =>
       _socket.userId != null && _socket.lobbyHost == _socket.userId;
 
@@ -298,7 +291,7 @@ class _RpsScreenState extends State<RpsScreen> with TickerProviderStateMixin {
     final gameWinner = sock.rpsGameWinner;
 
     return GameScaffold(
-      title: '✊ 가위바위보',
+      title: widget.fixedMode == 'hanabagi' ? '0️⃣ 제로' : '✊ 가위바위보',
       actions: [const GameMenuButton()],
       child: LayoutBuilder(
         builder: (ctx, box) {
@@ -318,18 +311,23 @@ class _RpsScreenState extends State<RpsScreen> with TickerProviderStateMixin {
 
           // ── 모드 미선택 ────────────────────────────────────────────────────
           if (mode == null && !active && gameWinner == null) {
+            if (widget.fixedMode != null) {
+              return _FixedModeWaitingView(
+                compact: compact,
+                pad: pad,
+                title: widget.fixedMode == 'hanabagi' ? '제로' : '게임 준비 중',
+                description: widget.fixedMode == 'hanabagi'
+                    ? '내 숫자와 합계 예측을 동시에 고르고, 하나~둘~ 후 결과를 확인해요.'
+                    : '방장이 게임을 준비하고 있어요.',
+                isHost: _isHost,
+              );
+            }
             return _ModeSelectView(
               compact: compact,
               pad: pad,
               isHost: _isHost,
               onMode: _startMode,
-              singleResult: sock.rpsResult,
-              singleChoices: sock.rpsChoices,
               userId: sock.userId,
-              singleWaiting: _waiting,
-              myChoice: _myChoice,
-              onLegacyPick: _legacyPick,
-              onLegacyReset: _legacyReset,
             );
           }
 
@@ -361,11 +359,13 @@ class _RpsScreenState extends State<RpsScreen> with TickerProviderStateMixin {
           // ── 진행 중 ────────────────────────────────────────────────────────
           final isWaiting = _phase == _Phase.waiting;
 
-          if (mode == 'rps3') {
+          if (mode == 'single' || mode == 'rps3') {
             return _Rps3View(
               compact: compact,
               pad: pad,
               sock: sock,
+              target: mode == 'single' ? 1 : 3,
+              title: mode == 'single' ? '단판 가위바위보' : null,
               tapped: _tapped,
               waiting: isWaiting,
               onPick: _pickChoice,
@@ -795,122 +795,18 @@ class _ModeSelectView extends StatelessWidget {
   final double pad;
   final bool isHost;
   final void Function(String) onMode;
-  final String? singleResult;
-  final Map<String, String>? singleChoices;
   final String? userId;
-  final bool singleWaiting;
-  final String? myChoice;
-  final void Function(String) onLegacyPick;
-  final VoidCallback onLegacyReset;
 
   const _ModeSelectView({
     required this.compact,
     required this.pad,
     required this.isHost,
     required this.onMode,
-    required this.singleResult,
-    required this.singleChoices,
     required this.userId,
-    required this.singleWaiting,
-    required this.myChoice,
-    required this.onLegacyPick,
-    required this.onLegacyReset,
   });
-
-  static const _choices = [
-    ('rock', '✊', '바위'),
-    ('scissors', '✌️', '가위'),
-    ('paper', '✋', '보'),
-  ];
-
-  static const _resultLabels = {
-    'win': ('🎉 이겼어요!', kSuccess),
-    'lose': ('😢 졌어요', kError),
-    'draw': ('🤝 무승부', kGold),
-  };
 
   @override
   Widget build(BuildContext context) {
-    if (singleResult != null && singleChoices != null) {
-      final (label, color) = _resultLabels[singleResult] ?? ('?', kTextMuted);
-      final emojiMap = {'rock': '✊', 'scissors': '✌️', 'paper': '✋'};
-      final sock = SocketService();
-      final myKey = userId ?? '';
-      final opKey = singleChoices!.keys.firstWhere(
-        (k) => k != myKey,
-        orElse: () => '',
-      );
-      final myEmoji = emojiMap[singleChoices![myKey]] ?? '?';
-      final opEmoji = emojiMap[singleChoices![opKey]] ?? '?';
-      return Padding(
-        padding: EdgeInsets.all(pad),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: color.withValues(alpha: 0.4)),
-              ),
-              child: Text(
-                label,
-                style: GoogleFonts.notoSans(
-                  color: color,
-                  fontSize: compact ? 24 : 28,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ),
-            const SizedBox(height: 28),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _HandBubble(
-                  emoji: myEmoji,
-                  label: myKey.isEmpty ? '나' : sock.nameOf(myKey),
-                  isMe: true,
-                  compact: compact,
-                ),
-                Text(
-                  'vs',
-                  style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 18),
-                ),
-                _HandBubble(
-                  emoji: opEmoji,
-                  label: opKey.isEmpty ? '상대' : sock.nameOf(opKey),
-                  isMe: false,
-                  compact: compact,
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-            OutlinedButton.icon(
-              onPressed: onLegacyReset,
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('다시 하기'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: kPrimary,
-                side: const BorderSide(color: kPrimary),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (singleWaiting) {
-      return const _LiveWaitingView();
-    }
-
     return SingleChildScrollView(
       padding: EdgeInsets.all(pad),
       child: Column(
@@ -928,12 +824,21 @@ class _ModeSelectView extends StatelessWidget {
           const SizedBox(height: 4),
           if (!isHost)
             Text(
-              '선택이 완료되면 바로 시작해요',
+              '가위바위보는 단판, 3판선승, 묵찌빠 중 하나로 시작해요.',
               textAlign: TextAlign.center,
               style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 13),
             ),
           const SizedBox(height: 20),
           if (isHost) ...[
+            _ModeCard(
+              emoji: '⚡',
+              title: '단판 가위바위보',
+              desc: '한 번에 승부를 정해요. 무승부면 다시 한 판!',
+              color: kGold,
+              onTap: () => onMode('single'),
+              compact: compact,
+            ),
+            const SizedBox(height: 12),
             _ModeCard(
               emoji: '✊',
               title: '가위바위보 3판선승',
@@ -951,65 +856,149 @@ class _ModeSelectView extends StatelessWidget {
               onTap: () => onMode('mukjippa'),
               compact: compact,
             ),
+          ] else ...[
             const SizedBox(height: 12),
-            _ModeCard(
-              emoji: '0️⃣',
-              title: '제로',
-              desc: '내 숫자와 합계 예측을 동시에 선택해요. 먼저 3점을 따면 승리.',
-              color: const Color(0xFF2E7D32),
-              onTap: () => onMode('hanabagi'),
+            _ModeInfoCard(
+              emoji: '⚡',
+              title: '단판 가위바위보',
+              desc: '한 번에 승부를 정하는 빠른 모드',
               compact: compact,
             ),
-            const SizedBox(height: 20),
-            const Divider(),
             const SizedBox(height: 12),
-          ],
-          Text(
-            '단판 가위바위보',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.notoSans(
-              color: kTextMuted,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
+            _ModeInfoCard(
+              emoji: '✊',
+              title: '가위바위보 3판선승',
+              desc: '먼저 3번 이기면 승리',
+              compact: compact,
             ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: _choices.map((c) {
-              final (key, emoji, label) = c;
-              return GestureDetector(
-                onTap: () => onLegacyPick(key),
-                child: Container(
-                  width: compact ? 80 : 96,
-                  height: compact ? 80 : 96,
-                  decoration: BoxDecoration(
-                    color: kCard,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: kBorder),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        emoji,
-                        style: TextStyle(fontSize: compact ? 28 : 34),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        label,
-                        style: GoogleFonts.notoSans(
-                          color: kTextMuted,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
+            const SizedBox(height: 12),
+            _ModeInfoCard(
+              emoji: '🀄',
+              title: '묵찌빠',
+              desc: '공격자를 정하고 같은 패로 마무리',
+              compact: compact,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ModeInfoCard extends StatelessWidget {
+  final String emoji;
+  final String title;
+  final String desc;
+  final bool compact;
+
+  const _ModeInfoCard({
+    required this.emoji,
+    required this.title,
+    required this.desc,
+    required this.compact,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.all(compact ? 14 : 16),
+      decoration: BoxDecoration(
+        color: kCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: kBorder),
+      ),
+      child: Row(
+        children: [
+          Text(emoji, style: TextStyle(fontSize: compact ? 24 : 30)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.notoSans(
+                    color: kText,
+                    fontSize: compact ? 14 : 16,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
-              );
-            }).toList(),
+                const SizedBox(height: 2),
+                Text(
+                  desc,
+                  style: GoogleFonts.notoSans(
+                    color: kTextMuted,
+                    fontSize: compact ? 11 : 12,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FixedModeWaitingView extends StatelessWidget {
+  final bool compact;
+  final double pad;
+  final String title;
+  final String description;
+  final bool isHost;
+
+  const _FixedModeWaitingView({
+    required this.compact,
+    required this.pad,
+    required this.title,
+    required this.description,
+    required this.isHost,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.all(pad),
+      child: Center(
+        child: Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(compact ? 18 : 22),
+          decoration: BoxDecoration(
+            color: kCard,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: kBorder),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('0️⃣', style: TextStyle(fontSize: compact ? 44 : 54)),
+              const SizedBox(height: 12),
+              Text(
+                title,
+                style: GoogleFonts.notoSans(
+                  color: kText,
+                  fontSize: compact ? 24 : 30,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                description,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.notoSans(
+                  color: kTextMuted,
+                  fontSize: compact ? 13 : 14,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 18),
+              _LiveWaitingView(
+                emojis: const ['0', '3', '5', '8'],
+                label: isHost ? '게임 시작 중...' : '방장이 게임을 시작하는 중...',
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1316,6 +1305,8 @@ class _Rps3View extends StatelessWidget {
   final bool compact;
   final double pad;
   final SocketService sock;
+  final int target;
+  final String? title;
   final bool tapped;
   final bool waiting;
   final void Function(String) onPick;
@@ -1324,6 +1315,8 @@ class _Rps3View extends StatelessWidget {
     required this.compact,
     required this.pad,
     required this.sock,
+    required this.target,
+    this.title,
     required this.tapped,
     required this.waiting,
     required this.onPick,
@@ -1351,7 +1344,7 @@ class _Rps3View extends StatelessWidget {
           _ScoreBoard(
             myScore: myScore,
             opScore: opScore,
-            target: 3,
+            target: target,
             compact: compact,
             myLabel: sock.nameOf(userId).isNotEmpty ? sock.nameOf(userId) : '나',
             opLabel: sock.nameOf(opId).isNotEmpty ? sock.nameOf(opId) : '상대',
@@ -1361,7 +1354,7 @@ class _Rps3View extends StatelessWidget {
             const _LiveWaitingView(),
           ] else ...[
             Text(
-              '가위바위보!',
+              title ?? '가위바위보!',
               style: GoogleFonts.notoSans(
                 color: kText,
                 fontSize: compact ? 20 : 24,
