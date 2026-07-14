@@ -166,7 +166,7 @@ class _RpsScreenState extends State<RpsScreen> with TickerProviderStateMixin {
         if (!mounted) return;
         HapticFeedback.heavyImpact();
         setState(() => _phase = _Phase.result);
-        Timer(const Duration(milliseconds: 1600), () {
+        Timer(const Duration(seconds: 5), () {
           if (!mounted) return;
 
           // carry-over 업데이트: clearRpsRound() 전에 캡처
@@ -617,23 +617,30 @@ class _ResultView extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _HanaResultCell(
-                  name: sock.nameOf(userId).isNotEmpty
-                      ? sock.nameOf(userId)
-                      : '나',
-                  fingers: myF,
-                  guess: myG,
-                  hit: myG == total,
-                  isMe: true,
-                  compact: compact,
+                Expanded(
+                  child: _HanaResultCell(
+                    name: sock.nameOf(userId).isNotEmpty
+                        ? sock.nameOf(userId)
+                        : '나',
+                    fingers: myF,
+                    guess: myG,
+                    hit: myG == total,
+                    isMe: true,
+                    compact: compact,
+                  ),
                 ),
-                _HanaResultCell(
-                  name: sock.nameOf(opId).isNotEmpty ? sock.nameOf(opId) : '상대',
-                  fingers: opF,
-                  guess: opG,
-                  hit: opG == total,
-                  isMe: false,
-                  compact: compact,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _HanaResultCell(
+                    name: sock.nameOf(opId).isNotEmpty
+                        ? sock.nameOf(opId)
+                        : '상대',
+                    fingers: opF,
+                    guess: opG,
+                    hit: opG == total,
+                    isMe: false,
+                    compact: compact,
+                  ),
                 ),
               ],
             ),
@@ -783,16 +790,21 @@ class _HanaResultCell extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            '$fingers개',
+            '낸 수 $fingers',
             style: GoogleFonts.notoSans(
               color: kText,
               fontSize: compact ? 22 : 26,
               fontWeight: FontWeight.w900,
             ),
           ),
+          const SizedBox(height: 2),
           Text(
-            '예측 $guess ${hit ? '✅' : '❌'}',
-            style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 12),
+            '예측한 합 $guess ${hit ? '✅' : '❌'}',
+            style: GoogleFonts.notoSans(
+              color: hit ? kSuccess : kTextMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ],
       ),
