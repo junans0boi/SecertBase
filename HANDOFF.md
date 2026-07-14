@@ -2,7 +2,53 @@
 
 Claude/Codex/Gemini 같은 다음 에이전트가 이어받기 위한 컨텍스트 정리.
 
-## 0. 최신 업데이트 (2026-07-14, 운영 DB 마이그레이션 및 전면 버그 수정)
+## 0. 최신 업데이트 (2026-07-14, MomentLoop 지도 연결 및 map ownership)
+
+이번 세션에서 남은 Secret Map vertical slice 2개를 처리했다.
+
+### 완료
+
+- `apps/secret_base_app/lib/screens/archive/map_screen.dart`
+  - 비밀지도 진입 시 `/api/setlog?user_id=...`도 함께 로드한다.
+  - 장소 상세의 `연결된 추억` placeholder를 실제 MomentLoop 기록 요약으로 교체했다.
+  - 매칭 규칙: 방문일(`visit_date`)이 있으면 같은 `taken_at/captured_at` 날짜의 setlog를 연결하고, 같은 날짜 안에서는 장소명이 caption에 들어간 기록을 먼저 보여준다. 방문일이 없으면 caption의 장소명 포함 여부로만 연결한다.
+  - 새 핀 생성 요청에는 `user_id`를 포함하고, `다녀왔어요` PATCH 요청에는 JWT `Authorization` 헤더를 포함한다.
+- `services/realtime-server/src/routes.js`
+  - `PATCH /api/map/:id`는 JWT `Authorization` 필수.
+  - 작성자만 수정 가능. JWT의 `userId`를 `map_pins.user_id`와 비교하고, 오래된 row는 `created_by` UserCode fallback.
+  - PATCH 저장 필드를 `rating`, `memo`, `visit_date`, `status`, `emotion_tags`로 확장했다.
+  - `DELETE /api/map/:id` 추가. JWT 기준 작성자만 삭제 가능.
+- `services/realtime-server/src/map-ownership.js`
+  - map pin 작성자 판정 순수 함수 분리.
+- `docs/REST_API.md`, `CONTEXT.md`
+  - `/api/map` 최신 계약과 남은 hardening risk 반영.
+
+검증:
+
+```text
+cd services/realtime-server && npm test
+pass, 28 tests
+
+cd services/realtime-server && npm run check
+pass
+
+cd apps/secret_base_app && flutter analyze lib/screens/archive/map_screen.dart test/map_screen_test.dart
+pass
+
+cd apps/secret_base_app && flutter test test/map_screen_test.dart
+pass
+
+cd apps/secret_base_app && flutter test
+fails on existing dart:html VM-test incompatibility in uno_audio.dart / jukebox_screen.dart
+```
+
+남은 Secret Map hardening:
+
+- `POST /api/map` still accepts explicit `created_by`/`user_id` for compatibility. Before launch, move map creation identity to JWT/auth middleware and derive user/couple server-side.
+
+---
+
+## 1. 이전 최신 업데이트 (2026-07-14, 운영 DB 마이그레이션 및 전면 버그 수정)
 
 ### 배포 상태 (2026-07-14)
 
@@ -46,7 +92,7 @@ https://secertbase.kro.kr/health => {"ok":true}
 
 - **MomentLoop**: `GET /api/setlog?user_id=...`로 setlog 데이터 로드, 독립 동작 정상.
 - **비밀지도**: couple-scoped 핀 저장/조회 정상.
-- **연결**: `map_screen.dart:892`에 `"MomentLoop 기록과 연결될 자리"` placeholder만 있음. 실제 setlog ↔ map_pin 연동 미구현. 다음 vertical slice 필요.
+- **연결**: 최신 섹션 기준으로 구현 완료. 과거에는 `map_screen.dart:892` placeholder만 있었다.
 
 ### 서버 SSH 접속
 

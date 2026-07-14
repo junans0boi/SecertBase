@@ -128,10 +128,11 @@ DB migrations applied 2026-07-14 (via `ensureTables` ALTER TABLE on server resta
 - `premium_subscriptions` table created ✅
 - Existing `map_pins` backfilled with `couple_id`/`user_id` from `created_by` UserCode ✅
 
-Active next vertical slice:
+Recently completed Secret Map slice:
 
-- MomentLoop ↔ 비밀지도 setlog 연결 미구현 (`map_screen.dart:892` placeholder)
-- `map_pins` PATCH: 여전히 ownership check 없음 (작성자만 수정 가능하도록 추가 필요)
+- MomentLoop ↔ 비밀지도 setlog 연결: map detail now loads `/api/setlog?user_id=...` and shows matching MomentLoop records by visit date/place text.
+- `map_pins` PATCH/DELETE ownership check: both now require JWT `Authorization`; only the original author can update/delete, with legacy `created_by` UserCode fallback for old rows.
+- `PATCH /api/map/:id` now persists `rating`, `memo`, `visit_date`, `status`, and `emotion_tags`.
 
 Resolved deployment divergence:
 
@@ -139,11 +140,10 @@ Resolved deployment divergence:
 - production server `main` and `origin/main` were aligned at `b190e9a`
 - Google login schema fixes and Caddy/deployment recovery were deployed and verified
 
-The most important active product/security risk is now the Secret Map scope:
+Remaining Secret Map product/security risk:
 
-- `/api/map` currently reads all `map_pins`
-- map pin creation/update trust client-provided identifiers or raw ids
-- before launch, map data must be scoped to the authenticated couple/user
+- `/api/map` scope is now couple/user based and PATCH/DELETE enforce JWT-derived author ownership.
+- `POST /api/map` still accepts client-provided `created_by`/`user_id` for compatibility; a future hardening slice should derive map creation identity from JWT too.
 
 See `HANDOFF.md` for the latest Secret Map planning notes.
 

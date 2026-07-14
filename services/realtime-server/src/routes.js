@@ -11,6 +11,7 @@ import { OAuth2Client } from 'google-auth-library';
 import { query, transaction } from './db.js';
 import { config } from './config.js';
 import { providerState, searchPlaces } from './place-search.js';
+import { canEditMapPin, normalizeMapEditorUserId } from './map-ownership.js';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const archiver = require('archiver');
@@ -417,6 +418,19 @@ const createJwtForUser = (user) =>
     config.JWT_SECRET,
     { expiresIn: '7d' }
   );
+
+const getAuthenticatedUserId = (req) => {
+  const authHeader = req.get('authorization') || '';
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!match) return null;
+
+  try {
+    const payload = jwt.verify(match[1], config.JWT_SECRET);
+    return normalizeMapEditorUserId(payload.userId);
+  } catch {
+    return null;
+  }
+};
 
 const dateOnly = (value) => {
   if (!value) return null;
@@ -1101,20 +1115,110 @@ router.post('/map', async (req, res) => {
   }
 });
 
-// 지도 핀 업데이트 (별점/메모)
+const loadMapPinForEditor = async (pinId, editorUserId) => {
+  const result = await query(
+    `SELECT p.*, u.UserCode AS editor_user_code
+     FROM map_pins p
+     LEFT JOIN Users u ON u.UserId = ?
+     WHERE p.id = ?
+     LIMIT 1`,
+    [editorUserId, pinId]
+  );
+
+  const pin = result.rows[0] ?? null;
+  if (!pin) return { pin: null, allowed: false };
+
+  return {
+    pin,
+    allowed: canEditMapPin(pin, editorUserId, pin.editor_user_code),
+  };
+};
+
+const parseMapEmotionTags = (value) => {
+  const tags = parseJsonArray(value)
+    .map((tag) => `${tag}`.trim())
+    .filter(Boolean);
+  return tags.length > 0 ? JSON.stringify(tags) : null;
+};
+
+// 지도 핀 업데이트 (작성자만 가능)
 router.patch('/map/:id', async (req, res) => {
   try {
+    await ensureTables();
     const { id } = req.params;
-    const { rating, memo } = req.body;
+    const editorUserId = getAuthenticatedUserId(req);
+    if (!editorUserId) {
+      return res.status(401).json({ ok: false, reason: 'unauthorized' });
+    }
+
+    const { pin, allowed } = await loadMapPinForEditor(id, editorUserId);
+    if (!pin) {
+      return res.status(404).json({ ok: false, reason: 'not_found' });
+    }
+    if (!allowed) {
+      return res.status(403).json({ ok: false, reason: 'forbidden' });
+    }
+
+    const allowedFields = {
+      rating: req.body.rating ?? null,
+      memo: req.body.memo ?? null,
+      visit_date: req.body.visit_date ?? null,
+      status: req.body.status ?? null,
+      emotion_tags: Object.prototype.hasOwnProperty.call(req.body, 'emotion_tags')
+        ? parseMapEmotionTags(req.body.emotion_tags)
+        : null,
+    };
+
+    if (allowedFields.status && !['visited', 'wishlist'].includes(allowedFields.status)) {
+      return res.status(400).json({ ok: false, reason: 'invalid_status' });
+    }
+
+    const updates = [];
+    const params = [];
+    for (const [field, value] of Object.entries(allowedFields)) {
+      if (!Object.prototype.hasOwnProperty.call(req.body, field)) continue;
+      updates.push(`${field} = ?`);
+      params.push(value);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ ok: false, reason: 'missing_fields' });
+    }
 
     await query(
-      'UPDATE map_pins SET rating = COALESCE(?, rating), memo = COALESCE(?, memo), updated_at = NOW() WHERE id = ?',
-      [rating, memo, id]
+      `UPDATE map_pins SET ${updates.join(', ')}, updated_at = NOW() WHERE id = ?`,
+      [...params, id]
     );
 
     res.json({ ok: true });
   } catch (err) {
     console.error('[API] /map PATCH error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+// 지도 핀 삭제 (작성자만 가능)
+router.delete('/map/:id', async (req, res) => {
+  try {
+    await ensureTables();
+    const { id } = req.params;
+    const editorUserId = getAuthenticatedUserId(req);
+    if (!editorUserId) {
+      return res.status(401).json({ ok: false, reason: 'unauthorized' });
+    }
+
+    const { pin, allowed } = await loadMapPinForEditor(id, editorUserId);
+    if (!pin) {
+      return res.status(404).json({ ok: false, reason: 'not_found' });
+    }
+    if (!allowed) {
+      return res.status(403).json({ ok: false, reason: 'forbidden' });
+    }
+
+    await query('DELETE FROM map_pins WHERE id = ?', [id]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[API] /map DELETE error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
   }
 });

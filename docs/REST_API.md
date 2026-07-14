@@ -517,7 +517,20 @@ place_search_failed
 
 ### GET `/map`
 
-Returns all map pins ordered by visit date.
+Returns map pins scoped to the requesting user. If the user belongs to a couple, the response includes that couple's pins; otherwise it includes only the user's own pins.
+
+Query parameters:
+
+```text
+user_id=1
+```
+
+Failure reasons:
+
+```text
+missing_user_id
+internal_error
+```
 
 ### POST `/map`
 
@@ -532,7 +545,10 @@ Request:
   "rating": 5,
   "visit_date": "2026-06-20",
   "memo": "분위기 좋음",
-  "created_by": "ABC123"
+  "created_by": "ABC123",
+  "user_id": 1,
+  "status": "visited",
+  "emotion_tags": ["또 가자", "사진 맛집"]
 }
 ```
 
@@ -547,14 +563,24 @@ Response:
 
 ### PATCH `/map/:id`
 
-Updates rating and/or memo.
+Updates a map pin. Only the original author can update it. The backend derives the editor from the JWT `Authorization` header, checks it against `map_pins.user_id`, and uses a legacy fallback to `created_by` UserCode for old rows without `user_id`.
+
+Headers:
+
+```text
+Authorization: Bearer <jwt>
+Content-Type: application/json
+```
 
 Request:
 
 ```json
 {
   "rating": 4,
-  "memo": "재방문 의향 있음"
+  "memo": "재방문 의향 있음",
+  "visit_date": "2026-06-20",
+  "status": "visited",
+  "emotion_tags": ["또 가자"]
 }
 ```
 
@@ -562,6 +588,42 @@ Response:
 
 ```json
 { "ok": true }
+```
+
+Failure reasons:
+
+```text
+unauthorized
+missing_fields
+invalid_status
+not_found
+forbidden
+internal_error
+```
+
+### DELETE `/map/:id`
+
+Deletes a map pin. Only the original author can delete it. The editor is derived from the JWT `Authorization` header.
+
+Headers:
+
+```text
+Authorization: Bearer <jwt>
+```
+
+Response:
+
+```json
+{ "ok": true }
+```
+
+Failure reasons:
+
+```text
+unauthorized
+not_found
+forbidden
+internal_error
 ```
 
 ## Daily Q&A

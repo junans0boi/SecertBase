@@ -47,6 +47,7 @@ class _MapScreenState extends State<MapScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
 
   List<Map<String, dynamic>> _pins = [];
+  List<Map<String, dynamic>> _setlogPosts = [];
   List<Map<String, dynamic>> _searchResults = [];
   bool _loading = true;
   bool _isSearching = false;
@@ -75,10 +76,24 @@ class _MapScreenState extends State<MapScreen> {
     super.dispose();
   }
 
+  int? get _currentUserId {
+    final value = _auth.user?['UserId'] ?? _auth.user?['id'];
+    if (value is int) return value;
+    return int.tryParse('$value');
+  }
+
+  Map<String, String> _jsonHeaders({bool includeAuth = false}) {
+    return {
+      'Content-Type': 'application/json',
+      if (includeAuth && _auth.token != null)
+        'Authorization': 'Bearer ${_auth.token}',
+    };
+  }
+
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final userId = _auth.user?['UserId'] ?? _auth.user?['id'];
+      final userId = _currentUserId;
       final mapUrl = userId != null
           ? '${_auth.baseUrl}/api/map?user_id=$userId'
           : '${_auth.baseUrl}/api/map?user_id=0';
@@ -93,6 +108,23 @@ class _MapScreenState extends State<MapScreen> {
               [];
           _activeCardIndex = 0;
         });
+      }
+
+      if (userId != null) {
+        final setlogUri = Uri.parse(
+          '${_auth.baseUrl}/api/setlog',
+        ).replace(queryParameters: {'user_id': '$userId'});
+        final setlogRes = await http.get(setlogUri);
+        final setlogData = jsonDecode(setlogRes.body) as Map<String, dynamic>;
+        if (setlogData['ok'] == true && mounted) {
+          setState(() {
+            _setlogPosts =
+                (setlogData['posts'] as List?)
+                    ?.map((e) => Map<String, dynamic>.from(e as Map))
+                    .toList() ??
+                [];
+          });
+        }
       }
     } catch (_) {
       debugPrint('map load error');
@@ -138,10 +170,9 @@ class _MapScreenState extends State<MapScreen> {
         setState(() {
           _searchResults = places
               .map(
-                (e) =>
-                    normalizePlaceResultForMap(
-                      Map<String, dynamic>.from(e as Map),
-                    ),
+                (e) => normalizePlaceResultForMap(
+                  Map<String, dynamic>.from(e as Map),
+                ),
               )
               .toList();
         });
@@ -195,11 +226,9 @@ class _MapScreenState extends State<MapScreen> {
                 .toList()
               ..sort((a, b) {
                 final aDistance =
-                    placeDoubleForMap(a['distanceMeters']) ??
-                    double.infinity;
+                    placeDoubleForMap(a['distanceMeters']) ?? double.infinity;
                 final bDistance =
-                    placeDoubleForMap(b['distanceMeters']) ??
-                    double.infinity;
+                    placeDoubleForMap(b['distanceMeters']) ?? double.infinity;
                 return aDistance.compareTo(bDistance);
               });
       });
@@ -287,13 +316,14 @@ class _MapScreenState extends State<MapScreen> {
   }) async {
     final userCode =
         _auth.user?['UserCode'] ?? _auth.user?['userCode'] ?? 'unknown';
+    final userId = _currentUserId;
     final visitDateStr = visitDate == null ? null : _dateValue(visitDate);
     final bodyMemo = _composeMemo(memo, emotionTags);
 
     try {
       await http.post(
         Uri.parse('${_auth.baseUrl}/api/map'),
-        headers: {'Content-Type': 'application/json'},
+        headers: _jsonHeaders(includeAuth: true),
         body: jsonEncode({
           'place_name': name,
           'category': category,
@@ -301,6 +331,7 @@ class _MapScreenState extends State<MapScreen> {
           'visit_date': status == 'visited' ? visitDateStr : null,
           'memo': bodyMemo.isNotEmpty ? bodyMemo : null,
           'created_by': userCode,
+          'user_id': userId,
           'latitude': lat,
           'longitude': lng,
           'status': status,
@@ -440,22 +471,33 @@ class _MapScreenState extends State<MapScreen> {
 
     final updatedMemo = _composeMemo(memoCtrl.text, selectedTags.toList());
     final id = pin['id'];
-    if (id != null) {
-      try {
-        await http.patch(
-          Uri.parse('${_auth.baseUrl}/api/map/$id'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'rating': selectedRating,
-            'memo': updatedMemo,
-            'visit_date': _dateValue(selectedDate),
-            'status': 'visited',
-            'emotion_tags': selectedTags.toList(),
-          }),
-        );
-      } catch (_) {
-        debugPrint('map visit patch error');
+    final userId = _currentUserId;
+    if (id == null || userId == null) {
+      _toast('방문 기록을 저장하지 못했어요');
+      return;
+    }
+
+    try {
+      final response = await http.patch(
+        Uri.parse('${_auth.baseUrl}/api/map/$id'),
+        headers: _jsonHeaders(includeAuth: true),
+        body: jsonEncode({
+          'rating': selectedRating,
+          'memo': updatedMemo,
+          'visit_date': _dateValue(selectedDate),
+          'status': 'visited',
+          'emotion_tags': selectedTags.toList(),
+        }),
+      );
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      if (response.statusCode != 200 || data['ok'] != true) {
+        _toast('작성자만 방문 기록을 수정할 수 있어요');
+        return;
       }
+    } catch (_) {
+      debugPrint('map visit patch error');
+      _toast('방문 기록을 저장하지 못했어요');
+      return;
     }
 
     setState(() {
@@ -727,6 +769,7 @@ class _MapScreenState extends State<MapScreen> {
         final memo = _cleanMemo(pin['memo']);
         final date = _formattedDate(pin['visit_date']);
         final author = '${pin['created_by'] ?? '우리'}';
+        final linkedPosts = linkedSetlogPostsForMap(pin, _setlogPosts);
 
         return _SheetFrame(
           child: Padding(
@@ -869,32 +912,9 @@ class _MapScreenState extends State<MapScreen> {
                   _DetailBlock(
                     icon: Icons.photo_library_outlined,
                     title: '연결된 추억',
-                    child: Row(
-                      children: [
-                        _MemoryDot(
-                          color: kMainRoseSoft,
-                          icon: Icons.favorite_rounded,
-                        ),
-                        const SizedBox(width: 8),
-                        _MemoryDot(
-                          color: kMainSkySoft,
-                          icon: Icons.image_outlined,
-                        ),
-                        const SizedBox(width: 8),
-                        _MemoryDot(
-                          color: kMainHoneySoft,
-                          icon: Icons.chat_bubble_outline_rounded,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            isVisited
-                                ? 'MomentLoop 기록과 연결될 자리'
-                                : '다녀온 뒤 추억을 연결할 자리',
-                            style: mainBody(size: 12, color: kMainMuted),
-                          ),
-                        ),
-                      ],
+                    child: _LinkedMemorySummary(
+                      posts: linkedPosts,
+                      isVisited: isVisited,
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -1270,8 +1290,7 @@ class _MapScreenState extends State<MapScreen> {
                         ...pins.asMap().entries.map((entry) {
                           final i = entry.key;
                           final pin = entry.value;
-                          final lat =
-                              placeDoubleForMap(pin['latitude']) ?? 0.0;
+                          final lat = placeDoubleForMap(pin['latitude']) ?? 0.0;
                           final lng =
                               placeDoubleForMap(pin['longitude']) ?? 0.0;
                           final category = pin['category'] ?? '기타';
@@ -2467,6 +2486,95 @@ class _ActionButton extends StatelessWidget {
   }
 }
 
+class _LinkedMemorySummary extends StatelessWidget {
+  final List<Map<String, dynamic>> posts;
+  final bool isVisited;
+
+  const _LinkedMemorySummary({required this.posts, required this.isVisited});
+
+  @override
+  Widget build(BuildContext context) {
+    if (posts.isEmpty) {
+      return Row(
+        children: [
+          _MemoryDot(color: kMainRoseSoft, icon: Icons.favorite_rounded),
+          const SizedBox(width: 8),
+          _MemoryDot(color: kMainSkySoft, icon: Icons.image_outlined),
+          const SizedBox(width: 8),
+          _MemoryDot(
+            color: kMainHoneySoft,
+            icon: Icons.chat_bubble_outline_rounded,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              isVisited
+                  ? '같은 날 MomentLoop 기록이 아직 없어요'
+                  : '다녀온 뒤 MomentLoop 기록과 이어져요',
+              style: mainBody(size: 12, color: kMainMuted),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            _MemoryDot(color: kMainRoseSoft, icon: Icons.auto_stories_rounded),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'MomentLoop 기록 ${posts.length}개와 연결됐어요',
+                style: mainBody(
+                  size: 12.5,
+                  color: kMainInk,
+                  weight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        ...posts.take(3).map((post) {
+          final caption = '${post['caption'] ?? ''}'.trim();
+          final mediaType = '${post['media_type'] ?? 'text'}';
+          final date = _formattedDate(post['taken_at'] ?? post['captured_at']);
+          final icon = switch (mediaType) {
+            'image' => Icons.image_outlined,
+            'video' => Icons.play_circle_outline_rounded,
+            _ => Icons.notes_rounded,
+          };
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon, size: 16, color: kMainRose),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    [
+                      ?date,
+                      if (caption.isNotEmpty) caption else '사진/영상 기록',
+                    ].join(' · '),
+                    style: mainBody(size: 12, color: kMainSub, height: 1.35),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
+    );
+  }
+}
+
 class _MapAppTile extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -2681,6 +2789,57 @@ String? _formattedDate(dynamic value) {
   final text = '$value';
   if (text.trim().isEmpty) return null;
   return text.split('T').first.replaceAll('-', '.');
+}
+
+String? _dateKey(dynamic value) {
+  if (value == null) return null;
+  final text = '$value'.trim();
+  if (text.isEmpty) return null;
+  return text.split(RegExp(r'[T ]')).first;
+}
+
+String _matchText(dynamic value) {
+  return '$value'.toLowerCase().replaceAll(RegExp(r'\s+'), '');
+}
+
+List<Map<String, dynamic>> linkedSetlogPostsForMap(
+  Map<String, dynamic> pin,
+  List<Map<String, dynamic>> posts,
+) {
+  final pinDate = _dateKey(pin['visit_date']);
+  final placeName = _matchText(pin['place_name']);
+
+  final dateMatched = posts.where((post) {
+    final postDate =
+        _dateKey(post['taken_at']) ?? _dateKey(post['captured_at']);
+    if (pinDate != null) return postDate == pinDate;
+
+    if (placeName.isEmpty) return false;
+    final caption = _matchText(post['caption']);
+    return caption.contains(placeName);
+  }).toList();
+
+  final placeMatched = placeName.isEmpty
+      ? <Map<String, dynamic>>[]
+      : dateMatched
+            .where((post) => _matchText(post['caption']).contains(placeName))
+            .toList();
+
+  final matched = placeMatched.isNotEmpty ? placeMatched : dateMatched;
+
+  matched.sort((a, b) {
+    final aCaption = _matchText(a['caption']);
+    final bCaption = _matchText(b['caption']);
+    final aPlaceMatch = placeName.isNotEmpty && aCaption.contains(placeName);
+    final bPlaceMatch = placeName.isNotEmpty && bCaption.contains(placeName);
+    if (aPlaceMatch != bPlaceMatch) return aPlaceMatch ? -1 : 1;
+
+    final aDate = '${a['captured_at'] ?? a['taken_at'] ?? ''}';
+    final bDate = '${b['captured_at'] ?? b['taken_at'] ?? ''}';
+    return bDate.compareTo(aDate);
+  });
+
+  return matched;
 }
 
 String? _formatDistanceMeters(dynamic value) {

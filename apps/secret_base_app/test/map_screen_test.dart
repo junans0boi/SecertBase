@@ -23,4 +23,35 @@ void main() {
     expect(placeIntForMap('4'), 4);
     expect(placeIntForMap(4.0), 4);
   });
+
+  test(
+    'linkedSetlogPostsForMap prefers same-day posts that mention the place',
+    () {
+      final pin = {
+        'place_name': '성수 카페',
+        'visit_date': '2026-07-14T00:00:00.000Z',
+      };
+      final posts = [
+        {'id': 1, 'taken_at': '2026-07-14', 'caption': '비 오는 날 성수 카페에서 찍은 사진'},
+        {'id': 2, 'taken_at': '2026-07-14', 'caption': '장소명은 안 적었지만 같은 날 기록'},
+        {'id': 3, 'taken_at': '2026-07-13', 'caption': '성수 카페 전날 기록'},
+      ];
+
+      final linked = linkedSetlogPostsForMap(pin, posts);
+
+      expect(linked.map((post) => post['id']), [1]);
+    },
+  );
+
+  test('linkedSetlogPostsForMap falls back to same-day posts', () {
+    final linked = linkedSetlogPostsForMap(
+      {'place_name': '성수 카페', 'visit_date': '2026-07-14'},
+      [
+        {'id': 1, 'taken_at': '2026-07-14', 'caption': '장소명은 안 적었지만 같은 날 기록'},
+        {'id': 2, 'taken_at': '2026-07-13', 'caption': '성수 카페 전날 기록'},
+      ],
+    );
+
+    expect(linked.map((post) => post['id']), [1]);
+  });
 }
