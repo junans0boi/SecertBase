@@ -52,12 +52,19 @@ test('personal history is author-only across separation, export, and a new Coupl
       token: one.token, method: 'POST', body: { place_name: 'My pin' },
     });
     const pinId = (await pinResponse.json()).id;
+    const retainedPinResponse = await server.request('/map', {
+      token: one.token, method: 'POST', body: { place_name: 'Old retained pin' },
+    });
+    const retainedPinId = (await retainedPinResponse.json()).id;
     await server.request('/map', { token: two.token, method: 'POST', body: { place_name: 'Partner pin' } });
     await server.request('/user/partner', { token: one.token, method: 'DELETE' });
 
     const history = await (await server.request('/history', { token: one.token })).json();
     assert.deepEqual(history.moments.map((item) => item.caption).sort(), ['mine only', 'my media']);
-    assert.deepEqual(history.pins.map((item) => item.place_name), ['My pin']);
+    assert.deepEqual(history.pins.map((item) => item.place_name).sort(), [
+      'My pin',
+      'Old retained pin',
+    ]);
     assert.equal((await server.request(`/history/moments/${partnerId}`, { token: one.token, method: 'DELETE' })).status, 404);
     assert.equal((await server.request(`/history/moments/${mineId}`, { token: one.token, method: 'DELETE' })).status, 200);
     assert.equal((await server.request(`/history/pins/${pinId}`, { token: one.token, method: 'DELETE' })).status, 200);
@@ -75,6 +82,9 @@ test('personal history is author-only across separation, export, and a new Coupl
     const three = await user(server, 'history-three');
     await pair(server, one, three);
     assert.deepEqual((await (await server.request('/setlog', { token: one.token })).json()).posts, []);
+    assert.equal((await server.request(`/map/${retainedPinId}`, {
+      token: one.token, method: 'DELETE',
+    })).status, 403);
     assert.equal((await server.request('/history', { token: one.token })).status, 409);
   } finally {
     await server.close();

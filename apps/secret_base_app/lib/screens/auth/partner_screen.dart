@@ -86,6 +86,45 @@ class _PartnerScreenState extends State<PartnerScreen> {
     );
   }
 
+  Future<void> _editProfile() async {
+    final controller = TextEditingController(
+      text: '${_auth.user?['Nickname'] ?? _auth.user?['UserName'] ?? ''}',
+    );
+    final nickname = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('프로필 이름 수정'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 50,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('저장'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (nickname == null || nickname.isEmpty) return;
+    await _auth.updateProfile(
+      fullName:
+          '${_auth.user?['FullName'] ?? _auth.user?['fullName'] ?? nickname}',
+      nickname: nickname,
+      birthDate:
+          '${_auth.user?['BirthDate'] ?? _auth.user?['birthDate'] ?? '2000-01-01'}'
+              .split('T')
+              .first,
+    );
+    if (mounted) setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     final myCode = _auth.user?['UserCode'] ?? '??????';
@@ -109,6 +148,13 @@ class _PartnerScreenState extends State<PartnerScreen> {
                       '상대방에게 요청을 보내고\n수락을 기다려 주세요.',
                       style: mainBody(size: 14, color: kMainSub),
                       textAlign: TextAlign.center,
+                    ),
+                    TextButton.icon(
+                      onPressed: _editProfile,
+                      icon: const Icon(Icons.edit_outlined),
+                      label: Text(
+                        '${_auth.user?['Nickname'] ?? _auth.user?['UserName'] ?? '프로필'}',
+                      ),
                     ),
                     const SizedBox(height: 32),
                     _myCodeCard(myCode),

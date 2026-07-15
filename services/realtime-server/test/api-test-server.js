@@ -30,7 +30,10 @@ export async function createApiTestServer({ adminUrl, redisUrl }) {
     import('../src/db.js'),
   ]);
   const app = express();
-  app.locals.io = { to: () => ({ emit: () => {} }) };
+  app.locals.io = {
+    to: () => ({ emit: () => {} }),
+    in: () => ({ disconnectSockets: () => {} }),
+  };
   app.use(express.json());
   app.use('/api', routes);
   const server = createServer(app);

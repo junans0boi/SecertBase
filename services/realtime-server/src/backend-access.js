@@ -48,6 +48,10 @@ const featureForSocketPacket = ([event, payload]) => {
     const gameType = String(payload?.gameType ?? payload?.type ?? '');
     if (gameType && !['yut', 'bomb', 'rps'].includes(gameType)) return gameType;
   }
+  if (event === 'game:restart:respond') {
+    const gameType = String(payload?.gameType ?? '');
+    if (gameType && !['yut', 'bomb', 'rps'].includes(gameType)) return gameType;
+  }
   return null;
 };
 
@@ -99,5 +103,28 @@ export const installSocketFeatureGate = (socket, featureSet) => {
     const response = disabledResponse(feature);
     if (typeof ack === 'function') ack(response);
     else socket.emit('feature:error', response);
+  });
+};
+
+export const installSocketAuthentication = (io, secret, resolveSession) => {
+  io.use(async (socket, next) => {
+    const authToken = socket.handshake.auth?.token;
+    const header = socket.handshake.headers?.authorization;
+    const token = authToken || (typeof header === 'string'
+      ? header.match(/^Bearer\s+(.+)$/i)?.[1]
+      : null);
+    if (!token) return next(new Error('AUTH_REQUIRED'));
+    try {
+      const payload = jwt.verify(token, secret);
+      const userId = Number(payload.userId);
+      if (!Number.isInteger(userId) || userId <= 0) throw new Error('invalid user');
+      const session = await resolveSession(userId);
+      if (!session) return next(new Error('ACTIVE_COUPLE_REQUIRED'));
+      Object.assign(socket.data, session);
+      next();
+    } catch (error) {
+      if (error.message === 'ACTIVE_COUPLE_REQUIRED') return next(error);
+      next(new Error('AUTH_INVALID'));
+    }
   });
 };

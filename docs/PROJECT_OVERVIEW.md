@@ -1,5 +1,13 @@
 # Secret Base Project Overview
 
+## Current MVP
+
+The public MVP is the mobile-web Couple core: consent-based pairing, persistent
+separation/reunion, D-day, MomentLoop text/photo/10-second clips, Secret Map,
+Yut/Bomb/RPS, and author-only inactive-history export. REST and Socket identity
+come from JWT, and a user can have only one active Couple. Deferred Archive and
+game surfaces remain feature-gated; UNO is absent from the public UI/assets.
+
 Last updated: 2026-06-20
 
 ## What This Project Is

@@ -7,6 +7,7 @@ import { Server } from 'socket.io';
 import { io as createClient } from 'socket.io-client';
 import {
   installSocketFeatureGate,
+  installSocketAuthentication,
   mvpRestFeatureGate,
   requireAuth,
 } from '../src/backend-access.js';
@@ -57,6 +58,49 @@ test('HTTP auth context ignores client user ids and REST feature gates are stabl
   }
 });
 
+test('Socket handshake requires a valid JWT and derives the server session', async () => {
+  const server = createServer();
+  const io = new Server(server);
+  installSocketAuthentication(io, secret, async (userId) =>
+    userId === 7 ? { userId: 'OWNER7', roomCode: 'couple-7' } : null);
+  io.on('connection', (socket) => socket.emit('session', socket.data));
+  await listen(server);
+  const url = `http://127.0.0.1:${server.address().port}`;
+
+  const connectError = (token) => new Promise((resolve) => {
+    const client = createClient(url, {
+      transports: ['websocket'],
+      auth: token ? { token } : {},
+      reconnection: false,
+    });
+    client.once('connect_error', (error) => {
+      client.disconnect();
+      resolve(error.message);
+    });
+  });
+
+  try {
+    assert.equal(await connectError(null), 'AUTH_REQUIRED');
+    assert.equal(await connectError('forged'), 'AUTH_INVALID');
+    const expired = jwt.sign({ userId: 7 }, secret, { expiresIn: -1 });
+    assert.equal(await connectError(expired), 'AUTH_INVALID');
+
+    const token = jwt.sign({ userId: 7 }, secret);
+    const client = createClient(url, {
+      transports: ['websocket'], auth: { token }, reconnection: false,
+    });
+    const session = await new Promise((resolve, reject) => {
+      client.once('session', resolve);
+      client.once('connect_error', reject);
+    });
+    assert.deepEqual(session, { userId: 'OWNER7', roomCode: 'couple-7' });
+    client.disconnect();
+  } finally {
+    await io.close();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 test('Socket feature gate allows MVP games and rejects UNO with the stable response', async () => {
   const server = createServer();
   const io = new Server(server);
@@ -80,6 +124,14 @@ test('Socket feature gate allows MVP games and rejects UNO with the stable respo
 
     const disabled = await client.timeout(1000).emitWithAck('game:uno:new', {});
     assert.deepEqual(disabled, {
+      ok: false,
+      error: { code: 'FEATURE_DISABLED', feature: 'uno' },
+    });
+    const restartBypass = await client.timeout(1000).emitWithAck(
+      'game:restart:respond',
+      { accept: true, gameType: 'uno' },
+    );
+    assert.deepEqual(restartBypass, {
       ok: false,
       error: { code: 'FEATURE_DISABLED', feature: 'uno' },
     });

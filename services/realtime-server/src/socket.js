@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { config } from "./config.js";
-import { installSocketFeatureGate } from "./backend-access.js";
+import { installSocketAuthentication, installSocketFeatureGate } from "./backend-access.js";
 import { query } from "./db.js";
 import { redis } from "./redis.js";
 import {
@@ -35,11 +35,7 @@ import {
 } from "./bomb-engine.js";
 
 const joinSchema = z.object({
-  userId: z.string().min(1),
-  roomCode: z.string().min(1).max(24),
-  roomSecret: z.string().min(1),
   profileEmoji: z.string().min(1).max(16).optional(),
-  nickname: z.string().max(50).optional(),
 });
 
 const profileSchema = z.object({
@@ -269,22 +265,18 @@ const cleanupLobbyForUser = async (io, roomCode, gameType, userId) => {
   emitLobby(io, roomCode, lobby);
 };
 
-const getRoomMembers = async (roomCode, roomSecret) => {
+const resolveSocketSession = async (userId) => {
   const result = await query(
-    `SELECT c.RoomCode, c.RoomSecret, u1.UserCode AS User1Code, u2.UserCode AS User2Code
+    `SELECT c.RoomCode, u.UserCode,
+            COALESCE(u.Nickname, u.UserName, u.UserCode) AS Nickname
      FROM Couples c
-     JOIN Users u1 ON c.User1Id = u1.UserId
-     JOIN Users u2 ON c.User2Id = u2.UserId
-     WHERE c.RoomCode = ? AND c.RoomSecret = ?`,
-    [roomCode, roomSecret],
+     JOIN Users u ON u.UserId = ?
+     WHERE c.Status = 'active' AND (c.User1Id = ? OR c.User2Id = ?)
+     LIMIT 1`,
+    [userId, userId, userId],
   );
-
-  if (result.rows.length === 0) {
-    return null;
-  }
-
-  const room = result.rows[0];
-  return [room.User1Code, room.User2Code];
+  const row = result.rows[0];
+  return row ? { userId: row.UserCode, roomCode: row.RoomCode, nickname: row.Nickname } : null;
 };
 
 const getOrderedPlayers = async (roomCode, presence) => {
@@ -321,6 +313,7 @@ const getUnoHandCount = (gameState) =>
   );
 
 export const registerSocketHandlers = (io) => {
+  installSocketAuthentication(io, config.JWT_SECRET, resolveSocketSession);
   io.on("connection", (socket) => {
     installSocketFeatureGate(socket, config.PUBLIC_FEATURE_SET);
     socket.on("session:join", async (payload, ackRaw) => {
@@ -331,18 +324,8 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const { userId, roomCode, roomSecret, profileEmoji, nickname } = parsed.data;
-      const roomMembers = await getRoomMembers(roomCode, roomSecret);
-      const isLegacyRoom = roomSecret === config.ROOM_SECRET;
-
-      if (!roomMembers && !isLegacyRoom) {
-        ack({ ok: false, reason: "invalid_secret" });
-        return;
-      }
-      if (roomMembers && !roomMembers.includes(userId)) {
-        ack({ ok: false, reason: "forbidden_user" });
-        return;
-      }
+      const { profileEmoji } = parsed.data;
+      const { userId, roomCode, nickname } = socket.data;
 
       const presence = getPresence(io, roomCode);
       if (presence.length >= 2 && !presence.includes(userId)) {
@@ -353,7 +336,7 @@ export const registerSocketHandlers = (io) => {
       socket.data.userId = userId;
       socket.data.roomCode = roomCode;
       socket.data.profileEmoji = profileEmoji ?? "🙂";
-      socket.data.nickname = nickname ?? userId;
+      socket.data.nickname = nickname;
       await socket.join(roomCode);
 
       const stateText = await redis.get(roomKey(roomCode));
@@ -361,7 +344,7 @@ export const registerSocketHandlers = (io) => {
 
       emitPresence(io, roomCode);
 
-      ack({ ok: true, state });
+      ack({ ok: true, state, roomCode, userId });
     });
 
     socket.on("profile:update", async (payload, ackRaw) => {

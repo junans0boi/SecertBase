@@ -1,6 +1,6 @@
 # REST API Documentation
 
-Last updated: 2026-06-20
+Last updated: 2026-07-15
 
 Base URLs:
 
@@ -17,6 +17,46 @@ Local:      http://localhost:4100/uploads/<filename>
 ```
 
 The backend uses MariaDB through `DATABASE_URL`.
+
+## Public MVP Contract
+
+Except for registration and login, public endpoints require
+`Authorization: Bearer <jwt>`. User identity and the active Couple are derived
+from the JWT; client `user_id`, `created_by`, and route user IDs do not select a
+different user or Couple.
+
+Current public endpoint groups:
+
+```text
+POST   /auth/register, /auth/login
+GET    /user/profile/:ignoredUserId
+GET|POST /pairing/requests
+POST   /pairing/requests/:id/accept|reject|cancel
+DELETE /user/partner
+GET|PATCH /couple/info
+POST   /couple/reunion-notice/seen
+GET|POST /setlog
+PATCH|DELETE /setlog/:id
+GET|POST /map
+PATCH|DELETE /map/:id
+GET    /places/search
+GET    /history
+DELETE /history/moments/:id, /history/pins/:id
+GET    /history/export
+```
+
+Pairing requires recipient acceptance. Separation makes the Couple inactive
+without deleting shared data; accepting a new request between the same two
+users restores that Couple. MomentLoop mutations are author-only. Active
+partners share Map edits, while only the pin creator can delete; linked pins
+are archived instead of hard-deleted. `/history` and its ZIP export are
+available only while waiting for pairing and include only the caller's authored
+records from inactive Couples.
+
+With `PUBLIC_FEATURE_SET=mvp`, Q&A, missions, timeline, wish tickets, reports,
+balance, challenges, jukebox, capsules, albums, reflections, and premium routes
+return `FEATURE_DISABLED`. The detailed catalog below includes legacy/deferred
+contracts for maintenance reference; it does not override this MVP section.
 
 ## Auth
 

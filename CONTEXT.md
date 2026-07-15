@@ -135,12 +135,12 @@ DB migrations applied 2026-07-14 (via `ensureTables` ALTER TABLE on server resta
 Recently completed Secret Map slice:
 
 - MomentLoop ↔ 비밀지도 setlog 연결: map detail now loads `/api/setlog?user_id=...` and shows matching MomentLoop records by visit date/place text.
-- `map_pins` PATCH/DELETE ownership check: both now require JWT `Authorization`; only the original author can update/delete, with legacy `created_by` UserCode fallback for old rows.
+- `map_pins` PATCH/DELETE use JWT identity: either active partner can update shared fields, while only the original author can delete. Linked pins are archived.
 - `PATCH /api/map/:id` now persists `rating`, `memo`, `visit_date`, `status`, and `emotion_tags`.
 
 Recently completed relationship management slice:
 
-- Users can disconnect from a partner via `DELETE /api/user/partner` with JWT `Authorization`.
+- Users can disconnect via `DELETE /api/user/partner`; the Couple becomes inactive and same-pair acceptance restores it.
 - Disconnect clears both users' `PartnerCode` values and deletes the active `Couples` row so either user can pair again later.
 - Existing archive rows tied to the old `couple_id` are preserved but no longer appear under a future new couple.
 
@@ -152,8 +152,8 @@ Resolved deployment divergence:
 
 Remaining Secret Map product/security risk:
 
-- `/api/map` scope is now couple/user based and PATCH/DELETE enforce JWT-derived author ownership.
-- `POST /api/map` still accepts client-provided `created_by`/`user_id` for compatibility; a future hardening slice should derive map creation identity from JWT too.
+- `/api/map` scope and creator identity are derived from JWT. Active partners share edits; creator-only deletion archives linked pins.
+- Socket.IO authenticates the handshake JWT and derives the active Couple room server-side; client room secrets and shared-secret bypasses are not accepted.
 
 See `HANDOFF.md` for the latest Secret Map planning notes.
 

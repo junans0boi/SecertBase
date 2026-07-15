@@ -1133,6 +1133,7 @@ router.delete('/user/partner', async (req, res) => {
     req.app.locals.io?.to(couple.RoomCode).emit('partner:disconnected', {
       reason: 'partner_disconnected',
     });
+    req.app.locals.io?.in(couple.RoomCode).disconnectSockets(true);
     res.json({ ok: true });
   } catch (err) {
     console.error('[API] /user/partner DELETE error:', err);
@@ -1268,8 +1269,7 @@ const resolveSetlogMapPinId = async (mapPinId, userId, coupleId) => {
   if (!pin) return { error: 'map_pin_not_found' };
 
   const sameCouple = coupleId && Number(pin.couple_id) === Number(coupleId);
-  const sameUser = Number(pin.user_id) === Number(userId);
-  if (!sameCouple && !sameUser) return { error: 'map_pin_forbidden' };
+  if (!sameCouple) return { error: 'map_pin_forbidden' };
 
   return { id: pinId };
 };
@@ -1666,6 +1666,10 @@ router.delete('/map/:id', async (req, res) => {
     if (!allowed) {
       return res.status(403).json({ ok: false, reason: 'forbidden' });
     }
+    const activeCoupleId = await getCoupleIdForUser(editorUserId);
+    if (!activeCoupleId || Number(pin.couple_id) !== Number(activeCoupleId) || pin.archived_at) {
+      return res.status(403).json({ ok: false, reason: 'forbidden' });
+    }
 
     const links = await query('SELECT COUNT(*) AS count FROM setlog_posts WHERE map_pin_id = ?', [id]);
     const linked = Number(links.rows[0]?.count) > 0;
@@ -1694,15 +1698,17 @@ const loadPersonalHistory = async (userId) => {
   const moments = await query(
     `SELECT p.*, mp.place_name AS linked_place_name
      FROM setlog_posts p
-     INNER JOIN Couples c ON c.CoupleId = p.couple_id AND c.Status = 'inactive'
+     LEFT JOIN Couples c ON c.CoupleId = p.couple_id
      LEFT JOIN map_pins mp ON mp.id = p.map_pin_id
-     WHERE p.user_id = ? ORDER BY p.captured_at DESC, p.id DESC`,
+     WHERE p.user_id = ? AND (c.Status = 'inactive' OR c.CoupleId IS NULL)
+     ORDER BY p.captured_at DESC, p.id DESC`,
     [userId],
   );
   const pins = await query(
     `SELECT p.* FROM map_pins p
-     INNER JOIN Couples c ON c.CoupleId = p.couple_id AND c.Status = 'inactive'
-     WHERE p.user_id = ? AND p.archived_at IS NULL
+     LEFT JOIN Couples c ON c.CoupleId = p.couple_id
+     WHERE p.user_id = ? AND (c.Status = 'inactive' OR c.CoupleId IS NULL)
+       AND p.archived_at IS NULL
      ORDER BY p.created_at DESC, p.id DESC`,
     [userId],
   );
@@ -1724,8 +1730,9 @@ router.delete('/history/moments/:id', async (req, res) => {
     if (!await requirePairingWait(req, res)) return;
     const result = await query(
       `SELECT p.id, p.media_url FROM setlog_posts p
-       INNER JOIN Couples c ON c.CoupleId = p.couple_id AND c.Status = 'inactive'
-       WHERE p.id = ? AND p.user_id = ? LIMIT 1`,
+       LEFT JOIN Couples c ON c.CoupleId = p.couple_id
+       WHERE p.id = ? AND p.user_id = ?
+         AND (c.Status = 'inactive' OR c.CoupleId IS NULL) LIMIT 1`,
       [req.params.id, req.auth.userId],
     );
     const moment = result.rows[0];
@@ -1745,8 +1752,9 @@ router.delete('/history/pins/:id', async (req, res) => {
     if (!await requirePairingWait(req, res)) return;
     const result = await query(
       `SELECT p.id FROM map_pins p
-       INNER JOIN Couples c ON c.CoupleId = p.couple_id AND c.Status = 'inactive'
-       WHERE p.id = ? AND p.user_id = ? AND p.archived_at IS NULL LIMIT 1`,
+       LEFT JOIN Couples c ON c.CoupleId = p.couple_id
+       WHERE p.id = ? AND p.user_id = ? AND p.archived_at IS NULL
+         AND (c.Status = 'inactive' OR c.CoupleId IS NULL) LIMIT 1`,
       [req.params.id, req.auth.userId],
     );
     const pin = result.rows[0];

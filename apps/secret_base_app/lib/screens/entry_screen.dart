@@ -68,12 +68,7 @@ class _EntryScreenState extends State<EntryScreen>
     if (_connecting) return;
     FocusScope.of(context).unfocus();
     setState(() => _connecting = true);
-    _socket.connect(
-      _urlCtrl.text.trim(),
-      _roomCtrl.text.trim(),
-      _secretCtrl.text.trim(),
-      _user,
-    );
+    _socket.connect(_urlCtrl.text.trim(), _auth.token ?? '');
   }
 
   @override

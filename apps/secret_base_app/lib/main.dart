@@ -104,17 +104,15 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
       ),
     );
     await _auth.markReunionNoticeSeen();
+    _reunionNoticeScheduled = false;
   }
 
   void _autoConnect() async {
     setState(() => _autoConnecting = true);
 
-    final roomCode = _auth.user?['RoomCode'];
-    final roomSecret = _auth.user?['RoomSecret'];
-    final userId = _auth.user?['UserCode'];
-
-    if (roomCode != null && roomSecret != null && userId != null) {
-      _socket.connect(_auth.baseUrl, roomCode, roomSecret, userId);
+    final token = _auth.token;
+    if (token != null) {
+      _socket.connect(_auth.baseUrl, token);
     }
 
     // The socket service will update isConnected, which triggers rebuild
