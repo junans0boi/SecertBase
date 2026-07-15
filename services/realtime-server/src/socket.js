@@ -153,6 +153,7 @@ const yutGameKey = (roomCode) => `yut:${roomCode}:game`;
 const unoGameKey = (roomCode) => `uno:${roomCode}:game`;
 const bombGameKey = (roomCode) => `bomb:${roomCode}:game`;
 const gameLobbyKey = (roomCode, gameType) => `lobby:${roomCode}:${gameType}`;
+const rpsGameKey = (roomCode) => `rps:${roomCode}:game`;
 const pirateKey = (roomCode) => `pirate:${roomCode}:game`;
 const randomYutBgm = () => `yut${Math.floor(Math.random() * 3) + 1}.mp3`;
 
@@ -697,7 +698,6 @@ export const registerSocketHandlers = (io) => {
     });
 
     // ── RPS multi-mode ────────────────────────────────────────────────────────
-    const rpsGameKey = (rc) => `rps:${rc}:game`;
     const rpsWinner = (c1, c2) =>
       c1 === c2 ? "draw"
       : ((c1==="rock"&&c2==="scissors")||(c1==="scissors"&&c2==="paper")||(c1==="paper"&&c2==="rock"))
@@ -2234,6 +2234,14 @@ export const registerSocketHandlers = (io) => {
           console.error(`lobby cleanup error: ${err.message}`),
         );
       }
+
+      // 가위바위보 진행 중 연결 끊기면 미완료 판 취소
+      redis.del(rpsGameKey(roomCode)).then(() => {
+        io.to(roomCode).emit("game:rps:cancelled", {
+          reason: "player_disconnected",
+          by: socket.data.userId,
+        });
+      }).catch((err) => console.error(`rps cancel error: ${err.message}`));
     });
   });
 };
