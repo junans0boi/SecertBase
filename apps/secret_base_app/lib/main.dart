@@ -42,7 +42,9 @@ class SecretBaseApp extends StatefulWidget {
 class _SecretBaseAppState extends State<SecretBaseApp> {
   final _socket = SocketService();
   final _auth = AuthService();
+  final _navigatorKey = GlobalKey<NavigatorState>();
   bool _autoConnecting = false;
+  bool _reunionNoticeScheduled = false;
 
   @override
   void initState() {
@@ -65,6 +67,13 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
 
   void _onAuthChanged() {
     _rebuild();
+    if (_auth.user?['ReunionNoticePending'] == true &&
+        !_reunionNoticeScheduled) {
+      _reunionNoticeScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showReunionNotice();
+      });
+    }
     // If logged in and paired, but not connected to socket, try auto-connect
     if (_auth.token != null &&
         _auth.user?['PartnerCode'] != null &&
@@ -72,6 +81,29 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
         !_autoConnecting) {
       _autoConnect();
     }
+  }
+
+  Future<void> _showReunionNotice() async {
+    final dialogContext = _navigatorKey.currentContext;
+    if (dialogContext == null || _auth.user?['ReunionNoticePending'] != true) {
+      _reunionNoticeScheduled = false;
+      return;
+    }
+    await showDialog<void>(
+      context: dialogContext,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('다시 만난 두 분을 응원해요'),
+        content: const Text('다시 이어진 두 분의 시간을 응원해요. 이전 기록도 다시 열렸어요.'),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('우리의 시간 이어가기'),
+          ),
+        ],
+      ),
+    );
+    await _auth.markReunionNoticeSeen();
   }
 
   void _autoConnect() async {
@@ -94,6 +126,7 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       title: '비밀기지',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),

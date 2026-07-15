@@ -379,6 +379,22 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  Future<bool> markReunionNoticeSeen() async {
+    if (_token == null) return false;
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/couple/reunion-notice/seen'),
+        headers: {'Authorization': 'Bearer $_token'},
+      );
+      if (response.statusCode != 200) return false;
+      await getProfile();
+      return true;
+    } catch (e) {
+      debugPrint('[Auth] Reunion notice error: $e');
+      return false;
+    }
+  }
+
   Future<Map<String, dynamic>?> getProfile() async {
     if (_token == null || _user == null) return null;
     final uid = _user!['UserId'] ?? _user!['id'];

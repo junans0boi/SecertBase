@@ -102,35 +102,61 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _confirmDisconnectPartner() {
-    showDialog(
+  Future<void> _confirmDisconnectPartner() async {
+    final continueDisconnect = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: kMainPaper,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text('애인 연결 해제', style: mainTitle(size: 24)),
         content: Text(
-          '현재 애인과의 연결을 해제할까요?\n서로의 앱이 연결 전 상태로 돌아가고, 이후 다른 사람과 다시 연결할 수 있어요.',
+          '연결을 해제하면 함께 쓰던 공간이 닫히고 상대방의 기록을 볼 수 없어요. '
+          '내가 작성한 기록은 개인 보관함에 남고, 같은 두 사람이 다시 연결하면 이전 기록이 복원돼요.',
           style: mainBody(size: 14, height: 1.5),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(context, false),
             child: Text('취소', style: mainBody(size: 14, color: kMainMuted)),
           ),
           TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _disconnectPartner();
-            },
+            onPressed: () => Navigator.pop(context, true),
             child: Text(
-              '해제하기',
+              '계속',
               style: mainBody(size: 14, color: kError, weight: FontWeight.w800),
             ),
           ),
         ],
       ),
     );
+    if (continueDisconnect != true || !mounted) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: kMainPaper,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('정말 연결을 해제할까요?', style: mainTitle(size: 24)),
+        content: Text(
+          '상대방의 동의 없이 바로 연결이 해제됩니다.',
+          style: mainBody(size: 14, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('돌아가기', style: mainBody(size: 14, color: kMainMuted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(
+              '연결 해제',
+              style: mainBody(size: 14, color: kError, weight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await _disconnectPartner();
   }
 
   Future<void> _disconnectPartner() async {

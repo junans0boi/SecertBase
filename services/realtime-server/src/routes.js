@@ -435,7 +435,12 @@ const getAuthenticatedUserId = (req) => req.auth?.userId ?? null;
 
 const dateOnly = (value) => {
   if (!value) return null;
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (value instanceof Date) {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
   return String(value).split('T')[0];
 };
 
@@ -456,6 +461,8 @@ const normalizeAuthUser = (user) => ({
   UserIcon: user.UserIcon ?? null,
   RoomCode: user.RoomCode ?? null,
   RoomSecret: user.RoomSecret ?? null,
+  CoupleStatus: user.CoupleStatus ?? null,
+  ReunionNoticePending: Boolean(user.ReunionNoticePending),
   AuthProvider: user.AuthProvider ?? null,
   GoogleLinked: Boolean(user.GoogleSubject),
   GooglePictureUrl: user.GooglePictureUrl ?? null,
@@ -467,10 +474,15 @@ const getProfileRowByUserId = async (userId) => {
     `SELECT u.UserId, u.Email, u.UserName, u.FullName, u.Nickname, u.BirthDate, u.UserCode,
             u.AuthProvider, u.GoogleSubject, u.GooglePictureUrl,
             p.UserIcon, p.PartnerCode,
-            c.RoomCode, c.RoomSecret
+            c.RoomCode, c.RoomSecret, c.Status AS CoupleStatus,
+            CASE
+              WHEN c.ReunionCount > 0 AND c.User1Id = u.UserId AND c.ReunionNoticeUser1SeenAt IS NULL THEN 1
+              WHEN c.ReunionCount > 0 AND c.User2Id = u.UserId AND c.ReunionNoticeUser2SeenAt IS NULL THEN 1
+              ELSE 0
+            END AS ReunionNoticePending
      FROM Users u
      JOIN User_Preference p ON u.UserId = p.UserId
-     LEFT JOIN Couples c ON (u.UserId = c.User1Id OR u.UserId = c.User2Id)
+     LEFT JOIN Couples c ON (u.UserId = c.User1Id OR u.UserId = c.User2Id) AND c.Status = 'active'
      WHERE u.UserId = ?`,
     [userId]
   );
@@ -479,7 +491,8 @@ const getProfileRowByUserId = async (userId) => {
 
 const getCoupleIdForUser = async (userId) => {
   const result = await query(
-    'SELECT CoupleId FROM Couples WHERE User1Id = ? OR User2Id = ? LIMIT 1',
+    `SELECT CoupleId FROM Couples
+     WHERE Status = 'active' AND (User1Id = ? OR User2Id = ?) LIMIT 1`,
     [userId, userId],
   );
 
@@ -765,7 +778,8 @@ router.post('/pairing/requests', async (req, res) => {
 
     const active = await query(
       `SELECT CoupleId FROM Couples
-       WHERE User1Id IN (?, ?) OR User2Id IN (?, ?)
+       WHERE Status = 'active'
+         AND (User1Id IN (?, ?) OR User2Id IN (?, ?))
        LIMIT 1`,
       [senderUserId, recipient.UserId, senderUserId, recipient.UserId],
     );
@@ -859,7 +873,8 @@ router.post('/pairing/requests/:id/accept', async (req, res) => {
       );
       const [couples] = await connection.execute(
         `SELECT CoupleId FROM Couples
-         WHERE User1Id IN (?, ?) OR User2Id IN (?, ?)
+         WHERE Status = 'active'
+           AND (User1Id IN (?, ?) OR User2Id IN (?, ?))
          FOR UPDATE`,
         [userIds[0], userIds[1], userIds[0], userIds[1]],
       );
@@ -870,13 +885,36 @@ router.post('/pairing/requests/:id/accept', async (req, res) => {
         userIds,
       );
       const codeById = new Map(users.map((user) => [Number(user.UserId), user.UserCode]));
+      const pairKey = `${userIds[0]}:${userIds[1]}`;
       const roomCode = `room_${userIds[0]}_${userIds[1]}`;
       const roomSecret = Math.random().toString(36).slice(2, 14);
-      const [coupleResult] = await connection.execute(
-        `INSERT INTO Couples (User1Id, User2Id, RoomCode, RoomSecret)
-         VALUES (?, ?, ?, ?)`,
-        [userIds[0], userIds[1], roomCode, roomSecret],
+      const [existingRows] = await connection.execute(
+        'SELECT CoupleId, Status FROM Couples WHERE PairKey = ? FOR UPDATE',
+        [pairKey],
       );
+      const existingCouple = existingRows[0];
+      let coupleId;
+      let reunited = false;
+      if (existingCouple) {
+        coupleId = existingCouple.CoupleId;
+        reunited = existingCouple.Status === 'inactive';
+        await connection.execute(
+          `UPDATE Couples
+           SET Status = 'active', ActivatedAt = CURRENT_TIMESTAMP, DeactivatedAt = NULL,
+               ReunionCount = ReunionCount + 1, RoomSecret = ?,
+               ReunionNoticeUser1SeenAt = NULL, ReunionNoticeUser2SeenAt = NULL
+           WHERE CoupleId = ?`,
+          [roomSecret, coupleId],
+        );
+      } else {
+        const [coupleResult] = await connection.execute(
+          `INSERT INTO Couples
+           (User1Id, User2Id, PairKey, RoomCode, RoomSecret, Status, ActivatedAt)
+           VALUES (?, ?, ?, ?, ?, 'active', CURRENT_TIMESTAMP)`,
+          [userIds[0], userIds[1], pairKey, roomCode, roomSecret],
+        );
+        coupleId = coupleResult.insertId;
+      }
       await connection.execute(
         `UPDATE User_Preference SET PartnerCode = CASE UserId
            WHEN ? THEN ? WHEN ? THEN ? END
@@ -901,13 +939,13 @@ router.post('/pairing/requests/:id/accept', async (req, res) => {
            AND (SenderUserId IN (?, ?) OR RecipientUserId IN (?, ?))`,
         [requestId, userIds[0], userIds[1], userIds[0], userIds[1]],
       );
-      return { coupleId: coupleResult.insertId };
+      return { coupleId, reunited };
     });
 
     if (activated.error) {
       return res.status(activated.status).json({ ok: false, reason: activated.error });
     }
-    res.json({ ok: true, coupleId: activated.coupleId });
+    res.json({ ok: true, coupleId: activated.coupleId, reunited: activated.reunited });
   } catch (error) {
     console.error('[API] pairing accept error:', error);
     res.status(500).json({ ok: false, reason: 'internal_error' });
@@ -1069,7 +1107,7 @@ router.delete('/user/partner', async (req, res) => {
     const coupleRes = await query(
       `SELECT CoupleId, User1Id, User2Id, RoomCode
        FROM Couples
-       WHERE User1Id = ? OR User2Id = ?
+       WHERE Status = 'active' AND (User1Id = ? OR User2Id = ?)
        LIMIT 1`,
       [userId, userId]
     );
@@ -1086,8 +1124,10 @@ router.delete('/user/partner', async (req, res) => {
         [userId, partnerId]
       );
       await connection.execute(
-        'DELETE FROM Couples WHERE CoupleId = ?',
-        [couple.CoupleId]
+        `UPDATE Couples
+         SET Status = 'inactive', DeactivatedAt = CURRENT_TIMESTAMP
+         WHERE CoupleId = ?`,
+        [couple.CoupleId],
       );
     });
 
@@ -1114,6 +1154,23 @@ router.get('/user/profile/:userId', async (req, res) => {
     res.json({ ok: true, user: normalizeAuthUser(user) });
   } catch (err) {
     console.error('[API] /user/profile error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.post('/couple/reunion-notice/seen', async (req, res) => {
+  try {
+    const userId = req.auth.userId;
+    const result = await query(
+      `UPDATE Couples
+       SET ReunionNoticeUser1SeenAt = CASE WHEN User1Id = ? THEN CURRENT_TIMESTAMP ELSE ReunionNoticeUser1SeenAt END,
+           ReunionNoticeUser2SeenAt = CASE WHEN User2Id = ? THEN CURRENT_TIMESTAMP ELSE ReunionNoticeUser2SeenAt END
+       WHERE Status = 'active' AND (User1Id = ? OR User2Id = ?) AND ReunionCount > 0`,
+      [userId, userId, userId, userId],
+    );
+    res.json({ ok: true, updated: result.rows.affectedRows > 0 });
+  } catch (error) {
+    console.error('[API] reunion notice error:', error);
     res.status(500).json({ ok: false, reason: 'internal_error' });
   }
 });
@@ -1607,7 +1664,7 @@ const getCoupleMemberIds = async (userId) => {
   const result = await query(
     `SELECT CoupleId, User1Id, User2Id
      FROM Couples
-     WHERE User1Id = ? OR User2Id = ?
+     WHERE Status = 'active' AND (User1Id = ? OR User2Id = ?)
      LIMIT 1`,
     [userId, userId]
   );
@@ -2679,10 +2736,7 @@ router.get('/couple/info', async (req, res) => {
   try {
     await ensureUserColumns();
     await ensureCouplesStartDate();
-    const { user_id } = req.query;
-    if (!user_id) return res.status(400).json({ ok: false, reason: 'missing_user_id' });
-
-    const uid = Number(user_id);
+    const uid = req.auth.userId;
     const result = await query(
       `SELECT c.CoupleId, c.StartDate,
               u1.UserId AS U1Id, COALESCE(u1.Nickname, u1.UserName) AS U1Name, u1.UserCode AS U1Code,
@@ -2690,7 +2744,7 @@ router.get('/couple/info', async (req, res) => {
        FROM Couples c
        JOIN Users u1 ON c.User1Id = u1.UserId
        JOIN Users u2 ON c.User2Id = u2.UserId
-       WHERE c.User1Id = ? OR c.User2Id = ?`,
+       WHERE c.Status = 'active' AND (c.User1Id = ? OR c.User2Id = ?)`,
       [uid, uid]
     );
 
@@ -2704,12 +2758,13 @@ router.get('/couple/info', async (req, res) => {
     let dDay = null;
     let startDateStr = null;
     if (row.StartDate) {
-      const start = new Date(row.StartDate);
+      startDateStr = dateOnly(row.StartDate);
+      const [year, month, day] = startDateStr.split('-').map(Number);
+      const start = new Date(year, month - 1, day);
       start.setHours(0, 0, 0, 0);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       dDay = Math.floor((today - start) / 86400000) + 1;
-      startDateStr = start.toISOString().split('T')[0];
     }
 
     res.json({ ok: true, coupleId: row.CoupleId, startDate: startDateStr, dDay, partnerName, partnerCode });
@@ -2722,12 +2777,14 @@ router.get('/couple/info', async (req, res) => {
 router.patch('/couple/info', async (req, res) => {
   try {
     await ensureCouplesStartDate();
-    const { user_id, start_date } = req.body;
-    if (!user_id || !start_date) return res.status(400).json({ ok: false, reason: 'missing_fields' });
+    const { start_date } = req.body;
+    const userId = req.auth.userId;
+    if (!start_date) return res.status(400).json({ ok: false, reason: 'missing_fields' });
 
     await query(
-      'UPDATE Couples SET StartDate = ? WHERE User1Id = ? OR User2Id = ?',
-      [start_date, Number(user_id), Number(user_id)]
+      `UPDATE Couples SET StartDate = ?
+       WHERE Status = 'active' AND (User1Id = ? OR User2Id = ?)`,
+      [start_date, userId, userId]
     );
 
     res.json({ ok: true });

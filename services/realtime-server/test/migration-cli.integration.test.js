@@ -32,6 +32,7 @@ test(
           '0001_initial_schema.sql',
           '0002_runtime_schema_repairs.sql',
           '0003_pairing_requests.sql',
+          '0004_couple_lifecycle.sql',
         ],
       });
 
@@ -47,6 +48,7 @@ test(
         '0001_initial_schema.sql',
         '0002_runtime_schema_repairs.sql',
         '0003_pairing_requests.sql',
+        '0004_couple_lifecycle.sql',
       ]);
 
       const connection = await mysql.createConnection(environment.databaseUrl);
@@ -61,6 +63,7 @@ test(
           '0001_initial_schema.sql',
           '0002_runtime_schema_repairs.sql',
           '0003_pairing_requests.sql',
+          '0004_couple_lifecycle.sql',
         ],
         pending: [],
       });
