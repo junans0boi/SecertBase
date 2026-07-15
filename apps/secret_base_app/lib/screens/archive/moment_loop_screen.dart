@@ -620,6 +620,7 @@ class _VideoPostPlayer extends StatefulWidget {
 class _VideoPostPlayerState extends State<_VideoPostPlayer> {
   late final VideoPlayerController _controller;
   bool _ready = false;
+  bool _muted = true;
   String? _error;
 
   @override
@@ -633,6 +634,7 @@ class _VideoPostPlayerState extends State<_VideoPostPlayer> {
           setState(() => _ready = true);
           _controller
             ..setLooping(true)
+            ..setVolume(0)
             ..play();
         })
         .catchError((_) {
@@ -670,11 +672,8 @@ class _VideoPostPlayerState extends State<_VideoPostPlayer> {
 
     return GestureDetector(
       onTap: () {
-        setState(() {
-          _controller.value.isPlaying
-              ? _controller.pause()
-              : _controller.play();
-        });
+        setState(() => _muted = !_muted);
+        _controller.setVolume(_muted ? 0 : 1);
       },
       child: AspectRatio(
         aspectRatio: _controller.value.aspectRatio,
@@ -682,20 +681,14 @@ class _VideoPostPlayerState extends State<_VideoPostPlayer> {
           alignment: Alignment.center,
           children: [
             VideoPlayer(_controller),
-            if (!_controller.value.isPlaying)
-              Container(
-                width: 54,
-                height: 54,
-                decoration: BoxDecoration(
-                  color: Colors.black.withAlpha(120),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.play_arrow_rounded,
-                  color: Colors.white,
-                  size: 34,
-                ),
+            Positioned(
+              right: 10,
+              bottom: 10,
+              child: Icon(
+                _muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                color: Colors.white,
               ),
+            ),
           ],
         ),
       ),
@@ -866,6 +859,29 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
       setState(() => _pickedMedia.addAll(media));
     } catch (_) {
       _toast('사진을 불러오지 못했어요');
+    }
+  }
+
+  Future<void> _addVideo() async {
+    try {
+      final file = await _imagePicker.pickVideo(
+        source: ImageSource.gallery,
+        maxDuration: const Duration(seconds: 10),
+      );
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      if (bytes.length > 30 * 1024 * 1024) {
+        _toast('영상은 30MB 이하만 올릴 수 있어요');
+        return;
+      }
+      if (!mounted) return;
+      setState(() {
+        _pickedMedia.add(
+          _PickedMomentMedia(name: file.name, bytes: bytes, isVideo: true),
+        );
+      });
+    } catch (_) {
+      _toast('영상을 불러오지 못했어요');
     }
   }
 
@@ -1084,7 +1100,8 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
                 children: [
                   _PickedMediaStrip(
                     media: _pickedMedia,
-                    onAdd: _saving ? null : _addPhotos,
+                    onAddPhoto: _saving ? null : _addPhotos,
+                    onAddVideo: _saving ? null : _addVideo,
                     onRemove: _saving
                         ? null
                         : (index) =>
@@ -1169,12 +1186,14 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
 
 class _PickedMediaStrip extends StatelessWidget {
   final List<_PickedMomentMedia> media;
-  final VoidCallback? onAdd;
+  final VoidCallback? onAddPhoto;
+  final VoidCallback? onAddVideo;
   final ValueChanged<int>? onRemove;
 
   const _PickedMediaStrip({
     required this.media,
-    required this.onAdd,
+    required this.onAddPhoto,
+    required this.onAddVideo,
     required this.onRemove,
   });
 
@@ -1188,7 +1207,7 @@ class _PickedMediaStrip extends StatelessWidget {
         separatorBuilder: (_, _) => const SizedBox(width: 10),
         itemBuilder: (context, index) {
           if (index == media.length) {
-            return _AddPhotoTile(onTap: onAdd);
+            return _AddMediaTile(onPhoto: onAddPhoto, onVideo: onAddVideo);
           }
 
           return _PickedPhotoTile(
@@ -1227,7 +1246,13 @@ class _PickedPhotoTile extends StatelessWidget {
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: kMainLine),
               ),
-              child: Image.memory(media.bytes, fit: BoxFit.cover),
+              child: media.isVideo
+                  ? const Icon(
+                      Icons.videocam_rounded,
+                      size: 42,
+                      color: kMainRose,
+                    )
+                  : Image.memory(media.bytes, fit: BoxFit.cover),
             ),
           ),
           Positioned(
@@ -1268,33 +1293,34 @@ class _PickedPhotoTile extends StatelessWidget {
   }
 }
 
-class _AddPhotoTile extends StatelessWidget {
-  final VoidCallback? onTap;
+class _AddMediaTile extends StatelessWidget {
+  final VoidCallback? onPhoto;
+  final VoidCallback? onVideo;
 
-  const _AddPhotoTile({required this.onTap});
+  const _AddMediaTile({required this.onPhoto, required this.onVideo});
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       width: 138,
-      child: OutlinedButton(
-        onPressed: onTap,
-        style: OutlinedButton.styleFrom(
-          foregroundColor: kMainInk,
-          backgroundColor: kMainPaperSoft,
-          side: const BorderSide(color: kMainLine),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+      child: Column(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: onPhoto,
+              icon: const Icon(Icons.add_photo_alternate_outlined),
+              label: const Text('사진'),
+            ),
           ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.add_photo_alternate_outlined, size: 30),
-            const SizedBox(height: 8),
-            Text('사진 추가', style: mainBody(size: 13, weight: FontWeight.w900)),
-          ],
-        ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: onVideo,
+              icon: const Icon(Icons.video_call_outlined),
+              label: const Text('클립'),
+            ),
+          ),
+        ],
       ),
     );
   }

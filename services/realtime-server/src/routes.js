@@ -13,6 +13,7 @@ import { config } from './config.js';
 import { providerState, searchPlaces } from './place-search.js';
 import { canEditMapPin, normalizeMapEditorUserId } from './map-ownership.js';
 import { partnerIdForCouple } from './couple-separation.js';
+import { normalizeMomentClip } from './moment-clip.js';
 import {
   disabledFeature,
   mvpRestFeatureGate,
@@ -1287,7 +1288,7 @@ router.post('/setlog', upload.single('media'), async (req, res) => {
       media_type,
       map_pin_id,
     } = req.body;
-    const mediaUrl = req.file ? `/uploads/${req.file.filename}` : null;
+    let mediaUrl = req.file ? `/uploads/${req.file.filename}` : null;
     const uploadedMediaType = req.file?.mimetype.startsWith('video/') ? 'video' : 'image';
     const normalizedMediaType = mediaUrl ? uploadedMediaType : (media_type || 'text');
     const reject = async (status, reason) => {
@@ -1327,6 +1328,17 @@ router.post('/setlog', upload.single('media'), async (req, res) => {
     const resolvedMapPin = await resolveSetlogMapPinId(map_pin_id, userId, coupleId);
     if (resolvedMapPin?.error) {
       return reject(400, resolvedMapPin.error);
+    }
+    if (req.file?.mimetype.startsWith('video/')) {
+      try {
+        const normalizedPath = await normalizeMomentClip(uploadedFilePath(req.file));
+        req.file.path = normalizedPath;
+        req.file.filename = path.basename(normalizedPath);
+        req.file.mimetype = 'video/mp4';
+        mediaUrl = `/uploads/${req.file.filename}`;
+      } catch (error) {
+        return reject(422, error.message);
+      }
     }
     const tagsArray = parseJsonArray(tags);
     const user = await query('SELECT UserCode FROM Users WHERE UserId = ? LIMIT 1', [userId]);
