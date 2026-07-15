@@ -80,7 +80,12 @@ const migrationStatus = async (connection, migrations) => {
 };
 
 const migrateUp = async (connection, migrations) => {
-  const lockName = 'secretbase_schema_migrations';
+  const [[database]] = await connection.query('SELECT DATABASE() AS name');
+  const databaseKey = createHash('sha256')
+    .update(database.name || 'default')
+    .digest('hex')
+    .slice(0, 16);
+  const lockName = `secretbase_migrations_${databaseKey}`;
   const [[lock]] = await connection.query('SELECT GET_LOCK(?, 10) AS acquired', [lockName]);
   if (lock.acquired !== 1) throw new Error('Could not acquire migration lock');
 
