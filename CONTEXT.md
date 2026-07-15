@@ -70,15 +70,19 @@ Known stale docs:
 
 ## Domain Language
 
-- Couple: the two linked users who share one private app space.
-- Partner pairing: the flow where two users connect into a couple.
+- Couple: the enduring relationship between the same two users that owns their shared private history. A user may retain multiple inactive Couples but may belong to only one active Couple at a time.
+- Pairing request: an invitation from one user to another to activate a Couple; knowing a UserCode does not imply consent.
+- Partner pairing: the flow where one user sends a Pairing request and the other explicitly accepts it, activating a Couple.
+- Pairing-wait state: the normal signed-in state for a user without an active Couple, where they can manage their profile and Pairing requests but cannot enter shared couple features.
+- Separation: unilateral deactivation of a Couple without deleting its shared history; either user may leave without the other user's consent.
+- Reunion: reactivation of an inactive Couple after a new Pairing request is accepted by the same two users, restoring access to their previous shared history.
 - Room: the realtime Socket.IO room for one couple.
 - RoomCode: stable room identifier returned by profile/couple APIs.
 - RoomSecret: shared secret used by the client to join the realtime room.
 - UserCode: short public user identifier used for pairing and realtime presence.
 - HomeShell: the paired/logged-in app shell shown after auth and socket connection.
 - Archive: persistent couple content such as setlog, map pins, daily Q&A, challenges, jukebox, and capsules.
-- Setlog: daily text/image/video record stored through `/api/setlog`.
+- Setlog: an author-owned daily text/image/video record shared for viewing within its active Couple; only its author may change or delete it.
 - Game lobby: pre-game realtime waiting state before yut, UNO, bomb, or lightweight games start.
 - Realtime game state: ephemeral Redis-backed state for active games.
 - Production DB: the MariaDB database used by the deployed service. Local tests against it mutate real data.

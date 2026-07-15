@@ -9,3 +9,17 @@ When fixing a bug, create or identify the feedback loop before editing code.
 
 Current architecture note: Secret Base uses Flutter, Node.js/Express/Socket.IO, Redis, and MariaDB/MySQL.
 Older logs mentioning PostgreSQL are stale unless the current code also confirms them.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs are tracked in this repository's GitHub Issues. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Engineering skills use the five canonical triage labels. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This is a single-context repository with a root `CONTEXT.md` and system ADRs under `docs/adr/`. See `docs/agents/domain.md`.
