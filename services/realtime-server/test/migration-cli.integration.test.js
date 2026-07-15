@@ -31,6 +31,7 @@ test(
         pending: [
           '0001_initial_schema.sql',
           '0002_runtime_schema_repairs.sql',
+          '0003_pairing_requests.sql',
         ],
       });
 
@@ -45,6 +46,7 @@ test(
       assert.deepEqual(firstResult.applied, [
         '0001_initial_schema.sql',
         '0002_runtime_schema_repairs.sql',
+        '0003_pairing_requests.sql',
       ]);
 
       const connection = await mysql.createConnection(environment.databaseUrl);
@@ -58,6 +60,7 @@ test(
         applied: [
           '0001_initial_schema.sql',
           '0002_runtime_schema_repairs.sql',
+          '0003_pairing_requests.sql',
         ],
         pending: [],
       });

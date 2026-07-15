@@ -14,9 +14,35 @@ class PartnerScreen extends StatefulWidget {
 class _PartnerScreenState extends State<PartnerScreen> {
   final _codeCtrl = TextEditingController();
   bool _loading = false;
+  bool _requestsLoading = true;
   String? _error;
+  List<Map<String, dynamic>> _sent = [];
+  List<Map<String, dynamic>> _received = [];
 
   final _auth = AuthService();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRequests();
+  }
+
+  @override
+  void dispose() {
+    _codeCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadRequests() async {
+    final data = await _auth.getPairingRequests();
+    if (!mounted) return;
+    setState(() {
+      _sent = ((data?['sent'] as List?) ?? []).cast<Map<String, dynamic>>();
+      _received = ((data?['received'] as List?) ?? [])
+          .cast<Map<String, dynamic>>();
+      _requestsLoading = false;
+    });
+  }
 
   void _linkPartner() async {
     if (_loading) return;
@@ -28,16 +54,28 @@ class _PartnerScreenState extends State<PartnerScreen> {
       _error = null;
     });
 
-    final success = await _auth.setPartner(code);
+    final error = await _auth.sendPairingRequest(code);
 
-    if (success) {
-      await _auth.getProfile(); // Refresh profile
+    if (!mounted) return;
+    if (error == null) {
+      _codeCtrl.clear();
+      setState(() => _loading = false);
+      await _loadRequests();
     } else {
       setState(() {
         _loading = false;
-        _error = '유효하지 않은 회원코드이거나 연결할 수 없습니다.';
+        _error = error;
       });
     }
+  }
+
+  Future<void> _respond(int id, String action) async {
+    if (_loading) return;
+    setState(() => _loading = true);
+    final success = await _auth.respondToPairingRequest(id, action);
+    if (!mounted) return;
+    setState(() => _loading = false);
+    if (success && action != 'accept') await _loadRequests();
   }
 
   void _copyMyCode(String code) {
@@ -64,10 +102,10 @@ class _PartnerScreenState extends State<PartnerScreen> {
                   children: [
                     const CozyMascot(size: 80),
                     const SizedBox(height: 20),
-                    Text('애인 연결하기', style: mainTitle(size: 32)),
+                    Text('연결 대기 공간', style: mainTitle(size: 30)),
                     const SizedBox(height: 12),
                     Text(
-                      '두 분 중 한 분만 코드를 입력하면\n자동으로 서로 연결됩니다.',
+                      '상대방에게 요청을 보내고\n수락을 기다려 주세요.',
                       style: mainBody(size: 14, color: kMainSub),
                       textAlign: TextAlign.center,
                     ),
@@ -77,10 +115,15 @@ class _PartnerScreenState extends State<PartnerScreen> {
                     const Divider(color: kMainLine),
                     const SizedBox(height: 24),
                     _partnerForm(),
+                    const SizedBox(height: 24),
+                    _requestSection(),
                     const SizedBox(height: 40),
                     TextButton(
                       onPressed: () => _auth.logout(),
-                      child: Text('다른 계정으로 로그인', style: mainBody(size: 13, color: kMainMuted)),
+                      child: Text(
+                        '다른 계정으로 로그인',
+                        style: mainBody(size: 13, color: kMainMuted),
+                      ),
                     ),
                   ],
                 ),
@@ -98,11 +141,19 @@ class _PartnerScreenState extends State<PartnerScreen> {
       color: kMainSageSoft,
       child: Column(
         children: [
-          Text('내 회원코드', style: mainBody(size: 13, color: kMainSub, weight: FontWeight.w700)),
+          Text(
+            '내 회원코드',
+            style: mainBody(size: 13, color: kMainSub, weight: FontWeight.w700),
+          ),
           const SizedBox(height: 12),
           Text(
             code,
-            style: mainTitle(size: 40, color: kMainInk, weight: FontWeight.w800, letterSpacing: 4),
+            style: mainTitle(
+              size: 40,
+              color: kMainInk,
+              weight: FontWeight.w800,
+              letterSpacing: 4,
+            ),
           ),
           const SizedBox(height: 16),
           SizedBox(
@@ -114,7 +165,9 @@ class _PartnerScreenState extends State<PartnerScreen> {
               style: OutlinedButton.styleFrom(
                 foregroundColor: kMainInk,
                 side: const BorderSide(color: kMainSage),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
           ),
@@ -129,7 +182,10 @@ class _PartnerScreenState extends State<PartnerScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('상대방의 코드 입력', style: mainBody(size: 13, color: kMainSub, weight: FontWeight.w700)),
+          Text(
+            '상대방에게 연결 요청',
+            style: mainBody(size: 13, color: kMainSub, weight: FontWeight.w700),
+          ),
           const SizedBox(height: 12),
           TextField(
             controller: _codeCtrl,
@@ -140,12 +196,17 @@ class _PartnerScreenState extends State<PartnerScreen> {
               hintText: 'ABC123',
               filled: true,
               fillColor: kMainPaperSoft,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none,
+              ),
             ),
           ),
           if (_error != null) ...[
             const SizedBox(height: 12),
-            Center(child: Text(_error!, style: mainBody(size: 13, color: kError))),
+            Center(
+              child: Text(_error!, style: mainBody(size: 13, color: kError)),
+            ),
           ],
           const SizedBox(height: 24),
           SizedBox(
@@ -155,13 +216,98 @@ class _PartnerScreenState extends State<PartnerScreen> {
               onPressed: _loading ? null : _linkPartner,
               style: FilledButton.styleFrom(
                 backgroundColor: kMainInk,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
               ),
               child: _loading
-                  ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                  : Text('연결하기', style: mainBody(size: 16, color: Colors.white, weight: FontWeight.w700)),
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : Text(
+                      '요청 보내기',
+                      style: mainBody(
+                        size: 16,
+                        color: Colors.white,
+                        weight: FontWeight.w700,
+                      ),
+                    ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _requestSection() {
+    if (_requestsLoading) {
+      return const Padding(
+        padding: EdgeInsets.all(24),
+        child: CircularProgressIndicator(color: kMainRose),
+      );
+    }
+    final received = _received
+        .where((item) => item['status'] == 'pending')
+        .toList();
+    final sent = _sent.where((item) => item['status'] == 'pending').toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (received.isNotEmpty) ...[
+          Text('받은 요청', style: mainTitle(size: 20)),
+          const SizedBox(height: 10),
+          ...received.map((item) => _requestTile(item, receivedRequest: true)),
+          const SizedBox(height: 20),
+        ],
+        Text('보낸 요청', style: mainTitle(size: 20)),
+        const SizedBox(height: 10),
+        if (sent.isEmpty)
+          Text('대기 중인 요청이 없어요.', style: mainBody(size: 13, color: kMainMuted))
+        else
+          ...sent.map((item) => _requestTile(item, receivedRequest: false)),
+      ],
+    );
+  }
+
+  Widget _requestTile(
+    Map<String, dynamic> item, {
+    required bool receivedRequest,
+  }) {
+    final name = receivedRequest
+        ? (item['senderNickname'] ?? item['senderCode'])
+        : (item['recipientNickname'] ?? item['recipientCode']);
+    return MainCard(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text('$name', style: mainBody(weight: FontWeight.w700)),
+          ),
+          if (receivedRequest) ...[
+            TextButton(
+              onPressed: _loading
+                  ? null
+                  : () => _respond(item['id'] as int, 'reject'),
+              child: const Text('거절'),
+            ),
+            FilledButton(
+              onPressed: _loading
+                  ? null
+                  : () => _respond(item['id'] as int, 'accept'),
+              child: const Text('수락'),
+            ),
+          ] else
+            TextButton(
+              onPressed: _loading
+                  ? null
+                  : () => _respond(item['id'] as int, 'cancel'),
+              child: const Text('취소'),
+            ),
         ],
       ),
     );

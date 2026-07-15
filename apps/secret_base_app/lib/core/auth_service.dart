@@ -301,6 +301,65 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  Future<Map<String, dynamic>?> getPairingRequests() async {
+    if (_token == null) return null;
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/pairing/requests'),
+        headers: {'Authorization': 'Bearer $_token'},
+      );
+      if (response.statusCode != 200) return null;
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    } catch (e) {
+      debugPrint('[Auth] Pairing requests error: $e');
+      return null;
+    }
+  }
+
+  Future<String?> sendPairingRequest(String recipientCode) async {
+    if (_token == null) return '로그인이 필요합니다.';
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/pairing/requests'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({'recipientCode': recipientCode}),
+      );
+      if (response.statusCode == 201) return null;
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return switch (data['reason']) {
+        'recipient_not_found' => '상대방 코드를 찾지 못했어요.',
+        'request_already_pending' => '이미 두 분 사이에 대기 중인 요청이 있어요.',
+        'active_couple_exists' => '이미 연결된 사용자는 새 요청을 받을 수 없어요.',
+        'cannot_pair_with_self' => '내 코드로는 요청할 수 없어요.',
+        _ => '요청을 보내지 못했어요.',
+      };
+    } catch (e) {
+      debugPrint('[Auth] Send pairing request error: $e');
+      return '요청을 보내지 못했어요.';
+    }
+  }
+
+  Future<bool> respondToPairingRequest(int requestId, String action) async {
+    if (_token == null || !{'accept', 'reject', 'cancel'}.contains(action)) {
+      return false;
+    }
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/pairing/requests/$requestId/$action'),
+        headers: {'Authorization': 'Bearer $_token'},
+      );
+      if (response.statusCode != 200) return false;
+      if (action == 'accept') await getProfile();
+      return true;
+    } catch (e) {
+      debugPrint('[Auth] Pairing response error: $e');
+      return false;
+    }
+  }
+
   Future<bool> disconnectPartner() async {
     if (_token == null || _user == null) return false;
     try {

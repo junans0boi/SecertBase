@@ -711,6 +711,209 @@ router.post(
 router.use(requireAuth(config.JWT_SECRET));
 router.use(mvpRestFeatureGate(config.PUBLIC_FEATURE_SET));
 
+const expirePairingRequests = () =>
+  query(
+    `UPDATE PairingRequests
+     SET Status = 'expired', RespondedAt = CURRENT_TIMESTAMP
+     WHERE Status = 'pending' AND ExpiresAt <= CURRENT_TIMESTAMP`,
+  );
+
+router.get('/pairing/requests', async (req, res) => {
+  try {
+    await expirePairingRequests();
+    const userId = req.auth.userId;
+    const result = await query(
+      `SELECT pr.PairingRequestId AS id, pr.SenderUserId AS senderUserId,
+              pr.RecipientUserId AS recipientUserId, pr.Status AS status,
+              pr.ExpiresAt AS expiresAt, pr.created_at AS createdAt,
+              sender.UserCode AS senderCode, sender.Nickname AS senderNickname,
+              recipient.UserCode AS recipientCode, recipient.Nickname AS recipientNickname
+       FROM PairingRequests pr
+       JOIN Users sender ON sender.UserId = pr.SenderUserId
+       JOIN Users recipient ON recipient.UserId = pr.RecipientUserId
+       WHERE pr.SenderUserId = ? OR pr.RecipientUserId = ?
+       ORDER BY pr.created_at DESC`,
+      [userId, userId],
+    );
+    res.json({
+      ok: true,
+      sent: result.rows.filter((item) => Number(item.senderUserId) === userId),
+      received: result.rows.filter((item) => Number(item.recipientUserId) === userId),
+    });
+  } catch (error) {
+    console.error('[API] pairing list error:', error);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.post('/pairing/requests', async (req, res) => {
+  try {
+    await expirePairingRequests();
+    const senderUserId = req.auth.userId;
+    const recipientCode = String(req.body.recipientCode ?? '').trim().toUpperCase();
+    if (!recipientCode) return res.status(400).json({ ok: false, reason: 'missing_recipient_code' });
+
+    const recipientResult = await query(
+      'SELECT UserId, UserCode, Nickname FROM Users WHERE UserCode = ? LIMIT 1',
+      [recipientCode],
+    );
+    const recipient = recipientResult.rows[0];
+    if (!recipient) return res.status(404).json({ ok: false, reason: 'recipient_not_found' });
+    if (Number(recipient.UserId) === senderUserId) {
+      return res.status(400).json({ ok: false, reason: 'cannot_pair_with_self' });
+    }
+
+    const active = await query(
+      `SELECT CoupleId FROM Couples
+       WHERE User1Id IN (?, ?) OR User2Id IN (?, ?)
+       LIMIT 1`,
+      [senderUserId, recipient.UserId, senderUserId, recipient.UserId],
+    );
+    if (active.rows.length > 0) {
+      return res.status(409).json({ ok: false, reason: 'active_couple_exists' });
+    }
+
+    const pending = await query(
+      `SELECT PairingRequestId FROM PairingRequests
+       WHERE Status = 'pending'
+         AND ((SenderUserId = ? AND RecipientUserId = ?)
+           OR (SenderUserId = ? AND RecipientUserId = ?))
+       LIMIT 1`,
+      [senderUserId, recipient.UserId, recipient.UserId, senderUserId],
+    );
+    if (pending.rows.length > 0) {
+      return res.status(409).json({ ok: false, reason: 'request_already_pending' });
+    }
+
+    const result = await query(
+      `INSERT INTO PairingRequests (SenderUserId, RecipientUserId, ExpiresAt)
+       VALUES (?, ?, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 7 DAY))`,
+      [senderUserId, recipient.UserId],
+    );
+    res.status(201).json({ ok: true, requestId: result.rows.insertId });
+  } catch (error) {
+    console.error('[API] pairing create error:', error);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+const updatePairingRequest = async (req, res, action) => {
+  try {
+    await expirePairingRequests();
+    const userId = req.auth.userId;
+    const requestId = Number(req.params.id);
+    const ownerColumn = action === 'cancelled' ? 'SenderUserId' : 'RecipientUserId';
+    const result = await query(
+      `UPDATE PairingRequests
+       SET Status = ?, RespondedAt = CURRENT_TIMESTAMP
+       WHERE PairingRequestId = ? AND ${ownerColumn} = ? AND Status = 'pending'`,
+      [action, requestId, userId],
+    );
+    if (result.rows.affectedRows === 0) {
+      return res.status(404).json({ ok: false, reason: 'pending_request_not_found' });
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    console.error(`[API] pairing ${action} error:`, error);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+};
+
+router.post('/pairing/requests/:id/reject', (req, res) =>
+  updatePairingRequest(req, res, 'rejected'));
+router.post('/pairing/requests/:id/cancel', (req, res) =>
+  updatePairingRequest(req, res, 'cancelled'));
+
+router.post('/pairing/requests/:id/accept', async (req, res) => {
+  try {
+    const recipientUserId = req.auth.userId;
+    const requestId = Number(req.params.id);
+    const activated = await transaction(async (connection) => {
+      await connection.execute(
+        'SELECT UserId FROM Users WHERE UserId = ? FOR UPDATE',
+        [recipientUserId],
+      );
+      const [requestRows] = await connection.execute(
+        `SELECT PairingRequestId, SenderUserId, RecipientUserId, Status, ExpiresAt
+         FROM PairingRequests WHERE PairingRequestId = ? FOR UPDATE`,
+        [requestId],
+      );
+      const request = requestRows[0];
+      if (!request || Number(request.RecipientUserId) !== recipientUserId || request.Status !== 'pending') {
+        return { error: 'pending_request_not_found', status: 404 };
+      }
+      if (new Date(request.ExpiresAt).getTime() <= Date.now()) {
+        await connection.execute(
+          `UPDATE PairingRequests SET Status = 'expired', RespondedAt = CURRENT_TIMESTAMP
+           WHERE PairingRequestId = ?`,
+          [requestId],
+        );
+        return { error: 'request_expired', status: 410 };
+      }
+
+      const senderUserId = Number(request.SenderUserId);
+      const userIds = [senderUserId, recipientUserId].sort((a, b) => a - b);
+      await connection.execute(
+        'SELECT UserId FROM Users WHERE UserId = ? FOR UPDATE',
+        [senderUserId],
+      );
+      const [couples] = await connection.execute(
+        `SELECT CoupleId FROM Couples
+         WHERE User1Id IN (?, ?) OR User2Id IN (?, ?)
+         FOR UPDATE`,
+        [userIds[0], userIds[1], userIds[0], userIds[1]],
+      );
+      if (couples.length > 0) return { error: 'active_couple_exists', status: 409 };
+
+      const [users] = await connection.execute(
+        'SELECT UserId, UserCode FROM Users WHERE UserId IN (?, ?)',
+        userIds,
+      );
+      const codeById = new Map(users.map((user) => [Number(user.UserId), user.UserCode]));
+      const roomCode = `room_${userIds[0]}_${userIds[1]}`;
+      const roomSecret = Math.random().toString(36).slice(2, 14);
+      const [coupleResult] = await connection.execute(
+        `INSERT INTO Couples (User1Id, User2Id, RoomCode, RoomSecret)
+         VALUES (?, ?, ?, ?)`,
+        [userIds[0], userIds[1], roomCode, roomSecret],
+      );
+      await connection.execute(
+        `UPDATE User_Preference SET PartnerCode = CASE UserId
+           WHEN ? THEN ? WHEN ? THEN ? END
+         WHERE UserId IN (?, ?)`,
+        [
+          senderUserId,
+          codeById.get(recipientUserId),
+          recipientUserId,
+          codeById.get(senderUserId),
+          senderUserId,
+          recipientUserId,
+        ],
+      );
+      await connection.execute(
+        `UPDATE PairingRequests SET Status = 'accepted', RespondedAt = CURRENT_TIMESTAMP
+         WHERE PairingRequestId = ?`,
+        [requestId],
+      );
+      await connection.execute(
+        `UPDATE PairingRequests SET Status = 'cancelled', RespondedAt = CURRENT_TIMESTAMP
+         WHERE Status = 'pending' AND PairingRequestId <> ?
+           AND (SenderUserId IN (?, ?) OR RecipientUserId IN (?, ?))`,
+        [requestId, userIds[0], userIds[1], userIds[0], userIds[1]],
+      );
+      return { coupleId: coupleResult.insertId };
+    });
+
+    if (activated.error) {
+      return res.status(activated.status).json({ ok: false, reason: activated.error });
+    }
+    res.json({ ok: true, coupleId: activated.coupleId });
+  } catch (error) {
+    console.error('[API] pairing accept error:', error);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
 router.patch('/user/profile/:userId', async (req, res) => {
   try {
     await ensureUserColumns();
@@ -795,7 +998,10 @@ router.patch('/user/password/:userId', async (req, res) => {
 });
 
 // 애인 설정 (Partner Pairing - Mutual with Auto-Room)
-router.post('/user/partner', async (req, res) => {
+router.post(
+  '/user/partner',
+  disabledFeature(config.PUBLIC_FEATURE_SET, 'legacy_pairing'),
+  async (req, res) => {
   try {
     const userId = req.auth.userId;
     const { partnerCode } = req.body;
@@ -848,7 +1054,8 @@ router.post('/user/partner', async (req, res) => {
     console.error('[API] /user/partner error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
   }
-});
+  },
+);
 
 // 애인 연결 해제
 router.delete('/user/partner', async (req, res) => {
