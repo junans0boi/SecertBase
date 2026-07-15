@@ -379,6 +379,39 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  /// 회원 탈퇴: 이메일 사용자는 현재 비밀번호 필수.
+  /// 성공 시 null 반환, 실패 시 오류 코드 문자열 반환.
+  Future<String?> deleteAccount({String? password}) async {
+    if (_token == null || _user == null) return 'unauthorized';
+    try {
+      final body = <String, dynamic>{};
+      if (password != null && password.isNotEmpty) {
+        body['password'] = password;
+      }
+      final response = await http.delete(
+        Uri.parse('$baseUrl/api/user'),
+        headers: {
+          'Authorization': 'Bearer $_token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(body),
+      );
+      if (response.statusCode == 200) {
+        await logout();
+        return null;
+      }
+      try {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return data['reason'] as String? ?? 'unknown_error';
+      } catch (_) {
+        return 'unknown_error';
+      }
+    } catch (e) {
+      debugPrint('[Auth] Delete account error: $e');
+      return 'network_error';
+    }
+  }
+
   Future<bool> markReunionNoticeSeen() async {
     if (_token == null) return false;
     try {

@@ -28,6 +28,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _passwordSaving = false;
   bool _anniversarySaving = false;
   bool _partnerDisconnecting = false;
+  bool _deleteAccountDeleting = false;
+  final _deletePasswordCtrl = TextEditingController();
   String? _profileMessage;
   String? _passwordMessage;
   String? _anniversaryMessage;
@@ -50,6 +52,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _nicknameCtrl.dispose();
     _currentPasswordCtrl.dispose();
     _newPasswordCtrl.dispose();
+    _deletePasswordCtrl.dispose();
     super.dispose();
   }
 
@@ -159,6 +162,124 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (confirmed == true) await _disconnectPartner();
   }
 
+  Future<void> _confirmDeleteAccount() async {
+    // 1단계: 탈퇴 결과 안내
+    final continueDelete = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: kMainPaper,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('회원 탈퇴', style: mainTitle(size: 24)),
+        content: Text(
+          '탈퇴하면 내가 작성한 MomentLoop와 미디어가 영구 삭제되고, '
+          '연결된 커플 공간이 닫혀요. 이 작업은 되돌릴 수 없어요.',
+          style: mainBody(size: 14, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('취소', style: mainBody(size: 14, color: kMainMuted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(
+              '계속',
+              style: mainBody(size: 14, color: kError, weight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (continueDelete != true || !mounted) return;
+
+    // 2단계: 비밀번호 입력 확인 (이메일 사용자)
+    final authProvider =
+        '${_auth.user?['AuthProvider'] ?? _auth.user?['authProvider'] ?? 'password'}';
+    final isPasswordUser = authProvider == 'password' || authProvider == 'null';
+
+    _deletePasswordCtrl.clear();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: kMainPaper,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('정말 탈퇴할까요?', style: mainTitle(size: 22)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '탈퇴 후에는 로그인이 불가능하며, 내 기록이 모두 삭제돼요.',
+              style: mainBody(size: 13, color: kMainSub, height: 1.5),
+            ),
+            if (isPasswordUser) ...[
+              const SizedBox(height: 14),
+              TextField(
+                controller: _deletePasswordCtrl,
+                obscureText: true,
+                style: mainBody(size: 14, color: kMainInk),
+                decoration: InputDecoration(
+                  hintText: '현재 비밀번호 입력',
+                  prefixIcon:
+                      const Icon(Icons.lock_outline, color: kMainMuted, size: 20),
+                  filled: true,
+                  fillColor: kMainPaperSoft,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 14,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('돌아가기', style: mainBody(size: 14, color: kMainMuted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(
+              '탈퇴',
+              style: mainBody(size: 14, color: kError, weight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await _doDeleteAccount(
+      password: isPasswordUser ? _deletePasswordCtrl.text.trim() : null,
+    );
+  }
+
+  Future<void> _doDeleteAccount({String? password}) async {
+    if (_deleteAccountDeleting) return;
+    setState(() => _deleteAccountDeleting = true);
+    final error = await _auth.deleteAccount(password: password);
+    if (!mounted) return;
+    setState(() => _deleteAccountDeleting = false);
+    if (error != null) {
+      String msg;
+      if (error == 'invalid_password') {
+        msg = '비밀번호가 맞지 않아요.';
+      } else if (error == 'password_required') {
+        msg = '비밀번호를 입력해주세요.';
+      } else {
+        msg = '탈퇴에 실패했어요. ($error)';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg, style: mainBody(color: Colors.white))),
+      );
+    }
+    // 성공 시 _auth.deleteAccount 내부에서 logout() 호출 → 앱이 로그인 화면으로 전환됨
+  }
+
   Future<void> _disconnectPartner() async {
     if (_partnerDisconnecting) return;
     setState(() => _partnerDisconnecting = true);
@@ -224,6 +345,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   backgroundColor: kMainPaper.withAlpha(210),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Center(
+              child: TextButton(
+                onPressed: _deleteAccountDeleting ? null : _confirmDeleteAccount,
+                child: Text(
+                  _deleteAccountDeleting ? '탈퇴 처리 중...' : '회원 탈퇴',
+                  style: mainBody(
+                    size: 13,
+                    color: kMainMuted,
+                    weight: FontWeight.w600,
                   ),
                 ),
               ),

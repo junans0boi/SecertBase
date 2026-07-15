@@ -14,6 +14,12 @@ import { config } from './config.js';
 import { providerState, searchPlaces } from './place-search.js';
 import { canEditMapPin, normalizeMapEditorUserId } from './map-ownership.js';
 import { partnerIdForCouple } from './couple-separation.js';
+import {
+  isPasswordUser,
+  buildTombstoneFields,
+  classifyPinsForDeletion,
+  collectMediaPaths,
+} from './account-deletion.js';
 import { normalizeMomentClip } from './moment-clip.js';
 import {
   disabledFeature,
@@ -416,6 +422,10 @@ const ensureUserColumns = async () => {
     await query(`ALTER TABLE Users ADD COLUMN IF NOT EXISTS is_premium TINYINT(1) NOT NULL DEFAULT 0`);
     await query(`ALTER TABLE Users ADD COLUMN IF NOT EXISTS premium_since DATETIME NULL`);
     await query(`ALTER TABLE Users ADD COLUMN IF NOT EXISTS premium_expires_at DATETIME NULL`);
+
+    // 탈퇴 tombstone 컬럼
+    await query(`ALTER TABLE Users ADD COLUMN IF NOT EXISTS IsDeleted TINYINT(1) NOT NULL DEFAULT 0`);
+    await query(`ALTER TABLE Users ADD COLUMN IF NOT EXISTS DeletedAt DATETIME NULL`);
   })();
 
   return userColumnsReadyPromise;
@@ -573,6 +583,12 @@ router.post('/auth/login', async (req, res) => {
     }
 
     const user = result.rows[0];
+
+    // 탈퇴한 사용자는 로그인 불가
+    if (user.IsDeleted) {
+      return res.status(401).json({ ok: false, reason: 'invalid_credentials' });
+    }
+
     const isMatch = await bcrypt.compare(password, user.PasswordHash);
 
     if (!isMatch) {
@@ -1137,6 +1153,160 @@ router.delete('/user/partner', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     console.error('[API] /user/partner DELETE error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+// 회원 탈퇴
+// POST body: { password } (이메일 사용자만. Google 사용자는 password 불필요)
+// 완료 조건:
+//   1. 이메일 사용자: 현재 비밀번호 + 명시적 확인
+//   2. 활성 커플 비활성화 → 상대방 소켓 알림
+//   3. 탈퇴 사용자의 setlog_posts 영구 삭제 + 미디어 파일 삭제
+//   4. 탈퇴 사용자의 map_pins: 연결된 핀 → 익명화, 연결 없는 핀 → 삭제
+//   5. Users 행 → tombstone (이메일/이름/자격증명 제거, IsDeleted=1)
+router.delete('/user', async (req, res) => {
+  try {
+    await ensureUserColumns();
+    const userId = getAuthenticatedUserId(req);
+    if (!userId) {
+      return res.status(401).json({ ok: false, reason: 'unauthorized' });
+    }
+
+    // 사용자 조회
+    const userRes = await query(
+      `SELECT UserId, Email, PasswordHash, AuthProvider
+       FROM Users WHERE UserId = ? LIMIT 1`,
+      [userId],
+    );
+    const user = userRes.rows[0];
+    if (!user) {
+      return res.status(404).json({ ok: false, reason: 'user_not_found' });
+    }
+
+    // 이메일 사용자: 현재 비밀번호 필수
+    if (isPasswordUser(user.AuthProvider)) {
+      const { password } = req.body || {};
+      if (!password) {
+        return res.status(400).json({ ok: false, reason: 'password_required' });
+      }
+      const isMatch = await bcrypt.compare(password, user.PasswordHash || '');
+      if (!isMatch) {
+        return res.status(401).json({ ok: false, reason: 'invalid_password' });
+      }
+    }
+
+    // 1. 활성 커플 찾기
+    const coupleRes = await query(
+      `SELECT CoupleId, User1Id, User2Id, RoomCode
+       FROM Couples
+       WHERE Status = 'active' AND (User1Id = ? OR User2Id = ?)
+       LIMIT 1`,
+      [userId, userId],
+    );
+    const couple = coupleRes.rows[0] ?? null;
+    const partnerId = partnerIdForCouple(couple, userId);
+
+    // 2. setlog_posts 목록 수집 (미디어 파일 경로 확보)
+    const setlogRes = await query(
+      'SELECT id, media_url FROM setlog_posts WHERE user_id = ?',
+      [userId],
+    );
+    const setlogPosts = setlogRes.rows;
+
+    // 3. map_pins 분류: setlog_posts 가 참조하는 핀 → 익명화, 나머지 → 삭제
+    const pinsRes = await query(
+      `SELECT mp.id,
+              EXISTS(
+                SELECT 1 FROM setlog_posts sp
+                WHERE sp.map_pin_id = mp.id
+              ) AS hasLinkedMoment
+       FROM map_pins mp
+       WHERE mp.user_id = ?`,
+      [userId],
+    );
+    const pinRows = (pinsRes.rows || []).map((r) => ({
+      id: r.id,
+      hasLinkedMoment: Boolean(r.hasLinkedMoment),
+    }));
+    const { toAnonymize, toDelete } = classifyPinsForDeletion(pinRows);
+
+    // 미디어 파일 경로 목록
+    const mediaPaths = collectMediaPaths(setlogPosts, mediaFilePath);
+
+    // ─── 트랜잭션으로 DB 변경 ─────────────────────────────────────────────
+    await transaction(async (conn) => {
+      // 커플 비활성화
+      if (couple) {
+        await conn.execute(
+          `UPDATE Couples SET Status = 'inactive', DeactivatedAt = CURRENT_TIMESTAMP WHERE CoupleId = ?`,
+          [couple.CoupleId],
+        );
+        if (partnerId) {
+          await conn.execute(
+            'UPDATE User_Preference SET PartnerCode = NULL WHERE UserId IN (?, ?)',
+            [userId, partnerId],
+          );
+        }
+      }
+
+      // setlog 삭제
+      if (setlogPosts.length > 0) {
+        await conn.execute('DELETE FROM setlog_posts WHERE user_id = ?', [userId]);
+      }
+
+      // map_pins 처리
+      if (toAnonymize.length > 0) {
+        await conn.execute(
+          `UPDATE map_pins
+           SET user_id = NULL, archived_at = CURRENT_TIMESTAMP
+           WHERE id IN (${toAnonymize.map(() => '?').join(',')})`,
+          toAnonymize,
+        );
+      }
+      if (toDelete.length > 0) {
+        await conn.execute(
+          `DELETE FROM map_pins WHERE id IN (${toDelete.map(() => '?').join(',')})`,
+          toDelete,
+        );
+      }
+
+      // Users tombstone 전환
+      const tombstone = buildTombstoneFields(userId);
+      await conn.execute(
+        `UPDATE Users
+         SET Email = ?, UserName = ?, FullName = ?, Nickname = ?,
+             PasswordHash = ?, GoogleSubject = NULL, GooglePictureUrl = NULL,
+             IsDeleted = ?, DeletedAt = ?
+         WHERE UserId = ?`,
+        [
+          tombstone.Email,
+          tombstone.UserName,
+          tombstone.FullName,
+          tombstone.Nickname,
+          tombstone.PasswordHash,
+          tombstone.IsDeleted,
+          tombstone.DeletedAt,
+          userId,
+        ],
+      );
+    });
+
+    // ─── 트랜잭션 외부: 미디어 파일 삭제, 소켓 알림 ──────────────────────
+    await Promise.allSettled(
+      mediaPaths.map((fp) => fs.promises.rm(fp, { force: true })),
+    );
+
+    if (couple) {
+      req.app.locals.io?.to(couple.RoomCode).emit('partner:disconnected', {
+        reason: 'partner_deleted_account',
+      });
+      req.app.locals.io?.in(couple.RoomCode).disconnectSockets(true);
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[API] /user DELETE error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
   }
 });
