@@ -6,6 +6,7 @@ dotenv.config();
 
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  PUBLIC_FEATURE_SET: z.enum(["mvp", "legacy"]).default("mvp"),
   PORT: z.coerce.number().int().min(1).max(65535).default(4100),
   CORS_ORIGIN: z
     .string()

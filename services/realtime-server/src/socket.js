@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { config } from "./config.js";
+import { installSocketFeatureGate } from "./backend-access.js";
 import { query } from "./db.js";
 import { redis } from "./redis.js";
 import {
@@ -321,6 +322,7 @@ const getUnoHandCount = (gameState) =>
 
 export const registerSocketHandlers = (io) => {
   io.on("connection", (socket) => {
+    installSocketFeatureGate(socket, config.PUBLIC_FEATURE_SET);
     socket.on("session:join", async (payload, ackRaw) => {
       const ack = normalizeAck(ackRaw);
       const parsed = joinSchema.safeParse(payload);

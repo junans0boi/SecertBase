@@ -13,6 +13,11 @@ import { config } from './config.js';
 import { providerState, searchPlaces } from './place-search.js';
 import { canEditMapPin, normalizeMapEditorUserId } from './map-ownership.js';
 import { partnerIdForCouple } from './couple-separation.js';
+import {
+  disabledFeature,
+  mvpRestFeatureGate,
+  requireAuth,
+} from './backend-access.js';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const archiver = require('archiver');
@@ -426,18 +431,7 @@ const createJwtForUser = (user) =>
     { expiresIn: '7d' }
   );
 
-const getAuthenticatedUserId = (req) => {
-  const authHeader = req.get('authorization') || '';
-  const match = authHeader.match(/^Bearer\s+(.+)$/i);
-  if (!match) return null;
-
-  try {
-    const payload = jwt.verify(match[1], config.JWT_SECRET);
-    return normalizeMapEditorUserId(payload.userId);
-  } catch {
-    return null;
-  }
-};
+const getAuthenticatedUserId = (req) => req.auth?.userId ?? null;
 
 const dateOnly = (value) => {
   if (!value) return null;
@@ -587,7 +581,10 @@ router.post('/auth/login', async (req, res) => {
   }
 });
 
-router.post('/auth/review-login', async (req, res) => {
+router.post(
+  '/auth/review-login',
+  disabledFeature(config.PUBLIC_FEATURE_SET, 'review_login'),
+  async (req, res) => {
   try {
     if (!config.KAKAO_REVIEW_AUTO_LOGIN || !config.KAKAO_REVIEW_EMAIL) {
       return res.status(404).json({ ok: false, reason: 'not_found' });
@@ -615,9 +612,13 @@ router.post('/auth/review-login', async (req, res) => {
     console.error('[API] /auth/review-login error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
   }
-});
+  },
+);
 
-router.post('/auth/google', async (req, res) => {
+router.post(
+  '/auth/google',
+  disabledFeature(config.PUBLIC_FEATURE_SET, 'google_login'),
+  async (req, res) => {
   try {
     const { idToken } = req.body;
     if (!idToken) {
@@ -704,13 +705,17 @@ router.post('/auth/google', async (req, res) => {
     console.error('[API] /auth/google error:', err);
     res.status(401).json({ ok: false, reason: 'google_auth_failed' });
   }
-});
+  },
+);
+
+router.use(requireAuth(config.JWT_SECRET));
+router.use(mvpRestFeatureGate(config.PUBLIC_FEATURE_SET));
 
 router.patch('/user/profile/:userId', async (req, res) => {
   try {
     await ensureUserColumns();
 
-    const { userId } = req.params;
+    const userId = req.auth.userId;
     const fullName = String(req.body.fullName || req.body.FullName || '').trim();
     const nickname = String(req.body.nickname || req.body.Nickname || '').trim();
     const birthDate = String(req.body.birthDate || req.body.BirthDate || '').trim();
@@ -746,7 +751,7 @@ router.patch('/user/profile/:userId', async (req, res) => {
 
 router.patch('/user/password/:userId', async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = req.auth.userId;
     const { currentPassword, newPassword } = req.body;
 
     if (!currentPassword || !newPassword) {
@@ -792,9 +797,10 @@ router.patch('/user/password/:userId', async (req, res) => {
 // 애인 설정 (Partner Pairing - Mutual with Auto-Room)
 router.post('/user/partner', async (req, res) => {
   try {
-    const { userId, partnerCode } = req.body;
+    const userId = req.auth.userId;
+    const { partnerCode } = req.body;
 
-    if (!userId || !partnerCode) {
+    if (!partnerCode) {
       return res.status(400).json({ ok: false, reason: 'missing_fields' });
     }
 
@@ -891,7 +897,7 @@ router.delete('/user/partner', async (req, res) => {
 // 프로필 조회 (With Room Info)
 router.get('/user/profile/:userId', async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = req.auth.userId;
     const user = await getProfileRowByUserId(userId);
 
     if (!user) {
