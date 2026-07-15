@@ -40,13 +40,14 @@ export async function createApiTestServer({ adminUrl, redisUrl }) {
   return {
     environment,
     async request(path, { token, method = 'GET', body } = {}) {
+      const isFormData = body instanceof FormData;
       return fetch(`${baseUrl}/api${path}`, {
         method,
         headers: {
           ...(token ? { authorization: `Bearer ${token}` } : {}),
-          ...(body ? { 'content-type': 'application/json' } : {}),
+          ...(body && !isFormData ? { 'content-type': 'application/json' } : {}),
         },
-        ...(body ? { body: JSON.stringify(body) } : {}),
+        ...(body ? { body: isFormData ? body : JSON.stringify(body) } : {}),
       });
     },
     async close() {

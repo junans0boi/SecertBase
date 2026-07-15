@@ -20,7 +20,6 @@ class MomentLoopScreen extends StatefulWidget {
 
 class _MomentLoopScreenState extends State<MomentLoopScreen> {
   final _auth = AuthService();
-  final _imagePicker = ImagePicker();
   List<Map<String, dynamic>> _posts = [];
   bool _loading = true;
   String? _error;
@@ -60,7 +59,10 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
       final uri = Uri.parse(
         '${_auth.baseUrl}/api/setlog',
       ).replace(queryParameters: {'user_id': '$userId'});
-      final response = await http.get(uri);
+      final response = await http.get(
+        uri,
+        headers: {'Authorization': 'Bearer ${_auth.token}'},
+      );
       final data = jsonDecode(response.body) as Map<String, dynamic>;
 
       if (response.statusCode == 200 && data['ok'] == true) {
@@ -93,37 +95,77 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
   }
 
   Future<void> _startCreatePostFlow() async {
-    try {
-      final files = await _imagePicker.pickMultiImage(imageQuality: 86);
-      if (files.isEmpty || !mounted) return;
+    final created = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => _CreateMomentPage(auth: _auth, initialMedia: const []),
+      ),
+    );
+    if (created == true) _loadPosts();
+  }
 
-      final media = <_PickedMomentMedia>[];
-      for (final file in files) {
-        media.add(
-          _PickedMomentMedia(
-            name: file.name,
-            bytes: await file.readAsBytes(),
-            isVideo: false,
+  Future<void> _editPost(Map<String, dynamic> post) async {
+    final controller = TextEditingController(text: '${post['caption'] ?? ''}');
+    final caption = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('MomentLoop 수정'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          minLines: 2,
+          maxLines: 5,
+          decoration: const InputDecoration(labelText: '남길 말'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('취소'),
           ),
-        );
-      }
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('저장'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (caption == null || caption.isEmpty) return;
+    final response = await http.patch(
+      Uri.parse('${_auth.baseUrl}/api/setlog/${post['id']}'),
+      headers: {
+        'Authorization': 'Bearer ${_auth.token}',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'caption': caption}),
+    );
+    if (response.statusCode == 200) await _loadPosts();
+  }
 
-      if (!mounted) return;
-      final created = await Navigator.of(context).push<bool>(
-        MaterialPageRoute(
-          fullscreenDialog: true,
-          builder: (_) => _CreateMomentPage(auth: _auth, initialMedia: media),
-        ),
-      );
-      if (created == true) _loadPosts();
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('사진을 불러오지 못했어요', style: mainBody(color: Colors.white)),
-        ),
-      );
-    }
+  Future<void> _deletePost(Map<String, dynamic> post) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('MomentLoop 삭제'),
+        content: const Text('이 기록과 첨부한 사진을 영구 삭제할까요?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('삭제'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final response = await http.delete(
+      Uri.parse('${_auth.baseUrl}/api/setlog/${post['id']}'),
+      headers: {'Authorization': 'Bearer ${_auth.token}'},
+    );
+    if (response.statusCode == 200) await _loadPosts();
   }
 
   @override
@@ -187,6 +229,8 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
                                 post: post,
                                 auth: _auth,
                                 isMine: _isMine(post),
+                                onEdit: () => _editPost(post),
+                                onDelete: () => _deletePost(post),
                               );
                             },
                           ),
@@ -352,11 +396,15 @@ class _MomentCard extends StatelessWidget {
   final Map<String, dynamic> post;
   final AuthService auth;
   final bool isMine;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   const _MomentCard({
     required this.post,
     required this.auth,
     required this.isMine,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   @override
@@ -413,6 +461,16 @@ class _MomentCard extends StatelessWidget {
                     ),
                   ),
                   _TypePill(mediaType: mediaType),
+                  if (isMine)
+                    PopupMenuButton<String>(
+                      tooltip: '기록 관리',
+                      onSelected: (value) =>
+                          value == 'edit' ? onEdit() : onDelete(),
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(value: 'edit', child: Text('수정')),
+                        PopupMenuItem(value: 'delete', child: Text('삭제')),
+                      ],
+                    ),
                 ],
               ),
             ),
@@ -820,7 +878,10 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
       final uri = Uri.parse(
         '${widget.auth.baseUrl}/api/map',
       ).replace(queryParameters: {'user_id': '$userId'});
-      final response = await http.get(uri);
+      final response = await http.get(
+        uri,
+        headers: {'Authorization': 'Bearer ${widget.auth.token}'},
+      );
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       if (response.statusCode == 200 && data['ok'] == true) {
         final pins = data['pins'];
@@ -919,10 +980,6 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
     if (_saving || userId == null) return;
 
     final caption = _captionCtrl.text.trim();
-    if (_pickedMedia.isEmpty) {
-      _toast('공유할 사진을 선택해주세요');
-      return;
-    }
     if (caption.isEmpty) {
       _toast('오늘 남기고 싶은 장면을 적어주세요');
       return;
@@ -945,32 +1002,36 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
         return;
       }
 
-      for (final media in _pickedMedia) {
+      final mediaItems = _pickedMedia.isEmpty
+          ? <_PickedMomentMedia?>[null]
+          : _pickedMedia.map<_PickedMomentMedia?>((media) => media).toList();
+      for (final media in mediaItems) {
         final request = http.MultipartRequest(
           'POST',
           Uri.parse('${widget.auth.baseUrl}/api/setlog'),
         );
+        request.headers['Authorization'] = 'Bearer ${widget.auth.token}';
         request.fields.addAll({
-          'user_id': '$userId',
-          'user_code': '${widget.auth.user?['UserCode'] ?? ''}',
           'caption': caption,
           'tags': jsonEncode(['#momentloop']),
           'taken_at': _dateOnly(now),
           'captured_at': _mysqlDateTime(now),
           if (mapPinId != null) 'map_pin_id': '$mapPinId',
         });
-        request.files.add(
-          http.MultipartFile.fromBytes(
-            'media',
-            media.bytes,
-            filename: media.name,
-            contentType: MediaType.parse(_mimeFor(media.name, media.isVideo)),
-          ),
-        );
+        if (media != null) {
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              'media',
+              media.bytes,
+              filename: media.name,
+              contentType: MediaType.parse(_mimeFor(media.name, media.isVideo)),
+            ),
+          );
+        }
         final response = await http.Response.fromStream(await request.send());
         final data = jsonDecode(response.body) as Map<String, dynamic>;
 
-        if (response.statusCode != 200 || data['ok'] != true) {
+        if (response.statusCode != 201 || data['ok'] != true) {
           _toast('저장하지 못했어요');
           return;
         }

@@ -1209,27 +1209,20 @@ router.get('/setlog', async (req, res) => {
     await ensureUserColumns();
     await ensureSetlogTable();
 
-    const { month, user_id } = req.query; // YYYY-MM 형식
+    const { month } = req.query; // YYYY-MM 형식
+    const coupleId = await getCoupleIdForUser(req.auth.userId);
+    if (!coupleId) {
+      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+    }
     let sql = `SELECT p.*, u.Nickname, COALESCE(u.Nickname, u.UserName) AS UserName
                FROM setlog_posts p
                LEFT JOIN Users u ON p.user_id = u.UserId
-               WHERE 1 = 1`;
-    let params = [];
+               WHERE p.couple_id = ?`;
+    const params = [coupleId];
 
     if (month) {
       sql += ` AND DATE_FORMAT(p.taken_at, '%Y-%m') = ?`;
       params.push(month);
-    }
-
-    if (user_id) {
-      const coupleId = await getCoupleIdForUser(Number(user_id));
-      if (coupleId) {
-        sql += ` AND p.couple_id = ?`;
-        params.push(coupleId);
-      } else {
-        sql += ` AND p.user_id = ?`;
-        params.push(Number(user_id));
-      }
     }
 
     sql += ` ORDER BY p.captured_at DESC, p.id DESC`;
@@ -1241,6 +1234,21 @@ router.get('/setlog', async (req, res) => {
     res.status(500).json({ ok: false, reason: 'internal_error' });
   }
 });
+
+const uploadedFilePath = (file) => file?.path || (file?.filename
+  ? path.join(config.UPLOADS_ROOT, file.filename)
+  : null);
+
+const removeUploadedFile = async (file) => {
+  const filePath = uploadedFilePath(file);
+  if (!filePath) return;
+  await fs.promises.rm(filePath, { force: true });
+};
+
+const mediaFilePath = (mediaUrl) => {
+  const filename = path.basename(String(mediaUrl || ''));
+  return filename ? path.join(config.UPLOADS_ROOT, filename) : null;
+};
 
 const resolveSetlogMapPinId = async (mapPinId, userId, coupleId) => {
   if (!mapPinId) return null;
@@ -1266,13 +1274,12 @@ const resolveSetlogMapPinId = async (mapPinId, userId, coupleId) => {
 
 // 셋로그 생성
 router.post('/setlog', upload.single('media'), async (req, res) => {
+  let keepUpload = false;
   try {
     await ensureUserColumns();
     await ensureSetlogTable();
 
     const {
-      user_id,
-      user_code,
       caption,
       tags,
       taken_at,
@@ -1283,26 +1290,46 @@ router.post('/setlog', upload.single('media'), async (req, res) => {
     const mediaUrl = req.file ? `/uploads/${req.file.filename}` : null;
     const uploadedMediaType = req.file?.mimetype.startsWith('video/') ? 'video' : 'image';
     const normalizedMediaType = mediaUrl ? uploadedMediaType : (media_type || 'text');
+    const reject = async (status, reason) => {
+      await removeUploadedFile(req.file);
+      return res.status(status).json({ ok: false, reason });
+    };
+    const allowedMomentMimes = new Set([
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'video/mp4',
+      'video/quicktime',
+      'video/webm',
+    ]);
 
-    if (!user_id || !taken_at) {
-      return res.status(400).json({ ok: false, reason: 'missing_fields' });
+    if (req.file && !allowedMomentMimes.has(req.file.mimetype)) {
+      return reject(415, 'unsupported_media_type');
+    }
+
+    if (!taken_at) {
+      return reject(400, 'missing_fields');
     }
 
     if (!['text', 'image', 'video'].includes(normalizedMediaType)) {
-      return res.status(400).json({ ok: false, reason: 'invalid_media_type' });
+      return reject(400, 'invalid_media_type');
     }
 
     if (normalizedMediaType === 'text' && !caption?.trim()) {
-      return res.status(400).json({ ok: false, reason: 'caption_required' });
+      return reject(400, 'caption_required');
     }
 
-    const userId = Number(user_id);
+    const userId = req.auth.userId;
     const coupleId = await getCoupleIdForUser(userId);
+    if (!coupleId) {
+      return reject(409, 'active_couple_required');
+    }
     const resolvedMapPin = await resolveSetlogMapPinId(map_pin_id, userId, coupleId);
     if (resolvedMapPin?.error) {
-      return res.status(400).json({ ok: false, reason: resolvedMapPin.error });
+      return reject(400, resolvedMapPin.error);
     }
     const tagsArray = parseJsonArray(tags);
+    const user = await query('SELECT UserCode FROM Users WHERE UserId = ? LIMIT 1', [userId]);
     
     const result = await query(
       `INSERT INTO setlog_posts
@@ -1312,7 +1339,7 @@ router.post('/setlog', upload.single('media'), async (req, res) => {
         coupleId,
         userId,
         resolvedMapPin?.id ?? null,
-        user_code || null,
+        user.rows[0]?.UserCode || null,
         normalizedMediaType,
         mediaUrl,
         caption || null,
@@ -1321,6 +1348,7 @@ router.post('/setlog', upload.single('media'), async (req, res) => {
         captured_at || null,
       ]
     );
+    keepUpload = true;
 
     const created = await query(
       `SELECT p.*, u.Nickname, COALESCE(u.Nickname, u.UserName) AS UserName
@@ -1330,9 +1358,58 @@ router.post('/setlog', upload.single('media'), async (req, res) => {
       [result.rows.insertId]
     );
 
-    res.json({ ok: true, post: created.rows[0] });
+    res.status(201).json({ ok: true, post: created.rows[0] });
   } catch (err) {
     console.error('[API] /setlog POST error:', err);
+    await removeUploadedFile(req.file).catch(() => {});
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  } finally {
+    if (req.file && !keepUpload) {
+      await removeUploadedFile(req.file).catch((error) => {
+        console.error('[API] failed to clean rejected MomentLoop upload:', error);
+      });
+    }
+  }
+});
+
+router.patch('/setlog/:id', async (req, res) => {
+  try {
+    await ensureSetlogTable();
+    const postId = Number(req.params.id);
+    const existing = await query(
+      'SELECT id, user_id, couple_id FROM setlog_posts WHERE id = ? LIMIT 1',
+      [postId],
+    );
+    const post = existing.rows[0];
+    if (!post) return res.status(404).json({ ok: false, reason: 'moment_not_found' });
+    if (Number(post.user_id) !== req.auth.userId) {
+      return res.status(403).json({ ok: false, reason: 'moment_author_required' });
+    }
+    const coupleId = await getCoupleIdForUser(req.auth.userId);
+    if (!coupleId || Number(post.couple_id) !== Number(coupleId)) {
+      return res.status(403).json({ ok: false, reason: 'active_couple_required' });
+    }
+
+    const caption = typeof req.body.caption === 'string' ? req.body.caption.trim() : null;
+    const takenAt = typeof req.body.taken_at === 'string' ? req.body.taken_at : null;
+    const tags = req.body.tags === undefined ? null : JSON.stringify(parseJsonArray(req.body.tags));
+    if (caption === null && takenAt === null && tags === null) {
+      return res.status(400).json({ ok: false, reason: 'no_changes' });
+    }
+    await query(
+      `UPDATE setlog_posts
+       SET caption = COALESCE(?, caption), taken_at = COALESCE(?, taken_at), tags = COALESCE(?, tags)
+       WHERE id = ?`,
+      [caption, takenAt, tags, postId],
+    );
+    const updated = await query(
+      `SELECT p.*, u.Nickname, COALESCE(u.Nickname, u.UserName) AS UserName
+       FROM setlog_posts p LEFT JOIN Users u ON p.user_id = u.UserId WHERE p.id = ?`,
+      [postId],
+    );
+    res.json({ ok: true, post: updated.rows[0] });
+  } catch (err) {
+    console.error('[API] /setlog PATCH error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
   }
 });
@@ -1342,8 +1419,23 @@ router.delete('/setlog/:id', async (req, res) => {
   try {
     await ensureSetlogTable();
 
-    const { id } = req.params;
+    const id = Number(req.params.id);
+    const existing = await query(
+      'SELECT id, user_id, couple_id, media_url FROM setlog_posts WHERE id = ? LIMIT 1',
+      [id],
+    );
+    const post = existing.rows[0];
+    if (!post) return res.status(404).json({ ok: false, reason: 'moment_not_found' });
+    if (Number(post.user_id) !== req.auth.userId) {
+      return res.status(403).json({ ok: false, reason: 'moment_author_required' });
+    }
+    const coupleId = await getCoupleIdForUser(req.auth.userId);
+    if (!coupleId || Number(post.couple_id) !== Number(coupleId)) {
+      return res.status(403).json({ ok: false, reason: 'active_couple_required' });
+    }
     await query('DELETE FROM setlog_posts WHERE id = ?', [id]);
+    const filePath = mediaFilePath(post.media_url);
+    if (filePath) await fs.promises.rm(filePath, { force: true });
     res.json({ ok: true });
   } catch (err) {
     console.error('[API] /setlog DELETE error:', err);
