@@ -96,10 +96,11 @@ class _MapScreenState extends State<MapScreen> {
     setState(() => _loading = true);
     try {
       final userId = _currentUserId;
-      final mapUrl = userId != null
-          ? '${_auth.baseUrl}/api/map?user_id=$userId'
-          : '${_auth.baseUrl}/api/map?user_id=0';
-      final res = await http.get(Uri.parse(mapUrl));
+      final mapUrl = '${_auth.baseUrl}/api/map';
+      final res = await http.get(
+        Uri.parse(mapUrl),
+        headers: _jsonHeaders(includeAuth: true),
+      );
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       if (data['ok'] == true) {
         setState(() {
@@ -116,7 +117,10 @@ class _MapScreenState extends State<MapScreen> {
         final setlogUri = Uri.parse(
           '${_auth.baseUrl}/api/setlog',
         ).replace(queryParameters: {'user_id': '$userId'});
-        final setlogRes = await http.get(setlogUri);
+        final setlogRes = await http.get(
+          setlogUri,
+          headers: _jsonHeaders(includeAuth: true),
+        );
         final setlogData = jsonDecode(setlogRes.body) as Map<String, dynamic>;
         if (setlogData['ok'] == true && mounted) {
           setState(() {
@@ -165,7 +169,7 @@ class _MapScreenState extends State<MapScreen> {
       final url = Uri.parse(
         '${_auth.baseUrl}/api/places/search?q=${Uri.encodeQueryComponent(query)}&limit=10&lat=${center.latitude}&lng=${center.longitude}',
       );
-      final res = await http.get(url);
+      final res = await http.get(url, headers: _jsonHeaders(includeAuth: true));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
         final places = data['places'] as List? ?? [];
@@ -316,9 +320,6 @@ class _MapScreenState extends State<MapScreen> {
     required double lat,
     required double lng,
   }) async {
-    final userCode =
-        _auth.user?['UserCode'] ?? _auth.user?['userCode'] ?? 'unknown';
-    final userId = _currentUserId;
     final visitDateStr = visitDate == null ? null : _dateValue(visitDate);
     final bodyMemo = _composeMemo(memo, emotionTags);
 
@@ -332,8 +333,6 @@ class _MapScreenState extends State<MapScreen> {
           'rating': status == 'visited' ? rating : null,
           'visit_date': status == 'visited' ? visitDateStr : null,
           'memo': bodyMemo.isNotEmpty ? bodyMemo : null,
-          'created_by': userCode,
-          'user_id': userId,
           'latitude': lat,
           'longitude': lng,
           'status': status,

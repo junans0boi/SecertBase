@@ -1500,23 +1500,14 @@ router.get('/places/search', async (req, res) => {
 router.get('/map', async (req, res) => {
   try {
     await ensureTables();
-    const userId = Number(req.query.user_id);
-    if (!userId) {
-      return res.status(400).json({ ok: false, reason: 'missing_user_id' });
+    const coupleId = await getCoupleIdForUser(req.auth.userId);
+    if (!coupleId) {
+      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
     }
-    const coupleId = await getCoupleIdForUser(userId);
-    let result;
-    if (coupleId) {
-      result = await query(
-        'SELECT * FROM map_pins WHERE couple_id = ? ORDER BY visit_date DESC, created_at DESC',
-        [coupleId]
-      );
-    } else {
-      result = await query(
-        'SELECT * FROM map_pins WHERE user_id = ? ORDER BY visit_date DESC, created_at DESC',
-        [userId]
-      );
-    }
+    const result = await query(
+      'SELECT * FROM map_pins WHERE couple_id = ? ORDER BY visit_date DESC, created_at DESC',
+      [coupleId],
+    );
     res.json({ ok: true, pins: result.rows });
   } catch (err) {
     console.error('[API] /map GET error:', err);
@@ -1528,19 +1519,19 @@ router.get('/map', async (req, res) => {
 router.post('/map', async (req, res) => {
   try {
     await ensureTables();
-    const { place_name, latitude, longitude, category, rating, visit_date, memo, created_by, user_id, status, emotion_tags } = req.body;
+    const { place_name, latitude, longitude, category, rating, visit_date, memo, status, emotion_tags } = req.body;
 
-    if (!place_name || !created_by) {
+    if (!place_name) {
       return res.status(400).json({ ok: false, reason: 'missing_fields' });
     }
 
-    // user_id 우선, 없으면 created_by(UserCode)로 조회
-    let uid = user_id ? Number(user_id) : null;
-    if (!uid && created_by) {
-      const userRes = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [created_by]);
-      uid = userRes.rows[0]?.UserId ?? null;
+    const uid = req.auth.userId;
+    const coupleId = await getCoupleIdForUser(uid);
+    if (!coupleId) {
+      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
     }
-    const coupleId = uid ? await getCoupleIdForUser(uid) : null;
+    const userResult = await query('SELECT UserCode FROM Users WHERE UserId = ? LIMIT 1', [uid]);
+    const createdBy = userResult.rows[0]?.UserCode;
 
     const result = await query(
       `INSERT INTO map_pins (place_name, latitude, longitude, category, rating, visit_date, memo, created_by, user_id, couple_id, status, emotion_tags)
@@ -1553,7 +1544,7 @@ router.post('/map', async (req, res) => {
         rating ?? null,
         visit_date ?? null,
         memo ?? null,
-        created_by,
+        createdBy,
         uid,
         coupleId,
         status ?? null,
@@ -1594,7 +1585,7 @@ const parseMapEmotionTags = (value) => {
   return tags.length > 0 ? JSON.stringify(tags) : null;
 };
 
-// 지도 핀 업데이트 (작성자만 가능)
+// 지도 핀 업데이트 (활성 커플 공동 편집)
 router.patch('/map/:id', async (req, res) => {
   try {
     await ensureTables();
@@ -1604,11 +1595,12 @@ router.patch('/map/:id', async (req, res) => {
       return res.status(401).json({ ok: false, reason: 'unauthorized' });
     }
 
-    const { pin, allowed } = await loadMapPinForEditor(id, editorUserId);
+    const { pin } = await loadMapPinForEditor(id, editorUserId);
     if (!pin) {
       return res.status(404).json({ ok: false, reason: 'not_found' });
     }
-    if (!allowed) {
+    const coupleId = await getCoupleIdForUser(editorUserId);
+    if (!coupleId || Number(pin.couple_id) !== Number(coupleId)) {
       return res.status(403).json({ ok: false, reason: 'forbidden' });
     }
 
