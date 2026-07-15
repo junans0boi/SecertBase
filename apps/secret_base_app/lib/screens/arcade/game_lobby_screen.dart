@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/main_design.dart';
 import '../../core/socket_service.dart';
-import '../../core/uno_audio.dart';
 import '../../core/yut_audio.dart';
 
 class GameLobbyScreen extends StatefulWidget {
@@ -13,7 +12,6 @@ class GameLobbyScreen extends StatefulWidget {
   final Color color;
   final Color backgroundColor;
   final Widget gameScreen;
-  final String? unoMode;
 
   const GameLobbyScreen({
     super.key,
@@ -24,7 +22,6 @@ class GameLobbyScreen extends StatefulWidget {
     required this.color,
     required this.backgroundColor,
     required this.gameScreen,
-    this.unoMode,
   });
 
   @override
@@ -74,12 +71,7 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
   }
 
   void _beginCountdown() {
-    if (_isUnoLobby) {
-      // Unlock audio on first interaction before countdown
-      UnoAudio.instance.unlock();
-    }
     setState(() => _countdown = 5);
-    UnoAudio.instance.countdownBeep(5);
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) {
         t.cancel();
@@ -88,10 +80,7 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
       setState(() => _countdown--);
       if (_countdown <= 0) {
         t.cancel();
-        UnoAudio.instance.countdownEnd();
         _launchGame();
-      } else {
-        UnoAudio.instance.countdownBeep(_countdown);
       }
     });
   }
@@ -113,10 +102,6 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
     ).pushReplacement(MaterialPageRoute(builder: (_) => widget.gameScreen));
     if (isHost) {
       Future.delayed(const Duration(milliseconds: 300), () {
-        if (_isUnoLobby) {
-          _socket.newUnoGame(mode: widget.unoMode ?? 'go_wild');
-          return;
-        }
         switch (widget.gameType) {
           case 'yut':
             _socket.newYutGame(
@@ -131,8 +116,6 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
       });
     }
   }
-
-  bool get _isUnoLobby => widget.gameType.startsWith('uno');
 
   @override
   Widget build(BuildContext context) {
