@@ -26,6 +26,20 @@ git fetch origin "$BRANCH"
 git checkout "$BRANCH"
 git pull --ff-only origin "$BRANCH"
 
+# ── 배포 전 백업 실행 조건 확인 ───────────────────────────────────────────
+REQUIRE_BACKUP_BEFORE_DEPLOY="${REQUIRE_BACKUP_BEFORE_DEPLOY:-false}"
+if [ "$REQUIRE_BACKUP_BEFORE_DEPLOY" = "true" ]; then
+  echo "==> 배포 전 백업 실행이 활성화되어 있습니다. 백업을 수행합니다."
+  if [ -z "${BACKUP_ENCRYPTION_KEY:-}" ]; then
+    echo "ERROR: REQUIRE_BACKUP_BEFORE_DEPLOY=true 이나, BACKUP_ENCRYPTION_KEY 가 지정되지 않았습니다." >&2
+    exit 1
+  fi
+  if ! "$REPO_DIR/scripts/backup.sh"; then
+    echo "ERROR: 배포 전 백업 실행 중 에러가 발생하여 배포가 중단되었습니다." >&2
+    exit 1
+  fi
+fi
+
 echo "==> Installing backend dependencies"
 cd "$REPO_DIR/services/realtime-server"
 npm ci
