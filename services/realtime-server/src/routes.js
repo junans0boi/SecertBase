@@ -1215,9 +1215,12 @@ router.get('/setlog', async (req, res) => {
     if (!coupleId) {
       return res.status(409).json({ ok: false, reason: 'active_couple_required' });
     }
-    let sql = `SELECT p.*, u.Nickname, COALESCE(u.Nickname, u.UserName) AS UserName
+    let sql = `SELECT p.*, u.Nickname, COALESCE(u.Nickname, u.UserName) AS UserName,
+                      mp.place_name AS linked_place_name, mp.category AS linked_place_category,
+                      mp.archived_at AS linked_place_archived_at
                FROM setlog_posts p
                LEFT JOIN Users u ON p.user_id = u.UserId
+               LEFT JOIN map_pins mp ON mp.id = p.map_pin_id
                WHERE p.couple_id = ?`;
     const params = [coupleId];
 
@@ -1363,9 +1366,12 @@ router.post('/setlog', upload.single('media'), async (req, res) => {
     keepUpload = true;
 
     const created = await query(
-      `SELECT p.*, u.Nickname, COALESCE(u.Nickname, u.UserName) AS UserName
+      `SELECT p.*, u.Nickname, COALESCE(u.Nickname, u.UserName) AS UserName,
+              mp.place_name AS linked_place_name, mp.category AS linked_place_category,
+              mp.archived_at AS linked_place_archived_at
        FROM setlog_posts p
        LEFT JOIN Users u ON p.user_id = u.UserId
+       LEFT JOIN map_pins mp ON mp.id = p.map_pin_id
        WHERE p.id = ?`,
       [result.rows.insertId]
     );
@@ -1505,7 +1511,7 @@ router.get('/map', async (req, res) => {
       return res.status(409).json({ ok: false, reason: 'active_couple_required' });
     }
     const result = await query(
-      'SELECT * FROM map_pins WHERE couple_id = ? ORDER BY visit_date DESC, created_at DESC',
+      'SELECT * FROM map_pins WHERE couple_id = ? AND archived_at IS NULL ORDER BY visit_date DESC, created_at DESC',
       [coupleId],
     );
     res.json({ ok: true, pins: result.rows });
@@ -1599,6 +1605,9 @@ router.patch('/map/:id', async (req, res) => {
     if (!pin) {
       return res.status(404).json({ ok: false, reason: 'not_found' });
     }
+    if (pin.archived_at) {
+      return res.status(404).json({ ok: false, reason: 'not_found' });
+    }
     const coupleId = await getCoupleIdForUser(editorUserId);
     if (!coupleId || Number(pin.couple_id) !== Number(coupleId)) {
       return res.status(403).json({ ok: false, reason: 'forbidden' });
@@ -1660,8 +1669,14 @@ router.delete('/map/:id', async (req, res) => {
       return res.status(403).json({ ok: false, reason: 'forbidden' });
     }
 
-    await query('DELETE FROM map_pins WHERE id = ?', [id]);
-    res.json({ ok: true });
+    const links = await query('SELECT COUNT(*) AS count FROM setlog_posts WHERE map_pin_id = ?', [id]);
+    const linked = Number(links.rows[0]?.count) > 0;
+    if (linked) {
+      await query('UPDATE map_pins SET archived_at = CURRENT_TIMESTAMP WHERE id = ?', [id]);
+    } else {
+      await query('DELETE FROM map_pins WHERE id = ?', [id]);
+    }
+    res.json({ ok: true, archived: linked });
   } catch (err) {
     console.error('[API] /map DELETE error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });

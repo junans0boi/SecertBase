@@ -414,6 +414,7 @@ class _MomentCard extends StatelessWidget {
     final mediaType = '${post['media_type'] ?? 'text'}';
     final author = _authorName(post, isMine);
     final time = _timeLabel(post['captured_at']);
+    final linkedPlace = '${post['linked_place_name'] ?? ''}'.trim();
     final hasMedia = mediaType != 'text' && mediaUrl.isNotEmpty;
 
     return Padding(
@@ -474,6 +475,28 @@ class _MomentCard extends StatelessWidget {
                 ],
               ),
             ),
+            if (linkedPlace.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.place_outlined,
+                      size: 17,
+                      color: kMainSage,
+                    ),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        linkedPlace,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: mainBody(size: 12, color: kMainSub),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             if (hasMedia)
               _MomentMedia(
                 url: _mediaUrl(auth.baseUrl, mediaUrl),

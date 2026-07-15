@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import mysql from 'mysql2/promise';
 import { createApiTestServer } from './api-test-server.js';
 
 const adminUrl = process.env.TEST_DATABASE_ADMIN_URL;
@@ -67,10 +68,39 @@ test('Secret Map is Couple-scoped, jointly editable, and creator-deletable', { s
       token: bob.token, method: 'DELETE',
     });
     assert.equal(partnerDelete.status, 403);
+
+    const linkedMoment = await server.request('/setlog', {
+      token: alice.token, method: 'POST',
+      body: { caption: 'remember this place', media_type: 'text', taken_at: '2026-07-15', map_pin_id: created.id },
+    });
+    assert.equal(linkedMoment.status, 201);
     const creatorDelete = await server.request(`/map/${created.id}`, {
       token: alice.token, method: 'DELETE',
     });
     assert.equal(creatorDelete.status, 200);
+    assert.equal((await creatorDelete.json()).archived, true);
+    const activeMap = await server.request('/map', { token: alice.token });
+    assert.deepEqual((await activeMap.json()).pins, []);
+    const moments = await server.request('/setlog', { token: alice.token });
+    assert.equal((await moments.json()).posts[0].linked_place_name, 'Our place');
+
+    const unlinkedResponse = await server.request('/map', {
+      token: alice.token, method: 'POST', body: { place_name: 'Temporary pin' },
+    });
+    const unlinked = await unlinkedResponse.json();
+    const hardDelete = await server.request(`/map/${unlinked.id}`, {
+      token: alice.token, method: 'DELETE',
+    });
+    assert.equal((await hardDelete.json()).archived, false);
+
+    const database = await mysql.createConnection(server.environment.databaseUrl);
+    const [rows] = await database.execute(
+      'SELECT id, archived_at FROM map_pins WHERE id IN (?, ?) ORDER BY id',
+      [created.id, unlinked.id],
+    );
+    await database.end();
+    assert.equal(rows.length, 1);
+    assert.ok(rows[0].archived_at);
   } finally {
     await server.close();
   }

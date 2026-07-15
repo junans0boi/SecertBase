@@ -770,6 +770,9 @@ class _MapScreenState extends State<MapScreen> {
         final memo = _cleanMemo(pin['memo']);
         final date = _formattedDate(pin['visit_date']);
         final author = '${pin['created_by'] ?? '우리'}';
+        final myCode =
+            '${_auth.user?['UserCode'] ?? _auth.user?['userCode'] ?? ''}';
+        final isCreator = myCode.isNotEmpty && author == myCode;
         final linkedPosts = linkedSetlogPostsForMap(pin, _setlogPosts);
 
         return _SheetFrame(
@@ -994,6 +997,17 @@ class _MapScreenState extends State<MapScreen> {
                       ),
                     ),
                   ],
+                  if (isCreator) ...[
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _deletePin(pin);
+                      },
+                      icon: const Icon(Icons.delete_outline),
+                      label: const Text('장소 삭제'),
+                    ),
+                  ],
                   const SizedBox(height: 10),
                   Center(
                     child: Text(
@@ -1008,6 +1022,32 @@ class _MapScreenState extends State<MapScreen> {
         );
       },
     );
+  }
+
+  Future<void> _deletePin(Map<String, dynamic> pin) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('장소 삭제'),
+        content: const Text('연결된 MomentLoop가 있으면 장소 기록은 보관되고 지도에서만 사라져요.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('삭제'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final response = await http.delete(
+      Uri.parse('${_auth.baseUrl}/api/map/${pin['id']}'),
+      headers: _jsonHeaders(includeAuth: true),
+    );
+    if (response.statusCode == 200) await _load();
   }
 
   void _showListSheet() {
