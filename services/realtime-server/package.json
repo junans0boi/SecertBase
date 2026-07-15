@@ -36,6 +36,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "adm-zip": "^0.5.18",
     "socket.io-client": "^4.8.3"
   }
 }

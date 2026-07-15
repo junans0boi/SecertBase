@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../core/app_theme.dart';
 import '../../core/main_design.dart';
 import '../../core/auth_service.dart';
+import '../archive/personal_history_screen.dart';
 
 class PartnerScreen extends StatefulWidget {
   const PartnerScreen({super.key});
@@ -117,6 +118,17 @@ class _PartnerScreenState extends State<PartnerScreen> {
                     _partnerForm(),
                     const SizedBox(height: 24),
                     _requestSection(),
+                    const SizedBox(height: 24),
+                    OutlinedButton.icon(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const PersonalHistoryScreen(),
+                        ),
+                      ),
+                      icon: const Icon(Icons.inventory_2_outlined),
+                      label: const Text('개인 보관함 열기'),
+                    ),
                     const SizedBox(height: 40),
                     TextButton(
                       onPressed: () => _auth.logout(),

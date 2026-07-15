@@ -5,6 +5,7 @@
 
 import express from 'express';
 import multer from 'multer';
+import { ZipArchive } from 'archiver';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
@@ -19,9 +20,6 @@ import {
   mvpRestFeatureGate,
   requireAuth,
 } from './backend-access.js';
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-const archiver = require('archiver');
 import path from 'path';
 import fs from 'fs';
 
@@ -1683,6 +1681,114 @@ router.delete('/map/:id', async (req, res) => {
   }
 });
 
+const requirePairingWait = async (req, res) => {
+  const activeCoupleId = await getCoupleIdForUser(req.auth.userId);
+  if (activeCoupleId) {
+    res.status(409).json({ ok: false, reason: 'personal_history_requires_pairing_wait' });
+    return false;
+  }
+  return true;
+};
+
+const loadPersonalHistory = async (userId) => {
+  const moments = await query(
+    `SELECT p.*, mp.place_name AS linked_place_name
+     FROM setlog_posts p
+     INNER JOIN Couples c ON c.CoupleId = p.couple_id AND c.Status = 'inactive'
+     LEFT JOIN map_pins mp ON mp.id = p.map_pin_id
+     WHERE p.user_id = ? ORDER BY p.captured_at DESC, p.id DESC`,
+    [userId],
+  );
+  const pins = await query(
+    `SELECT p.* FROM map_pins p
+     INNER JOIN Couples c ON c.CoupleId = p.couple_id AND c.Status = 'inactive'
+     WHERE p.user_id = ? AND p.archived_at IS NULL
+     ORDER BY p.created_at DESC, p.id DESC`,
+    [userId],
+  );
+  return { moments: moments.rows, pins: pins.rows };
+};
+
+router.get('/history', async (req, res) => {
+  try {
+    if (!await requirePairingWait(req, res)) return;
+    res.json({ ok: true, ...await loadPersonalHistory(req.auth.userId) });
+  } catch (error) {
+    console.error('[API] /history GET error:', error);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.delete('/history/moments/:id', async (req, res) => {
+  try {
+    if (!await requirePairingWait(req, res)) return;
+    const result = await query(
+      `SELECT p.id, p.media_url FROM setlog_posts p
+       INNER JOIN Couples c ON c.CoupleId = p.couple_id AND c.Status = 'inactive'
+       WHERE p.id = ? AND p.user_id = ? LIMIT 1`,
+      [req.params.id, req.auth.userId],
+    );
+    const moment = result.rows[0];
+    if (!moment) return res.status(404).json({ ok: false, reason: 'history_not_found' });
+    await query('DELETE FROM setlog_posts WHERE id = ?', [moment.id]);
+    const filePath = mediaFilePath(moment.media_url);
+    if (filePath) await fs.promises.rm(filePath, { force: true });
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('[API] history moment DELETE error:', error);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.delete('/history/pins/:id', async (req, res) => {
+  try {
+    if (!await requirePairingWait(req, res)) return;
+    const result = await query(
+      `SELECT p.id FROM map_pins p
+       INNER JOIN Couples c ON c.CoupleId = p.couple_id AND c.Status = 'inactive'
+       WHERE p.id = ? AND p.user_id = ? AND p.archived_at IS NULL LIMIT 1`,
+      [req.params.id, req.auth.userId],
+    );
+    const pin = result.rows[0];
+    if (!pin) return res.status(404).json({ ok: false, reason: 'history_not_found' });
+    const links = await query('SELECT COUNT(*) AS count FROM setlog_posts WHERE map_pin_id = ?', [pin.id]);
+    if (Number(links.rows[0]?.count) > 0) {
+      await query('UPDATE map_pins SET archived_at = CURRENT_TIMESTAMP WHERE id = ?', [pin.id]);
+    } else {
+      await query('DELETE FROM map_pins WHERE id = ?', [pin.id]);
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('[API] history pin DELETE error:', error);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.get('/history/export', async (req, res) => {
+  try {
+    if (!await requirePairingWait(req, res)) return;
+    const history = await loadPersonalHistory(req.auth.userId);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="secretbase-personal-history.zip"');
+    const archive = new ZipArchive({ zlib: { level: 9 } });
+    archive.on('warning', (error) => console.warn('[Export] skipped media:', error.message));
+    archive.on('error', (error) => res.destroy(error));
+    archive.pipe(res);
+    archive.append(JSON.stringify(history.moments, null, 2), { name: 'momentloop.json' });
+    archive.append(JSON.stringify(history.pins, null, 2), { name: 'map-pins.json' });
+    for (const moment of history.moments) {
+      const filePath = mediaFilePath(moment.media_url);
+      if (filePath && fs.existsSync(filePath)) {
+        archive.file(filePath, { name: `media/${moment.id}-${path.basename(filePath)}` });
+      }
+    }
+    await archive.finalize();
+  } catch (error) {
+    console.error('[API] history export error:', error);
+    if (!res.headersSent) res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
 // ============================================
 // 3. Q&A API (10시의 질문)
 // ============================================
@@ -3138,7 +3244,7 @@ router.get('/album/folders/:id/download-all', async (req, res) => {
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(folderTitle)}.zip"`);
 
-    const archive = archiver('zip', { zlib: { level: 9 } });
+    const archive = new ZipArchive({ zlib: { level: 9 } });
     archive.on('error', (err) => { throw err; });
     archive.pipe(res);
 
