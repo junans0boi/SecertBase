@@ -12,7 +12,7 @@ app.use(cors({ origin: config.CORS_ORIGIN, credentials: true }));
 app.use(express.json());
 
 // Static files (uploads)
-app.use('/uploads', express.static('uploads'));
+app.use('/uploads', express.static(config.UPLOADS_ROOT));
 
 // Health check
 app.get("/health", async (_, res) => {

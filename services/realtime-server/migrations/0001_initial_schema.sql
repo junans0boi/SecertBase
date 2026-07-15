@@ -1,5 +1,4 @@
--- Secret Base MariaDB/MySQL legacy bootstrap snapshot.
--- New schema changes belong in migrations/ and run through `npm run migrate -- up`.
+-- Secret Base MariaDB/MySQL Schema
 
 -- 1. 사용자 및 커플 정보 테이블
 CREATE TABLE IF NOT EXISTS Users (

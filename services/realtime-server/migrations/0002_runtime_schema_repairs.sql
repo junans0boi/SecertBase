@@ -1,0 +1,39 @@
+-- Schema changes previously repaired lazily by request handlers.
+
+ALTER TABLE Users
+  ADD COLUMN IF NOT EXISTS premium_since DATETIME NULL;
+
+ALTER TABLE map_pins
+  ADD COLUMN IF NOT EXISTS couple_id INT NULL,
+  ADD COLUMN IF NOT EXISTS user_id INT NULL,
+  ADD COLUMN IF NOT EXISTS status VARCHAR(20) NULL,
+  ADD COLUMN IF NOT EXISTS emotion_tags JSON NULL;
+
+ALTER TABLE album_folders
+  ADD COLUMN IF NOT EXISTS description TEXT NULL,
+  ADD COLUMN IF NOT EXISTS cover_url TEXT NULL,
+  ADD COLUMN IF NOT EXISTS sort_order INT NOT NULL DEFAULT 0;
+
+ALTER TABLE album_photos
+  ADD COLUMN IF NOT EXISTS caption TEXT NULL,
+  ADD COLUMN IF NOT EXISTS is_premium_quality TINYINT(1) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS file_size_kb INT NULL;
+
+ALTER TABLE private_reflections
+  ADD COLUMN IF NOT EXISTS mood_tag VARCHAR(50) NULL,
+  ADD COLUMN IF NOT EXISTS category VARCHAR(50) NOT NULL DEFAULT 'general';
+
+CREATE TABLE IF NOT EXISTS premium_subscriptions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  plan VARCHAR(20) NOT NULL DEFAULT 'monthly',
+  status VARCHAR(20) NOT NULL DEFAULT 'active',
+  amount_krw INT NULL,
+  started_at DATETIME NULL,
+  expires_at DATETIME NULL,
+  payment_key VARCHAR(200) NULL,
+  payment_method VARCHAR(50) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_premium_sub_user (user_id)
+);

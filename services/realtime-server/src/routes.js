@@ -908,7 +908,7 @@ router.get('/user/profile/:userId', async (req, res) => {
 // Multer 설정 (파일 업로드)
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/');
+    cb(null, config.UPLOADS_ROOT);
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);

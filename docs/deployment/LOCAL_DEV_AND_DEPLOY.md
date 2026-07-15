@@ -31,14 +31,66 @@ npm run dev
 
 Required backend env keys:
 
+- `NODE_ENV`: `development`, `test`, or `production`
 - `PORT`: realtime/API server port, normally `4100`
 - `CORS_ORIGIN`: comma-separated allowed browser origins
 - `REDIS_URL`: Redis connection URL
+- `REDIS_KEY_PREFIX`: Redis key namespace; required and unique in test mode
 - `DATABASE_URL`: MariaDB/MySQL connection URL
+- `UPLOADS_ROOT`: media storage path, normally `uploads`
 - `JWT_SECRET`: random 32+ character secret for login tokens
 - `GOOGLE_CLIENT_ID`: Google OAuth Web Client ID. Leave empty to disable Google login.
 - `ROOM_SECRET`: legacy room secret
 - `ALLOWED_USERS`: comma-separated pair for the legacy two-person room flow
+
+## Database Migrations
+
+Ordered SQL migrations live in `services/realtime-server/migrations`. The runner
+records applied filenames and checksums in `schema_migrations`, and serializes
+concurrent runs with a MariaDB advisory lock.
+
+```bash
+cd services/realtime-server
+npm run migrate -- status
+npm run migrate -- up --dry-run
+npm run migrate -- up
+```
+
+Running `up` again is safe and reports zero newly applied migrations. Never edit
+an applied migration; add the next numbered SQL file instead. On production,
+inspect `status`, run the dry-run audit, and take the required database/uploads
+backup before `up`. Production `up` requires the backup identifier explicitly:
+
+```bash
+NODE_ENV=production npm run migrate -- up --backup-ref '<backup-id>'
+```
+
+`schema.sql` remains a legacy bootstrap snapshot. New schema changes belong only
+in the ordered migration directory.
+
+## Isolated Backend Integration Tests
+
+Integration tests create a unique `secretbase_test_*` MariaDB schema, Redis key
+prefix, and temporary uploads directory for each test, then remove all three.
+They do not read the backend `.env` as their test target.
+
+Create a local-only MariaDB test runner account with permission to create and
+drop test schemas, then run:
+
+```bash
+cd services/realtime-server
+TEST_DATABASE_ADMIN_URL='mysql://<test-user>:<password>@127.0.0.1:3306/mysql' \
+TEST_REDIS_URL='redis://127.0.0.1:6379' \
+npm run test:integration
+```
+
+The safety guard accepts only a test-named local MariaDB user on port `3306`, a
+local Redis target on port `6379` with a unique test namespace, and uploads below
+the system temporary directory. Known production tunnel ports such as `3307`
+and `6380`, production schema names, and normal uploads paths fail before the
+server connects. When production endpoints are available in the environment,
+set `PRODUCTION_DATABASE_URL` and `PRODUCTION_REDIS_URL`; tests also reject a
+local endpoint matching either known production server.
 
 Flutter app:
 
