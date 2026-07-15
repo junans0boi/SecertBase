@@ -33,6 +33,7 @@ GET    /user/profile/:ignoredUserId
 GET|POST /pairing/requests
 POST   /pairing/requests/:id/accept|reject|cancel
 DELETE /user/partner
+DELETE /user
 GET|PATCH /couple/info
 POST   /couple/reunion-notice/seen
 GET|POST /setlog
@@ -414,6 +415,48 @@ Failure reasons:
 ```text
 unauthorized
 couple_not_found
+internal_error
+```
+
+### DELETE `/user`
+
+Permanently deletes the authenticated user's account (tombstone transition) and cleans up their data.
+
+- If the user registered via email, the request body **must** contain their current password.
+- If the user registered via Google, no password is required.
+- The active couple status is set to `inactive` and the partner is notified via WebSocket.
+- The user's `setlog_posts` and physical media files are permanently deleted.
+- The user's `map_pins` are either anonymized (if linked to a moment) or hard-deleted.
+- The user's row in the `Users` table becomes a tombstone (emails/names cleared, `IsDeleted=1`).
+
+Headers:
+
+```text
+Authorization: Bearer <jwt>
+Content-Type: application/json
+```
+
+Request (only for email users):
+
+```json
+{
+  "password": "currentPassword"
+}
+```
+
+Response:
+
+```json
+{ "ok": true }
+```
+
+Failure reasons:
+
+```text
+unauthorized
+password_required
+invalid_password
+user_not_found
 internal_error
 ```
 

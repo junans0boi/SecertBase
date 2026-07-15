@@ -71,11 +71,13 @@ Game events:
 ```text
 game:yut:new / throw / move / state
 game:bomb:new / answer / state
-game:rps:start / pick / state
+game:rps:start / pick / state / cancelled
 ```
 
 Yut and Bomb state is stored in the Couple's Redis namespace and returned by
-`session:restore` after reconnect. An interrupted RPS round is not restored.
+`session:restore` after reconnect. An interrupted RPS round is not restored; if a user disconnects during an active RPS round, the server deletes the Redis state and emits `game:rps:cancelled` (reason: `player_disconnected`) to the room.
+
+If a partner deletes their account (via `DELETE /user`), the remaining partner's socket receives `partner:disconnected` (reason: `partner_deleted_account`) and is disconnected from the room.
 
 ## Disabled Events
 
