@@ -83,7 +83,9 @@ Known stale docs:
 - HomeShell: the paired/logged-in app shell shown after auth and socket connection.
 - Archive: persistent couple content such as setlog, map pins, daily Q&A, challenges, jukebox, and capsules.
 - Setlog: an author-owned daily text/image/video record shared for viewing within its active Couple; only its author may change or delete it.
-- Game lobby: pre-game realtime waiting state before yut, UNO, bomb, or lightweight games start.
+- One Card (원카드): the couple card game formerly labeled UNO. The user-visible name and card artwork are Secret Base originals to avoid Mattel trademark/trade dress; internal identifiers may still say `uno`.
+- Zero (제로): the standalone arcade game split out of the RPS 하나빼기 mode; presented as its own game, not an RPS mode.
+- Game lobby: pre-game realtime waiting state before yut, One Card, bomb, or lightweight games start.
 - Realtime game state: ephemeral Redis-backed state for active games.
 - Production DB: the MariaDB database used by the deployed service. Local tests against it mutate real data.
 
