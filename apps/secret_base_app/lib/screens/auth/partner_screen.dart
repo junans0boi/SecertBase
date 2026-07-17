@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/app_theme.dart';
@@ -19,6 +21,7 @@ class _PartnerScreenState extends State<PartnerScreen> {
   String? _error;
   List<Map<String, dynamic>> _sent = [];
   List<Map<String, dynamic>> _received = [];
+  Timer? _pollTimer;
 
   final _auth = AuthService();
 
@@ -26,11 +29,18 @@ class _PartnerScreenState extends State<PartnerScreen> {
   void initState() {
     super.initState();
     _loadRequests();
+    _pollTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      if (mounted) {
+        _loadRequests();
+        _auth.getProfile();
+      }
+    });
   }
 
   @override
   void dispose() {
     _codeCtrl.dispose();
+    _pollTimer?.cancel();
     super.dispose();
   }
 

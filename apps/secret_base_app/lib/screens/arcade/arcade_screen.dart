@@ -44,6 +44,21 @@ class ArcadeScreen extends StatelessWidget {
   };
 
   void _open(BuildContext context, _GameInfo game) {
+    final socket = SocketService();
+    final isActive = switch (game.type) {
+      'yut' => socket.yutActive,
+      'bomb' => socket.bombActive,
+      _ => false,
+    };
+
+    if (isActive) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => _screen(game.type)),
+      );
+      return;
+    }
+
     Navigator.push(
       context,
       MaterialPageRoute(

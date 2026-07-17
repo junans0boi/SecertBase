@@ -209,10 +209,6 @@ class SocketService extends ChangeNotifier {
           if (map['ok'] == true) {
             roomCode = '${map['roomCode'] ?? ''}';
             userId = '${map['userId'] ?? ''}';
-            isConnected = true;
-            status = '입장 완료';
-            _log('방 입장 완료');
-            notifyListeners();
             socket.emitWithAck(
               'session:restore',
               {},
@@ -221,6 +217,10 @@ class SocketService extends ChangeNotifier {
                 if (rm['ok'] == true) {
                   _restoreGames(_m(rm['activeGames'] ?? {}));
                 }
+                isConnected = true;
+                status = '입장 완료';
+                _log('방 입장 및 복원 완료');
+                notifyListeners();
               },
             );
           } else {
@@ -1320,34 +1320,38 @@ class SocketService extends ChangeNotifier {
   }
 
   void _restoreGames(Map<String, dynamic> games) {
-    if (games.containsKey('yut')) {
-      final yut = _m(games['yut']);
-      _applyYutState(yut);
-      _log('윷놀이 복원');
-    }
-    if (games.containsKey('uno')) {
-      final uno = _m(games['uno']);
-      unoActive = true;
-      unoCurrentPlayer = uno['turn'] as String?;
-      unoMode = uno['mode'] as String? ?? unoMode;
-      selectedUnoMode = unoMode;
-      unoTopCardMap = _cardMap(uno['topCard']);
-      unoTopCard = unoTopCardMap?.toString() ?? uno['topCard']?.toString();
-      unoDeclaredColor = uno['declaredColor'] as String?;
-      unoDrawStack = (uno['drawStack'] as num?)?.toInt() ?? 0;
-      unoDrawStackType = uno['drawStackType'] as String?;
-      _applyUnoCounts(uno['handCount']);
-      _applyUnoCallNeeded(uno['unoCallNeeded']);
-      final hand = uno['hand'];
-      unoHand = hand is List ? hand : [];
-      _log('UNO 복원');
-    }
-    if (games.containsKey('bomb')) {
-      final bomb = _m(games['bomb']);
-      bombActive = true;
-      bombCurrentPlayer = bomb['holder'] as String?;
-      bombDuration = bomb['timer'] as int?;
-      _log('폭탄 복원');
+    try {
+      if (games.containsKey('yut')) {
+        final yut = _m(games['yut']);
+        _applyYutState(yut);
+        _log('윷놀이 복원');
+      }
+      if (games.containsKey('uno')) {
+        final uno = _m(games['uno']);
+        unoActive = true;
+        unoCurrentPlayer = uno['turn'] as String?;
+        unoMode = uno['mode'] as String? ?? unoMode;
+        selectedUnoMode = unoMode;
+        unoTopCardMap = _cardMap(uno['topCard']);
+        unoTopCard = unoTopCardMap?.toString() ?? uno['topCard']?.toString();
+        unoDeclaredColor = uno['declaredColor'] as String?;
+        unoDrawStack = (uno['drawStack'] as num?)?.toInt() ?? 0;
+        unoDrawStackType = uno['drawStackType'] as String?;
+        _applyUnoCounts(uno['handCount']);
+        _applyUnoCallNeeded(uno['unoCallNeeded']);
+        final hand = uno['hand'];
+        unoHand = hand is List ? hand : [];
+        _log('UNO 복원');
+      }
+      if (games.containsKey('bomb')) {
+        final bomb = _m(games['bomb']);
+        bombActive = true;
+        bombCurrentPlayer = bomb['holder'] as String?;
+        bombDuration = (bomb['timer'] as num?)?.toInt();
+        _log('폭탄 복원');
+      }
+    } catch (e, stack) {
+      _log('게임 복원 중 에러 발생: $e\n$stack');
     }
     notifyListeners();
   }
@@ -1371,7 +1375,7 @@ class SocketService extends ChangeNotifier {
     yutCurrentTurn = map['currentTurn'] as String?;
     yutCharacters = _stringMap(map['characters']);
     yutBgm = map['bgm'] as String? ?? yutBgm;
-    yutOrderCountdownUntil = map['orderCountdownUntil'] as int?;
+    yutOrderCountdownUntil = (map['orderCountdownUntil'] as num?)?.toInt();
     yutStartRolls = _m(map['startRolls'] ?? yutStartRolls);
     final pending = map['pendingMoves'];
     yutPendingMoves = pending is List ? List<dynamic>.from(pending) : [];
@@ -1395,11 +1399,17 @@ class SocketService extends ChangeNotifier {
       yutPieces = yutPieceDetails.map(
         (player, pieces) => MapEntry(
           player,
-          pieces.map((piece) {
-            if (piece is Map) return (piece['position'] as int?) ?? 0;
-            if (piece is int) return piece;
-            return 0;
-          }).toList(),
+          pieces
+              .map((piece) {
+                if (piece is Map) {
+                  final pos = piece['position'];
+                  return (pos is num) ? pos.toInt() : 0;
+                }
+                if (piece is num) return piece.toInt();
+                return 0;
+              })
+              .toList()
+              .cast<int>(),
         ),
       );
     }
