@@ -1,8 +1,28 @@
-# 세션 핸드오프 노트 (2026-07-16)
+# 세션 핸드오프 노트 (2026-07-18)
 
 Claude/Codex/Gemini 같은 다음 에이전트가 이어받기 위한 컨텍스트 정리.
 
-## 0. 최신 업데이트 (2026-07-16, 원카드 명칭 변경 및 게임 복구/윷놀이 버그 수정 계획 수립)
+## 0. 최신 업데이트 (2026-07-18, 워킹트리 정리 및 main 병합 PR)
+
+post-MVP 사이클 시작 전 0단계 정리를 완료했다.
+
+### 완료
+
+- 2026-07-16 세션의 미커밋 변경(socket_service 세션 복원 지연, partner_screen 폴링, arcade_screen 바로 입장)을 `4da24c1`로 커밋.
+- `dart format` 일괄 적용(`491347c`), CI 워크플로우 커밋(`d873ddb`, 토큰에 workflow scope 확보됨), 스킬/7단계 가이드 문서 커밋(`eb5e653`).
+- `services/realtime-server/.env.backup-*` 파일은 로컬 `~/secretbase-env-backups/`로 이동 (레포에 커밋 금지).
+- **발견**: 이슈 #1~#17 전체 작업이 `codex/issue-1-migrations-test-seam` 브랜치에만 있고 GitHub `main`은 2026-07-14(a2d4271)에 멈춰 있었다. 병합용 **PR #19** 생성: https://github.com/junans0boi/SecertBase/pull/19
+- 검증: backend 74 tests fail 0 + check pass, flutter test 7 pass, analyze/format clean.
+
+### 다음 할 일
+
+1. **PR #19 병합 여부는 사람이 결정** — main push가 `deploy-to-server.yml`/`deploy-flutter-web.yml`을 트리거하므로 Actions secrets(`SERVER_HOST` 등)와 운영 서버 체크아웃 상태를 먼저 확인할 것.
+2. 새 세션에서 grill-with-docs로 post-MVP epic 범위 결정 (후보: 원카드 명칭 전환+아케이드 복구, 윷놀이 3대 버그 — 아래 2026-07-16 섹션 참고).
+3. 결정 → spec/ADR → 새 epic + vertical slice 이슈 생성 → 이슈 단위 TDD 구현.
+
+---
+
+## 1. 이전 업데이트 (2026-07-16, 원카드 명칭 변경 및 게임 복구/윷놀이 버그 수정 계획 수립)
 
 이번 세션에서 실시간 페어링 반응성 개선 및 윷놀이 재접속 안정화를 완료하고, 다음 작업을 위한 상세 계획을 수립했다.
 
