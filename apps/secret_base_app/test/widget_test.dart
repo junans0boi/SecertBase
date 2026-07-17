@@ -22,6 +22,9 @@ void main() {
     expect(find.text('폭탄 돌리기'), findsOneWidget);
     expect(find.text('가위바위보'), findsOneWidget);
     expect(find.text('원카드'), findsOneWidget);
+    expect(find.text('제로'), findsOneWidget);
+    // 하나빼기는 제로로 분리 — 가위바위보 설명에서 제외.
+    expect(find.text('단판, 3판, 묵찌빠 세 가지 모드'), findsOneWidget);
     // 상표 노출 금지 (ADR 0001) — 사용자 노출명은 원카드만.
     expect(find.text('UNO'), findsNothing);
     // 아직 복구되지 않은 게임.

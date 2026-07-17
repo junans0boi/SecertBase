@@ -109,6 +109,7 @@ test('Socket feature gate allows public games and rejects unknown types and hear
     socket.on('game:yut:new', (_, ack) => ack({ ok: true }));
     socket.on('game:uno:new', (_, ack) => ack({ ok: true }));
     socket.on('game:restart:respond', (_, ack) => ack({ ok: true }));
+    socket.on('game:lobby:join', (_, ack) => ack({ ok: true }));
   });
   await listen(server);
   const client = createClient(`http://127.0.0.1:${server.address().port}`, {
@@ -131,6 +132,13 @@ test('Socket feature gate allows public games and rejects unknown types and hear
       { accept: true, gameType: 'uno' },
     );
     assert.deepEqual(restartRestored, { ok: true });
+
+    // 제로(RPS 하나빼기 분리 게임)는 자체 로비 타입으로 통과해야 한다.
+    const zeroLobby = await client.timeout(1000).emitWithAck(
+      'game:lobby:join',
+      { gameType: 'zero' },
+    );
+    assert.deepEqual(zeroLobby, { ok: true });
 
     // 미공개 game type과 heart는 여전히 차단된다.
     const unknown = await client.timeout(1000).emitWithAck(

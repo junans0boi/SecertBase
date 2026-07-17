@@ -19,7 +19,7 @@ const disabledRestPrefixes = new Map([
 
 // 공개된 게임 타입. 게임을 복구할 때는 여기에 추가하고
 // disabledSocketPrefixes에서 해당 prefix를 제거한다 (epic #20).
-export const PUBLIC_GAME_TYPES = ['yut', 'bomb', 'rps', 'uno'];
+export const PUBLIC_GAME_TYPES = ['yut', 'bomb', 'rps', 'zero', 'uno'];
 
 const disabledSocketPrefixes = new Map([
   ['game:dice:', 'dice'],

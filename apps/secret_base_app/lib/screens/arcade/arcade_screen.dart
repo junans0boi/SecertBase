@@ -32,9 +32,17 @@ class ArcadeScreen extends StatelessWidget {
       type: 'rps',
       icon: Icons.back_hand_outlined,
       title: '가위바위보',
-      description: '단판, 3판, 묵찌빠, 하나빼기 네 가지 모드',
+      description: '단판, 3판, 묵찌빠 세 가지 모드',
       color: kMainSage,
       background: kMainSageSoft,
+    ),
+    _GameInfo(
+      type: 'zero',
+      icon: Icons.exposure_zero_rounded,
+      title: '제로',
+      description: '내 숫자와 합계 예측을 동시에 고르는 심리전',
+      color: kMainHoney,
+      background: kMainHoneySoft,
     ),
     _GameInfo(
       type: 'uno',
@@ -50,6 +58,7 @@ class ArcadeScreen extends StatelessWidget {
     'yut' => const YutScreen(),
     'bomb' => const BombScreen(),
     'uno' => const UnoScreen(),
+    'zero' => const RpsScreen(fixedMode: 'hanabagi'),
     _ => const RpsScreen(),
   };
 
