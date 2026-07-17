@@ -56,12 +56,14 @@ class UnoBoard extends StatefulWidget {
   @override
   State<UnoBoard> createState() => _UnoBoardState();
 
+  // Secret Base 자체 카드 팔레트 (main_design 캔디 톤).
+  // UNO 원색(trade dress)을 쓰지 않는다 — ADR 0001.
   static Color getColorFromString(String? colorStr) {
-    if (colorStr == 'red') return const Color(0xFFE52521);
-    if (colorStr == 'blue') return const Color(0xFF0068B5);
-    if (colorStr == 'green') return const Color(0xFF4CAE4C);
-    if (colorStr == 'yellow') return const Color(0xFFF9D000);
-    return const Color(0xFF222222);
+    if (colorStr == 'red') return const Color(0xFFFF6F9F); // rose
+    if (colorStr == 'blue') return const Color(0xFF55A9DE); // sky
+    if (colorStr == 'green') return const Color(0xFF55BF8A); // sage
+    if (colorStr == 'yellow') return const Color(0xFFFFBE32); // honey
+    return const Color(0xFF3B2D52); // deep plum (wild)
   }
 }
 
@@ -449,8 +451,8 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
                                   bottom: sideActionInset,
                                   left: sideActionInset,
                                   child: _UnoCallButton(
-                                    label: 'UNO!',
-                                    color: const Color(0xFFE52521),
+                                    label: '원카드!',
+                                    color: const Color(0xFFFF6F9F),
                                     enabled:
                                         widget.pendingCall || widget.catchable,
                                     onTap: widget.onUnoButton ?? () {},
@@ -1147,40 +1149,36 @@ class UnoCardBack extends StatelessWidget {
         ],
       ),
       padding: EdgeInsets.all(width * 0.06),
+      // Secret Base 자체 뒷면: 딥 플럼 + 로즈 하트 + ONE CARD 워드마크 (ADR 0001)
       child: Container(
         decoration: BoxDecoration(
-          color: const Color(0xFFE52521),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF463560), Color(0xFF2E2342)],
+          ),
           borderRadius: BorderRadius.circular(width * 0.08),
         ),
-        child: Center(
-          child: Transform.rotate(
-            angle: -math.pi / 6,
-            child: Container(
-              width: width * 0.7,
-              height: height * 0.35,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF9D000),
-                borderRadius: BorderRadius.circular(width * 0.35),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black26,
-                    blurRadius: 2,
-                    offset: Offset(1, 1),
-                  ),
-                ],
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                'UNO',
-                style: TextStyle(
-                  color: const Color(0xFFE52521),
-                  fontSize: width * 0.22,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -1,
-                ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.favorite_rounded,
+              color: const Color(0xFFFF6F9F),
+              size: width * 0.42,
+              shadows: const [Shadow(color: Colors.black38, blurRadius: 3)],
+            ),
+            SizedBox(height: height * 0.04),
+            Text(
+              'ONE CARD',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.9),
+                fontSize: width * 0.13,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.2,
               ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -1345,18 +1343,12 @@ class UnoCardFront extends StatelessWidget {
         ),
         child: Stack(
           children: [
-            // Oval center highlight
+            // 하트 워터마크 (UNO의 기울어진 타원 하이라이트 대체 — ADR 0001)
             Center(
-              child: Transform.rotate(
-                angle: -math.pi / 6,
-                child: Container(
-                  width: width * 0.8,
-                  height: height * 0.5,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(width * 0.4),
-                  ),
-                ),
+              child: Icon(
+                Icons.favorite_rounded,
+                color: Colors.white.withValues(alpha: 0.16),
+                size: width * 0.78,
               ),
             ),
             child,
@@ -1397,169 +1389,71 @@ class UnoCardFront extends StatelessWidget {
     );
   }
 
-  Widget _buildWild() {
-    const qColors = [
-      Color(0xFFE52521),
-      Color(0xFFF9D000),
-      Color(0xFF0068B5),
-      Color(0xFF4CAE4C),
-    ];
-    return _cardShell(
-      color: const Color(0xFF111111),
-      overrideBackground: const Color(0xFF111111),
-      cornerValue: 'W',
-      child: Center(
-        child: Container(
-          width: width * 0.62,
-          height: height * 0.45,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 1.5),
-          ),
-          child: ClipOval(
-            child: Column(
-              children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      Expanded(child: Container(color: qColors[0])),
-                      Expanded(child: Container(color: qColors[1])),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: Row(
-                    children: [
-                      Expanded(child: Container(color: qColors[2])),
-                      Expanded(child: Container(color: qColors[3])),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
+  // Secret Base 4색 팔레트 (rose/honey/sky/sage) — ADR 0001
+  static const _suitColors = [
+    Color(0xFFFF6F9F),
+    Color(0xFFFFBE32),
+    Color(0xFF55A9DE),
+    Color(0xFF55BF8A),
+  ];
+
+  // 2x2 하트 그리드: UNO wild의 4색 타원/원형 분할 디자인 대체.
+  Widget _heartGrid(double size) {
+    Widget heart(Color color) => Icon(
+      Icons.favorite_rounded,
+      color: color,
+      size: size,
+      shadows: const [Shadow(color: Colors.black38, blurRadius: 2)],
+    );
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [heart(_suitColors[0]), heart(_suitColors[1])],
         ),
-      ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [heart(_suitColors[2]), heart(_suitColors[3])],
+        ),
+      ],
     );
   }
 
+  Widget _buildWild() {
+    return _cardShell(
+      color: const Color(0xFF3B2D52),
+      overrideBackground: const Color(0xFF3B2D52),
+      cornerValue: 'W',
+      child: Center(child: _heartGrid(width * 0.26)),
+    );
+  }
+
+  // Secret Base 자체 +4 디자인: 딥 플럼 + 2x2 하트 + 큰 +4.
+  // UNO의 "4장 부채꼴 미니카드" 트레이드드레스를 쓰지 않는다 — ADR 0001.
   Widget _buildWildDraw4() {
-    const qColors = [
-      Color(0xFFE52521),
-      Color(0xFFF9D000),
-      Color(0xFF4CAE4C),
-      Color(0xFF0068B5),
-    ];
-    // Reference: real UNO +4 card — 4 colored small cards fanned + black bg
-    return Container(
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(width * 0.1),
-        boxShadow: const [
-          BoxShadow(color: Colors.black54, blurRadius: 5, offset: Offset(2, 3)),
-        ],
-      ),
-      padding: EdgeInsets.all(width * 0.05),
-      child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF111111),
-          borderRadius: BorderRadius.circular(width * 0.08),
-          border: Border.all(color: Colors.black87, width: 1),
-        ),
-        child: Stack(
-          clipBehavior: Clip.none,
+    return _cardShell(
+      color: const Color(0xFF3B2D52),
+      overrideBackground: const Color(0xFF3B2D52),
+      cornerValue: '+4',
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // 4 mini colored cards arranged in 2x2
-            Positioned(
-              top: height * 0.12,
-              left: width * 0.06,
-              child: _miniCard(qColors[0], width, height),
-            ),
-            Positioned(
-              top: height * 0.12,
-              right: width * 0.06,
-              child: _miniCard(qColors[1], width, height),
-            ),
-            Positioned(
-              top: height * 0.38,
-              left: width * 0.06,
-              child: _miniCard(qColors[2], width, height),
-            ),
-            Positioned(
-              top: height * 0.38,
-              right: width * 0.06,
-              child: _miniCard(qColors[3], width, height),
-            ),
-            // +4 circle in center
-            Center(
-              child: Container(
-                width: width * 0.48,
-                height: width * 0.48,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: const Color(0xFF111111),
-                  border: Border.all(color: Colors.white, width: 2.5),
-                  boxShadow: const [
-                    BoxShadow(color: Colors.black54, blurRadius: 4),
-                  ],
-                ),
-                child: Center(
-                  child: Text(
-                    '+4',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: width * 0.28,
-                      fontWeight: FontWeight.w900,
-                      height: 1,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            // Corner labels
-            Positioned(
-              top: 3,
-              left: 4,
-              child: Text(
-                '+4',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: width * 0.14,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ),
-            Positioned(
-              bottom: 3,
-              right: 4,
-              child: Transform.rotate(
-                angle: math.pi,
-                child: Text(
-                  '+4',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: width * 0.14,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
+            _heartGrid(width * 0.19),
+            SizedBox(height: height * 0.03),
+            Text(
+              '+4',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: width * 0.26,
+                fontWeight: FontWeight.w900,
+                height: 1,
+                shadows: const [Shadow(color: Colors.black54, blurRadius: 3)],
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _miniCard(Color color, double w, double h) {
-    return Container(
-      width: w * 0.35,
-      height: h * 0.22,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(w * 0.04),
-        border: Border.all(color: Colors.white, width: 1),
       ),
     );
   }

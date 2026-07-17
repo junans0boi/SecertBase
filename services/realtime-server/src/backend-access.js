@@ -17,8 +17,11 @@ const disabledRestPrefixes = new Map([
   ['/premium', 'premium'],
 ]);
 
+// 공개된 게임 타입. 게임을 복구할 때는 여기에 추가하고
+// disabledSocketPrefixes에서 해당 prefix를 제거한다 (epic #20).
+export const PUBLIC_GAME_TYPES = ['yut', 'bomb', 'rps', 'uno'];
+
 const disabledSocketPrefixes = new Map([
-  ['game:uno:', 'uno'],
   ['game:dice:', 'dice'],
   ['game:roulette:', 'roulette'],
   ['game:telepathy:', 'telepathy'],
@@ -46,11 +49,11 @@ const featureForSocketPacket = ([event, payload]) => {
 
   if (event.startsWith('game:lobby:')) {
     const gameType = String(payload?.gameType ?? payload?.type ?? '');
-    if (gameType && !['yut', 'bomb', 'rps'].includes(gameType)) return gameType;
+    if (gameType && !PUBLIC_GAME_TYPES.includes(gameType)) return gameType;
   }
   if (event === 'game:restart:respond') {
     const gameType = String(payload?.gameType ?? '');
-    if (gameType && !['yut', 'bomb', 'rps'].includes(gameType)) return gameType;
+    if (gameType && !PUBLIC_GAME_TYPES.includes(gameType)) return gameType;
   }
   return null;
 };

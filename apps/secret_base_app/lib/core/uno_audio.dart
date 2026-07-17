@@ -1,9 +1,12 @@
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
+import 'uno_audio_stub.dart'
+    if (dart.library.html) 'uno_audio_web.dart'
+    as impl;
 
 class UnoAudio {
   UnoAudio._();
   static final UnoAudio instance = UnoAudio._();
+
+  final _backend = impl.UnoAudioBackend();
 
   bool _enabled = true;
   int _dealIdx = 0;
@@ -11,16 +14,11 @@ class UnoAudio {
   bool get enabled => _enabled;
   set enabled(bool v) => _enabled = v;
 
-  static String _url(String file) => 'assets/assets/sounds/uno/$file';
-
   Future<void> unlock() async {}
 
   Future<void> _play(String file) async {
     if (!_enabled) return;
-    try {
-      final audio = html.AudioElement(_url(file));
-      await audio.play();
-    } catch (_) {}
+    await _backend.play(file);
   }
 
   // ── 카드 선택 (내 패에서 카드 탭) ─────────────────────────────────────────

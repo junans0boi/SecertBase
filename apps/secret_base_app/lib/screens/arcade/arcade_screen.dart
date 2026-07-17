@@ -5,6 +5,7 @@ import '../../core/socket_service.dart';
 import 'game_lobby_screen.dart';
 import 'games/bomb_screen.dart';
 import 'games/rps_screen.dart';
+import 'games/uno_screen.dart';
 import 'games/yut_screen.dart';
 
 class ArcadeScreen extends StatelessWidget {
@@ -35,11 +36,20 @@ class ArcadeScreen extends StatelessWidget {
       color: kMainSage,
       background: kMainSageSoft,
     ),
+    _GameInfo(
+      type: 'uno',
+      icon: Icons.style_rounded,
+      title: '원카드',
+      description: '색과 숫자를 맞춰 손패를 먼저 비우는 카드 대결',
+      color: kMainRose,
+      background: kMainRoseSoft,
+    ),
   ];
 
   Widget _screen(String type) => switch (type) {
     'yut' => const YutScreen(),
     'bomb' => const BombScreen(),
+    'uno' => const UnoScreen(),
     _ => const RpsScreen(),
   };
 
@@ -48,6 +58,7 @@ class ArcadeScreen extends StatelessWidget {
     final isActive = switch (game.type) {
       'yut' => socket.yutActive,
       'bomb' => socket.bombActive,
+      'uno' => socket.unoActive,
       _ => false,
     };
 

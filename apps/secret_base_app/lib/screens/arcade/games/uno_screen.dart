@@ -211,7 +211,7 @@ class _UnoTopOverlay extends StatelessWidget {
                   ),
                   Expanded(
                     child: Text(
-                      '🃏 UNO',
+                      '🃏 원카드',
                       textAlign: TextAlign.center,
                       style: GoogleFonts.notoSans(
                         color: Colors.white,
@@ -518,7 +518,7 @@ class _WinBanner extends StatelessWidget {
         border: Border.all(color: isMe ? kSuccess : kError),
       ),
       child: Text(
-        isMe ? '🎉 UNO! 손패를 모두 냈어요!' : '$winner 승리! 다음 판에서 복수하자 😤',
+        isMe ? '🎉 원카드! 손패를 모두 냈어요!' : '$winner 승리! 다음 판에서 복수하자 😤',
         textAlign: TextAlign.center,
         style: GoogleFonts.notoSans(
           color: isMe ? kSuccess : kError,
@@ -574,7 +574,7 @@ class _ResultDialog extends StatelessWidget {
             Text(isMe ? '🏆' : '😢', style: const TextStyle(fontSize: 64)),
             const SizedBox(height: 16),
             Text(
-              isMe ? 'UNO 승리!' : '패배...',
+              isMe ? '원카드 승리!' : '패배...',
               style: GoogleFonts.notoSans(
                 color: Colors.white,
                 fontSize: 28,
@@ -583,7 +583,7 @@ class _ResultDialog extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              isMe ? '손패를 모두 냈어요! 최고예요!' : '$winner 님이 먼저 UNO를 달성했어요.',
+              isMe ? '손패를 모두 냈어요! 최고예요!' : '$winner 님이 먼저 원카드를 달성했어요.',
               textAlign: TextAlign.center,
               style: GoogleFonts.notoSans(
                 color: Colors.white60,

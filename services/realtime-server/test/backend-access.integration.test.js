@@ -101,13 +101,14 @@ test('Socket handshake requires a valid JWT and derives the server session', asy
   }
 });
 
-test('Socket feature gate allows MVP games and rejects UNO with the stable response', async () => {
+test('Socket feature gate allows public games and rejects unknown types and heart', async () => {
   const server = createServer();
   const io = new Server(server);
   io.on('connection', (socket) => {
     installSocketFeatureGate(socket, 'mvp');
     socket.on('game:yut:new', (_, ack) => ack({ ok: true }));
     socket.on('game:uno:new', (_, ack) => ack({ ok: true }));
+    socket.on('game:restart:respond', (_, ack) => ack({ ok: true }));
   });
   await listen(server);
   const client = createClient(`http://127.0.0.1:${server.address().port}`, {
@@ -122,18 +123,28 @@ test('Socket feature gate allows MVP games and rejects UNO with the stable respo
     const allowed = await client.timeout(1000).emitWithAck('game:yut:new', {});
     assert.deepEqual(allowed, { ok: true });
 
-    const disabled = await client.timeout(1000).emitWithAck('game:uno:new', {});
-    assert.deepEqual(disabled, {
-      ok: false,
-      error: { code: 'FEATURE_DISABLED', feature: 'uno' },
-    });
-    const restartBypass = await client.timeout(1000).emitWithAck(
+    // 복구된 게임(원카드)은 통과해야 한다. 내부 식별자는 uno를 유지한다.
+    const restored = await client.timeout(1000).emitWithAck('game:uno:new', {});
+    assert.deepEqual(restored, { ok: true });
+    const restartRestored = await client.timeout(1000).emitWithAck(
       'game:restart:respond',
       { accept: true, gameType: 'uno' },
     );
-    assert.deepEqual(restartBypass, {
+    assert.deepEqual(restartRestored, { ok: true });
+
+    // 미공개 game type과 heart는 여전히 차단된다.
+    const unknown = await client.timeout(1000).emitWithAck(
+      'game:lobby:join',
+      { gameType: 'poker' },
+    );
+    assert.deepEqual(unknown, {
       ok: false,
-      error: { code: 'FEATURE_DISABLED', feature: 'uno' },
+      error: { code: 'FEATURE_DISABLED', feature: 'poker' },
+    });
+    const heart = await client.timeout(1000).emitWithAck('heart:send', {});
+    assert.deepEqual(heart, {
+      ok: false,
+      error: { code: 'FEATURE_DISABLED', feature: 'heart' },
     });
   } finally {
     client.disconnect();
