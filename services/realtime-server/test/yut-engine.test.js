@@ -114,6 +114,20 @@ test('movePiece follows shortcut and backdo routes', () => {
   });
 });
 
+test('nal-backdo waits on the goal square instead of returning to start', () => {
+  // 첫 턴 도(1칸) 직후 빽도: 대기(0)로 빠지지 않고 도착 칸(20)에서 대기해야 한다.
+  assert.deepEqual(movePiece({ position: 1, lastPos: 0 }, YUT_RESULTS.BACKDO), {
+    position: 20,
+    lastPos: 1,
+  });
+  // 도착 칸에서 다음 이동이 있어야 완주된다.
+  assert.deepEqual(movePiece({ position: 20, lastPos: 1 }, 1), {
+    position: 20,
+    lastPos: 20,
+    finished: true,
+  });
+});
+
 test('hasBackdoMove returns false when backdo should become nak', () => {
   assert.equal(
     hasBackdoMove([

@@ -244,7 +244,8 @@ function getPrevPosition(currentPosition, lastPos) {
 
   const prevMap = {
     0: 0,
-    1: 0,
+    // 날빽도: 1칸에서 빽도는 대기(0)가 아니라 도착 칸(20) 대기. 완주는 다음 이동에서.
+    1: 20,
     2: 1,
     3: 2,
     4: 3,
