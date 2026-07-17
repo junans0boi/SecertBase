@@ -83,6 +83,10 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
   String? _animResult;
   int? _animThrowAt;
   int? _notifiedThrowAt;
+  // 결과는 연출이 끝난 뒤에만 노출한다. widget.lastResultName을 직접 그리면
+  // 서버 응답이 연출 중에 도착했을 때 스포일러가 된다.
+  String? _revealedResultName;
+  bool _revealedNak = false;
   Timer? _countdownTimer;
   Timer? _moveUnlockTimer;
   int _countdownSeconds = 0;
@@ -108,11 +112,21 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     );
     _stickThrowCtrl.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
-        setState(() => _showThrowAnim = false);
+        setState(() {
+          _showThrowAnim = false;
+          _revealedResultName = widget.lastResultName;
+          _revealedNak = widget.lastThrowNak;
+        });
         _resultBounceCtrl.forward(from: 0);
         _notifyThrowResultRevealed();
       }
     });
+    // 재접속 복원 등 연출 없이 진입한 경우 마지막 결과를 즉시 노출한다.
+    _revealedResultName = widget.lastResultName;
+    _revealedNak = widget.lastThrowNak;
+    if (_revealedResultName != null) {
+      _resultBounceCtrl.value = 1.0;
+    }
     _syncCountdown();
   }
 
@@ -130,6 +144,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
         setState(() {
           _animResult = widget.lastResultName;
           _showThrowAnim = true;
+          _revealedResultName = null;
         });
         YutAudio.instance.playThrow();
         _stickThrowCtrl.forward(from: 0);
@@ -191,6 +206,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
       _showThrowAnim = true;
       _animResult = null;
       _animThrowAt = null;
+      _revealedResultName = null;
     });
     YutAudio.instance.playThrow();
     _stickThrowCtrl.forward(from: 0);
@@ -1053,12 +1069,15 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              widget.lastThrowNak
+                              // 연출 중에는 낙/이동 대기 텍스트도 결과를 스포일러하므로 가린다.
+                              _showThrowAnim
+                                  ? '던지는 중…'
+                                  : _revealedNak
                                   ? '낙 · 다음 차례로 넘어갑니다'
                                   : '이동 대기: ${_pendingMoveText()}',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: widget.lastThrowNak
+                                color: !_showThrowAnim && _revealedNak
                                     ? const Color(0xFFB13B2E)
                                     : const Color(0xFF5A3718),
                                 fontWeight: FontWeight.bold,
@@ -1069,7 +1088,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                             SizedBox(
                               height: _compact ? 52 : 74,
                               child: Center(
-                                child: widget.lastResultName != null
+                                child: _revealedResultName != null
                                     ? ScaleTransition(
                                         scale: _resultBounce,
                                         child: CircleAvatar(
@@ -1078,9 +1097,9 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                             0xFFFFF9EA,
                                           ),
                                           child: Text(
-                                            widget.lastThrowNak
+                                            _revealedNak
                                                 ? '낙'
-                                                : widget.lastResultName!,
+                                                : _revealedResultName!,
                                             style: TextStyle(
                                               fontSize: _compact ? 20 : 28,
                                               fontWeight: FontWeight.w900,
