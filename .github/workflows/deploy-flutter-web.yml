@@ -32,6 +32,18 @@ jobs:
         working-directory: apps/secret_base_app
         run: flutter pub get
 
+      - name: Verify formatting
+        working-directory: apps/secret_base_app
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Analyze code
+        working-directory: apps/secret_base_app
+        run: flutter analyze
+
+      - name: Run tests
+        working-directory: apps/secret_base_app
+        run: flutter test
+
       - name: Build web
         working-directory: apps/secret_base_app
         env:

@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  backend-ci:
+    name: Backend CI (Node.js)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: services/realtime-server/package-lock.json
+
+      - name: Install dependencies
+        working-directory: services/realtime-server
+        run: npm ci
+
+      - name: Syntax check
+        working-directory: services/realtime-server
+        run: npm run check
+
+      - name: Run tests
+        working-directory: services/realtime-server
+        run: npm test
+
+  frontend-ci:
+    name: Frontend CI (Flutter)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+          cache-key: "flutter-:os:-:channel:-:version:-:arch:-:hash:"
+
+      - name: Install dependencies
+        working-directory: apps/secret_base_app
+        run: flutter pub get
+
+      - name: Verify formatting
+        working-directory: apps/secret_base_app
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Analyze code
+        working-directory: apps/secret_base_app
+        run: flutter analyze
+
+      - name: Run tests
+        working-directory: apps/secret_base_app
+        run: flutter test
+
+      - name: Build web check
+        working-directory: apps/secret_base_app
+        run: flutter build web --release --base-href "/SecertBase/" --no-wasm-dry-run
+
