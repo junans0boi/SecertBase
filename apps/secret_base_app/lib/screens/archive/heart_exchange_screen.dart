@@ -8,9 +8,27 @@ class HeartExchangeScreen extends StatelessWidget {
   const HeartExchangeScreen({super.key});
 
   static const _items = [
-    _ExchangeItem('❓', '10시의 질문', '매일 밤 10시에 나누는 서로의 속마음 문답', kMainHoney, kMainHoneySoft),
-    _ExchangeItem('⚖️', '커플 밸런스', '오늘 서로의 취향이 얼마나 일치하는지 알아보는 게임', kMainPeach, kMainPeachSoft),
-    _ExchangeItem('🎟️', '소원권', '미션 완료 보상과 애정 어린 약속 쿠폰', kMainRose, kMainRoseSoft),
+    _ExchangeItem(
+      '❓',
+      '10시의 질문',
+      '매일 밤 10시에 나누는 서로의 속마음 문답',
+      kMainHoney,
+      kMainHoneySoft,
+    ),
+    _ExchangeItem(
+      '⚖️',
+      '커플 밸런스',
+      '오늘 서로의 취향이 얼마나 일치하는지 알아보는 게임',
+      kMainPeach,
+      kMainPeachSoft,
+    ),
+    _ExchangeItem(
+      '🎟️',
+      '소원권',
+      '미션 완료 보상과 애정 어린 약속 쿠폰',
+      kMainRose,
+      kMainRoseSoft,
+    ),
   ];
 
   @override
@@ -77,7 +95,13 @@ class _ExchangeItem {
   final String desc;
   final Color color;
   final Color bgColor;
-  const _ExchangeItem(this.emoji, this.name, this.desc, this.color, this.bgColor);
+  const _ExchangeItem(
+    this.emoji,
+    this.name,
+    this.desc,
+    this.color,
+    this.bgColor,
+  );
 }
 
 class _ExchangeCard extends StatelessWidget {

@@ -11,7 +11,8 @@ class HeartOverlay extends StatefulWidget {
   State<HeartOverlay> createState() => _HeartOverlayState();
 }
 
-class _HeartOverlayState extends State<HeartOverlay> with TickerProviderStateMixin {
+class _HeartOverlayState extends State<HeartOverlay>
+    with TickerProviderStateMixin {
   static const _count = 9;
   late final AnimationController _ctrl;
   late final List<_HeartConfig> _configs;
@@ -49,14 +50,15 @@ class _HeartOverlayState extends State<HeartOverlay> with TickerProviderStateMix
               animation: _ctrl,
               builder: (_, __) {
                 final t = _ctrl.value;
-                if (t < cfg.startT || t > cfg.endT) return const SizedBox.shrink();
+                if (t < cfg.startT || t > cfg.endT)
+                  return const SizedBox.shrink();
                 final progress = (t - cfg.startT) / (cfg.endT - cfg.startT);
                 final y = Curves.easeOut.transform(progress) * cfg.rise;
                 final opacity = progress < 0.15
                     ? progress / 0.15
                     : progress > 0.7
-                        ? 1.0 - (progress - 0.7) / 0.3
-                        : 1.0;
+                    ? 1.0 - (progress - 0.7) / 0.3
+                    : 1.0;
                 final scale = progress < 0.12
                     ? 0.4 + (progress / 0.12) * 0.8
                     : 1.0 + math.sin(progress * math.pi) * 0.15;
@@ -86,17 +88,24 @@ class _HeartOverlayState extends State<HeartOverlay> with TickerProviderStateMix
                 final fade = _ctrl.value < 0.15
                     ? _ctrl.value / 0.15
                     : _ctrl.value > 0.75
-                        ? 1.0 - (_ctrl.value - 0.75) / 0.25
-                        : 1.0;
+                    ? 1.0 - (_ctrl.value - 0.75) / 0.25
+                    : 1.0;
                 return Opacity(
                   opacity: fade.clamp(0.0, 1.0),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.favorite_rounded, size: 64, color: kMainRose),
+                      const Icon(
+                        Icons.favorite_rounded,
+                        size: 64,
+                        color: kMainRose,
+                      ),
                       const SizedBox(height: 10),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.white.withAlpha(220),
                           borderRadius: BorderRadius.circular(30),
@@ -131,12 +140,12 @@ class _HeartConfig {
   final Color color;
 
   _HeartConfig(int i, math.Random rng)
-      : xOffset = (i % 2 == 0 ? -1.0 : 1.0) * (15.0 + rng.nextDouble() * 100.0),
-        heartSize = 22.0 + rng.nextDouble() * 28.0,
-        rise = 200.0 + rng.nextDouble() * 160.0,
-        startT = (i / 9.0) * 0.55,
-        endT = (i / 9.0) * 0.55 + 0.55,
-        color = _heartColors[i % _heartColors.length];
+    : xOffset = (i % 2 == 0 ? -1.0 : 1.0) * (15.0 + rng.nextDouble() * 100.0),
+      heartSize = 22.0 + rng.nextDouble() * 28.0,
+      rise = 200.0 + rng.nextDouble() * 160.0,
+      startT = (i / 9.0) * 0.55,
+      endT = (i / 9.0) * 0.55 + 0.55,
+      color = _heartColors[i % _heartColors.length];
 
   static const _heartColors = [
     kMainRose,

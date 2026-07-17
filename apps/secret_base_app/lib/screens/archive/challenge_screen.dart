@@ -16,7 +16,6 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
   List<Map<String, dynamic>> _challenges = [];
   bool _loading = true;
 
-
   @override
   void initState() {
     super.initState();
@@ -32,7 +31,8 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       if (data['ok'] == true) {
         setState(() {
-          _challenges = (data['challenges'] as List?)
+          _challenges =
+              (data['challenges'] as List?)
                   ?.map((e) => Map<String, dynamic>.from(e as Map))
                   .toList() ??
               [];
@@ -67,7 +67,14 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
               const SizedBox(height: 10),
               Row(
                 children: [
-                  Expanded(child: _dialogField(targetCtrl, '목표 수치', '100', numeric: true)),
+                  Expanded(
+                    child: _dialogField(
+                      targetCtrl,
+                      '목표 수치',
+                      '100',
+                      numeric: true,
+                    ),
+                  ),
                   const SizedBox(width: 10),
                   Expanded(child: _dialogField(unitCtrl, '단위', 'kg')),
                 ],
@@ -82,7 +89,9 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
           ),
           FilledButton(
             onPressed: () async {
-              if (titleCtrl.text.trim().isEmpty || targetCtrl.text.trim().isEmpty) return;
+              if (titleCtrl.text.trim().isEmpty ||
+                  targetCtrl.text.trim().isEmpty)
+                return;
               Navigator.pop(ctx);
               await _createChallenge(
                 title: titleCtrl.text.trim(),
@@ -94,17 +103,30 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
             style: FilledButton.styleFrom(
               backgroundColor: kMainSky,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
-            child: Text('만들기', style: mainBody(size: 14, color: Colors.white, weight: FontWeight.w700)),
+            child: Text(
+              '만들기',
+              style: mainBody(
+                size: 14,
+                color: Colors.white,
+                weight: FontWeight.w700,
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  TextField _dialogField(TextEditingController ctrl, String label, String hint,
-      {bool numeric = false}) {
+  TextField _dialogField(
+    TextEditingController ctrl,
+    String label,
+    String hint, {
+    bool numeric = false,
+  }) {
     return TextField(
       controller: ctrl,
       keyboardType: numeric ? TextInputType.number : TextInputType.text,
@@ -119,7 +141,10 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
         ),
         labelStyle: mainBody(size: 12, color: kMainMuted),
         hintStyle: mainBody(size: 13, color: kMainMuted),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 12,
+        ),
       ),
       style: mainBody(size: 14, color: kMainInk),
     );
@@ -165,9 +190,17 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(challenge['title'] ?? '', style: mainBody(size: 14, color: kMainSub)),
+            Text(
+              challenge['title'] ?? '',
+              style: mainBody(size: 14, color: kMainSub),
+            ),
             const SizedBox(height: 12),
-            _dialogField(valueCtrl, '추가할 수치${unit.isNotEmpty ? " ($unit)" : ""}', '0', numeric: true),
+            _dialogField(
+              valueCtrl,
+              '추가할 수치${unit.isNotEmpty ? " ($unit)" : ""}',
+              '0',
+              numeric: true,
+            ),
             const SizedBox(height: 10),
             _dialogField(noteCtrl, '메모 (선택)', ''),
           ],
@@ -187,9 +220,18 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
             style: FilledButton.styleFrom(
               backgroundColor: kMainSage,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
-            child: Text('기록', style: mainBody(size: 14, color: Colors.white, weight: FontWeight.w700)),
+            child: Text(
+              '기록',
+              style: mainBody(
+                size: 14,
+                color: Colors.white,
+                weight: FontWeight.w700,
+              ),
+            ),
           ),
         ],
       ),
@@ -201,7 +243,10 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       await http.post(
         Uri.parse('${_auth.baseUrl}/api/challenges/$id/log'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'value': value, 'note': note.isNotEmpty ? note : null}),
+        body: jsonEncode({
+          'value': value,
+          'note': note.isNotEmpty ? note : null,
+        }),
       );
       await _load();
     } catch (_) {}
@@ -218,7 +263,10 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
           icon: const Icon(Icons.arrow_back_ios_new, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('🏆 목표 챌린지', style: mainBody(size: 17, color: kMainInk, weight: FontWeight.w700)),
+        title: Text(
+          '🏆 목표 챌린지',
+          style: mainBody(size: 17, color: kMainInk, weight: FontWeight.w700),
+        ),
         elevation: 0,
       ),
       floatingActionButton: FloatingActionButton(
@@ -281,25 +329,42 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                 Expanded(
                   child: Text(
                     c['title'] ?? '',
-                    style: mainBody(size: 16, color: kMainInk, weight: FontWeight.w800),
+                    style: mainBody(
+                      size: 16,
+                      color: kMainInk,
+                      weight: FontWeight.w800,
+                    ),
                   ),
                 ),
                 if (isCompleted) ...[
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
                     decoration: BoxDecoration(
                       color: kMainSage,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Text('완료 ✓', style: mainBody(size: 11, color: Colors.white, weight: FontWeight.w700)),
+                    child: Text(
+                      '완료 ✓',
+                      style: mainBody(
+                        size: 11,
+                        color: Colors.white,
+                        weight: FontWeight.w700,
+                      ),
+                    ),
                   ),
                 ],
               ],
             ),
             if ((c['description'] ?? '').isNotEmpty) ...[
               const SizedBox(height: 4),
-              Text(c['description'], style: mainBody(size: 12, color: kMainMuted)),
+              Text(
+                c['description'],
+                style: mainBody(size: 12, color: kMainMuted),
+              ),
             ],
             const SizedBox(height: 14),
             Row(
@@ -307,11 +372,19 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
               children: [
                 Text(
                   '${current.toStringAsFixed(current % 1 == 0 ? 0 : 1)} / ${target.toStringAsFixed(target % 1 == 0 ? 0 : 1)}${unit.isNotEmpty ? ' $unit' : ''}',
-                  style: mainBody(size: 13, color: kMainSub, weight: FontWeight.w700),
+                  style: mainBody(
+                    size: 13,
+                    color: kMainSub,
+                    weight: FontWeight.w700,
+                  ),
                 ),
                 Text(
                   '${(progress * 100).toStringAsFixed(0)}%',
-                  style: mainBody(size: 13, color: kMainSky, weight: FontWeight.w700),
+                  style: mainBody(
+                    size: 13,
+                    color: kMainSky,
+                    weight: FontWeight.w700,
+                  ),
                 ),
               ],
             ),
@@ -321,7 +394,9 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
               child: LinearProgressIndicator(
                 value: progress,
                 backgroundColor: kMainLine,
-                valueColor: AlwaysStoppedAnimation(isCompleted ? kMainSage : kMainSky),
+                valueColor: AlwaysStoppedAnimation(
+                  isCompleted ? kMainSage : kMainSky,
+                ),
                 minHeight: 8,
               ),
             ),

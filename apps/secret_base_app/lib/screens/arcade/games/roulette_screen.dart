@@ -13,7 +13,8 @@ class RouletteScreen extends StatefulWidget {
   State<RouletteScreen> createState() => _RouletteScreenState();
 }
 
-class _RouletteScreenState extends State<RouletteScreen> with SingleTickerProviderStateMixin {
+class _RouletteScreenState extends State<RouletteScreen>
+    with SingleTickerProviderStateMixin {
   final _socket = SocketService();
   late AnimationController _spinCtrl;
   late Animation<double> _spin;
@@ -22,12 +23,22 @@ class _RouletteScreenState extends State<RouletteScreen> with SingleTickerProvid
   List<String> _options = ['야식', '벌칙', '결제자', '면제권', '산책', '게임'];
   final _editCtrl = TextEditingController();
 
-  static const _colors = [kPrimary, kAccent, kGold, kTeal, Color(0xFF5DADE2), Color(0xFFFF6348)];
+  static const _colors = [
+    kPrimary,
+    kAccent,
+    kGold,
+    kTeal,
+    Color(0xFF5DADE2),
+    Color(0xFFFF6348),
+  ];
 
   @override
   void initState() {
     super.initState();
-    _spinCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 2000));
+    _spinCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2000),
+    );
     _spin = CurvedAnimation(parent: _spinCtrl, curve: Curves.easeOut);
     _socket.addListener(_rebuild);
   }
@@ -73,8 +84,7 @@ class _RouletteScreenState extends State<RouletteScreen> with SingleTickerProvid
           children: [
             _buildWheel(result),
             const SizedBox(height: 24),
-            if (result != null)
-              _ResultCard(result: result),
+            if (result != null) _ResultCard(result: result),
             const SizedBox(height: 24),
             _buildOptions(),
             const SizedBox(height: 32),
@@ -89,10 +99,7 @@ class _RouletteScreenState extends State<RouletteScreen> with SingleTickerProvid
     return AnimatedBuilder(
       animation: _spin,
       builder: (_, child) {
-        return Transform.rotate(
-          angle: _spin.value * 2 * pi * 3,
-          child: child,
-        );
+        return Transform.rotate(angle: _spin.value * 2 * pi * 3, child: child);
       },
       child: SizedBox(
         width: 200,
@@ -115,7 +122,11 @@ class _RouletteScreenState extends State<RouletteScreen> with SingleTickerProvid
         children: [
           Text(
             '항목 관리',
-            style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 12, fontWeight: FontWeight.w600),
+            style: GoogleFonts.notoSans(
+              color: kTextMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           const SizedBox(height: 12),
           Wrap(
@@ -127,11 +138,16 @@ class _RouletteScreenState extends State<RouletteScreen> with SingleTickerProvid
               return GestureDetector(
                 onLongPress: () => setState(() => _options.removeAt(i)),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: _colors[i % _colors.length].withOpacity(0.15),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: _colors[i % _colors.length].withOpacity(0.4)),
+                    border: Border.all(
+                      color: _colors[i % _colors.length].withOpacity(0.4),
+                    ),
                   ),
                   child: Text(
                     opt,
@@ -154,7 +170,10 @@ class _RouletteScreenState extends State<RouletteScreen> with SingleTickerProvid
                   style: const TextStyle(color: kText, fontSize: 14),
                   decoration: const InputDecoration(
                     hintText: '항목 추가',
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
                   ),
                   onSubmitted: (_) => _addOption(),
                 ),
@@ -194,11 +213,18 @@ class _ResultCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Text('선택됨', style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 12)),
+          Text(
+            '선택됨',
+            style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 12),
+          ),
           const SizedBox(height: 4),
           Text(
             result,
-            style: GoogleFonts.notoSans(color: kText, fontSize: 28, fontWeight: FontWeight.w800),
+            style: GoogleFonts.notoSans(
+              color: kText,
+              fontSize: 28,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ],
       ),
@@ -221,11 +247,15 @@ class _SpinButton extends StatelessWidget {
           gradient: spinning ? null : kPrimaryGrad,
           color: spinning ? kCard : null,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: spinning ? null : [BoxShadow(color: kPrimary.withAlpha(80), blurRadius: 16)],
+          boxShadow: spinning
+              ? null
+              : [BoxShadow(color: kPrimary.withAlpha(80), blurRadius: 16)],
         ),
         child: MaterialButton(
           onPressed: spinning ? null : onTap,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Text(
             spinning ? '돌리는 중...' : '돌리기!',
             style: GoogleFonts.notoSans(
@@ -286,7 +316,11 @@ class _WheelPainter extends CustomPainter {
       final tp = TextPainter(
         text: TextSpan(
           text: items[i],
-          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         textDirection: TextDirection.ltr,
       );
@@ -296,6 +330,5 @@ class _WheelPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _WheelPainter old) =>
-      old.items != items;
+  bool shouldRepaint(covariant _WheelPainter old) => old.items != items;
 }

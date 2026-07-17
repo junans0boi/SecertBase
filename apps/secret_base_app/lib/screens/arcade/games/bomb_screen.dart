@@ -14,7 +14,8 @@ class BombScreen extends StatefulWidget {
   State<BombScreen> createState() => _BombScreenState();
 }
 
-class _BombScreenState extends State<BombScreen> with SingleTickerProviderStateMixin {
+class _BombScreenState extends State<BombScreen>
+    with SingleTickerProviderStateMixin {
   final _socket = SocketService();
   final _answerCtrl = TextEditingController();
   Timer? _timer;
@@ -25,11 +26,14 @@ class _BombScreenState extends State<BombScreen> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
-    _pulseCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 600))
-      ..repeat(reverse: true);
-    _pulse = Tween(begin: 0.95, end: 1.05).animate(
-      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
-    );
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    )..repeat(reverse: true);
+    _pulse = Tween(
+      begin: 0.95,
+      end: 1.05,
+    ).animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
     _socket.addListener(_rebuild);
   }
 
@@ -91,19 +95,27 @@ class _BombScreenState extends State<BombScreen> with SingleTickerProviderStateM
       child: GameMenuListener(
         gameType: 'bomb',
         child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            if (sock.bombLoser != null)
-              Expanded(child: _ExplodeScreen(loser: sock.bombLoser!, userId: sock.userId))
-            else if (!sock.bombActive) ...[
-              const SizedBox(height: 24),
-              _StartPanel(twoPlayers: twoPlayers, onStart: (d) => sock.newBombGame(duration: d)),
-            ] else
-              Expanded(child: _buildGameUI(sock, isMyTurn)),
-          ],
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              if (sock.bombLoser != null)
+                Expanded(
+                  child: _ExplodeScreen(
+                    loser: sock.bombLoser!,
+                    userId: sock.userId,
+                  ),
+                )
+              else if (!sock.bombActive) ...[
+                const SizedBox(height: 24),
+                _StartPanel(
+                  twoPlayers: twoPlayers,
+                  onStart: (d) => sock.newBombGame(duration: d),
+                ),
+              ] else
+                Expanded(child: _buildGameUI(sock, isMyTurn)),
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -133,10 +145,7 @@ class _BombScreenState extends State<BombScreen> with SingleTickerProviderStateM
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 12),
-          _AnswerInput(
-            ctrl: _answerCtrl,
-            onSubmit: _submitAnswer,
-          ),
+          _AnswerInput(ctrl: _answerCtrl, onSubmit: _submitAnswer),
         ] else
           _WaitingBadge(player: sock.bombCurrentPlayer ?? '상대방'),
         const SizedBox(height: 16),
@@ -153,7 +162,11 @@ class _BombVisual extends StatelessWidget {
   final Animation<double> pulse;
   final int remaining;
   final bool isMyTurn;
-  const _BombVisual({required this.pulse, required this.remaining, required this.isMyTurn});
+  const _BombVisual({
+    required this.pulse,
+    required this.remaining,
+    required this.isMyTurn,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -175,7 +188,13 @@ class _BombVisual extends StatelessWidget {
                     width: isMyTurn ? 2 : 1,
                   ),
                   boxShadow: isMyTurn
-                      ? [BoxShadow(color: kError.withOpacity(0.25), blurRadius: 24, spreadRadius: 4)]
+                      ? [
+                          BoxShadow(
+                            color: kError.withOpacity(0.25),
+                            blurRadius: 24,
+                            spreadRadius: 4,
+                          ),
+                        ]
                       : null,
                 ),
                 child: const Center(
@@ -217,7 +236,11 @@ class _HolderCard extends StatelessWidget {
   final String currentPlayer;
   final String userId;
   final bool isMyTurn;
-  const _HolderCard({required this.currentPlayer, required this.userId, required this.isMyTurn});
+  const _HolderCard({
+    required this.currentPlayer,
+    required this.userId,
+    required this.isMyTurn,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -227,7 +250,9 @@ class _HolderCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: (isMyTurn ? kError : kPrimary).withOpacity(0.1),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: (isMyTurn ? kError : kPrimary).withOpacity(0.35)),
+        border: Border.all(
+          color: (isMyTurn ? kError : kPrimary).withOpacity(0.35),
+        ),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -256,7 +281,11 @@ class _QuestionCard extends StatelessWidget {
   final String question;
   final String? category;
   final bool? lastCorrect;
-  const _QuestionCard({required this.question, this.category, this.lastCorrect});
+  const _QuestionCard({
+    required this.question,
+    this.category,
+    this.lastCorrect,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -281,20 +310,31 @@ class _QuestionCard extends StatelessWidget {
                 ),
                 child: Text(
                   category ?? '문제',
-                  style: GoogleFonts.notoSans(color: kGold, fontSize: 11, fontWeight: FontWeight.w600),
+                  style: GoogleFonts.notoSans(
+                    color: kGold,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               if (lastCorrect == false) ...[
                 const SizedBox(width: 8),
                 const Icon(Icons.close, color: kError, size: 16),
-                Text(' 오답', style: GoogleFonts.notoSans(color: kError, fontSize: 11)),
+                Text(
+                  ' 오답',
+                  style: GoogleFonts.notoSans(color: kError, fontSize: 11),
+                ),
               ],
             ],
           ),
           const SizedBox(height: 10),
           Text(
             question,
-            style: GoogleFonts.notoSans(color: kText, fontSize: 17, fontWeight: FontWeight.w700),
+            style: GoogleFonts.notoSans(
+              color: kText,
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
@@ -330,8 +370,16 @@ class _AnswerInput extends StatelessWidget {
             ),
             child: MaterialButton(
               onPressed: onSubmit,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              child: Text('제출', style: GoogleFonts.notoSans(color: Colors.white, fontWeight: FontWeight.w700)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Text(
+                '제출',
+                style: GoogleFonts.notoSans(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           ),
         ),
@@ -389,7 +437,14 @@ class _StartPanelState extends State<_StartPanel> {
             children: [
               const Text('💣', style: TextStyle(fontSize: 56)),
               const SizedBox(height: 12),
-              Text('폭탄 돌리기', style: GoogleFonts.notoSans(color: kText, fontSize: 22, fontWeight: FontWeight.w700)),
+              Text(
+                '폭탄 돌리기',
+                style: GoogleFonts.notoSans(
+                  color: kText,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
               const SizedBox(height: 6),
               Text(
                 widget.twoPlayers ? '퀴즈를 맞추면 폭탄을 넘길 수 있어요' : '상대방을 기다리는 중...',
@@ -400,21 +455,32 @@ class _StartPanelState extends State<_StartPanel> {
         ),
         const SizedBox(height: 24),
         if (widget.twoPlayers) ...[
-          Text('제한 시간', style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 13)),
+          Text(
+            '제한 시간',
+            style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 13),
+          ),
           const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               IconButton(
-                onPressed: _duration > 10 ? () => setState(() => _duration -= 10) : null,
+                onPressed: _duration > 10
+                    ? () => setState(() => _duration -= 10)
+                    : null,
                 icon: const Icon(Icons.remove_circle_outline, color: kPrimary),
               ),
               Text(
                 '$_duration초',
-                style: GoogleFonts.notoSans(color: kText, fontSize: 24, fontWeight: FontWeight.w700),
+                style: GoogleFonts.notoSans(
+                  color: kText,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               IconButton(
-                onPressed: _duration < 120 ? () => setState(() => _duration += 10) : null,
+                onPressed: _duration < 120
+                    ? () => setState(() => _duration += 10)
+                    : null,
                 icon: const Icon(Icons.add_circle_outline, color: kPrimary),
               ),
             ],
@@ -427,25 +493,53 @@ class _StartPanelState extends State<_StartPanel> {
               decoration: BoxDecoration(
                 color: const Color(0xFFFF9F43),
                 borderRadius: BorderRadius.circular(16),
-                boxShadow: [BoxShadow(color: const Color(0xFFFF9F43).withOpacity(0.3), blurRadius: 16)],
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFFF9F43).withOpacity(0.3),
+                    blurRadius: 16,
+                  ),
+                ],
               ),
               child: MaterialButton(
                 onPressed: () => widget.onStart(_duration),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                child: Text('게임 시작!', style: GoogleFonts.notoSans(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(
+                  '게임 시작!',
+                  style: GoogleFonts.notoSans(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
             ),
           ),
         ] else
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-            decoration: BoxDecoration(color: kCard, borderRadius: BorderRadius.circular(14), border: Border.all(color: kBorder)),
+            decoration: BoxDecoration(
+              color: kCard,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: kBorder),
+            ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: kTextMuted)),
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: kTextMuted,
+                  ),
+                ),
                 const SizedBox(width: 10),
-                Text('상대방을 기다리는 중...', style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 14)),
+                Text(
+                  '상대방을 기다리는 중...',
+                  style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 14),
+                ),
               ],
             ),
           ),

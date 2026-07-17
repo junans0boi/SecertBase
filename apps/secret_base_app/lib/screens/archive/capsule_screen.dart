@@ -30,7 +30,8 @@ class _CapsuleScreenState extends State<CapsuleScreen> {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
         if (data['ok'] == true && mounted) {
           setState(() {
-            _capsules = (data['capsules'] as List?)
+            _capsules =
+                (data['capsules'] as List?)
                     ?.map((e) => Map<String, dynamic>.from(e as Map))
                     .toList() ??
                 [];
@@ -44,7 +45,9 @@ class _CapsuleScreenState extends State<CapsuleScreen> {
   Future<void> _openCapsule(Map<String, dynamic> capsule) async {
     final id = capsule['id'];
     try {
-      final res = await http.patch(Uri.parse('${_auth.baseUrl}/api/capsules/$id/open'));
+      final res = await http.patch(
+        Uri.parse('${_auth.baseUrl}/api/capsules/$id/open'),
+      );
       if (res.statusCode == 200) {
         await _load();
         if (mounted) _showOpenedDialog(capsule);
@@ -96,9 +99,18 @@ class _CapsuleScreenState extends State<CapsuleScreen> {
               onPressed: () => Navigator.pop(ctx),
               style: FilledButton.styleFrom(
                 backgroundColor: kMainHoney,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
-              child: Text('닫기', style: mainBody(size: 14, color: Colors.white, weight: FontWeight.w700)),
+              child: Text(
+                '닫기',
+                style: mainBody(
+                  size: 14,
+                  color: Colors.white,
+                  weight: FontWeight.w700,
+                ),
+              ),
             ),
           ),
         ],
@@ -116,7 +128,9 @@ class _CapsuleScreenState extends State<CapsuleScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDlg) => AlertDialog(
           backgroundColor: kMainPaper,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
           title: Text('🕯️ 타임캡슐 만들기', style: mainTitle(size: 20)),
           content: SingleChildScrollView(
             child: Column(
@@ -165,7 +179,10 @@ class _CapsuleScreenState extends State<CapsuleScreen> {
                   },
                   child: Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 13,
+                    ),
                     decoration: BoxDecoration(
                       color: openDate != null ? kMainHoneySoft : kMainPaperSoft,
                       borderRadius: BorderRadius.circular(14),
@@ -188,7 +205,9 @@ class _CapsuleScreenState extends State<CapsuleScreen> {
                           style: mainBody(
                             size: 13,
                             color: openDate != null ? kMainHoney : kMainMuted,
-                            weight: openDate != null ? FontWeight.w600 : FontWeight.w400,
+                            weight: openDate != null
+                                ? FontWeight.w600
+                                : FontWeight.w400,
                           ),
                         ),
                       ],
@@ -207,7 +226,8 @@ class _CapsuleScreenState extends State<CapsuleScreen> {
               onPressed: titleCtrl.text.trim().isEmpty || openDate == null
                   ? null
                   : () async {
-                      if (titleCtrl.text.trim().isEmpty || openDate == null) return;
+                      if (titleCtrl.text.trim().isEmpty || openDate == null)
+                        return;
                       Navigator.pop(ctx);
                       await _create(
                         title: titleCtrl.text.trim(),
@@ -218,9 +238,18 @@ class _CapsuleScreenState extends State<CapsuleScreen> {
               style: FilledButton.styleFrom(
                 backgroundColor: kMainHoney,
                 disabledBackgroundColor: kMainLine,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
-              child: Text('봉인하기', style: mainBody(size: 14, color: Colors.white, weight: FontWeight.w700)),
+              child: Text(
+                '봉인하기',
+                style: mainBody(
+                  size: 14,
+                  color: Colors.white,
+                  weight: FontWeight.w700,
+                ),
+              ),
             ),
           ],
         ),
@@ -233,8 +262,10 @@ class _CapsuleScreenState extends State<CapsuleScreen> {
     required String message,
     required DateTime openDate,
   }) async {
-    final userCode = _auth.user?['UserCode'] ?? _auth.user?['userCode'] ?? 'unknown';
-    final openDateStr = '${openDate.year}-${openDate.month.toString().padLeft(2, '0')}-${openDate.day.toString().padLeft(2, '0')}';
+    final userCode =
+        _auth.user?['UserCode'] ?? _auth.user?['userCode'] ?? 'unknown';
+    final openDateStr =
+        '${openDate.year}-${openDate.month.toString().padLeft(2, '0')}-${openDate.day.toString().padLeft(2, '0')}';
     try {
       await http.post(
         Uri.parse('${_auth.baseUrl}/api/capsules'),
@@ -264,7 +295,10 @@ class _CapsuleScreenState extends State<CapsuleScreen> {
         ),
         labelStyle: mainBody(size: 12, color: kMainMuted),
         hintStyle: mainBody(size: 13, color: kMainMuted),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 13,
+        ),
       ),
       style: mainBody(size: 14, color: kMainInk),
     );
@@ -282,7 +316,10 @@ class _CapsuleScreenState extends State<CapsuleScreen> {
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('🕯️ 타임캡슐', style: mainBody(size: 17, color: kMainInk, weight: FontWeight.w700)),
+        title: Text(
+          '🕯️ 타임캡슐',
+          style: mainBody(size: 17, color: kMainInk, weight: FontWeight.w700),
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showCreateDialog,
@@ -316,7 +353,10 @@ class _CapsuleScreenState extends State<CapsuleScreen> {
               const SizedBox(height: 8),
               Text('미래의 우리에게 편지를 남겨보세요', style: mainBody(size: 14)),
               const SizedBox(height: 4),
-              Text('열어볼 날짜를 정하고 봉인해요', style: mainBody(size: 13, color: kMainMuted)),
+              Text(
+                '열어볼 날짜를 정하고 봉인해요',
+                style: mainBody(size: 13, color: kMainMuted),
+              ),
             ],
           ),
         ),
@@ -350,7 +390,11 @@ class _CapsuleScreenState extends State<CapsuleScreen> {
 
     return MainCard(
       padding: const EdgeInsets.all(18),
-      color: isOpened ? kMainSageSoft : isOpenable ? kMainHoneySoft : kMainPaper,
+      color: isOpened
+          ? kMainSageSoft
+          : isOpenable
+          ? kMainHoneySoft
+          : kMainPaper,
       borderColor: isOpenable ? kMainHoney.withAlpha(180) : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -358,24 +402,42 @@ class _CapsuleScreenState extends State<CapsuleScreen> {
           Row(
             children: [
               Text(
-                isOpened ? '🎉' : isOpenable ? '✨' : '🔒',
+                isOpened
+                    ? '🎉'
+                    : isOpenable
+                    ? '✨'
+                    : '🔒',
                 style: const TextStyle(fontSize: 22),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   c['title'] ?? '',
-                  style: mainBody(size: 16, color: kMainInk, weight: FontWeight.w800),
+                  style: mainBody(
+                    size: 16,
+                    color: kMainInk,
+                    weight: FontWeight.w800,
+                  ),
                 ),
               ),
               if (isOpened)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: kMainSage,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Text('열림', style: mainBody(size: 11, color: Colors.white, weight: FontWeight.w700)),
+                  child: Text(
+                    '열림',
+                    style: mainBody(
+                      size: 11,
+                      color: Colors.white,
+                      weight: FontWeight.w700,
+                    ),
+                  ),
                 ),
             ],
           ),
@@ -394,21 +456,37 @@ class _CapsuleScreenState extends State<CapsuleScreen> {
             ),
           Row(
             children: [
-              const Icon(Icons.calendar_today_outlined, size: 13, color: kMainMuted),
+              const Icon(
+                Icons.calendar_today_outlined,
+                size: 13,
+                color: kMainMuted,
+              ),
               const SizedBox(width: 4),
               Text(
-                isOpened ? '열린 날: $openDateFormatted' : '$openDateFormatted 에 열려요',
+                isOpened
+                    ? '열린 날: $openDateFormatted'
+                    : '$openDateFormatted 에 열려요',
                 style: mainBody(size: 12, color: kMainMuted),
               ),
               if (daysLeft != null) ...[
                 const SizedBox(width: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: kMainSkySoft,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Text('D-$daysLeft', style: mainBody(size: 11, color: kMainSky, weight: FontWeight.w700)),
+                  child: Text(
+                    'D-$daysLeft',
+                    style: mainBody(
+                      size: 11,
+                      color: kMainSky,
+                      weight: FontWeight.w700,
+                    ),
+                  ),
                 ),
               ],
             ],
@@ -429,10 +507,19 @@ class _CapsuleScreenState extends State<CapsuleScreen> {
                 onPressed: () => _openCapsule(c),
                 style: FilledButton.styleFrom(
                   backgroundColor: kMainHoney,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   padding: const EdgeInsets.symmetric(vertical: 11),
                 ),
-                child: Text('지금 열어볼까요? 🎉', style: mainBody(size: 14, color: Colors.white, weight: FontWeight.w700)),
+                child: Text(
+                  '지금 열어볼까요? 🎉',
+                  style: mainBody(
+                    size: 14,
+                    color: Colors.white,
+                    weight: FontWeight.w700,
+                  ),
+                ),
               ),
             ),
           ],

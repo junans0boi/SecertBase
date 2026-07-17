@@ -15,7 +15,8 @@ class PremiumScreen extends StatefulWidget {
   State<PremiumScreen> createState() => _PremiumScreenState();
 }
 
-class _PremiumScreenState extends State<PremiumScreen> with TickerProviderStateMixin {
+class _PremiumScreenState extends State<PremiumScreen>
+    with TickerProviderStateMixin {
   final _auth = AuthService();
   bool _loading = true;
   bool _activating = false;
@@ -34,8 +35,14 @@ class _PremiumScreenState extends State<PremiumScreen> with TickerProviderStateM
   @override
   void initState() {
     super.initState();
-    _shimmerCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
-    _glowCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))..repeat(reverse: true);
+    _shimmerCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat();
+    _glowCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
     _loadStatus();
   }
 
@@ -54,9 +61,14 @@ class _PremiumScreenState extends State<PremiumScreen> with TickerProviderStateM
 
   Future<void> _loadStatus() async {
     final uid = _userId;
-    if (uid == null) { setState(() => _loading = false); return; }
+    if (uid == null) {
+      setState(() => _loading = false);
+      return;
+    }
     try {
-      final response = await http.get(Uri.parse('${_auth.baseUrl}/api/premium/status?user_id=$uid'));
+      final response = await http.get(
+        Uri.parse('${_auth.baseUrl}/api/premium/status?user_id=$uid'),
+      );
       final data = jsonDecode(response.body);
       if (!mounted) return;
       if (response.statusCode == 200 && data['ok'] == true) {
@@ -68,8 +80,10 @@ class _PremiumScreenState extends State<PremiumScreen> with TickerProviderStateM
           _limits = data['limits'];
         });
       }
-    } catch (_) {}
-    finally { if (mounted) setState(() => _loading = false); }
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   Future<void> _activatePremium() async {
@@ -90,8 +104,14 @@ class _PremiumScreenState extends State<PremiumScreen> with TickerProviderStateM
             Text('선택한 플랜:', style: mainBody(size: 12, color: kMainMuted)),
             const SizedBox(height: 6),
             Text(
-              _selectedPlan == 'yearly' ? '연간 플랜 — ₩19,000 / 년' : '월간 플랜 — ₩1,900 / 월',
-              style: mainBody(size: 16, color: kMainInk, weight: FontWeight.bold),
+              _selectedPlan == 'yearly'
+                  ? '연간 플랜 — ₩19,000 / 년'
+                  : '월간 플랜 — ₩1,900 / 월',
+              style: mainBody(
+                size: 16,
+                color: kMainInk,
+                weight: FontWeight.bold,
+              ),
             ),
             const SizedBox(height: 12),
             Container(
@@ -109,14 +129,22 @@ class _PremiumScreenState extends State<PremiumScreen> with TickerProviderStateM
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('취소', style: mainBody(color: kMainMuted))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('취소', style: mainBody(color: kMainMuted)),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(
               backgroundColor: kMainRose,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
-            child: Text('구독 시작 👑', style: mainBody(color: Colors.white, weight: FontWeight.bold)),
+            child: Text(
+              '구독 시작 👑',
+              style: mainBody(color: Colors.white, weight: FontWeight.bold),
+            ),
           ),
         ],
       ),
@@ -148,11 +176,15 @@ class _PremiumScreenState extends State<PremiumScreen> with TickerProviderStateM
           ),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('구독 활성화에 실패했습니다')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('구독 활성화에 실패했습니다')));
       }
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('네트워크 오류가 발생했습니다')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('네트워크 오류가 발생했습니다')));
     } finally {
       if (mounted) setState(() => _activating = false);
     }
@@ -173,7 +205,10 @@ class _PremiumScreenState extends State<PremiumScreen> with TickerProviderStateM
           style: mainBody(size: 14),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('유지', style: mainBody(color: kMainMuted))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('유지', style: mainBody(color: kMainMuted)),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('취소하기', style: TextStyle(color: Colors.red)),
@@ -191,10 +226,14 @@ class _PremiumScreenState extends State<PremiumScreen> with TickerProviderStateM
       );
       final data = jsonDecode(response.body);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data['message'] ?? '구독이 취소되었어요')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(data['message'] ?? '구독이 취소되었어요')));
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('네트워크 오류가 발생했습니다')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('네트워크 오류가 발생했습니다')));
     }
   }
 
@@ -223,8 +262,16 @@ class _PremiumScreenState extends State<PremiumScreen> with TickerProviderStateM
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
-                            Color.lerp(const Color(0xFFFF6B9D), const Color(0xFFFF8E53), _glowCtrl.value)!,
-                            Color.lerp(const Color(0xFFFF8E53), const Color(0xFFFFD700), _glowCtrl.value)!,
+                            Color.lerp(
+                              const Color(0xFFFF6B9D),
+                              const Color(0xFFFF8E53),
+                              _glowCtrl.value,
+                            )!,
+                            Color.lerp(
+                              const Color(0xFFFF8E53),
+                              const Color(0xFFFFD700),
+                              _glowCtrl.value,
+                            )!,
                           ],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
@@ -232,7 +279,9 @@ class _PremiumScreenState extends State<PremiumScreen> with TickerProviderStateM
                         borderRadius: BorderRadius.circular(24),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFFFF6B9D).withValues(alpha: 0.3 + _glowCtrl.value * 0.2),
+                            color: const Color(
+                              0xFFFF6B9D,
+                            ).withValues(alpha: 0.3 + _glowCtrl.value * 0.2),
                             blurRadius: 20 + _glowCtrl.value * 10,
                             offset: const Offset(0, 6),
                           ),
@@ -243,7 +292,9 @@ class _PremiumScreenState extends State<PremiumScreen> with TickerProviderStateM
                           const Text('👑', style: TextStyle(fontSize: 56)),
                           const SizedBox(height: 10),
                           Text(
-                            _isPremium ? 'Premium 구독 중' : '더 많은 추억을\n비밀기지에 담아보세요',
+                            _isPremium
+                                ? 'Premium 구독 중'
+                                : '더 많은 추억을\n비밀기지에 담아보세요',
                             style: mainTitle(size: 22, color: Colors.white),
                             textAlign: TextAlign.center,
                           ),
@@ -251,12 +302,18 @@ class _PremiumScreenState extends State<PremiumScreen> with TickerProviderStateM
                           if (_isPremium && _premiumExpiresAt != null)
                             Text(
                               '만료일: ${_premiumExpiresAt!.substring(0, 10)}',
-                              style: mainBody(size: 13, color: Colors.white.withValues(alpha: 0.85)),
+                              style: mainBody(
+                                size: 13,
+                                color: Colors.white.withValues(alpha: 0.85),
+                              ),
                             )
                           else
                             Text(
                               '소중한 추억을 더 많이, 더 선명하게',
-                              style: mainBody(size: 14, color: Colors.white.withValues(alpha: 0.85)),
+                              style: mainBody(
+                                size: 14,
+                                color: Colors.white.withValues(alpha: 0.85),
+                              ),
                             ),
                         ],
                       ),
@@ -266,7 +323,10 @@ class _PremiumScreenState extends State<PremiumScreen> with TickerProviderStateM
                   const SizedBox(height: 28),
 
                   // ── 혜택 비교표
-                  Text('무료 vs Premium 혜택 비교', style: mainTitle(size: 17, color: kMainInk)),
+                  Text(
+                    '무료 vs Premium 혜택 비교',
+                    style: mainTitle(size: 17, color: kMainInk),
+                  ),
                   const SizedBox(height: 12),
                   _BenefitTable(limits: _limits),
 
@@ -303,7 +363,9 @@ class _PremiumScreenState extends State<PremiumScreen> with TickerProviderStateM
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: [
                             BoxShadow(
-                              color: kMainRose.withValues(alpha: 0.3 + _glowCtrl.value * 0.25),
+                              color: kMainRose.withValues(
+                                alpha: 0.3 + _glowCtrl.value * 0.25,
+                              ),
                               blurRadius: 16,
                               offset: const Offset(0, 4),
                             ),
@@ -316,13 +378,26 @@ class _PremiumScreenState extends State<PremiumScreen> with TickerProviderStateM
                         style: FilledButton.styleFrom(
                           backgroundColor: kMainRose,
                           padding: const EdgeInsets.symmetric(vertical: 18),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
                         ),
                         child: _activating
-                            ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2.5,
+                                ),
+                              )
                             : Text(
                                 '👑 구독 시작하기 — ${_selectedPlan == 'yearly' ? '₩19,000/년' : '₩1,900/월'}',
-                                style: mainBody(size: 16, color: Colors.white, weight: FontWeight.bold),
+                                style: mainBody(
+                                  size: 16,
+                                  color: Colors.white,
+                                  weight: FontWeight.bold,
+                                ),
                               ),
                       ),
                     ),
@@ -340,28 +415,55 @@ class _PremiumScreenState extends State<PremiumScreen> with TickerProviderStateM
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
                         color: const Color(0xFFFFF9E6),
-                        border: Border.all(color: const Color(0xFFFFD700).withValues(alpha: 0.6)),
+                        border: Border.all(
+                          color: const Color(0xFFFFD700).withValues(alpha: 0.6),
+                        ),
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(children: [
-                            const Text('✅', style: TextStyle(fontSize: 20)),
-                            const SizedBox(width: 8),
-                            Text('구독 중', style: mainBody(size: 14, color: const Color(0xFFB8860B), weight: FontWeight.bold)),
-                          ]),
+                          Row(
+                            children: [
+                              const Text('✅', style: TextStyle(fontSize: 20)),
+                              const SizedBox(width: 8),
+                              Text(
+                                '구독 중',
+                                style: mainBody(
+                                  size: 14,
+                                  color: const Color(0xFFB8860B),
+                                  weight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
                           if (_subscription != null) ...[
                             const SizedBox(height: 10),
-                            _InfoRow('플랜', _subscription!['plan'] == 'yearly' ? '연간 플랜' : '월간 플랜'),
+                            _InfoRow(
+                              '플랜',
+                              _subscription!['plan'] == 'yearly'
+                                  ? '연간 플랜'
+                                  : '월간 플랜',
+                            ),
                             _InfoRow('금액', '₩${_subscription!['amount_krw']}'),
-                            if (_premiumSince != null) _InfoRow('시작일', _premiumSince!.substring(0, 10)),
-                            if (_premiumExpiresAt != null) _InfoRow('만료일', _premiumExpiresAt!.substring(0, 10)),
+                            if (_premiumSince != null)
+                              _InfoRow('시작일', _premiumSince!.substring(0, 10)),
+                            if (_premiumExpiresAt != null)
+                              _InfoRow(
+                                '만료일',
+                                _premiumExpiresAt!.substring(0, 10),
+                              ),
                           ],
                           const SizedBox(height: 14),
                           TextButton(
                             onPressed: _cancelPremium,
-                            child: Text('구독 취소하기', style: mainBody(size: 13, color: Colors.red.shade400)),
+                            child: Text(
+                              '구독 취소하기',
+                              style: mainBody(
+                                size: 13,
+                                color: Colors.red.shade400,
+                              ),
+                            ),
                           ),
                         ],
                       ),
@@ -400,7 +502,9 @@ class _BenefitTable extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: kMainRoseSoft),
-        boxShadow: [BoxShadow(color: kMainRose.withValues(alpha: 0.06), blurRadius: 8)],
+        boxShadow: [
+          BoxShadow(color: kMainRose.withValues(alpha: 0.06), blurRadius: 8),
+        ],
       ),
       child: Column(
         children: [
@@ -409,16 +513,43 @@ class _BenefitTable extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
             decoration: BoxDecoration(
               color: kMainRoseSoft,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(16),
+              ),
             ),
             child: Row(
               children: [
-                Expanded(flex: 3, child: Text('기능', style: mainBody(size: 12, color: kMainRose, weight: FontWeight.bold))),
-                Expanded(flex: 2, child: Center(child: Text('무료', style: mainBody(size: 12, color: kMainInk)))),
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    '기능',
+                    style: mainBody(
+                      size: 12,
+                      color: kMainRose,
+                      weight: FontWeight.bold,
+                    ),
+                  ),
+                ),
                 Expanded(
                   flex: 2,
                   child: Center(
-                    child: Text('👑 Premium', style: mainBody(size: 12, color: kMainRose, weight: FontWeight.bold)),
+                    child: Text(
+                      '무료',
+                      style: mainBody(size: 12, color: kMainInk),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Center(
+                    child: Text(
+                      '👑 Premium',
+                      style: mainBody(
+                        size: 12,
+                        color: kMainRose,
+                        weight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -430,13 +561,43 @@ class _BenefitTable extends StatelessWidget {
             return Container(
               padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 16),
               decoration: BoxDecoration(
-                color: i.isEven ? Colors.white : kMainPaper.withValues(alpha: 0.5),
+                color: i.isEven
+                    ? Colors.white
+                    : kMainPaper.withValues(alpha: 0.5),
               ),
               child: Row(
                 children: [
-                  Expanded(flex: 3, child: Text(row.$1, style: mainBody(size: 12, color: kMainInk))),
-                  Expanded(flex: 2, child: Center(child: Text(row.$2, style: mainBody(size: 12, color: kMainSub), textAlign: TextAlign.center))),
-                  Expanded(flex: 2, child: Center(child: Text(row.$3, style: mainBody(size: 12, color: kMainRose, weight: FontWeight.bold), textAlign: TextAlign.center))),
+                  Expanded(
+                    flex: 3,
+                    child: Text(
+                      row.$1,
+                      style: mainBody(size: 12, color: kMainInk),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Center(
+                      child: Text(
+                        row.$2,
+                        style: mainBody(size: 12, color: kMainSub),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Center(
+                      child: Text(
+                        row.$3,
+                        style: mainBody(
+                          size: 12,
+                          color: kMainRose,
+                          weight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             );
@@ -483,7 +644,13 @@ class _PlanCard extends StatelessWidget {
             width: isSelected ? 2 : 1,
           ),
           boxShadow: isSelected
-              ? [BoxShadow(color: kMainRose.withValues(alpha: 0.15), blurRadius: 12, offset: const Offset(0, 3))]
+              ? [
+                  BoxShadow(
+                    color: kMainRose.withValues(alpha: 0.15),
+                    blurRadius: 12,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
               : [],
         ),
         child: Row(
@@ -494,9 +661,14 @@ class _PlanCard extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: isSelected ? kMainRose : Colors.transparent,
-                border: Border.all(color: isSelected ? kMainRose : kMainMuted, width: 2),
+                border: Border.all(
+                  color: isSelected ? kMainRose : kMainMuted,
+                  width: 2,
+                ),
               ),
-              child: isSelected ? const Icon(Icons.check, size: 13, color: Colors.white) : null,
+              child: isSelected
+                  ? const Icon(Icons.check, size: 13, color: Colors.white)
+                  : null,
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -505,16 +677,33 @@ class _PlanCard extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Text(title, style: mainBody(size: 14, color: kMainInk, weight: FontWeight.bold)),
+                      Text(
+                        title,
+                        style: mainBody(
+                          size: 14,
+                          color: kMainInk,
+                          weight: FontWeight.bold,
+                        ),
+                      ),
                       if (badge != null) ...[
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: const Color(0xFFFFD700),
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: Text(badge!, style: mainBody(size: 10, color: Colors.white, weight: FontWeight.bold)),
+                          child: Text(
+                            badge!,
+                            style: mainBody(
+                              size: 10,
+                              color: Colors.white,
+                              weight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                       ],
                     ],
@@ -527,11 +716,18 @@ class _PlanCard extends StatelessWidget {
                 children: [
                   TextSpan(
                     text: price,
-                    style: mainBody(size: 18, color: kMainInk, weight: FontWeight.bold).copyWith(color: kMainInk),
+                    style: mainBody(
+                      size: 18,
+                      color: kMainInk,
+                      weight: FontWeight.bold,
+                    ).copyWith(color: kMainInk),
                   ),
                   TextSpan(
                     text: period,
-                    style: mainBody(size: 12, color: kMainSub).copyWith(color: kMainSub),
+                    style: mainBody(
+                      size: 12,
+                      color: kMainSub,
+                    ).copyWith(color: kMainSub),
                   ),
                 ],
               ),
@@ -559,7 +755,10 @@ class _InfoRow extends StatelessWidget {
       child: Row(
         children: [
           Text('$label: ', style: mainBody(size: 13, color: kMainSub)),
-          Text(value, style: mainBody(size: 13, color: kMainInk, weight: FontWeight.bold)),
+          Text(
+            value,
+            style: mainBody(size: 13, color: kMainInk, weight: FontWeight.bold),
+          ),
         ],
       ),
     );

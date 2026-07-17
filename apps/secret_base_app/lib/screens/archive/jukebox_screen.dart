@@ -34,7 +34,8 @@ class _JukeboxScreenState extends State<JukeboxScreen> {
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       if (data['ok'] == true) {
         setState(() {
-          _tracks = (data['tracks'] as List?)
+          _tracks =
+              (data['tracks'] as List?)
                   ?.map((e) => Map<String, dynamic>.from(e as Map))
                   .toList() ??
               [];
@@ -60,8 +61,8 @@ class _JukeboxScreenState extends State<JukeboxScreen> {
         reader.readAsArrayBuffer(file);
         reader.onLoad.listen((_) {
           // ignore: avoid_dynamic_calls
-        final jsBuffer = reader.result as dynamic;
-        final bytes = Uint8List.view(jsBuffer as ByteBuffer);
+          final jsBuffer = reader.result as dynamic;
+          final bytes = Uint8List.view(jsBuffer as ByteBuffer);
           setDlg(() => pickedFile = (bytes: bytes, name: file.name));
         });
       });
@@ -72,7 +73,9 @@ class _JukeboxScreenState extends State<JukeboxScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDlg) => AlertDialog(
           backgroundColor: kMainPaper,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           title: Text('트랙 추가', style: mainTitle(size: 22)),
           content: SingleChildScrollView(
             child: Column(
@@ -97,7 +100,9 @@ class _JukeboxScreenState extends State<JukeboxScreen> {
                     child: Row(
                       children: [
                         Icon(
-                          pickedFile != null ? Icons.audio_file : Icons.upload_file,
+                          pickedFile != null
+                              ? Icons.audio_file
+                              : Icons.upload_file,
                           color: pickedFile != null ? kMainSage : kMainMuted,
                           size: 20,
                         ),
@@ -141,11 +146,17 @@ class _JukeboxScreenState extends State<JukeboxScreen> {
                 backgroundColor: kMainPeach,
                 foregroundColor: Colors.white,
                 disabledBackgroundColor: kMainLine,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
               child: Text(
                 '업로드',
-                style: mainBody(size: 14, color: Colors.white, weight: FontWeight.w700),
+                style: mainBody(
+                  size: 14,
+                  color: Colors.white,
+                  weight: FontWeight.w700,
+                ),
               ),
             ),
           ],
@@ -168,7 +179,10 @@ class _JukeboxScreenState extends State<JukeboxScreen> {
         ),
         labelStyle: mainBody(size: 12, color: kMainMuted),
         hintStyle: mainBody(size: 13, color: kMainMuted),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 12,
+        ),
       ),
       style: mainBody(size: 14, color: kMainInk),
     );
@@ -181,12 +195,15 @@ class _JukeboxScreenState extends State<JukeboxScreen> {
     required String artist,
   }) async {
     setState(() => _uploading = true);
-    final userCode = _auth.user?['UserCode'] ?? _auth.user?['userCode'] ?? 'unknown';
+    final userCode =
+        _auth.user?['UserCode'] ?? _auth.user?['userCode'] ?? 'unknown';
     final uri = Uri.parse('${_auth.baseUrl}/api/jukebox');
     final request = http.MultipartRequest('POST', uri)
       ..fields['title'] = title
       ..fields['uploaded_by'] = userCode
-      ..files.add(http.MultipartFile.fromBytes('audio', bytes, filename: fileName));
+      ..files.add(
+        http.MultipartFile.fromBytes('audio', bytes, filename: fileName),
+      );
     if (artist.isNotEmpty) request.fields['artist'] = artist;
     try {
       final response = await request.send();
@@ -225,7 +242,10 @@ class _JukeboxScreenState extends State<JukeboxScreen> {
             ? const SizedBox(
                 width: 24,
                 height: 24,
-                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2,
+                ),
               )
             : const Icon(Icons.add),
       ),
@@ -288,11 +308,18 @@ class _JukeboxScreenState extends State<JukeboxScreen> {
               children: [
                 Text(
                   track['title'] ?? '제목 없음',
-                  style: mainBody(size: 15, color: kMainInk, weight: FontWeight.w700),
+                  style: mainBody(
+                    size: 15,
+                    color: kMainInk,
+                    weight: FontWeight.w700,
+                  ),
                 ),
                 if ((track['artist'] ?? '').isNotEmpty) ...[
                   const SizedBox(height: 2),
-                  Text(track['artist'], style: mainBody(size: 12, color: kMainMuted)),
+                  Text(
+                    track['artist'],
+                    style: mainBody(size: 12, color: kMainMuted),
+                  ),
                 ],
                 if (durStr != null) ...[
                   const SizedBox(height: 2),

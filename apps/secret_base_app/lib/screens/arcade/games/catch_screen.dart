@@ -33,10 +33,7 @@ class _CanvasPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawRect(
-      Offset.zero & size,
-      Paint()..color = Colors.white,
-    );
+    canvas.drawRect(Offset.zero & size, Paint()..color = Colors.white);
     for (final stroke in strokes) {
       if (stroke.pts.isEmpty) continue;
       final paint = Paint()
@@ -51,7 +48,9 @@ class _CanvasPainter extends CustomPainter {
         canvas.drawCircle(
           Offset(pts[0].x * size.width, pts[0].y * size.height),
           stroke.size / 2,
-          Paint()..color = stroke.color..style = PaintingStyle.fill,
+          Paint()
+            ..color = stroke.color
+            ..style = PaintingStyle.fill,
         );
         continue;
       }
@@ -63,7 +62,11 @@ class _CanvasPainter extends CustomPainter {
         final mx = ((prev.x + curr.x) / 2) * size.width;
         final my = ((prev.y + curr.y) / 2) * size.height;
         path.quadraticBezierTo(
-          prev.x * size.width, prev.y * size.height, mx, my);
+          prev.x * size.width,
+          prev.y * size.height,
+          mx,
+          my,
+        );
       }
       canvas.drawPath(path, paint);
     }
@@ -218,7 +221,8 @@ class _CatchScreenState extends State<CatchScreen> {
   }
 
   void _onPanUpdate(DragUpdateDetails d, Size canvasSize) {
-    if (!_isDrawer || _currentStroke == null || _socket.catchPhase != 'drawing') return;
+    if (!_isDrawer || _currentStroke == null || _socket.catchPhase != 'drawing')
+      return;
     final nx = d.localPosition.dx / canvasSize.width;
     final ny = d.localPosition.dy / canvasSize.height;
     setState(() => _currentStroke!.pts.add(_Pt(nx, ny)));
@@ -264,62 +268,67 @@ class _CatchScreenState extends State<CatchScreen> {
     return GameScaffold(
       title: '🎨 캐치마인드',
       actions: [const GameMenuButton()],
-      child: LayoutBuilder(builder: (ctx, box) {
-        final compact = box.maxWidth < 430;
+      child: LayoutBuilder(
+        builder: (ctx, box) {
+          final compact = box.maxWidth < 430;
 
-        // 게임 전 대기
-        if (!sock.catchActive && phase != 'gameover') {
-          return _WaitingView(
-            compact: compact,
-            isHost: _isHost,
-            onStart: () => sock.startCatch(maxRounds: 6),
-          );
-        }
+          // 게임 전 대기
+          if (!sock.catchActive && phase != 'gameover') {
+            return _WaitingView(
+              compact: compact,
+              isHost: _isHost,
+              onStart: () => sock.startCatch(maxRounds: 6),
+            );
+          }
 
-        // 게임 종료
-        if (phase == 'gameover') {
-          return _GameOverView(
+          // 게임 종료
+          if (phase == 'gameover') {
+            return _GameOverView(
+              compact: compact,
+              sock: sock,
+              isHost: _isHost,
+              onReset: sock.resetCatch,
+            );
+          }
+
+          // 라운드 결과
+          if (phase == 'guessed' || phase == 'timeout') {
+            return _RoundResultView(
+              compact: compact,
+              sock: sock,
+              isHost: _isHost,
+              onNext: sock.nextCatchRound,
+            );
+          }
+
+          // 진행 중 (drawing)
+          return _GameView(
             compact: compact,
             sock: sock,
-            isHost: _isHost,
-            onReset: sock.resetCatch,
+            isDrawer: _isDrawer,
+            timeLeft: _timeLeft,
+            myStrokes: _myStrokes,
+            remoteStrokes: _remoteStrokes,
+            colorIdx: _colorIdx,
+            sizeIdx: _sizeIdx,
+            erasing: _erasing,
+            guessCtrl: _guessCtrl,
+            guessFocus: _guessFocus,
+            onColorChanged: (i) => setState(() {
+              _colorIdx = i;
+              _erasing = false;
+            }),
+            onSizeChanged: (i) => setState(() => _sizeIdx = i),
+            onEraseToggle: () => setState(() => _erasing = !_erasing),
+            onClear: _clearCanvas,
+            onPanStart: _onPanStart,
+            onPanUpdate: _onPanUpdate,
+            onPanEnd: _onPanEnd,
+            onGuess: _submitGuess,
+            onHint: sock.requestCatchHint,
           );
-        }
-
-        // 라운드 결과
-        if (phase == 'guessed' || phase == 'timeout') {
-          return _RoundResultView(
-            compact: compact,
-            sock: sock,
-            isHost: _isHost,
-            onNext: sock.nextCatchRound,
-          );
-        }
-
-        // 진행 중 (drawing)
-        return _GameView(
-          compact: compact,
-          sock: sock,
-          isDrawer: _isDrawer,
-          timeLeft: _timeLeft,
-          myStrokes: _myStrokes,
-          remoteStrokes: _remoteStrokes,
-          colorIdx: _colorIdx,
-          sizeIdx: _sizeIdx,
-          erasing: _erasing,
-          guessCtrl: _guessCtrl,
-          guessFocus: _guessFocus,
-          onColorChanged: (i) => setState(() { _colorIdx = i; _erasing = false; }),
-          onSizeChanged: (i) => setState(() => _sizeIdx = i),
-          onEraseToggle: () => setState(() => _erasing = !_erasing),
-          onClear: _clearCanvas,
-          onPanStart: _onPanStart,
-          onPanUpdate: _onPanUpdate,
-          onPanEnd: _onPanEnd,
-          onGuess: _submitGuess,
-          onHint: sock.requestCatchHint,
-        );
-      }),
+        },
+      ),
     );
   }
 }
@@ -331,7 +340,11 @@ class _CatchScreenState extends State<CatchScreen> {
 class _WaitingView extends StatelessWidget {
   final bool compact, isHost;
   final VoidCallback onStart;
-  const _WaitingView({required this.compact, required this.isHost, required this.onStart});
+  const _WaitingView({
+    required this.compact,
+    required this.isHost,
+    required this.onStart,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -355,7 +368,11 @@ class _WaitingView extends StatelessWidget {
             Text(
               '출제자가 그림을 그리면\n정답자가 맞추는 게임!',
               textAlign: TextAlign.center,
-              style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 14, height: 1.5),
+              style: GoogleFonts.notoSans(
+                color: kTextMuted,
+                fontSize: 14,
+                height: 1.5,
+              ),
             ),
             const SizedBox(height: 32),
             if (isHost) ...[
@@ -367,16 +384,29 @@ class _WaitingView extends StatelessWidget {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: kPrimary,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                   ),
-                  child: Text('게임 시작!',
-                      style: GoogleFonts.notoSans(fontSize: 16, fontWeight: FontWeight.w800)),
+                  child: Text(
+                    '게임 시작!',
+                    style: GoogleFonts.notoSans(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 10),
-              Text('6라운드 진행 (3 + 3턴)', style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 12)),
+              Text(
+                '6라운드 진행 (3 + 3턴)',
+                style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 12),
+              ),
             ] else
-              Text('방장이 시작하길 기다려요...', style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 14)),
+              Text(
+                '방장이 시작하길 기다려요...',
+                style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 14),
+              ),
           ],
         ),
       ),
@@ -458,17 +488,25 @@ class _GameView extends StatelessWidget {
           Text(
             'R$round/$maxRounds',
             style: GoogleFonts.notoSans(
-              color: kTextMuted, fontSize: 11, fontWeight: FontWeight.w700),
+              color: kTextMuted,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: isDrawer
                 ? Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: kPrimary.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: kPrimary.withValues(alpha: 0.3)),
+                      border: Border.all(
+                        color: kPrimary.withValues(alpha: 0.3),
+                      ),
                     ),
                     child: Text(
                       '단어: $word',
@@ -497,7 +535,10 @@ class _GameView extends StatelessWidget {
                       ),
                       Text(
                         '$wordLen 글자  •  $drawerName 이(가) 그리는 중',
-                        style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 10),
+                        style: GoogleFonts.notoSans(
+                          color: kTextMuted,
+                          fontSize: 10,
+                        ),
                       ),
                     ],
                   ),
@@ -511,19 +552,21 @@ class _GameView extends StatelessWidget {
 
     // Canvas area
     final strokes = isDrawer ? myStrokes : remoteStrokes;
-    final canvas = LayoutBuilder(builder: (_, box) {
-      final size = Size(box.maxWidth, box.maxHeight);
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onPanStart: isDrawer ? (d) => onPanStart(d, size) : null,
-        onPanUpdate: isDrawer ? (d) => onPanUpdate(d, size) : null,
-        onPanEnd: isDrawer ? onPanEnd : null,
-        child: CustomPaint(
-          size: size,
-          painter: _CanvasPainter(List.of(strokes)),
-        ),
-      );
-    });
+    final canvas = LayoutBuilder(
+      builder: (_, box) {
+        final size = Size(box.maxWidth, box.maxHeight);
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onPanStart: isDrawer ? (d) => onPanStart(d, size) : null,
+          onPanUpdate: isDrawer ? (d) => onPanUpdate(d, size) : null,
+          onPanEnd: isDrawer ? onPanEnd : null,
+          child: CustomPaint(
+            size: size,
+            painter: _CanvasPainter(List.of(strokes)),
+          ),
+        );
+      },
+    );
 
     // Bottom: tools (drawer) or guess input (guesser)
     final bottom = isDrawer
@@ -557,12 +600,11 @@ class _GameView extends StatelessWidget {
         Expanded(
           child: Stack(
             children: [
-              Positioned.fill(
-                bottom: bottomHeight,
-                child: canvas,
-              ),
+              Positioned.fill(bottom: bottomHeight, child: canvas),
               Positioned(
-                left: 0, right: 0, bottom: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
                 height: bottomHeight,
                 child: bottom,
               ),
@@ -636,7 +678,9 @@ class _DrawerTools extends StatelessWidget {
     final dotSz = compact ? 28.0 : 32.0;
     return Container(
       padding: EdgeInsets.symmetric(
-        horizontal: compact ? 10 : 16, vertical: compact ? 8 : 10),
+        horizontal: compact ? 10 : 16,
+        vertical: compact ? 8 : 10,
+      ),
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(top: BorderSide(color: Color(0xFFEEEEEE))),
@@ -666,7 +710,12 @@ class _DrawerTools extends StatelessWidget {
                         width: 2.5,
                       ),
                       boxShadow: (!erasing && colorIdx == i)
-                          ? [BoxShadow(color: kPrimary.withValues(alpha: 0.4), blurRadius: 6)]
+                          ? [
+                              BoxShadow(
+                                color: kPrimary.withValues(alpha: 0.4),
+                                blurRadius: 6,
+                              ),
+                            ]
                           : null,
                     ),
                   ),
@@ -696,12 +745,16 @@ class _DrawerTools extends StatelessWidget {
                       ),
                     ),
                     child: Center(
-                      child: Text(sizeLabels[i],
-                          style: GoogleFonts.notoSans(
-                            color: (!erasing && sizeIdx == i) ? kPrimary : kTextMuted,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          )),
+                      child: Text(
+                        sizeLabels[i],
+                        style: GoogleFonts.notoSans(
+                          color: (!erasing && sizeIdx == i)
+                              ? kPrimary
+                              : kTextMuted,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -719,7 +772,10 @@ class _DrawerTools extends StatelessWidget {
                     border: Border.all(color: erasing ? kError : kBorder),
                   ),
                   child: Center(
-                    child: Text('🧹', style: TextStyle(fontSize: compact ? 14 : 16)),
+                    child: Text(
+                      '🧹',
+                      style: TextStyle(fontSize: compact ? 14 : 16),
+                    ),
                   ),
                 ),
               ),
@@ -736,7 +792,10 @@ class _DrawerTools extends StatelessWidget {
                     border: Border.all(color: kBorder),
                   ),
                   child: Center(
-                    child: Text('🗑️', style: TextStyle(fontSize: compact ? 14 : 16)),
+                    child: Text(
+                      '🗑️',
+                      style: TextStyle(fontSize: compact ? 14 : 16),
+                    ),
                   ),
                 ),
               ),
@@ -786,13 +845,19 @@ class _GuessPanel extends StatelessWidget {
               height: 36,
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 itemCount: guessLog.length,
                 itemBuilder: (_, i) {
                   final item = guessLog[i];
                   return Container(
                     margin: const EdgeInsets.only(right: 6),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: kCard,
                       borderRadius: BorderRadius.circular(10),
@@ -800,7 +865,10 @@ class _GuessPanel extends StatelessWidget {
                     ),
                     child: Text(
                       '${item['text']}',
-                      style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 11),
+                      style: GoogleFonts.notoSans(
+                        color: kTextMuted,
+                        fontSize: 11,
+                      ),
                     ),
                   );
                 },
@@ -824,7 +892,9 @@ class _GuessPanel extends StatelessWidget {
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: kGold.withValues(alpha: 0.5)),
                       ),
-                      child: const Center(child: Text('💡', style: TextStyle(fontSize: 18))),
+                      child: const Center(
+                        child: Text('💡', style: TextStyle(fontSize: 18)),
+                      ),
                     ),
                   ),
                 // Text field
@@ -837,8 +907,14 @@ class _GuessPanel extends StatelessWidget {
                     style: GoogleFonts.notoSans(fontSize: 14),
                     decoration: InputDecoration(
                       hintText: '정답 입력...',
-                      hintStyle: GoogleFonts.notoSans(color: kTextMuted, fontSize: 13),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      hintStyle: GoogleFonts.notoSans(
+                        color: kTextMuted,
+                        fontSize: 13,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
                         borderSide: const BorderSide(color: Color(0xFFDDDDDD)),
@@ -865,7 +941,11 @@ class _GuessPanel extends StatelessWidget {
                       color: kPrimary,
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    child: const Icon(Icons.send, color: Colors.white, size: 20),
+                    child: const Icon(
+                      Icons.send,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                   ),
                 ),
               ],
@@ -940,15 +1020,19 @@ class _RoundResultView extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               _ScorePill(
-                label: sock.nameOf(userId).isNotEmpty ? sock.nameOf(userId) : '나',
+                label: sock.nameOf(userId).isNotEmpty
+                    ? sock.nameOf(userId)
+                    : '나',
                 score: myScore,
                 isMe: true,
                 compact: compact,
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Text('vs',
-                    style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 16)),
+                child: Text(
+                  'vs',
+                  style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 16),
+                ),
               ),
               _ScorePill(
                 label: sock.nameOf(opId).isNotEmpty ? sock.nameOf(opId) : '상대',
@@ -965,15 +1049,27 @@ class _RoundResultView extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: kPrimary,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 14,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
               ),
-              child: Text('다음 라운드 →',
-                  style: GoogleFonts.notoSans(fontSize: 15, fontWeight: FontWeight.w800)),
+              child: Text(
+                '다음 라운드 →',
+                style: GoogleFonts.notoSans(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
             )
           else
-            Text('방장이 다음 라운드를 시작하길 기다려요',
-                style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 13)),
+            Text(
+              '방장이 다음 라운드를 시작하길 기다려요',
+              style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 13),
+            ),
         ],
       ),
     );
@@ -984,18 +1080,33 @@ class _ScorePill extends StatelessWidget {
   final String label;
   final int score;
   final bool isMe, compact;
-  const _ScorePill({required this.label, required this.score, required this.isMe, required this.compact});
+  const _ScorePill({
+    required this.label,
+    required this.score,
+    required this.isMe,
+    required this.compact,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(label,
-            style: GoogleFonts.notoSans(
-                color: isMe ? kPrimary : kAccent, fontSize: 12, fontWeight: FontWeight.w700)),
-        Text('$score',
-            style: GoogleFonts.notoSans(
-                color: kText, fontSize: compact ? 36 : 44, fontWeight: FontWeight.w900)),
+        Text(
+          label,
+          style: GoogleFonts.notoSans(
+            color: isMe ? kPrimary : kAccent,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        Text(
+          '$score',
+          style: GoogleFonts.notoSans(
+            color: kText,
+            fontSize: compact ? 36 : 44,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
         Text('점', style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 11)),
       ],
     );
@@ -1012,7 +1123,12 @@ class _GameOverView extends StatelessWidget {
   final bool isHost;
   final VoidCallback onReset;
 
-  const _GameOverView({required this.compact, required this.sock, required this.isHost, required this.onReset});
+  const _GameOverView({
+    required this.compact,
+    required this.sock,
+    required this.isHost,
+    required this.onReset,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1041,14 +1157,19 @@ class _GameOverView extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               _ScorePill(
-                label: sock.nameOf(userId).isNotEmpty ? sock.nameOf(userId) : '나',
+                label: sock.nameOf(userId).isNotEmpty
+                    ? sock.nameOf(userId)
+                    : '나',
                 score: sock.catchScores[userId] ?? 0,
                 isMe: true,
                 compact: compact,
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Text('vs', style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 18)),
+                child: Text(
+                  'vs',
+                  style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 18),
+                ),
               ),
               _ScorePill(
                 label: sock.nameOf(opId).isNotEmpty ? sock.nameOf(opId) : '상대',
@@ -1067,13 +1188,20 @@ class _GameOverView extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: kPrimary,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 28,
+                  vertical: 14,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
               ),
             )
           else
-            Text('방장이 다시 시작하길 기다려요',
-                style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 13)),
+            Text(
+              '방장이 다시 시작하길 기다려요',
+              style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 13),
+            ),
         ],
       ),
     );

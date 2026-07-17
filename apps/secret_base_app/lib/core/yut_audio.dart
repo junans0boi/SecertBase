@@ -1,7 +1,8 @@
 import 'dart:math';
 
 import 'yut_audio_stub.dart'
-    if (dart.library.html) 'yut_audio_web.dart' as impl;
+    if (dart.library.html) 'yut_audio_web.dart'
+    as impl;
 
 class YutAudio {
   YutAudio._();

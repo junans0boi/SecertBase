@@ -55,9 +55,9 @@ class _PirateScreenState extends State<PirateScreen>
 
   void _startGame() {
     if (_socket.presenceUsers.length < 2) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('상대방이 접속해야 시작할 수 있어요')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('상대방이 접속해야 시작할 수 있어요')));
       return;
     }
     _explodeShown = false;
@@ -77,8 +77,7 @@ class _PirateScreenState extends State<PirateScreen>
   }
 
   bool get _isMyTurn =>
-      _socket.pirateActive &&
-      _socket.pirateCurrentTurn == _socket.userId;
+      _socket.pirateActive && _socket.pirateCurrentTurn == _socket.userId;
 
   @override
   Widget build(BuildContext context) {
@@ -109,8 +108,8 @@ class _PirateScreenState extends State<PirateScreen>
     );
   }
 
-  bool get _isHost => _socket.userId != null &&
-      _socket.lobbyHost == _socket.userId;
+  bool get _isHost =>
+      _socket.userId != null && _socket.lobbyHost == _socket.userId;
 
   // ── Setup Phase ──────────────────────────────────────────────────────────
 
@@ -301,22 +300,20 @@ class _PirateScreenState extends State<PirateScreen>
         vertical: compact ? 10 : 12,
       ),
       decoration: BoxDecoration(
-        color: isMyTurn
-            ? const Color(0xFFFFEDD5)
-            : const Color(0xFFF0F0F0),
+        color: isMyTurn ? const Color(0xFFFFEDD5) : const Color(0xFFF0F0F0),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: isMyTurn
-              ? const Color(0xFFCC4F2A)
-              : const Color(0xFFCCCCCC),
+          color: isMyTurn ? const Color(0xFFCC4F2A) : const Color(0xFFCCCCCC),
           width: isMyTurn ? 2 : 1,
         ),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(isMyTurn ? '⚔️' : '⏳',
-              style: TextStyle(fontSize: compact ? 18 : 20)),
+          Text(
+            isMyTurn ? '⚔️' : '⏳',
+            style: TextStyle(fontSize: compact ? 18 : 20),
+          ),
           const SizedBox(width: 8),
           Flexible(
             child: Text(
@@ -521,10 +518,7 @@ class _HoleWidget extends StatelessWidget {
         decoration: BoxDecoration(
           color: bg,
           shape: BoxShape.circle,
-          border: Border.all(
-            color: border,
-            width: canTap ? 2.5 : 1.5,
-          ),
+          border: Border.all(color: border, width: canTap ? 2.5 : 1.5),
           boxShadow: canTap
               ? [
                   BoxShadow(
@@ -579,10 +573,7 @@ class _PirateBarrelWidget extends StatelessWidget {
       width: size,
       height: size * 1.2,
       child: CustomPaint(
-        painter: _PirateBarrelPainter(
-          state: state,
-          piratePop: piratePop,
-        ),
+        painter: _PirateBarrelPainter(state: state, piratePop: piratePop),
       ),
     );
   }
@@ -606,8 +597,14 @@ class _PirateBarrelPainter extends CustomPainter {
     _drawPirate(canvas, cx, barrelTop, barrelW, size);
   }
 
-  void _drawBarrel(Canvas canvas, double cx, double barrelTop,
-      double barrelBottom, double barrelW, Size size) {
+  void _drawBarrel(
+    Canvas canvas,
+    double cx,
+    double barrelTop,
+    double barrelBottom,
+    double barrelW,
+    Size size,
+  ) {
     final barrelH = barrelBottom - barrelTop;
 
     // Barrel body (slightly wider at middle)
@@ -616,12 +613,18 @@ class _PirateBarrelPainter extends CustomPainter {
     final right = cx + barrelW / 2;
     bodyPath.moveTo(left + barrelW * 0.06, barrelTop);
     bodyPath.quadraticBezierTo(
-        left - barrelW * 0.04, barrelTop + barrelH * 0.5,
-        left + barrelW * 0.06, barrelBottom);
+      left - barrelW * 0.04,
+      barrelTop + barrelH * 0.5,
+      left + barrelW * 0.06,
+      barrelBottom,
+    );
     bodyPath.lineTo(right - barrelW * 0.06, barrelBottom);
     bodyPath.quadraticBezierTo(
-        right + barrelW * 0.04, barrelTop + barrelH * 0.5,
-        right - barrelW * 0.06, barrelTop);
+      right + barrelW * 0.04,
+      barrelTop + barrelH * 0.5,
+      right - barrelW * 0.06,
+      barrelTop,
+    );
     bodyPath.close();
 
     // Shadow
@@ -632,16 +635,19 @@ class _PirateBarrelPainter extends CustomPainter {
 
     // Main body fill
     final woodGrad = Paint()
-      ..shader = LinearGradient(
-        colors: const [
-          Color(0xFF8B4A12),
-          Color(0xFFC27830),
-          Color(0xFF8B4A12),
-        ],
-        stops: const [0.0, 0.5, 1.0],
-        begin: Alignment.centerLeft,
-        end: Alignment.centerRight,
-      ).createShader(Rect.fromLTWH(cx - barrelW / 2, barrelTop, barrelW, barrelH));
+      ..shader =
+          LinearGradient(
+            colors: const [
+              Color(0xFF8B4A12),
+              Color(0xFFC27830),
+              Color(0xFF8B4A12),
+            ],
+            stops: const [0.0, 0.5, 1.0],
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ).createShader(
+            Rect.fromLTWH(cx - barrelW / 2, barrelTop, barrelW, barrelH),
+          );
     canvas.drawPath(bodyPath, woodGrad);
 
     // Wood grain lines
@@ -681,24 +687,31 @@ class _PirateBarrelPainter extends CustomPainter {
       ..style = PaintingStyle.stroke;
     canvas.drawOval(
       Rect.fromCenter(
-          center: Offset(cx, barrelTop),
-          width: barrelW * 0.88,
-          height: barrelW * 0.22),
+        center: Offset(cx, barrelTop),
+        width: barrelW * 0.88,
+        height: barrelW * 0.22,
+      ),
       rimPaint,
     );
     canvas.drawOval(
       Rect.fromCenter(
-          center: Offset(cx, barrelTop),
-          width: barrelW * 0.88,
-          height: barrelW * 0.22),
+        center: Offset(cx, barrelTop),
+        width: barrelW * 0.88,
+        height: barrelW * 0.22,
+      ),
       Paint()
         ..color = const Color(0xFF3A2010)
         ..style = PaintingStyle.fill,
     );
   }
 
-  void _drawPirate(Canvas canvas, double cx, double barrelTop, double barrelW,
-      Size size) {
+  void _drawPirate(
+    Canvas canvas,
+    double cx,
+    double barrelTop,
+    double barrelW,
+    Size size,
+  ) {
     // Pop offset: calm = slightly inside barrel, nervous = head at rim, exploded = flying
     double popY;
     if (state == _BarrelState.exploded) {
@@ -716,16 +729,14 @@ class _PirateBarrelPainter extends CustomPainter {
     // ── Bandana (behind head) ──
     final bandanaPath = Path()
       ..addOval(Rect.fromCircle(center: headCenter, radius: headR * 1.05));
-    canvas.drawPath(
-      bandanaPath,
-      Paint()..color = const Color(0xFFCC2222),
-    );
+    canvas.drawPath(bandanaPath, Paint()..color = const Color(0xFFCC2222));
     // Bandana knot on right
     canvas.drawOval(
       Rect.fromCenter(
-          center: headCenter.translate(headR * 0.92, -headR * 0.15),
-          width: headR * 0.48,
-          height: headR * 0.3),
+        center: headCenter.translate(headR * 0.92, -headR * 0.15),
+        width: headR * 0.48,
+        height: headR * 0.3,
+      ),
       Paint()..color = const Color(0xFFAA1515),
     );
 
@@ -733,9 +744,10 @@ class _PirateBarrelPainter extends CustomPainter {
     final skullPaint = Paint()..color = Colors.white.withOpacity(0.85);
     canvas.drawOval(
       Rect.fromCenter(
-          center: headCenter.translate(-headR * 0.38, -headR * 0.45),
-          width: headR * 0.32,
-          height: headR * 0.28),
+        center: headCenter.translate(-headR * 0.38, -headR * 0.45),
+        width: headR * 0.32,
+        height: headR * 0.28,
+      ),
       skullPaint,
     );
     // Crossbones on bandana (simplified)
@@ -859,7 +871,11 @@ class _PirateBarrelPainter extends CustomPainter {
   }
 
   void _drawExplosionStars(
-      Canvas canvas, Offset center, double headR, double pop) {
+    Canvas canvas,
+    Offset center,
+    double headR,
+    double pop,
+  ) {
     final starPaint = Paint()..color = const Color(0xFFFFCC00);
     final angles = [0.0, pi / 3, 2 * pi / 3, pi, 4 * pi / 3, 5 * pi / 3];
     final r = headR * 1.6 * pop;

@@ -42,10 +42,16 @@ class _AlbumScreenState extends State<AlbumScreen> {
   Future<void> _loadFolders() async {
     final uid = _userId;
     if (uid == null) {
-      setState(() { _loading = false; _error = '로그인 정보가 없어요'; });
+      setState(() {
+        _loading = false;
+        _error = '로그인 정보가 없어요';
+      });
       return;
     }
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final response = await http.get(
         Uri.parse('${_auth.baseUrl}/api/album/folders?user_id=$uid'),
@@ -74,7 +80,11 @@ class _AlbumScreenState extends State<AlbumScreen> {
       final response = await http.post(
         Uri.parse('${_auth.baseUrl}/api/album/folders'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'user_id': uid, 'title': title.trim(), 'description': desc?.trim()}),
+        body: jsonEncode({
+          'user_id': uid,
+          'title': title.trim(),
+          'description': desc?.trim(),
+        }),
       );
       final data = jsonDecode(response.body);
       if (!mounted) return;
@@ -85,28 +95,38 @@ class _AlbumScreenState extends State<AlbumScreen> {
         if (reason == 'folder_limit_exceeded') {
           _showPremiumDialog(data['message'] ?? '폴더 생성 한도를 초과했습니다.');
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('앨범 폴더를 만들지 못했어요')));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('앨범 폴더를 만들지 못했어요')));
         }
       }
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('네트워크 오류가 발생했습니다')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('네트워크 오류가 발생했습니다')));
     }
   }
 
   Future<void> _deleteFolder(int folderId) async {
     try {
-      final response = await http.delete(Uri.parse('${_auth.baseUrl}/api/album/folders/$folderId'));
+      final response = await http.delete(
+        Uri.parse('${_auth.baseUrl}/api/album/folders/$folderId'),
+      );
       final data = jsonDecode(response.body);
       if (!mounted) return;
       if (response.statusCode == 200 && data['ok'] == true) {
         _loadFolders();
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('폴더 삭제에 실패했습니다')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('폴더 삭제에 실패했습니다')));
       }
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('네트워크 오류가 발생했습니다')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('네트워크 오류가 발생했습니다')));
     }
   }
 
@@ -129,7 +149,9 @@ class _AlbumScreenState extends State<AlbumScreen> {
               decoration: InputDecoration(
                 hintText: '폴더 이름 (예: 오이도 여행 🐚)',
                 hintStyle: mainBody(size: 13, color: kMainMuted),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: const BorderSide(color: kMainRose, width: 1.5),
@@ -144,7 +166,9 @@ class _AlbumScreenState extends State<AlbumScreen> {
               decoration: InputDecoration(
                 hintText: '한 줄 설명 (선택)',
                 hintStyle: mainBody(size: 12, color: kMainMuted),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: const BorderSide(color: kMainRose, width: 1.5),
@@ -154,7 +178,10 @@ class _AlbumScreenState extends State<AlbumScreen> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('취소', style: mainBody(color: kMainMuted))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('취소', style: mainBody(color: kMainMuted)),
+          ),
           FilledButton(
             onPressed: () {
               Navigator.pop(ctx);
@@ -162,9 +189,14 @@ class _AlbumScreenState extends State<AlbumScreen> {
             },
             style: FilledButton.styleFrom(
               backgroundColor: kMainRose,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
-            child: Text('만들기', style: mainBody(color: Colors.white, weight: FontWeight.bold)),
+            child: Text(
+              '만들기',
+              style: mainBody(color: Colors.white, weight: FontWeight.bold),
+            ),
           ),
         ],
       ),
@@ -177,28 +209,56 @@ class _AlbumScreenState extends State<AlbumScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: kMainPaper,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Row(children: [
-          const Text('👑', style: TextStyle(fontSize: 24)),
-          const SizedBox(width: 8),
-          Text('비밀기지 Premium', style: mainTitle(size: 18, color: kMainInk)),
-        ]),
+        title: Row(
+          children: [
+            const Text('👑', style: TextStyle(fontSize: 24)),
+            const SizedBox(width: 8),
+            Text('비밀기지 Premium', style: mainTitle(size: 18, color: kMainInk)),
+          ],
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(message, style: mainBody(size: 14, color: kMainInk, weight: FontWeight.bold)),
+            Text(
+              message,
+              style: mainBody(
+                size: 14,
+                color: kMainInk,
+                weight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 12),
-            Text('Premium으로 업그레이드하면:\n• 폴더 최대 100개\n• 폴더당 각자 50장\n• 2K 고화질 원본 보관',
-              style: mainBody(size: 12, color: kMainSub)),
+            Text(
+              'Premium으로 업그레이드하면:\n• 폴더 최대 100개\n• 폴더당 각자 50장\n• 2K 고화질 원본 보관',
+              style: mainBody(size: 12, color: kMainSub),
+            ),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(color: kMainRoseSoft, borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(
+                color: kMainRoseSoft,
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('월간 플랜', style: mainBody(size: 12, color: kMainRose, weight: FontWeight.bold)),
-                  Text('₩1,900 / 월', style: mainBody(size: 13, color: kMainInk, weight: FontWeight.bold)),
+                  Text(
+                    '월간 플랜',
+                    style: mainBody(
+                      size: 12,
+                      color: kMainRose,
+                      weight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    '₩1,900 / 월',
+                    style: mainBody(
+                      size: 13,
+                      color: kMainInk,
+                      weight: FontWeight.bold,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -208,30 +268,57 @@ class _AlbumScreenState extends State<AlbumScreen> {
               decoration: BoxDecoration(
                 color: const Color(0xFFFFD700).withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFFFD700).withValues(alpha: 0.4)),
+                border: Border.all(
+                  color: const Color(0xFFFFD700).withValues(alpha: 0.4),
+                ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('연간 플랜 (17% 할인)', style: mainBody(size: 12, color: const Color(0xFFB8860B), weight: FontWeight.bold)),
-                  Text('₩19,000 / 년', style: mainBody(size: 13, color: kMainInk, weight: FontWeight.bold)),
+                  Text(
+                    '연간 플랜 (17% 할인)',
+                    style: mainBody(
+                      size: 12,
+                      color: const Color(0xFFB8860B),
+                      weight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    '₩19,000 / 년',
+                    style: mainBody(
+                      size: 13,
+                      color: kMainInk,
+                      weight: FontWeight.bold,
+                    ),
+                  ),
                 ],
               ),
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('나중에', style: mainBody(color: kMainMuted))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('나중에', style: mainBody(color: kMainMuted)),
+          ),
           FilledButton(
             onPressed: () {
               Navigator.pop(ctx);
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const PremiumScreen()));
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PremiumScreen()),
+              );
             },
             style: FilledButton.styleFrom(
               backgroundColor: kMainRose,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
-            child: Text('구독하기 👑', style: mainBody(color: Colors.white, weight: FontWeight.bold)),
+            child: Text(
+              '구독하기 👑',
+              style: mainBody(color: Colors.white, weight: FontWeight.bold),
+            ),
           ),
         ],
       ),
@@ -252,10 +339,19 @@ class _AlbumScreenState extends State<AlbumScreen> {
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(colors: [Color(0xFFFFD700), Color(0xFFFF8C00)]),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFFD700), Color(0xFFFF8C00)],
+                ),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Text('👑 Premium', style: mainBody(size: 11, color: Colors.white, weight: FontWeight.bold)),
+              child: Text(
+                '👑 Premium',
+                style: mainBody(
+                  size: 11,
+                  color: Colors.white,
+                  weight: FontWeight.bold,
+                ),
+              ),
             ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: kMainInk),
@@ -266,117 +362,165 @@ class _AlbumScreenState extends State<AlbumScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: kMainRose))
           : _error != null
-              ? Center(child: Text(_error!, style: mainBody(color: kMainSub)))
-              : RefreshIndicator(
-                  color: kMainRose,
-                  onRefresh: _loadFolders,
-                  child: CustomScrollView(
-                    slivers: [
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                '${_folders.length} / $_folderLimit 폴더',
-                                style: mainBody(size: 13, color: kMainSub),
-                              ),
-                              if (!_isPremium)
-                                GestureDetector(
-                                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PremiumScreen())).then((_) => _loadFolders()),
-                                  child: Text('👑 업그레이드', style: mainBody(size: 12, color: kMainRose, weight: FontWeight.bold)),
+          ? Center(
+              child: Text(_error!, style: mainBody(color: kMainSub)),
+            )
+          : RefreshIndicator(
+              color: kMainRose,
+              onRefresh: _loadFolders,
+              child: CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '${_folders.length} / $_folderLimit 폴더',
+                            style: mainBody(size: 13, color: kMainSub),
+                          ),
+                          if (!_isPremium)
+                            GestureDetector(
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const PremiumScreen(),
                                 ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-                          child: LinearProgressIndicator(
-                            value: _folderLimit > 0 ? (_folders.length / _folderLimit).clamp(0.0, 1.0) : 0,
-                            backgroundColor: kMainRoseSoft,
-                            color: _folders.length >= _folderLimit ? Colors.red : kMainRose,
-                            minHeight: 4,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
-                      ),
-                      const SliverToBoxAdapter(child: SizedBox(height: 16)),
-                      _folders.isEmpty
-                          ? SliverFillRemaining(
-                              child: Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Text('📂', style: TextStyle(fontSize: 64)),
-                                    const SizedBox(height: 16),
-                                    Text('아직 추억 폴더가 없어요', style: mainTitle(size: 18, color: kMainInk)),
-                                    const SizedBox(height: 8),
-                                    Text('첫 번째 추억 폴더를 만들어 보세요!', style: mainBody(size: 14, color: kMainSub)),
-                                  ],
+                              ).then((_) => _loadFolders()),
+                              child: Text(
+                                '👑 업그레이드',
+                                style: mainBody(
+                                  size: 12,
+                                  color: kMainRose,
+                                  weight: FontWeight.bold,
                                 ),
                               ),
-                            )
-                          : SliverPadding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
-                              sliver: SliverGrid(
-                                delegate: SliverChildBuilderDelegate(
-                                  (ctx, i) {
-                                    final folder = _folders[i];
-                                    return _FolderCard(
-                                      folder: folder,
-                                      baseUrl: _auth.baseUrl,
-                                      onTap: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) => AlbumFolderDetailScreen(
-                                              folderId: folder['id'],
-                                              folderTitle: folder['title'] ?? '추억 폴더',
-                                              isPremium: _isPremium,
-                                            ),
-                                          ),
-                                        ).then((_) => _loadFolders());
-                                      },
-                                      onDelete: () => showDialog(
-                                        context: context,
-                                        builder: (c) => AlertDialog(
-                                          backgroundColor: kMainPaper,
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                                          title: Text('폴더 삭제', style: mainTitle(size: 18)),
-                                          content: Text('"${folder['title']}" 폴더와 안에 있는 사진이 모두 삭제됩니다.', style: mainBody()),
-                                          actions: [
-                                            TextButton(onPressed: () => Navigator.pop(c), child: Text('취소', style: mainBody(color: kMainMuted))),
-                                            TextButton(
-                                              onPressed: () { _deleteFolder(folder['id']); Navigator.pop(c); },
-                                              child: const Text('삭제', style: TextStyle(color: Colors.red)),
-                                            ),
-                                          ],
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                      child: LinearProgressIndicator(
+                        value: _folderLimit > 0
+                            ? (_folders.length / _folderLimit).clamp(0.0, 1.0)
+                            : 0,
+                        backgroundColor: kMainRoseSoft,
+                        color: _folders.length >= _folderLimit
+                            ? Colors.red
+                            : kMainRose,
+                        minHeight: 4,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 16)),
+                  _folders.isEmpty
+                      ? SliverFillRemaining(
+                          child: Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Text(
+                                  '📂',
+                                  style: TextStyle(fontSize: 64),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  '아직 추억 폴더가 없어요',
+                                  style: mainTitle(size: 18, color: kMainInk),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  '첫 번째 추억 폴더를 만들어 보세요!',
+                                  style: mainBody(size: 14, color: kMainSub),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : SliverPadding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          sliver: SliverGrid(
+                            delegate: SliverChildBuilderDelegate((ctx, i) {
+                              final folder = _folders[i];
+                              return _FolderCard(
+                                folder: folder,
+                                baseUrl: _auth.baseUrl,
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => AlbumFolderDetailScreen(
+                                        folderId: folder['id'],
+                                        folderTitle: folder['title'] ?? '추억 폴더',
+                                        isPremium: _isPremium,
+                                      ),
+                                    ),
+                                  ).then((_) => _loadFolders());
+                                },
+                                onDelete: () => showDialog(
+                                  context: context,
+                                  builder: (c) => AlertDialog(
+                                    backgroundColor: kMainPaper,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    title: Text(
+                                      '폴더 삭제',
+                                      style: mainTitle(size: 18),
+                                    ),
+                                    content: Text(
+                                      '"${folder['title']}" 폴더와 안에 있는 사진이 모두 삭제됩니다.',
+                                      style: mainBody(),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(c),
+                                        child: Text(
+                                          '취소',
+                                          style: mainBody(color: kMainMuted),
                                         ),
                                       ),
-                                    );
-                                  },
-                                  childCount: _folders.length,
+                                      TextButton(
+                                        onPressed: () {
+                                          _deleteFolder(folder['id']);
+                                          Navigator.pop(c);
+                                        },
+                                        child: const Text(
+                                          '삭제',
+                                          style: TextStyle(color: Colors.red),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                              );
+                            }, childCount: _folders.length),
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
                                   crossAxisCount: 2,
                                   mainAxisSpacing: 14,
                                   crossAxisSpacing: 14,
                                   childAspectRatio: 0.85,
                                 ),
-                              ),
-                            ),
-                      const SliverToBoxAdapter(child: SizedBox(height: 100)),
-                    ],
-                  ),
-                ),
+                          ),
+                        ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 100)),
+                ],
+              ),
+            ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showCreateDialog,
         backgroundColor: kMainRose,
         icon: const Icon(Icons.add_rounded, color: Colors.white),
-        label: Text('새 폴더', style: mainBody(color: Colors.white, weight: FontWeight.bold)),
+        label: Text(
+          '새 폴더',
+          style: mainBody(color: Colors.white, weight: FontWeight.bold),
+        ),
       ),
     );
   }
@@ -402,7 +546,9 @@ class _FolderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final coverUrl = folder['cover_url'];
-    final hasDescription = folder['description'] != null && (folder['description'] as String).isNotEmpty;
+    final hasDescription =
+        folder['description'] != null &&
+        (folder['description'] as String).isNotEmpty;
 
     return GestureDetector(
       onTap: onTap,
@@ -415,7 +561,9 @@ class _FolderCard extends StatelessWidget {
           children: [
             Expanded(
               child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(20),
+                ),
                 child: coverUrl != null
                     ? Image.network(
                         '$baseUrl$coverUrl',
@@ -428,7 +576,9 @@ class _FolderCard extends StatelessWidget {
             Container(
               decoration: const BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
+                borderRadius: BorderRadius.vertical(
+                  bottom: Radius.circular(20),
+                ),
               ),
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
               child: Column(
@@ -437,7 +587,11 @@ class _FolderCard extends StatelessWidget {
                 children: [
                   Text(
                     folder['title'] ?? '추억 폴더',
-                    style: mainBody(size: 14, color: kMainInk, weight: FontWeight.bold),
+                    style: mainBody(
+                      size: 14,
+                      color: kMainInk,
+                      weight: FontWeight.bold,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -493,7 +647,8 @@ class AlbumFolderDetailScreen extends StatefulWidget {
   });
 
   @override
-  State<AlbumFolderDetailScreen> createState() => _AlbumFolderDetailScreenState();
+  State<AlbumFolderDetailScreen> createState() =>
+      _AlbumFolderDetailScreenState();
 }
 
 class _AlbumFolderDetailScreenState extends State<AlbumFolderDetailScreen> {
@@ -521,14 +676,20 @@ class _AlbumFolderDetailScreenState extends State<AlbumFolderDetailScreen> {
     setState(() => _loading = true);
     try {
       final response = await http.get(
-        Uri.parse('${_auth.baseUrl}/api/album/photos?folder_id=${widget.folderId}'),
+        Uri.parse(
+          '${_auth.baseUrl}/api/album/photos?folder_id=${widget.folderId}',
+        ),
       );
       final data = jsonDecode(response.body);
       if (response.statusCode == 200 && data['ok'] == true) {
-        setState(() { _photos = data['photos'] ?? []; });
+        setState(() {
+          _photos = data['photos'] ?? [];
+        });
       }
-    } catch (_) {}
-    finally { if (mounted) setState(() => _loading = false); }
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   Future<void> _uploadPhoto() async {
@@ -561,7 +722,9 @@ class _AlbumFolderDetailScreenState extends State<AlbumFolderDetailScreen> {
               decoration: InputDecoration(
                 hintText: '이 사진에 한마디! (선택)',
                 hintStyle: mainBody(size: 13, color: kMainMuted),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: const BorderSide(color: kMainRose, width: 1.5),
@@ -575,23 +738,36 @@ class _AlbumFolderDetailScreenState extends State<AlbumFolderDetailScreen> {
                   color: const Color(0xFFFFD700).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Row(children: [
-                  const Text('👑', style: TextStyle(fontSize: 14)),
-                  const SizedBox(width: 6),
-                  Text('2K 고화질로 저장됩니다', style: mainBody(size: 11, color: const Color(0xFFB8860B))),
-                ]),
+                child: Row(
+                  children: [
+                    const Text('👑', style: TextStyle(fontSize: 14)),
+                    const SizedBox(width: 6),
+                    Text(
+                      '2K 고화질로 저장됩니다',
+                      style: mainBody(size: 11, color: const Color(0xFFB8860B)),
+                    ),
+                  ],
+                ),
               ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('취소', style: mainBody(color: kMainMuted))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('취소', style: mainBody(color: kMainMuted)),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(
               backgroundColor: kMainRose,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
-            child: Text('사진 고르기', style: mainBody(color: Colors.white, weight: FontWeight.bold)),
+            child: Text(
+              '사진 고르기',
+              style: mainBody(color: Colors.white, weight: FontWeight.bold),
+            ),
           ),
         ],
       ),
@@ -614,7 +790,10 @@ class _AlbumFolderDetailScreenState extends State<AlbumFolderDetailScreen> {
     setState(() => _uploading = true);
     try {
       final bytes = await pickedFile.readAsBytes();
-      final request = http.MultipartRequest('POST', Uri.parse('${_auth.baseUrl}/api/album/photos'));
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('${_auth.baseUrl}/api/album/photos'),
+      );
       request.fields.addAll({
         'folder_id': '${widget.folderId}',
         'user_id': '$uid',
@@ -624,7 +803,14 @@ class _AlbumFolderDetailScreenState extends State<AlbumFolderDetailScreen> {
 
       final ext = pickedFile.name.split('.').last.toLowerCase();
       final mime = ext == 'png' ? 'image/png' : 'image/jpeg';
-      request.files.add(http.MultipartFile.fromBytes('media', bytes, filename: pickedFile.name, contentType: MediaType.parse(mime)));
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'media',
+          bytes,
+          filename: pickedFile.name,
+          contentType: MediaType.parse(mime),
+        ),
+      );
 
       final streamed = await request.send();
       final response = await http.Response.fromStream(streamed);
@@ -638,12 +824,16 @@ class _AlbumFolderDetailScreenState extends State<AlbumFolderDetailScreen> {
         if (reason == 'limit_exceeded') {
           _showPremiumDialog(data['message'] ?? '사진 등록 한도를 초과했습니다.');
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('사진 업로드에 실패했습니다.')));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('사진 업로드에 실패했습니다.')));
         }
       }
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('사진 업로드 중 네트워크 오류가 발생했습니다')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('사진 업로드 중 네트워크 오류가 발생했습니다')));
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
@@ -651,7 +841,9 @@ class _AlbumFolderDetailScreenState extends State<AlbumFolderDetailScreen> {
 
   Future<void> _deletePhoto(int id) async {
     try {
-      final response = await http.delete(Uri.parse('${_auth.baseUrl}/api/album/photos/$id'));
+      final response = await http.delete(
+        Uri.parse('${_auth.baseUrl}/api/album/photos/$id'),
+      );
       final data = jsonDecode(response.body);
       if (response.statusCode == 200 && data['ok'] == true) _loadPhotos();
     } catch (_) {}
@@ -661,13 +853,18 @@ class _AlbumFolderDetailScreenState extends State<AlbumFolderDetailScreen> {
     try {
       final path = photoUrl.replaceFirst(_auth.baseUrl, '');
       final response = await http.patch(
-        Uri.parse('${_auth.baseUrl}/api/album/folders/${widget.folderId}/set-cover'),
+        Uri.parse(
+          '${_auth.baseUrl}/api/album/folders/${widget.folderId}/set-cover',
+        ),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'photo_url': path}),
       );
       final data = jsonDecode(response.body);
       if (response.statusCode == 200 && data['ok'] == true) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('이 사진을 폴더 커버로 설정했어요! 📸')));
+        if (mounted)
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('이 사진을 폴더 커버로 설정했어요! 📸')),
+          );
       }
     } catch (_) {}
   }
@@ -680,7 +877,9 @@ class _AlbumFolderDetailScreenState extends State<AlbumFolderDetailScreen> {
   }
 
   Future<void> _downloadAll() async {
-    final uri = Uri.parse('${_auth.baseUrl}/api/album/folders/${widget.folderId}/download-all');
+    final uri = Uri.parse(
+      '${_auth.baseUrl}/api/album/folders/${widget.folderId}/download-all',
+    );
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
@@ -692,45 +891,84 @@ class _AlbumFolderDetailScreenState extends State<AlbumFolderDetailScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: kMainPaper,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Row(children: [
-          const Text('👑', style: TextStyle(fontSize: 24)),
-          const SizedBox(width: 8),
-          Text('비밀기지 Premium', style: mainTitle(size: 18, color: kMainInk)),
-        ]),
+        title: Row(
+          children: [
+            const Text('👑', style: TextStyle(fontSize: 24)),
+            const SizedBox(width: 8),
+            Text('비밀기지 Premium', style: mainTitle(size: 18, color: kMainInk)),
+          ],
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(message, style: mainBody(size: 14, color: kMainInk, weight: FontWeight.bold)),
+            Text(
+              message,
+              style: mainBody(
+                size: 14,
+                color: kMainInk,
+                weight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 12),
-            Text('Premium으로 업그레이드하면:\n• 폴더당 각자 50장\n• 2K 고화질 원본 보관\n• 폴더 최대 100개',
-              style: mainBody(size: 12, color: kMainSub)),
+            Text(
+              'Premium으로 업그레이드하면:\n• 폴더당 각자 50장\n• 2K 고화질 원본 보관\n• 폴더 최대 100개',
+              style: mainBody(size: 12, color: kMainSub),
+            ),
             const SizedBox(height: 14),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(color: kMainRoseSoft, borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(
+                color: kMainRoseSoft,
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('월 구독료', style: mainBody(size: 12, color: kMainRose, weight: FontWeight.bold)),
-                  Text('₩1,900 / 월', style: mainBody(size: 13, color: kMainInk, weight: FontWeight.bold)),
+                  Text(
+                    '월 구독료',
+                    style: mainBody(
+                      size: 12,
+                      color: kMainRose,
+                      weight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    '₩1,900 / 월',
+                    style: mainBody(
+                      size: 13,
+                      color: kMainInk,
+                      weight: FontWeight.bold,
+                    ),
+                  ),
                 ],
               ),
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('나중에', style: mainBody(color: kMainMuted))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('나중에', style: mainBody(color: kMainMuted)),
+          ),
           FilledButton(
             onPressed: () {
               Navigator.pop(ctx);
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const PremiumScreen()));
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PremiumScreen()),
+              );
             },
             style: FilledButton.styleFrom(
               backgroundColor: kMainRose,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
-            child: Text('구독하기 👑', style: mainBody(color: Colors.white, weight: FontWeight.bold)),
+            child: Text(
+              '구독하기 👑',
+              style: mainBody(color: Colors.white, weight: FontWeight.bold),
+            ),
           ),
         ],
       ),
@@ -751,7 +989,10 @@ class _AlbumFolderDetailScreenState extends State<AlbumFolderDetailScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF5A3D2B),
         elevation: 0,
-        title: Text(widget.folderTitle, style: mainTitle(size: 20, color: Colors.white)),
+        title: Text(
+          widget.folderTitle,
+          style: mainTitle(size: 20, color: Colors.white),
+        ),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           if (widget.isPremium)
@@ -759,10 +1000,19 @@ class _AlbumFolderDetailScreenState extends State<AlbumFolderDetailScreen> {
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(colors: [Color(0xFFFFD700), Color(0xFFFF8C00)]),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFFD700), Color(0xFFFF8C00)],
+                ),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Text('👑 HD', style: mainBody(size: 10, color: Colors.white, weight: FontWeight.bold)),
+              child: Text(
+                '👑 HD',
+                style: mainBody(
+                  size: 10,
+                  color: Colors.white,
+                  weight: FontWeight.bold,
+                ),
+              ),
             ),
           IconButton(
             icon: const Icon(Icons.download_rounded),
@@ -785,10 +1035,16 @@ class _AlbumFolderDetailScreenState extends State<AlbumFolderDetailScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('$myNick ${myPhotos.length}/$_photoLimit장', style: mainBody(size: 11, color: Colors.white70)),
+                            Text(
+                              '$myNick ${myPhotos.length}/$_photoLimit장',
+                              style: mainBody(size: 11, color: Colors.white70),
+                            ),
                             const SizedBox(height: 4),
                             LinearProgressIndicator(
-                              value: (myPhotos.length / _photoLimit).clamp(0.0, 1.0),
+                              value: (myPhotos.length / _photoLimit).clamp(
+                                0.0,
+                                1.0,
+                              ),
                               backgroundColor: Colors.white24,
                               color: Colors.white,
                               minHeight: 4,
@@ -802,10 +1058,16 @@ class _AlbumFolderDetailScreenState extends State<AlbumFolderDetailScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('$partnerNick ${partnerPhotos.length}/$_photoLimit장', style: mainBody(size: 11, color: Colors.white70)),
+                            Text(
+                              '$partnerNick ${partnerPhotos.length}/$_photoLimit장',
+                              style: mainBody(size: 11, color: Colors.white70),
+                            ),
                             const SizedBox(height: 4),
                             LinearProgressIndicator(
-                              value: (partnerPhotos.length / _photoLimit).clamp(0.0, 1.0),
+                              value: (partnerPhotos.length / _photoLimit).clamp(
+                                0.0,
+                                1.0,
+                              ),
                               backgroundColor: Colors.white24,
                               color: kMainRose,
                               minHeight: 4,
@@ -826,33 +1088,46 @@ class _AlbumFolderDetailScreenState extends State<AlbumFolderDetailScreen> {
                             children: [
                               const Text('🖼️', style: TextStyle(fontSize: 60)),
                               const SizedBox(height: 16),
-                              Text('아직 사진이 없어요\n첫 번째 추억을 올려보세요!',
-                                style: mainBody(size: 16, color: Colors.white70),
-                                textAlign: TextAlign.center),
+                              Text(
+                                '아직 사진이 없어요\n첫 번째 추억을 올려보세요!',
+                                style: mainBody(
+                                  size: 16,
+                                  color: Colors.white70,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
                             ],
                           ),
                         )
                       : GridView.builder(
                           padding: const EdgeInsets.all(16),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            mainAxisSpacing: 16,
-                            crossAxisSpacing: 16,
-                            childAspectRatio: 0.78,
-                          ),
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                mainAxisSpacing: 16,
+                                crossAxisSpacing: 16,
+                                childAspectRatio: 0.78,
+                              ),
                           itemCount: _photos.length,
                           itemBuilder: (ctx, i) {
                             final photo = _photos[i];
                             final isMine = photo['user_id'] == myUid;
-                            final isPremiumQuality = photo['is_premium_quality'] == 1;
+                            final isPremiumQuality =
+                                photo['is_premium_quality'] == 1;
                             return _PolaroidCard(
                               photoUrl: '${_auth.baseUrl}${photo['photo_url']}',
                               caption: photo['caption'],
                               isMine: isMine,
                               isPremiumQuality: isPremiumQuality,
-                              onDelete: isMine ? () => _deletePhoto(photo['id']) : null,
-                              onSetCover: () => _setCover('${_auth.baseUrl}${photo['photo_url']}'),
-                              onDownload: () => _downloadPhoto('${_auth.baseUrl}${photo['photo_url']}'),
+                              onDelete: isMine
+                                  ? () => _deletePhoto(photo['id'])
+                                  : null,
+                              onSetCover: () => _setCover(
+                                '${_auth.baseUrl}${photo['photo_url']}',
+                              ),
+                              onDownload: () => _downloadPhoto(
+                                '${_auth.baseUrl}${photo['photo_url']}',
+                              ),
                             );
                           },
                         ),
@@ -863,14 +1138,24 @@ class _AlbumFolderDetailScreenState extends State<AlbumFolderDetailScreen> {
           ? FloatingActionButton.extended(
               onPressed: null,
               backgroundColor: kMainRose,
-              icon: const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
+              icon: const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2,
+                ),
+              ),
               label: Text('업로드 중...', style: mainBody(color: Colors.white)),
             )
           : FloatingActionButton.extended(
               onPressed: _uploadPhoto,
               backgroundColor: kMainRose,
               icon: const Icon(Icons.add_a_photo_rounded, color: Colors.white),
-              label: Text('사진 추가', style: mainBody(color: Colors.white, weight: FontWeight.bold)),
+              label: Text(
+                '사진 추가',
+                style: mainBody(color: Colors.white, weight: FontWeight.bold),
+              ),
             ),
     );
   }
@@ -912,38 +1197,83 @@ class _PolaroidCard extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: kMainMuted, borderRadius: BorderRadius.circular(2))),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: kMainMuted,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
             const SizedBox(height: 20),
             if (onSetCover != null)
               ListTile(
                 leading: const Icon(Icons.image_rounded, color: kMainInk),
-                title: Text('폴더 커버로 설정', style: mainBody(size: 15, color: kMainInk, weight: FontWeight.bold)),
-                onTap: () { Navigator.pop(ctx); onSetCover!(); },
+                title: Text(
+                  '폴더 커버로 설정',
+                  style: mainBody(
+                    size: 15,
+                    color: kMainInk,
+                    weight: FontWeight.bold,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  onSetCover!();
+                },
               ),
             if (onDownload != null)
               ListTile(
                 leading: const Icon(Icons.download_rounded, color: kMainInk),
-                title: Text('사진 다운로드', style: mainBody(size: 15, color: kMainInk, weight: FontWeight.bold)),
-                onTap: () { Navigator.pop(ctx); onDownload!(); },
+                title: Text(
+                  '사진 다운로드',
+                  style: mainBody(
+                    size: 15,
+                    color: kMainInk,
+                    weight: FontWeight.bold,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  onDownload!();
+                },
               ),
             if (onDelete != null)
               ListTile(
                 leading: const Icon(Icons.delete_rounded, color: Colors.red),
-                title: Text('사진 삭제', style: mainBody(size: 15, color: Colors.red, weight: FontWeight.bold)),
-                onTap: () { 
+                title: Text(
+                  '사진 삭제',
+                  style: mainBody(
+                    size: 15,
+                    color: Colors.red,
+                    weight: FontWeight.bold,
+                  ),
+                ),
+                onTap: () {
                   Navigator.pop(ctx);
                   showDialog(
                     context: context,
                     builder: (c) => AlertDialog(
                       backgroundColor: kMainPaper,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
                       title: Text('사진 삭제', style: mainTitle(size: 16)),
                       content: Text('이 사진을 삭제할까요?', style: mainBody()),
                       actions: [
-                        TextButton(onPressed: () => Navigator.pop(c), child: Text('취소', style: mainBody(color: kMainMuted))),
                         TextButton(
-                          onPressed: () { Navigator.pop(c); onDelete!(); },
-                          child: const Text('삭제', style: TextStyle(color: Colors.red)),
+                          onPressed: () => Navigator.pop(c),
+                          child: Text('취소', style: mainBody(color: kMainMuted)),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pop(c);
+                            onDelete!();
+                          },
+                          child: const Text(
+                            '삭제',
+                            style: TextStyle(color: Colors.red),
+                          ),
                         ),
                       ],
                     ),
@@ -970,7 +1300,13 @@ class _PolaroidCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(4),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(2, 4))],
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: 8,
+                offset: const Offset(2, 4),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -983,9 +1319,16 @@ class _PolaroidCard extends StatelessWidget {
                   height: 14,
                   margin: const EdgeInsets.only(top: -7),
                   decoration: BoxDecoration(
-                    color: isMine ? const Color(0xFF8B4513) : const Color(0xFF4A90D9),
+                    color: isMine
+                        ? const Color(0xFF8B4513)
+                        : const Color(0xFF4A90D9),
                     shape: BoxShape.circle,
-                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 3)],
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.3),
+                        blurRadius: 3,
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -999,7 +1342,12 @@ class _PolaroidCard extends StatelessWidget {
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => Container(
                         color: kMainRoseSoft,
-                        child: const Center(child: Icon(Icons.broken_image_rounded, color: kMainMuted)),
+                        child: const Center(
+                          child: Icon(
+                            Icons.broken_image_rounded,
+                            color: kMainMuted,
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -1026,7 +1374,11 @@ class _PolaroidCard extends StatelessWidget {
                     else
                       Text(
                         isMine ? '나의 추억 💕' : '우리의 추억 💕',
-                        style: const TextStyle(fontFamily: 'Gaegu', fontSize: 11, color: Color(0xFF9E9E9E)),
+                        style: const TextStyle(
+                          fontFamily: 'Gaegu',
+                          fontSize: 11,
+                          color: Color(0xFF9E9E9E),
+                        ),
                       ),
                     if (isPremiumQuality)
                       Padding(
@@ -1035,7 +1387,13 @@ class _PolaroidCard extends StatelessWidget {
                           children: [
                             const Text('✨', style: TextStyle(fontSize: 9)),
                             const SizedBox(width: 2),
-                            Text('2K HD', style: mainBody(size: 9, color: const Color(0xFFB8860B))),
+                            Text(
+                              '2K HD',
+                              style: mainBody(
+                                size: 9,
+                                color: const Color(0xFFB8860B),
+                              ),
+                            ),
                           ],
                         ),
                       ),

@@ -220,8 +220,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 style: mainBody(size: 14, color: kMainInk),
                 decoration: InputDecoration(
                   hintText: '현재 비밀번호 입력',
-                  prefixIcon:
-                      const Icon(Icons.lock_outline, color: kMainMuted, size: 20),
+                  prefixIcon: const Icon(
+                    Icons.lock_outline,
+                    color: kMainMuted,
+                    size: 20,
+                  ),
                   filled: true,
                   fillColor: kMainPaperSoft,
                   border: OutlineInputBorder(
@@ -274,7 +277,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         msg = '탈퇴에 실패했어요. ($error)';
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg, style: mainBody(color: Colors.white))),
+        SnackBar(
+          content: Text(msg, style: mainBody(color: Colors.white)),
+        ),
       );
     }
     // 성공 시 _auth.deleteAccount 내부에서 logout() 호출 → 앱이 로그인 화면으로 전환됨
@@ -352,7 +357,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 10),
             Center(
               child: TextButton(
-                onPressed: _deleteAccountDeleting ? null : _confirmDeleteAccount,
+                onPressed: _deleteAccountDeleting
+                    ? null
+                    : _confirmDeleteAccount,
                 child: Text(
                   _deleteAccountDeleting ? '탈퇴 처리 중...' : '회원 탈퇴',
                   style: mainBody(

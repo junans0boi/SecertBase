@@ -13,7 +13,8 @@ class DiceScreen extends StatefulWidget {
   State<DiceScreen> createState() => _DiceScreenState();
 }
 
-class _DiceScreenState extends State<DiceScreen> with SingleTickerProviderStateMixin {
+class _DiceScreenState extends State<DiceScreen>
+    with SingleTickerProviderStateMixin {
   final _socket = SocketService();
   late AnimationController _shakeCtrl;
   late Animation<double> _shake;
@@ -24,10 +25,14 @@ class _DiceScreenState extends State<DiceScreen> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
-    _shakeCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 500));
-    _shake = Tween(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _shakeCtrl, curve: Curves.elasticOut),
+    _shakeCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
     );
+    _shake = Tween(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _shakeCtrl, curve: Curves.elasticOut));
     _socket.addListener(_rebuild);
   }
 
@@ -61,8 +66,7 @@ class _DiceScreenState extends State<DiceScreen> with SingleTickerProviderStateM
         children: [
           _buildDice(result),
           const SizedBox(height: 40),
-          if (result != null)
-            _ResultBadge(label: '결과', value: '$result'),
+          if (result != null) _ResultBadge(label: '결과', value: '$result'),
           const SizedBox(height: 48),
           _buildRollButton(),
         ],
@@ -75,10 +79,7 @@ class _DiceScreenState extends State<DiceScreen> with SingleTickerProviderStateM
       animation: _shake,
       builder: (_, child) {
         final offset = sin(_shake.value * pi * 6) * 8 * (1 - _shake.value);
-        return Transform.translate(
-          offset: Offset(offset, 0),
-          child: child,
-        );
+        return Transform.translate(offset: Offset(offset, 0), child: child);
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
@@ -104,7 +105,10 @@ class _DiceScreenState extends State<DiceScreen> with SingleTickerProviderStateM
               ? const SizedBox(
                   width: 40,
                   height: 40,
-                  child: CircularProgressIndicator(strokeWidth: 3, color: kPrimary),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    color: kPrimary,
+                  ),
                 )
               : Text(
                   value != null ? _faces[value - 1] : '🎲',
@@ -130,7 +134,11 @@ class _PrimaryButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final String label;
   final IconData? icon;
-  const _PrimaryButton({required this.onPressed, required this.label, this.icon});
+  const _PrimaryButton({
+    required this.onPressed,
+    required this.label,
+    this.icon,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -144,17 +152,29 @@ class _PrimaryButton extends StatelessWidget {
           color: enabled ? null : kCard,
           borderRadius: BorderRadius.circular(16),
           boxShadow: enabled
-              ? [BoxShadow(color: kPrimary.withOpacity(0.3), blurRadius: 16, offset: const Offset(0, 4))]
+              ? [
+                  BoxShadow(
+                    color: kPrimary.withOpacity(0.3),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ]
               : null,
         ),
         child: MaterialButton(
           onPressed: onPressed,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (icon != null) ...[
-                Icon(icon, color: enabled ? Colors.white : kTextMuted, size: 20),
+                Icon(
+                  icon,
+                  color: enabled ? Colors.white : kTextMuted,
+                  size: 20,
+                ),
                 const SizedBox(width: 8),
               ],
               Text(
@@ -190,10 +210,17 @@ class _ResultBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('$label  ', style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 14)),
+          Text(
+            '$label  ',
+            style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 14),
+          ),
           Text(
             value,
-            style: GoogleFonts.notoSans(color: kPrimary, fontSize: 22, fontWeight: FontWeight.w800),
+            style: GoogleFonts.notoSans(
+              color: kPrimary,
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ],
       ),

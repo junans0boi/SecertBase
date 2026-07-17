@@ -81,7 +81,11 @@ class _TelepathyScreenState extends State<TelepathyScreen> {
               if (_myChoice != null)
                 Text(
                   '내 선택: $_myChoice',
-                  style: GoogleFonts.notoSans(color: kPrimary, fontSize: 16, fontWeight: FontWeight.w600),
+                  style: GoogleFonts.notoSans(
+                    color: kPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
             ] else ...[
               Text(
@@ -118,7 +122,11 @@ class _TelepathyScreenState extends State<TelepathyScreen> {
             child: Center(
               child: Text(
                 opt,
-                style: GoogleFonts.notoSans(color: kText, fontSize: 16, fontWeight: FontWeight.w600),
+                style: GoogleFonts.notoSans(
+                  color: kText,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -128,13 +136,14 @@ class _TelepathyScreenState extends State<TelepathyScreen> {
     );
   }
 
-  Widget _buildResult(bool success, String? selected, Map<String, String>? choices) {
+  Widget _buildResult(
+    bool success,
+    String? selected,
+    Map<String, String>? choices,
+  ) {
     return Column(
       children: [
-        Text(
-          success ? '✨' : '💔',
-          style: const TextStyle(fontSize: 72),
-        ),
+        Text(success ? '✨' : '💔', style: const TextStyle(fontSize: 72)),
         const SizedBox(height: 12),
         Text(
           success ? '텔레파시 성공!' : '아쉽게 실패...',
@@ -152,13 +161,15 @@ class _TelepathyScreenState extends State<TelepathyScreen> {
           ),
         ] else if (!success && choices != null) ...[
           const SizedBox(height: 16),
-          ...choices.entries.map((e) => Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Text(
-              '${e.key}: ${e.value}',
-              style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 14),
+          ...choices.entries.map(
+            (e) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Text(
+                '${e.key}: ${e.value}',
+                style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 14),
+              ),
             ),
-          )),
+          ),
         ],
       ],
     );
@@ -172,11 +183,15 @@ class _WaitWidget extends StatelessWidget {
     return Column(
       children: [
         const SizedBox(
-          width: 48, height: 48,
+          width: 48,
+          height: 48,
           child: CircularProgressIndicator(strokeWidth: 3, color: kPrimary),
         ),
         const SizedBox(height: 16),
-        Text('상대방 선택 대기 중...', style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 16)),
+        Text(
+          '상대방 선택 대기 중...',
+          style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 16),
+        ),
       ],
     );
   }
