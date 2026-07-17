@@ -12,6 +12,8 @@ import {
   getCarriedPieces,
   hasBackdoMove,
   getNextPlayer as getNextYutPlayer,
+  recordCapture,
+  settleTurnAfterMove,
   serializeYutGame,
 } from "./yut-engine.js";
 import {
@@ -1318,20 +1320,15 @@ export const registerSocketHandlers = (io) => {
           capturedPiece.lastPos = 0;
           capturedPiece.finished = false;
         }
-        gameState.lastCaptureCount = capturedPieces.length;
+        recordCapture(gameState, capturedPieces.length);
       }
 
       const won = checkWin(gameState.players[userId]);
       if (won) {
         gameState.winner = userId;
-      } else if (gameState.pendingMoves.length === 0) {
-        const caughtOpponent = (gameState.lastCaptureCount ?? 0) > 0;
-        gameState.currentTurn = caughtOpponent ? userId : getNextYutPlayer(gameState, userId);
-        gameState.phase = "throwing";
       } else {
-        gameState.phase = "moving";
+        settleTurnAfterMove(gameState, userId);
       }
-      gameState.lastCaptureCount = 0;
 
       await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
 

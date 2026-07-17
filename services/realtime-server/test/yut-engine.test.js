@@ -7,6 +7,8 @@ import {
   getCarriedPieces,
   hasBackdoMove,
   checkCatch,
+  recordCapture,
+  settleTurnAfterMove,
 } from '../src/yut-engine.js';
 
 function withMockedRandom(values, run) {
@@ -156,6 +158,64 @@ test('getCarriedPieces carries stacked field pieces but not start pieces', () =>
 
   assert.deepEqual(getCarriedPieces(pieces[0], pieces).map((piece) => piece.id), [0, 1]);
   assert.deepEqual(getCarriedPieces(pieces[2], pieces).map((piece) => piece.id), [2]);
+});
+
+test('catch during multi-move turn keeps the extra turn until all moves settle', () => {
+  const gameState = {
+    playersOrder: ['A', 'B'],
+    currentTurn: 'A',
+    phase: 'moving',
+    pendingMoves: [4, 1],
+    caughtOpponentThisTurn: false,
+  };
+
+  // 윷+도 펜딩 중 첫 이동(윷)에서 잡기 발생.
+  gameState.pendingMoves.splice(0, 1);
+  recordCapture(gameState, 1);
+  settleTurnAfterMove(gameState, 'A');
+  assert.equal(gameState.phase, 'moving');
+  assert.equal(gameState.currentTurn, 'A');
+
+  // 마지막 이동(도)은 잡기 없음 — 그래도 이전 잡기의 추가 턴이 유지되어야 한다.
+  gameState.pendingMoves.splice(0, 1);
+  recordCapture(gameState, 0);
+  settleTurnAfterMove(gameState, 'A');
+  assert.equal(gameState.currentTurn, 'A');
+  assert.equal(gameState.phase, 'throwing');
+  // 추가 턴은 1회 소비: 플래그가 리셋되어야 한다.
+  assert.equal(gameState.caughtOpponentThisTurn, false);
+});
+
+test('turn passes to opponent when no capture happened this turn', () => {
+  const gameState = {
+    playersOrder: ['A', 'B'],
+    currentTurn: 'A',
+    phase: 'moving',
+    pendingMoves: [],
+    caughtOpponentThisTurn: false,
+  };
+
+  recordCapture(gameState, 0);
+  settleTurnAfterMove(gameState, 'A');
+  assert.equal(gameState.currentTurn, 'B');
+  assert.equal(gameState.phase, 'throwing');
+});
+
+test('consumed extra turn does not leak into the next settle', () => {
+  const gameState = {
+    playersOrder: ['A', 'B'],
+    currentTurn: 'A',
+    phase: 'moving',
+    pendingMoves: [],
+    caughtOpponentThisTurn: true,
+  };
+
+  settleTurnAfterMove(gameState, 'A');
+  assert.equal(gameState.currentTurn, 'A');
+
+  // 추가 턴에서 잡기 없이 이동을 마치면 턴이 넘어가야 한다.
+  settleTurnAfterMove(gameState, 'A');
+  assert.equal(gameState.currentTurn, 'B');
 });
 
 test('checkCatch ignores start and goal positions', () => {

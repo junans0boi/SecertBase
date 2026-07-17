@@ -149,9 +149,38 @@ export function createYutGameState(player1, player2, options = {}) {
     startRolls: {},
     orderCountdownUntil: null,
     pendingMoves: [],
+    caughtOpponentThisTurn: false,
     winner: null,
     lastThrow: null,
   };
+}
+
+/**
+ * Remember that the mover captured at least one opponent piece this turn.
+ * The extra turn is granted once per turn, after every pending move settles.
+ */
+export function recordCapture(gameState, capturedCount) {
+  if (capturedCount > 0) {
+    gameState.caughtOpponentThisTurn = true;
+  }
+}
+
+/**
+ * Decide the next turn after a move. Only settles when every pending move
+ * has been played; a capture anywhere in the turn keeps the turn once.
+ */
+export function settleTurnAfterMove(gameState, userId) {
+  if (gameState.pendingMoves.length > 0) {
+    gameState.phase = "moving";
+    return;
+  }
+  if (gameState.caughtOpponentThisTurn) {
+    gameState.caughtOpponentThisTurn = false;
+    gameState.currentTurn = userId;
+  } else {
+    gameState.currentTurn = getNextPlayer(gameState, userId);
+  }
+  gameState.phase = "throwing";
 }
 
 /**
