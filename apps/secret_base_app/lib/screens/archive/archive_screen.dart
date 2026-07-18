@@ -2,15 +2,12 @@ import 'package:flutter/material.dart';
 import '../../core/main_design.dart';
 import 'moment_loop_screen.dart';
 import 'map_screen.dart';
-import 'album_screen.dart';
-import 'shelter_screen.dart';
-import 'capsule_screen.dart';
-import 'vault_screen.dart';
-import 'heart_exchange_screen.dart';
 
 class ArchiveScreen extends StatelessWidget {
   const ArchiveScreen({super.key});
 
+  // 비활성 REST에 의존하는 항목(앨범/캡슐/대피소/교감/저장고)은 복구 전까지
+  // 노출하지 않는다 (#32). 복원은 git 히스토리 참고.
   static const _items = [
     _ArchiveItem(
       Icons.auto_stories_outlined,
@@ -27,51 +24,6 @@ class ArchiveScreen extends StatelessWidget {
       '장소 저장',
       '둘이 다녀온 장소와 다시 가고 싶은 곳을 지도 위에 모아요.',
       '장소',
-      kMainSage,
-      kMainSageSoft,
-    ),
-    _ArchiveItem(
-      Icons.photo_library_outlined,
-      '우리 앨범',
-      '사진 모음',
-      '사진으로 남은 순간을 앨범처럼 넘겨볼 수 있어요.',
-      '사진',
-      kMainPeach,
-      kMainPeachSoft,
-    ),
-    _ArchiveItem(
-      Icons.inventory_2_outlined,
-      '타임캡슐',
-      '미래 편지',
-      '나중의 우리에게 열리는 편지를 예약해요.',
-      '예약',
-      kMainHoney,
-      kMainHoneySoft,
-    ),
-    _ArchiveItem(
-      Icons.spa_outlined,
-      '마음 대피소',
-      '속마음 보관',
-      '바로 말하기 어려운 마음을 조용히 정리해둘 수 있어요.',
-      '마음',
-      kMainSky,
-      kMainSkySoft,
-    ),
-    _ArchiveItem(
-      Icons.favorite_border,
-      '마음 교감',
-      '질문과 소원권',
-      '질문, 밸런스, 소원권처럼 서로를 알아가는 도구예요.',
-      '교감',
-      kMainLilac,
-      kMainLilacSoft,
-    ),
-    _ArchiveItem(
-      Icons.widgets_outlined,
-      '추억 저장고',
-      '챌린지와 도구',
-      '챌린지, 타임라인, 리포트처럼 쌓인 기록을 정리해요.',
-      '정리',
       kMainSage,
       kMainSageSoft,
     ),
@@ -95,9 +47,8 @@ class ArchiveScreen extends StatelessWidget {
               ),
             ),
           ),
-          SliverToBoxAdapter(child: _collectionRail(context)),
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(18, 18, 18, 8),
+            padding: const EdgeInsets.fromLTRB(18, 4, 18, 8),
             sliver: SliverToBoxAdapter(
               child: Text(
                 '더 꺼내보기',
@@ -112,10 +63,10 @@ class ArchiveScreen extends StatelessWidget {
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(18, 0, 18, 34),
             sliver: SliverList.separated(
-              itemCount: _items.length - 4,
+              itemCount: _items.length - 1,
               separatorBuilder: (context, index) => const SizedBox(height: 10),
               itemBuilder: (ctx, i) {
-                final item = _items[i + 4];
+                final item = _items[i + 1];
                 return _ArchiveListTile(
                   item: item,
                   onTap: () => _openDetail(ctx, item),
@@ -124,26 +75,6 @@ class ArchiveScreen extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _collectionRail(BuildContext context) {
-    final railItems = _items.sublist(1, 4);
-    return SizedBox(
-      height: 178,
-      child: ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: 18),
-        scrollDirection: Axis.horizontal,
-        itemCount: railItems.length,
-        separatorBuilder: (context, index) => const SizedBox(width: 12),
-        itemBuilder: (ctx, i) {
-          final item = railItems[i];
-          return _ArchiveCollectionCard(
-            item: item,
-            onTap: () => _openDetail(ctx, item),
-          );
-        },
       ),
     );
   }
@@ -188,16 +119,6 @@ class ArchiveScreen extends StatelessWidget {
         screen = const MomentLoopScreen();
       case '비밀 지도':
         screen = const MapScreen();
-      case '우리 앨범':
-        screen = const AlbumScreen();
-      case '타임캡슐':
-        screen = const CapsuleScreen();
-      case '마음 대피소':
-        screen = const ShelterScreen();
-      case '마음 교감':
-        screen = const HeartExchangeScreen();
-      case '추억 저장고':
-        screen = const VaultScreen();
     }
     if (screen != null) {
       Navigator.push(ctx, MaterialPageRoute(builder: (_) => screen!));
@@ -297,71 +218,6 @@ class _FeaturedMemoryCard extends StatelessWidget {
                   ),
                 ],
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ArchiveCollectionCard extends StatelessWidget {
-  final _ArchiveItem item;
-  final VoidCallback onTap;
-
-  const _ArchiveCollectionCard({required this.item, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 150,
-        padding: const EdgeInsets.all(15),
-        decoration: BoxDecoration(
-          color: item.bgColor,
-          borderRadius: BorderRadius.circular(26),
-          border: Border.all(color: item.color.withAlpha(80)),
-          boxShadow: [
-            BoxShadow(
-              color: item.color.withAlpha(18),
-              blurRadius: 18,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _ArchiveBadge(label: item.badge, color: item.color),
-            const Spacer(),
-            Container(
-              width: 54,
-              height: 54,
-              decoration: BoxDecoration(
-                color: kMainPaper.withAlpha(220),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Icon(item.icon, color: item.color, size: 28),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              item.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: mainBody(
-                size: 16,
-                color: kMainInk,
-                weight: FontWeight.w900,
-                height: 1.1,
-              ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              item.desc,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: mainBody(size: 12, color: kMainSub, height: 1.1),
             ),
           ],
         ),

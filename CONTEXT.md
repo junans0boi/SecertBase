@@ -83,6 +83,7 @@ Known stale docs:
 - HomeShell: the paired/logged-in app shell shown after auth and socket connection.
 - Archive: persistent couple content such as setlog, map pins, daily Q&A, challenges, jukebox, and capsules.
 - Setlog: an author-owned daily text/image/video record shared for viewing within its active Couple; only its author may change or delete it.
+- Album (우리 앨범): if built, a read-only gallery over media attached to the couple's Setlog records — never a separate upload destination. Not exposed in the first release; whether it exists at all awaits private-beta feedback (2026-07-18 decision). Legacy folder/photo data is not part of any album contract.
 - One Card (원카드): the couple card game formerly labeled UNO. The user-visible name and card artwork are Secret Base originals to avoid Mattel trademark/trade dress; internal identifiers may still say `uno`.
 - Zero (제로): the standalone arcade game split out of the RPS 하나빼기 mode; presented as its own game, not an RPS mode.
 - Drawing Quiz (그림 맞히기): the drawing-and-guessing game formerly labeled 캐치마인드; renamed to avoid the Netmarble trademark. Internal identifiers still say `catch`.
