@@ -5,6 +5,7 @@ import '../../core/socket_service.dart';
 import 'game_lobby_screen.dart';
 import 'games/bomb_screen.dart';
 import 'games/dice_screen.dart';
+import 'games/pirate_screen.dart';
 import 'games/roulette_screen.dart';
 import 'games/rps_screen.dart';
 import 'games/telepathy_screen.dart';
@@ -79,6 +80,14 @@ class ArcadeScreen extends StatelessWidget {
       color: kMainLilac,
       background: kMainLilacSoft,
     ),
+    _GameInfo(
+      type: 'pirate',
+      icon: Icons.sailing_outlined,
+      title: '해적 룰렛',
+      description: '칼을 하나씩 꽂다가 터지면 당첨되는 벌칙 게임',
+      color: kMainRose,
+      background: kMainRoseSoft,
+    ),
   ];
 
   Widget _screen(String type) => switch (type) {
@@ -89,6 +98,7 @@ class ArcadeScreen extends StatelessWidget {
     'dice' => const DiceScreen(),
     'roulette' => const RouletteScreen(),
     'telepathy' => const TelepathyScreen(),
+    'pirate' => const PirateScreen(),
     _ => const RpsScreen(),
   };
 

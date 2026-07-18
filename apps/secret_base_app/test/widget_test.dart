@@ -36,7 +36,8 @@ void main() {
     expect(find.text('주사위'), findsOneWidget);
     expect(find.text('룰렛'), findsOneWidget);
     expect(find.text('텔레파시'), findsOneWidget);
+    expect(find.text('해적 룰렛'), findsOneWidget);
     // 아직 복구되지 않은 게임.
-    expect(find.text('해적룰렛'), findsNothing);
+    expect(find.text('그림 맞히기'), findsNothing);
   });
 }

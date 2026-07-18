@@ -28,10 +28,10 @@ export const PUBLIC_GAME_TYPES = [
   'dice',
   'roulette',
   'telepathy',
+  'pirate',
 ];
 
 const disabledSocketPrefixes = new Map([
-  ['game:pirate:', 'pirate'],
   ['game:catch:', 'catch'],
   ['heart:', 'heart'],
 ]);
