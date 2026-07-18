@@ -7,6 +7,7 @@ import 'games/bomb_screen.dart';
 import 'games/dice_screen.dart';
 import 'games/roulette_screen.dart';
 import 'games/rps_screen.dart';
+import 'games/telepathy_screen.dart';
 import 'games/uno_screen.dart';
 import 'games/yut_screen.dart';
 
@@ -70,6 +71,14 @@ class ArcadeScreen extends StatelessWidget {
       color: kMainPeach,
       background: kMainPeachSoft,
     ),
+    _GameInfo(
+      type: 'telepathy',
+      icon: Icons.psychology_outlined,
+      title: '텔레파시',
+      description: '같은 답을 고르면 성공하는 취향 맞추기',
+      color: kMainLilac,
+      background: kMainLilacSoft,
+    ),
   ];
 
   Widget _screen(String type) => switch (type) {
@@ -79,6 +88,7 @@ class ArcadeScreen extends StatelessWidget {
     'zero' => const RpsScreen(fixedMode: 'hanabagi'),
     'dice' => const DiceScreen(),
     'roulette' => const RouletteScreen(),
+    'telepathy' => const TelepathyScreen(),
     _ => const RpsScreen(),
   };
 
