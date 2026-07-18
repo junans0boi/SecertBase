@@ -4,6 +4,7 @@ import '../../core/main_design.dart';
 import '../../core/socket_service.dart';
 import 'game_lobby_screen.dart';
 import 'games/bomb_screen.dart';
+import 'games/dice_screen.dart';
 import 'games/rps_screen.dart';
 import 'games/uno_screen.dart';
 import 'games/yut_screen.dart';
@@ -52,6 +53,14 @@ class ArcadeScreen extends StatelessWidget {
       color: kMainRose,
       background: kMainRoseSoft,
     ),
+    _GameInfo(
+      type: 'dice',
+      icon: Icons.casino_outlined,
+      title: '주사위',
+      description: '1부터 6까지 동시에 굴리는 초간단 내기',
+      color: kMainSky,
+      background: kMainSkySoft,
+    ),
   ];
 
   Widget _screen(String type) => switch (type) {
@@ -59,6 +68,7 @@ class ArcadeScreen extends StatelessWidget {
     'bomb' => const BombScreen(),
     'uno' => const UnoScreen(),
     'zero' => const RpsScreen(fixedMode: 'hanabagi'),
+    'dice' => const DiceScreen(),
     _ => const RpsScreen(),
   };
 

@@ -27,7 +27,8 @@ void main() {
     expect(find.text('단판, 3판, 묵찌빠 세 가지 모드'), findsOneWidget);
     // 상표 노출 금지 (ADR 0001) — 사용자 노출명은 원카드만.
     expect(find.text('UNO'), findsNothing);
+    expect(find.text('주사위'), findsOneWidget);
     // 아직 복구되지 않은 게임.
-    expect(find.text('주사위'), findsNothing);
+    expect(find.text('룰렛'), findsNothing);
   });
 }
