@@ -14,6 +14,12 @@ void main() {
   testWidgets('public arcade exposes restored games without UNO branding', (
     tester,
   ) async {
+    // 게임 목록이 길어 기본 뷰포트(600px)에서는 하단 항목이 lazy build로
+    // 트리에 없다. 전체 목록이 한 화면에 들어오도록 뷰포트를 키운다.
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
     await tester.pumpWidget(
       const MaterialApp(home: Scaffold(body: ArcadeScreen())),
     );
@@ -28,7 +34,8 @@ void main() {
     // 상표 노출 금지 (ADR 0001) — 사용자 노출명은 원카드만.
     expect(find.text('UNO'), findsNothing);
     expect(find.text('주사위'), findsOneWidget);
+    expect(find.text('룰렛'), findsOneWidget);
     // 아직 복구되지 않은 게임.
-    expect(find.text('룰렛'), findsNothing);
+    expect(find.text('텔레파시'), findsNothing);
   });
 }

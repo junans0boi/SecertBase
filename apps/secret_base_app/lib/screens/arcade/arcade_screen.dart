@@ -5,6 +5,7 @@ import '../../core/socket_service.dart';
 import 'game_lobby_screen.dart';
 import 'games/bomb_screen.dart';
 import 'games/dice_screen.dart';
+import 'games/roulette_screen.dart';
 import 'games/rps_screen.dart';
 import 'games/uno_screen.dart';
 import 'games/yut_screen.dart';
@@ -61,6 +62,14 @@ class ArcadeScreen extends StatelessWidget {
       color: kMainSky,
       background: kMainSkySoft,
     ),
+    _GameInfo(
+      type: 'roulette',
+      icon: Icons.track_changes_rounded,
+      title: '룰렛',
+      description: '선택지를 적고 돌려서 정하는 결정 도우미',
+      color: kMainPeach,
+      background: kMainPeachSoft,
+    ),
   ];
 
   Widget _screen(String type) => switch (type) {
@@ -69,6 +78,7 @@ class ArcadeScreen extends StatelessWidget {
     'uno' => const UnoScreen(),
     'zero' => const RpsScreen(fixedMode: 'hanabagi'),
     'dice' => const DiceScreen(),
+    'roulette' => const RouletteScreen(),
     _ => const RpsScreen(),
   };
 
