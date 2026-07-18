@@ -2,7 +2,38 @@
 
 Claude/Codex/Gemini 같은 다음 에이전트가 이어받기 위한 컨텍스트 정리.
 
-## 0. 최신 업데이트 (2026-07-18, 워킹트리 정리 및 main 병합 PR)
+## 0. 최신 업데이트 (2026-07-18 저녁, post-MVP epic #20 구현 완료)
+
+grill 세션으로 post-MVP epic 범위를 확정하고(#20 wayfinder), 하위 이슈 #21~#30을 전부 구현·CLOSED 처리했다.
+
+### 확정된 범위 (grill 결과)
+
+- **첫 릴리즈 = 실커플 3~5쌍 7일 비공개 베타 완주 + 운영 승격 판정**. PR #19 병합 = 승격 행위이며 사람이 실행.
+- 아카이브 REST 14개는 계속 비활성. 베타 중 신규 피드백은 이슈+트리아지, P0/P1만 즉시 반영.
+- ADR `docs/adr/0001-one-card-rename-keeps-internal-uno-identifiers.md`: 노출명 '원카드'+자체 트레이드드레스, 내부 식별자 `uno` 유지는 의도적 결정.
+
+### 구현 완료 (#21~#30, 커밋 de2256f~98b3284)
+
+1. **윷놀이 3대 버그**: 날빽도 `prevMap 1:0→1:20`(#21), 잡기 추가 턴 씹힘 — `caughtOpponentThisTurn` 플래그+`settleTurnAfterMove` 엔진 추출(#22), 결과 스포일러 — `_revealedResultName` 버퍼로 연출 완료 후 노출(#23, 해결 추정이었으나 재현돼 수정).
+2. **원카드 전환+복구**(#24): 노출 문자열 전부 교체, 카드 자체 디자인(캔디 4색 rose/sky/sage/honey, 뒷면 딥 플럼+하트+ONE CARD, wild/+4 2x2 하트), gate 해제, `PUBLIC_GAME_TYPES` 상수 도입. `uno_audio` dart:html 조건부 import 전환(VM 테스트 비호환 재발 제거). 음성 에셋은 유지(사용자가 추후 교체).
+3. **제로 분리**(#25): 아케이드 독립 항목(로비 타입 `zero` → `RpsScreen(fixedMode: 'hanabagi')`), RPS 설명에서 하나빼기 제거.
+4. **경량 게임 복구**(#26~#30): 주사위/룰렛/텔레파시/해적 룰렛/그림 맞히기. '캐치마인드'는 넷마블 상표라 **'그림 맞히기'**로 노출명 변경.
+5. **flutter analyze 0건 달성**: dart fix 54건 + 수동 정리로 기존 info 60건 전량 해소 (CI analyze 단계가 info에도 실패하는 문제 해결).
+
+### 검증
+
+backend 78 tests fail 0 + `npm run check` pass, flutter 8 tests pass, `flutter analyze` 0 issues, `dart format` clean.
+
+### 다음 할 일
+
+1. **#31 베타 준비 (ready-for-human)**: codex 브랜치를 test 서버에 배포(`./scripts/deploy_test_server.sh`) 후 실기기 2인으로 복구된 게임 6종 완주+재접속 복원 확인 → 7일 베타 시작. 에이전트는 실기기 플레이를 못 하므로 이 확인은 사람 몫.
+2. 원카드 카드 디자인 시안을 실제 화면에서 확인하고 마음에 안 들면 피드백 (uno_board.dart 코드 페인팅이라 반복 수정 쉬움).
+3. `voice_uno.mp3` 등 음성 에셋 교체는 사용자가 직접.
+4. 베타 통과 후 Actions secrets(`SERVER_HOST` 등)·운영 서버 브랜치 확인 → PR #19 병합(=운영 릴리즈).
+
+---
+
+## 1. 이전 업데이트 (2026-07-18 오전, 워킹트리 정리 및 main 병합 PR)
 
 post-MVP 사이클 시작 전 0단계 정리를 완료했다.
 
