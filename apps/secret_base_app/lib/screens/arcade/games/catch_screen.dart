@@ -266,7 +266,7 @@ class _CatchScreenState extends State<CatchScreen> {
     final phase = sock.catchPhase;
 
     return GameScaffold(
-      title: '🎨 캐치마인드',
+      title: '🎨 그림 맞히기',
       actions: [const GameMenuButton()],
       child: LayoutBuilder(
         builder: (ctx, box) {
@@ -357,7 +357,8 @@ class _WaitingView extends StatelessWidget {
             Text('🎨', style: TextStyle(fontSize: compact ? 60 : 80)),
             const SizedBox(height: 16),
             Text(
-              '캐치마인드',
+              // 넷마블 '캐치마인드' 상표를 피해 자체 명칭 사용 (epic #20)
+              '그림 맞히기',
               style: GoogleFonts.notoSans(
                 fontSize: compact ? 24 : 30,
                 fontWeight: FontWeight.w900,

@@ -4,6 +4,7 @@ import '../../core/main_design.dart';
 import '../../core/socket_service.dart';
 import 'game_lobby_screen.dart';
 import 'games/bomb_screen.dart';
+import 'games/catch_screen.dart';
 import 'games/dice_screen.dart';
 import 'games/pirate_screen.dart';
 import 'games/roulette_screen.dart';
@@ -88,6 +89,14 @@ class ArcadeScreen extends StatelessWidget {
       color: kMainRose,
       background: kMainRoseSoft,
     ),
+    _GameInfo(
+      type: 'catch',
+      icon: Icons.brush_outlined,
+      title: '그림 맞히기',
+      description: '직접 그린 그림을 보고 상대가 정답을 맞혀요',
+      color: kMainSage,
+      background: kMainSageSoft,
+    ),
   ];
 
   Widget _screen(String type) => switch (type) {
@@ -99,6 +108,7 @@ class ArcadeScreen extends StatelessWidget {
     'roulette' => const RouletteScreen(),
     'telepathy' => const TelepathyScreen(),
     'pirate' => const PirateScreen(),
+    'catch' => const CatchScreen(),
     _ => const RpsScreen(),
   };
 
