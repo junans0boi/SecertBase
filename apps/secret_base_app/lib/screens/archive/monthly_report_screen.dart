@@ -35,8 +35,9 @@ class _MonthlyReportScreenState extends State<MonthlyReportScreen> {
         ),
       );
       final data = jsonDecode(res.body) as Map<String, dynamic>;
-      if (data['ok'] == true && mounted)
+      if (data['ok'] == true && mounted) {
         setState(() => _report = data['report'] as Map<String, dynamic>?);
+      }
     } catch (_) {
     } finally {
       if (mounted) setState(() => _loading = false);

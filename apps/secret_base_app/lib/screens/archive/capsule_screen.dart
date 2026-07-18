@@ -226,8 +226,9 @@ class _CapsuleScreenState extends State<CapsuleScreen> {
               onPressed: titleCtrl.text.trim().isEmpty || openDate == null
                   ? null
                   : () async {
-                      if (titleCtrl.text.trim().isEmpty || openDate == null)
+                      if (titleCtrl.text.trim().isEmpty || openDate == null) {
                         return;
+                      }
                       Navigator.pop(ctx);
                       await _create(
                         title: titleCtrl.text.trim(),
@@ -368,7 +369,7 @@ class _CapsuleScreenState extends State<CapsuleScreen> {
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(18, 14, 18, 100),
       itemCount: _capsules.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (_, i) => _capsuleCard(_capsules[i]),
     );
   }

@@ -20,7 +20,7 @@ class _RouletteScreenState extends State<RouletteScreen>
   late Animation<double> _spin;
   bool _spinning = false;
 
-  List<String> _options = ['야식', '벌칙', '결제자', '면제권', '산책', '게임'];
+  final List<String> _options = ['야식', '벌칙', '결제자', '면제권', '산책', '게임'];
   final _editCtrl = TextEditingController();
 
   static const _colors = [
@@ -143,10 +143,10 @@ class _RouletteScreenState extends State<RouletteScreen>
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: _colors[i % _colors.length].withOpacity(0.15),
+                    color: _colors[i % _colors.length].withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color: _colors[i % _colors.length].withOpacity(0.4),
+                      color: _colors[i % _colors.length].withValues(alpha: 0.4),
                     ),
                   ),
                   child: Text(
@@ -206,10 +206,13 @@ class _ResultCard extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [kAccent.withOpacity(0.15), kPrimary.withOpacity(0.1)],
+          colors: [
+            kAccent.withValues(alpha: 0.15),
+            kPrimary.withValues(alpha: 0.1),
+          ],
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kAccent.withOpacity(0.3)),
+        border: Border.all(color: kAccent.withValues(alpha: 0.3)),
       ),
       child: Column(
         children: [
@@ -284,7 +287,7 @@ class _WheelPainter extends CustomPainter {
 
     for (int i = 0; i < items.length; i++) {
       final paint = Paint()
-        ..color = colors[i % colors.length].withOpacity(0.8)
+        ..color = colors[i % colors.length].withValues(alpha: 0.8)
         ..style = PaintingStyle.fill;
       canvas.drawArc(
         Rect.fromCircle(center: center, radius: radius),

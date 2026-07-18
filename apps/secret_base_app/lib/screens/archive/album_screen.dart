@@ -568,7 +568,7 @@ class _FolderCard extends StatelessWidget {
                     ? Image.network(
                         '$baseUrl$coverUrl',
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _emptyFolderCover(),
+                        errorBuilder: (_, _, _) => _emptyFolderCover(),
                       )
                     : _emptyFolderCover(),
               ),
@@ -798,7 +798,7 @@ class _AlbumFolderDetailScreenState extends State<AlbumFolderDetailScreen> {
         'folder_id': '${widget.folderId}',
         'user_id': '$uid',
         'user_code': myCode,
-        if (caption != null) 'caption': caption,
+        'caption': ?caption,
       });
 
       final ext = pickedFile.name.split('.').last.toLowerCase();
@@ -861,10 +861,11 @@ class _AlbumFolderDetailScreenState extends State<AlbumFolderDetailScreen> {
       );
       final data = jsonDecode(response.body);
       if (response.statusCode == 200 && data['ok'] == true) {
-        if (mounted)
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('이 사진을 폴더 커버로 설정했어요! 📸')),
           );
+        }
       }
     } catch (_) {}
   }
@@ -1340,7 +1341,7 @@ class _PolaroidCard extends StatelessWidget {
                     child: Image.network(
                       photoUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
+                      errorBuilder: (_, _, _) => Container(
                         color: kMainRoseSoft,
                         child: const Center(
                           child: Icon(

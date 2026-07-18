@@ -221,8 +221,11 @@ class _CatchScreenState extends State<CatchScreen> {
   }
 
   void _onPanUpdate(DragUpdateDetails d, Size canvasSize) {
-    if (!_isDrawer || _currentStroke == null || _socket.catchPhase != 'drawing')
+    if (!_isDrawer ||
+        _currentStroke == null ||
+        _socket.catchPhase != 'drawing') {
       return;
+    }
     final nx = d.localPosition.dx / canvasSize.width;
     final ny = d.localPosition.dy / canvasSize.height;
     setState(() => _currentStroke!.pts.add(_Pt(nx, ny)));

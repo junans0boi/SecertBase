@@ -257,7 +257,7 @@ class _PremiumScreenState extends State<PremiumScreen>
                   // ── 상단 히어로 배너
                   AnimatedBuilder(
                     animation: _glowCtrl,
-                    builder: (_, __) => Container(
+                    builder: (_, _) => Container(
                       padding: const EdgeInsets.all(28),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(

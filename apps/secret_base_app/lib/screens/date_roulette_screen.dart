@@ -199,9 +199,10 @@ class _DateRouletteScreenState extends State<DateRouletteScreen>
   Widget _ideaCard() {
     return AnimatedBuilder(
       animation: _flipCtrl,
-      builder: (_, __) => Transform(
+      builder: (_, _) => Transform(
         alignment: Alignment.center,
-        transform: Matrix4.identity()..scale(_scaleX.value, 1.0, 1.0),
+        transform: Matrix4.identity()
+          ..scaleByDouble(_scaleX.value, 1.0, 1.0, 1.0),
         child: _IdeaCard(idea: _current),
       ),
     );

@@ -90,8 +90,9 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
           FilledButton(
             onPressed: () async {
               if (titleCtrl.text.trim().isEmpty ||
-                  targetCtrl.text.trim().isEmpty)
+                  targetCtrl.text.trim().isEmpty) {
                 return;
+              }
               Navigator.pop(ctx);
               await _createChallenge(
                 title: titleCtrl.text.trim(),
@@ -286,7 +287,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                     : ListView.separated(
                         padding: const EdgeInsets.fromLTRB(18, 12, 18, 100),
                         itemCount: _challenges.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        separatorBuilder: (_, _) => const SizedBox(height: 12),
                         itemBuilder: (_, i) => _challengeCard(_challenges[i]),
                       ),
               ),

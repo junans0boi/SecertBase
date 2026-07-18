@@ -1,5 +1,5 @@
 import 'dart:convert';
-// ignore: avoid_web_libraries_in_flutter
+// ignore: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'dart:html' as html;
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -280,7 +280,7 @@ class _JukeboxScreenState extends State<JukeboxScreen> {
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(18, 12, 18, 100),
       itemCount: _tracks.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (_, i) => _trackCard(_tracks[i]),
     );
   }

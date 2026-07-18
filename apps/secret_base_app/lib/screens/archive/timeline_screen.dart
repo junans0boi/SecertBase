@@ -77,7 +77,7 @@ class _TimelineScreenState extends State<TimelineScreen> {
                     : ListView.separated(
                         padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
                         itemCount: _events.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        separatorBuilder: (_, _) => const SizedBox(height: 10),
                         itemBuilder: (_, i) => _eventCard(_events[i]),
                       ),
               ),

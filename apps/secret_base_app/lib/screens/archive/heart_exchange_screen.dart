@@ -60,7 +60,7 @@ class HeartExchangeScreen extends StatelessWidget {
               child: ListView.separated(
                 padding: const EdgeInsets.fromLTRB(18, 0, 18, 26),
                 itemCount: _items.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
                 itemBuilder: (ctx, i) => _ExchangeCard(
                   item: _items[i],
                   onTap: () => _openDetail(ctx, _items[i]),

@@ -372,7 +372,7 @@ class _PirateScreenState extends State<PirateScreen>
         const SizedBox(height: 8),
         AnimatedBuilder(
           animation: _explodeAnim,
-          builder: (_, __) => _PirateBarrelWidget(
+          builder: (_, _) => _PirateBarrelWidget(
             state: _BarrelState.exploded,
             piratePop: _explodeAnim.value,
             size: compact ? 150 : 180,
@@ -522,7 +522,7 @@ class _HoleWidget extends StatelessWidget {
           boxShadow: canTap
               ? [
                   BoxShadow(
-                    color: const Color(0xFFFF8C00).withOpacity(0.4),
+                    color: const Color(0xFFFF8C00).withValues(alpha: 0.4),
                     blurRadius: 10,
                     spreadRadius: 1,
                   ),
@@ -530,7 +530,7 @@ class _HoleWidget extends StatelessWidget {
               : isBomb
               ? [
                   BoxShadow(
-                    color: const Color(0xFFCC2A2A).withOpacity(0.3),
+                    color: const Color(0xFFCC2A2A).withValues(alpha: 0.3),
                     blurRadius: 12,
                     spreadRadius: 2,
                   ),
@@ -630,7 +630,7 @@ class _PirateBarrelPainter extends CustomPainter {
     // Shadow
     canvas.drawPath(
       bodyPath.shift(const Offset(3, 5)),
-      Paint()..color = Colors.black.withOpacity(0.18),
+      Paint()..color = Colors.black.withValues(alpha: 0.18),
     );
 
     // Main body fill
@@ -652,7 +652,7 @@ class _PirateBarrelPainter extends CustomPainter {
 
     // Wood grain lines
     final grain = Paint()
-      ..color = const Color(0xFF6B3A0A).withOpacity(0.3)
+      ..color = const Color(0xFF6B3A0A).withValues(alpha: 0.3)
       ..strokeWidth = 1.0
       ..style = PaintingStyle.stroke;
     for (int i = 1; i <= 5; i++) {
@@ -741,7 +741,7 @@ class _PirateBarrelPainter extends CustomPainter {
     );
 
     // Skull on bandana
-    final skullPaint = Paint()..color = Colors.white.withOpacity(0.85);
+    final skullPaint = Paint()..color = Colors.white.withValues(alpha: 0.85);
     canvas.drawOval(
       Rect.fromCenter(
         center: headCenter.translate(-headR * 0.38, -headR * 0.45),
@@ -752,7 +752,7 @@ class _PirateBarrelPainter extends CustomPainter {
     );
     // Crossbones on bandana (simplified)
     final bonePaint = Paint()
-      ..color = Colors.white.withOpacity(0.7)
+      ..color = Colors.white.withValues(alpha: 0.7)
       ..strokeWidth = headR * 0.055
       ..strokeCap = StrokeCap.round;
     canvas.drawLine(

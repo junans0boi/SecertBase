@@ -56,8 +56,9 @@ class _WishTicketScreenState extends State<WishTicketScreen> {
   Future<void> _createTicket() async {
     final issuer = _auth.user?['UserId'] ?? _auth.user?['id'];
     final ownerCode = _auth.user?['PartnerCode'];
-    if (issuer == null || ownerCode == null || _titleCtrl.text.trim().isEmpty)
+    if (issuer == null || ownerCode == null || _titleCtrl.text.trim().isEmpty) {
       return;
+    }
     await http.post(
       Uri.parse('${_auth.baseUrl}/api/wish-tickets'),
       headers: {'Content-Type': 'application/json'},
@@ -164,7 +165,7 @@ class _WishTicketScreenState extends State<WishTicketScreen> {
                 child: ListView.separated(
                   padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
                   itemCount: _tickets.isEmpty ? 1 : _tickets.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  separatorBuilder: (_, _) => const SizedBox(height: 10),
                   itemBuilder: (_, i) {
                     if (_tickets.isEmpty) {
                       return MainCard(

@@ -8,16 +8,13 @@ class UnoAudio {
 
   final _backend = impl.UnoAudioBackend();
 
-  bool _enabled = true;
+  bool enabled = true;
   int _dealIdx = 0;
-
-  bool get enabled => _enabled;
-  set enabled(bool v) => _enabled = v;
 
   Future<void> unlock() async {}
 
   Future<void> _play(String file) async {
-    if (!_enabled) return;
+    if (!enabled) return;
     await _backend.play(file);
   }
 

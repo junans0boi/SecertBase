@@ -94,7 +94,7 @@ class _DiceScreenState extends State<DiceScreen>
           ),
           boxShadow: [
             BoxShadow(
-              color: kPrimary.withOpacity(_rolling ? 0.3 : 0.1),
+              color: kPrimary.withValues(alpha: _rolling ? 0.3 : 0.1),
               blurRadius: _rolling ? 32 : 12,
               spreadRadius: _rolling ? 4 : 0,
             ),
@@ -154,7 +154,7 @@ class _PrimaryButton extends StatelessWidget {
           boxShadow: enabled
               ? [
                   BoxShadow(
-                    color: kPrimary.withOpacity(0.3),
+                    color: kPrimary.withValues(alpha: 0.3),
                     blurRadius: 16,
                     offset: const Offset(0, 4),
                   ),
@@ -203,9 +203,9 @@ class _ResultBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
       decoration: BoxDecoration(
-        color: kPrimary.withOpacity(0.1),
+        color: kPrimary.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kPrimary.withOpacity(0.3)),
+        border: Border.all(color: kPrimary.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

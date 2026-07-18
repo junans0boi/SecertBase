@@ -182,7 +182,7 @@ class _BombVisual extends StatelessWidget {
                 height: 120,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: isMyTurn ? kError.withOpacity(0.15) : kCard,
+                  color: isMyTurn ? kError.withValues(alpha: 0.15) : kCard,
                   border: Border.all(
                     color: isMyTurn ? kError : kBorder,
                     width: isMyTurn ? 2 : 1,
@@ -190,7 +190,7 @@ class _BombVisual extends StatelessWidget {
                   boxShadow: isMyTurn
                       ? [
                           BoxShadow(
-                            color: kError.withOpacity(0.25),
+                            color: kError.withValues(alpha: 0.25),
                             blurRadius: 24,
                             spreadRadius: 4,
                           ),
@@ -208,9 +208,11 @@ class _BombVisual extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           decoration: BoxDecoration(
-            color: _timerColor(remaining).withOpacity(0.12),
+            color: _timerColor(remaining).withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: _timerColor(remaining).withOpacity(0.4)),
+            border: Border.all(
+              color: _timerColor(remaining).withValues(alpha: 0.4),
+            ),
           ),
           child: Text(
             '⏱️ $remaining초',
@@ -248,10 +250,10 @@ class _HolderCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       decoration: BoxDecoration(
-        color: (isMyTurn ? kError : kPrimary).withOpacity(0.1),
+        color: (isMyTurn ? kError : kPrimary).withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: (isMyTurn ? kError : kPrimary).withOpacity(0.35),
+          color: (isMyTurn ? kError : kPrimary).withValues(alpha: 0.35),
         ),
       ),
       child: Row(
@@ -293,9 +295,9 @@ class _QuestionCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: kGold.withOpacity(0.08),
+        color: kGold.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kGold.withOpacity(0.3)),
+        border: Border.all(color: kGold.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -305,7 +307,7 @@ class _QuestionCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: kGold.withOpacity(0.2),
+                  color: kGold.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -429,9 +431,9 @@ class _StartPanelState extends State<_StartPanel> {
           width: double.infinity,
           padding: const EdgeInsets.all(28),
           decoration: BoxDecoration(
-            color: kError.withOpacity(0.08),
+            color: kError.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: kError.withOpacity(0.25)),
+            border: Border.all(color: kError.withValues(alpha: 0.25)),
           ),
           child: Column(
             children: [
@@ -495,7 +497,7 @@ class _StartPanelState extends State<_StartPanel> {
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFFFF9F43).withOpacity(0.3),
+                    color: const Color(0xFFFF9F43).withValues(alpha: 0.3),
                     blurRadius: 16,
                   ),
                 ],

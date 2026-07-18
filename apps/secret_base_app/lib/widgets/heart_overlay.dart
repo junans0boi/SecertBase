@@ -48,10 +48,11 @@ class _HeartOverlayState extends State<HeartOverlay>
             final cfg = _configs[i];
             return AnimatedBuilder(
               animation: _ctrl,
-              builder: (_, __) {
+              builder: (_, _) {
                 final t = _ctrl.value;
-                if (t < cfg.startT || t > cfg.endT)
+                if (t < cfg.startT || t > cfg.endT) {
                   return const SizedBox.shrink();
+                }
                 final progress = (t - cfg.startT) / (cfg.endT - cfg.startT);
                 final y = Curves.easeOut.transform(progress) * cfg.rise;
                 final opacity = progress < 0.15
@@ -84,7 +85,7 @@ class _HeartOverlayState extends State<HeartOverlay>
           Center(
             child: AnimatedBuilder(
               animation: _ctrl,
-              builder: (_, __) {
+              builder: (_, _) {
                 final fade = _ctrl.value < 0.15
                     ? _ctrl.value / 0.15
                     : _ctrl.value > 0.75
