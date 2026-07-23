@@ -30,8 +30,16 @@ Thumbs.db
 *.log
 uploads/
 
-# Sensitive
+# Sensitive / Internal — not for public eyes
 docs/google_auth_info.md
+AGENTS.md
+CLAUDE.md
+CONTEXT.md
+.claude/
+docs/handoff/
+docs/notion/
+services/realtime-server/.env*
+!services/realtime-server/.env.example
 
 # Temp/Trash
 trash/

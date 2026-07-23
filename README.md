@@ -50,47 +50,6 @@
 
 ---
 
-## 로컬 개발 환경
-
-### 사전 준비
-
-- Flutter SDK
-- Node.js 20+
-- SSH 접근 권한 (프로덕션 DB/Redis 터널용)
-
-### 1. SSH 터널 (프로덕션 DB·Redis 로컬 연결)
-
-```bash
-ssh -i ~/Downloads/ssh-key.key -N -f \
-  -L 3307:127.0.0.1:3306 \
-  -L 6380:127.0.0.1:6379 \
-  ubuntu@<서버 IP>
-```
-
-### 2. 백엔드 실행
-
-```bash
-cd services/realtime-server
-cp .env.example .env   # DB/Redis/JWT 시크릿 입력
-npm install
-node src/index.js      # 포트 4100
-```
-
-### 3. Flutter 앱 실행
-
-```bash
-cd apps/secret_base_app
-flutter pub get
-flutter run -d chrome \
-  --web-hostname localhost \
-  --web-port 7357 \
-  '--dart-define=SOCKET_URL=http://localhost:4100'
-```
-
-> 로그인: 이메일/비밀번호 사용 (Google OAuth는 localhost 미등록)
-
----
-
 ## 서버 배포
 
 ```bash
