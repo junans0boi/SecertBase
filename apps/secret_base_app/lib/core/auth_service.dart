@@ -215,7 +215,7 @@ class AuthService extends ChangeNotifier {
 
     try {
       final auth = await account.authentication;
-      final idToken = auth.idToken ?? auth.accessToken;
+      final idToken = auth.idToken;
 
       if (idToken == null || idToken.isEmpty) {
         _googleCompleting = false;
