@@ -659,7 +659,6 @@ router.post(
 
 router.post(
   '/auth/google',
-  disabledFeature(config.PUBLIC_FEATURE_SET, 'google_login'),
   async (req, res) => {
   try {
     const { idToken } = req.body;
