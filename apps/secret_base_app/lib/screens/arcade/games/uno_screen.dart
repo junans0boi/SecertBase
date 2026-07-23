@@ -73,6 +73,11 @@ class _UnoScreenState extends State<UnoScreen> {
   Widget build(BuildContext context) {
     final sock = _socket;
     final currentUser = sock.userId ?? 'jun';
+    final opponentId = sock.presenceNicknames.keys.firstWhere(
+      (k) => k != currentUser,
+      orElse: () => '',
+    );
+    final opponentName = opponentId.isNotEmpty ? sock.nameOf(opponentId) : null;
 
     return Scaffold(
       backgroundColor: const Color(0xFF10121C),
@@ -119,6 +124,7 @@ class _UnoScreenState extends State<UnoScreen> {
                       lastSpecialBy: sock.unoLastSpecialBy,
                       lastSpecialAt: sock.unoLastSpecialAt,
                       topInset: topInset,
+                      opponentName: opponentName,
                     ),
                   ),
                   if (sock.unoActive)

@@ -169,6 +169,10 @@ class _YutScreenState extends State<YutScreen> {
                   p1Character: _characterFor(p1),
                   p2Character: _characterFor(p2),
                   onThrowResultRevealed: _playThrowResultAudio,
+                  nicknames: {
+                    'jun': sock.nameOf(p1),
+                    'gf': sock.nameOf(p2),
+                  },
                 ),
               ),
             ),

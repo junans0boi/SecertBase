@@ -26,6 +26,7 @@ class UnoBoard extends StatefulWidget {
   final String? lastSpecialBy;
   final int? lastSpecialAt;
   final double topInset;
+  final String? opponentName;
 
   const UnoBoard({
     super.key,
@@ -51,6 +52,7 @@ class UnoBoard extends StatefulWidget {
     this.lastSpecialBy,
     this.lastSpecialAt,
     this.topInset = 0,
+    this.opponentName,
   });
 
   @override
@@ -444,6 +446,7 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
                               totalSeconds: _turnSeconds,
                               isMyTurn: isMyTurn,
                               turn: widget.turn,
+                              opponentName: widget.opponentName,
                             ),
                           ),
 
@@ -1584,12 +1587,14 @@ class _TurnTimerBar extends StatelessWidget {
   final int totalSeconds;
   final bool isMyTurn;
   final String? turn;
+  final String? opponentName;
 
   const _TurnTimerBar({
     required this.timeLeft,
     required this.totalSeconds,
     required this.isMyTurn,
     required this.turn,
+    this.opponentName,
   });
 
   Color get _barColor {
@@ -1609,7 +1614,7 @@ class _TurnTimerBar extends StatelessWidget {
         SizedBox(
           width: 60,
           child: Text(
-            isMyTurn ? '내 턴' : (turn ?? '상대'),
+            isMyTurn ? '내 턴' : (opponentName ?? '상대'),
             style: TextStyle(
               color: isMyTurn ? Colors.greenAccent : Colors.white54,
               fontSize: 11,

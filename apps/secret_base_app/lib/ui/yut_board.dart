@@ -25,6 +25,7 @@ class YutBoard extends StatefulWidget {
   final String p1Character;
   final String p2Character;
   final ValueChanged<int>? onThrowResultRevealed;
+  final Map<String, String> nicknames;
 
   const YutBoard({
     super.key,
@@ -49,6 +50,7 @@ class YutBoard extends StatefulWidget {
     this.p1Character = 'honggilldong',
     this.p2Character = 'miho',
     this.onThrowResultRevealed,
+    this.nicknames = const {},
   });
 
   @override
@@ -97,6 +99,8 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
 
   int? _selectedPieceId;
   bool _moveInFlight = false;
+
+  String _nick(String id) => widget.nicknames[id] ?? id;
 
   @override
   void initState() {
@@ -768,7 +772,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                 borderRadius: BorderRadius.circular(18),
               ),
               child: Text(
-                '$starter 선공',
+                '${_nick(starter)} 선공',
                 style: const TextStyle(
                   color: Colors.black87,
                   fontSize: 20,
@@ -800,7 +804,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     return Column(
       children: [
         Text(
-          name,
+          _nick(name),
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
