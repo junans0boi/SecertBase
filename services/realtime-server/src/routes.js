@@ -57,6 +57,20 @@ const ensureSetlogTable = () => {
   `);
     await query(`ALTER TABLE setlog_posts ADD COLUMN IF NOT EXISTS map_pin_id INT NULL`);
     await query(`ALTER TABLE setlog_posts ADD INDEX IF NOT EXISTS idx_setlog_map_pin (map_pin_id)`);
+    await query(`ALTER TABLE setlog_posts ADD COLUMN IF NOT EXISTS session_id VARCHAR(64) NULL`);
+    await query(`ALTER TABLE setlog_posts ADD INDEX IF NOT EXISTS idx_setlog_session (session_id)`);
+    await query(`
+      CREATE TABLE IF NOT EXISTS setlog_reactions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        couple_id INT NOT NULL,
+        session_id VARCHAR(64) NOT NULL,
+        user_id INT NOT NULL,
+        emoji VARCHAR(8) NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_reaction (couple_id, session_id, user_id),
+        INDEX idx_reaction_session (couple_id, session_id)
+      )
+    `);
   })();
 
   return setlogReadyPromise;
@@ -1386,7 +1400,11 @@ router.get('/setlog', async (req, res) => {
     }
     let sql = `SELECT p.*, u.Nickname, COALESCE(u.Nickname, u.UserName) AS UserName,
                       mp.place_name AS linked_place_name, mp.category AS linked_place_category,
-                      mp.archived_at AS linked_place_archived_at
+                      mp.archived_at AS linked_place_archived_at,
+                      (SELECT JSON_ARRAYAGG(JSON_OBJECT('user_id', r.user_id, 'emoji', r.emoji))
+                       FROM setlog_reactions r
+                       WHERE p.session_id IS NOT NULL AND r.session_id = p.session_id AND r.couple_id = p.couple_id
+                      ) AS session_reactions
                FROM setlog_posts p
                LEFT JOIN Users u ON p.user_id = u.UserId
                LEFT JOIN map_pins mp ON mp.id = p.map_pin_id
@@ -1458,6 +1476,7 @@ router.post('/setlog', upload.single('media'), async (req, res) => {
       captured_at,
       media_type,
       map_pin_id,
+      session_id,
     } = req.body;
     let mediaUrl = req.file ? `/uploads/${req.file.filename}` : null;
     const uploadedMediaType = req.file?.mimetype.startsWith('video/') ? 'video' : 'image';
@@ -1516,8 +1535,8 @@ router.post('/setlog', upload.single('media'), async (req, res) => {
     
     const result = await query(
       `INSERT INTO setlog_posts
-       (couple_id, user_id, map_pin_id, user_code, media_type, media_url, caption, tags, taken_at, captured_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, NOW()))`,
+       (couple_id, user_id, map_pin_id, user_code, media_type, media_url, caption, tags, taken_at, captured_at, session_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, NOW()), ?)`,
       [
         coupleId,
         userId,
@@ -1529,6 +1548,7 @@ router.post('/setlog', upload.single('media'), async (req, res) => {
         JSON.stringify(tagsArray),
         taken_at,
         captured_at || null,
+        session_id || null,
       ]
     );
     keepUpload = true;
@@ -1555,6 +1575,50 @@ router.post('/setlog', upload.single('media'), async (req, res) => {
         console.error('[API] failed to clean rejected MomentLoop upload:', error);
       });
     }
+  }
+});
+
+// 셋로그 이모지 반응 토글
+router.post('/setlog/reaction', async (req, res) => {
+  try {
+    await ensureSetlogTable();
+    const { session_id, emoji } = req.body;
+    if (!session_id || !emoji) {
+      return res.status(400).json({ ok: false, reason: 'missing_fields' });
+    }
+    const userId = req.auth.userId;
+    const coupleId = await getCoupleIdForUser(userId);
+    if (!coupleId) {
+      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+    }
+
+    const existing = await query(
+      'SELECT emoji FROM setlog_reactions WHERE couple_id = ? AND session_id = ? AND user_id = ? LIMIT 1',
+      [coupleId, session_id, userId]
+    );
+
+    if (existing.rows[0]?.emoji === emoji) {
+      await query(
+        'DELETE FROM setlog_reactions WHERE couple_id = ? AND session_id = ? AND user_id = ?',
+        [coupleId, session_id, userId]
+      );
+    } else {
+      await query(
+        `INSERT INTO setlog_reactions (couple_id, session_id, user_id, emoji)
+         VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE emoji = VALUES(emoji), created_at = NOW()`,
+        [coupleId, session_id, userId, emoji]
+      );
+    }
+
+    const reactions = await query(
+      'SELECT user_id, emoji FROM setlog_reactions WHERE couple_id = ? AND session_id = ?',
+      [coupleId, session_id]
+    );
+    res.json({ ok: true, reactions: reactions.rows });
+  } catch (err) {
+    console.error('[API] /setlog/reaction POST error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
   }
 });
 
