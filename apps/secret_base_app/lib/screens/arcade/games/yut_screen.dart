@@ -112,19 +112,9 @@ class _YutScreenState extends State<YutScreen> {
   @override
   Widget build(BuildContext context) {
     final sock = _socket;
-    final currentUser = sock.userId ?? 'jun';
-    final p1 = sock.yutPlayers.isNotEmpty ? sock.yutPlayers[0] : 'jun';
-    final p2 = sock.yutPlayers.length > 1 ? sock.yutPlayers[1] : 'gf';
-    final boardUser = currentUser == p2 ? 'gf' : 'jun';
-    final boardTurn = sock.yutCurrentTurn == p2
-        ? 'gf'
-        : sock.yutCurrentTurn == p1
-        ? 'jun'
-        : sock.yutCurrentTurn;
-    final boardStartRolls = {
-      'jun': sock.yutStartRolls[p1],
-      'gf': sock.yutStartRolls[p2],
-    };
+    final currentUser = sock.userId ?? '';
+    final p1 = sock.yutPlayers.isNotEmpty ? sock.yutPlayers[0] : '';
+    final p2 = sock.yutPlayers.length > 1 ? sock.yutPlayers[1] : '';
     final p1Pieces = sock.yutPieceDetails[p1] ?? sock.yutPieces[p1];
     final p2Pieces = sock.yutPieceDetails[p2] ?? sock.yutPieces[p2];
 
@@ -149,11 +139,11 @@ class _YutScreenState extends State<YutScreen> {
                 child: YutBoard(
                   gameId: sock.yutActive ? (sock.yutGameId ?? 'active') : null,
                   phase: sock.yutPhase,
-                  turn: boardTurn,
+                  turn: sock.yutCurrentTurn,
                   p1Pieces: p1Pieces,
                   p2Pieces: p2Pieces,
                   pendingMoves: sock.yutPendingMoves,
-                  startRolls: boardStartRolls,
+                  startRolls: sock.yutStartRolls,
                   orderCountdownUntil: sock.yutOrderCountdownUntil,
                   onNewGame: sock.newYutGame,
                   onRollStartDice: sock.rollYutStartDice,
@@ -162,17 +152,16 @@ class _YutScreenState extends State<YutScreen> {
                   onMovePiece: (pieceId, moveIndex, {int? backdoDir}) =>
                       sock.moveYut(pieceId, moveIndex: moveIndex, backdoDir: backdoDir),
                   onMoveNewPiece: () => sock.moveYut(0),
-                  currentUser: boardUser,
+                  currentUser: currentUser,
                   lastResultName: sock.yutLastThrow,
                   lastThrowAt: sock.yutLastThrowAt,
                   lastThrowNak: sock.yutLastNak,
                   p1Character: _characterFor(p1),
                   p2Character: _characterFor(p2),
                   onThrowResultRevealed: _playThrowResultAudio,
-                  nicknames: {
-                    'jun': sock.nameOf(p1),
-                    'gf': sock.nameOf(p2),
-                  },
+                  p1UserId: p1,
+                  p2UserId: p2,
+                  displayName: sock.nameOf,
                 ),
               ),
             ),

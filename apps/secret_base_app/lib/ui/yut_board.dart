@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../core/yut_audio.dart';
 
+String _defaultDisplayName(String uid) => uid;
+
 class YutBoard extends StatefulWidget {
   final String? gameId;
   final String? phase;
@@ -25,7 +27,9 @@ class YutBoard extends StatefulWidget {
   final String p1Character;
   final String p2Character;
   final ValueChanged<int>? onThrowResultRevealed;
-  final Map<String, String> nicknames;
+  final String p1UserId;
+  final String p2UserId;
+  final String Function(String) displayName;
 
   const YutBoard({
     super.key,
@@ -50,7 +54,9 @@ class YutBoard extends StatefulWidget {
     this.p1Character = 'honggilldong',
     this.p2Character = 'miho',
     this.onThrowResultRevealed,
-    this.nicknames = const {},
+    this.p1UserId = '',
+    this.p2UserId = '',
+    this.displayName = _defaultDisplayName,
   });
 
   @override
@@ -100,7 +106,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
   int? _selectedPieceId;
   bool _moveInFlight = false;
 
-  String _nick(String id) => widget.nicknames[id] ?? id;
+  String _display(String uid) => widget.displayName(uid);
 
   @override
   void initState() {
@@ -510,7 +516,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     final isMyTurn = widget.turn == widget.currentUser;
     final hasMove = widget.pendingMoves?.isNotEmpty == true;
     final isMovePhase = widget.phase == 'moving' || widget.phase == 'throwing';
-    final pieces = widget.currentUser == 'gf'
+    final pieces = widget.currentUser == widget.p2UserId
         ? widget.p2Pieces
         : widget.p1Pieces;
     if (_moveInFlight) return false;
@@ -668,8 +674,8 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
   }
 
   Widget _buildRollOrderView() {
-    final junRoll = widget.startRolls?['jun'];
-    final gfRoll = widget.startRolls?['gf'];
+    final p1Roll = widget.startRolls?[widget.p1UserId];
+    final p2Roll = widget.startRolls?[widget.p2UserId];
     final alreadyRolled = widget.startRolls?[widget.currentUser] != null;
 
     return Container(
@@ -690,9 +696,9 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _buildStartDice('jun', junRoll),
+                _buildStartDice(widget.p1UserId, p1Roll),
                 const SizedBox(width: 28),
-                _buildStartDice('gf', gfRoll),
+                _buildStartDice(widget.p2UserId, p2Roll),
               ],
             ),
             const SizedBox(height: 24),
@@ -721,18 +727,8 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
   }
 
   Widget _buildOrderCountdownView() {
-    final players = widget.startRolls?.keys.toList() ?? const [];
-    final first = players.contains('jun')
-        ? 'jun'
-        : (players.isNotEmpty ? players[0] : 'jun');
-    final second = players.contains('gf')
-        ? 'gf'
-        : (players.length > 1
-              ? players.firstWhere(
-                  (player) => player != first,
-                  orElse: () => 'gf',
-                )
-              : 'gf');
+    final first = widget.p1UserId;
+    final second = widget.p2UserId;
     final firstRoll = widget.startRolls?[first];
     final secondRoll = widget.startRolls?[second];
     final starter = widget.turn ?? '-';
@@ -772,7 +768,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                 borderRadius: BorderRadius.circular(18),
               ),
               child: Text(
-                '${_nick(starter)} 선공',
+                '${_display(starter)} 선공',
                 style: const TextStyle(
                   color: Colors.black87,
                   fontSize: 20,
@@ -804,7 +800,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     return Column(
       children: [
         Text(
-          _nick(name),
+          _display(name),
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
@@ -860,21 +856,21 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     }
 
     final isMyTurn = widget.turn == widget.currentUser;
-    final opponent = widget.currentUser == 'jun' ? 'gf' : 'jun';
-    final isGf = widget.currentUser == 'gf';
+    final opponent = widget.currentUser == widget.p1UserId ? widget.p2UserId : widget.p1UserId;
+    final isP2 = widget.currentUser == widget.p2UserId;
     final isRollOrder = widget.phase == 'roll_order';
     final isOrderCountdown = widget.phase == 'order_countdown';
     final canThrow = isMyTurn &&
         (widget.phase == 'throwing' ||
             (widget.phase == 'moving' && widget.hasBonusThrow));
 
-    final myPieces = isGf ? widget.p2Pieces : widget.p1Pieces;
-    final opPieces = isGf ? widget.p1Pieces : widget.p2Pieces;
+    final myPieces = isP2 ? widget.p2Pieces : widget.p1Pieces;
+    final opPieces = isP2 ? widget.p1Pieces : widget.p2Pieces;
 
-    final myColor = isGf ? const Color(0xFF4B8DD8) : const Color(0xFFE45858);
-    final opColor = isGf ? const Color(0xFFE45858) : const Color(0xFF4B8DD8);
-    final myCharacter = isGf ? widget.p2Character : widget.p1Character;
-    final opCharacter = isGf ? widget.p1Character : widget.p2Character;
+    final myColor = isP2 ? const Color(0xFF4B8DD8) : const Color(0xFFE45858);
+    final opColor = isP2 ? const Color(0xFFE45858) : const Color(0xFF4B8DD8);
+    final myCharacter = isP2 ? widget.p2Character : widget.p1Character;
+    final opCharacter = isP2 ? widget.p1Character : widget.p2Character;
 
     Map<int, int> p1Counts = {};
     if (widget.p1Pieces != null) {
@@ -1030,9 +1026,9 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                           character: widget.p1Character,
                                           count: count,
                                           selected:
-                                              !isGf &&
+                                              !isP2 &&
                                               _selectedPieceId == e.key,
-                                          onTap: !isGf
+                                          onTap: !isP2
                                               ? () => _selectPiece(e.key)
                                               : null,
                                           stackOffset: const Offset(-10, -10),
@@ -1059,8 +1055,8 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                           character: widget.p2Character,
                                           count: count,
                                           selected:
-                                              isGf && _selectedPieceId == e.key,
-                                          onTap: isGf
+                                              isP2 && _selectedPieceId == e.key,
+                                          onTap: isP2
                                               ? () => _selectPiece(e.key)
                                               : null,
                                           stackOffset: const Offset(10, 10),
