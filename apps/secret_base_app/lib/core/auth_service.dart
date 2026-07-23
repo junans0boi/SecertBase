@@ -200,20 +200,31 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<bool> _completeGoogleLogin(GoogleSignInAccount account) async {
-    if (_googleCompleting) return false;
+  Future<bool>? _googleCompleteFuture;
+
+  Future<bool> _completeGoogleLogin(GoogleSignInAccount account) {
+    if (_googleCompleteFuture != null) return _googleCompleteFuture!;
+    _googleCompleteFuture = _doCompleteGoogleLogin(account).whenComplete(() {
+      _googleCompleteFuture = null;
+    });
+    return _googleCompleteFuture!;
+  }
+
+  Future<bool> _doCompleteGoogleLogin(GoogleSignInAccount account) async {
     _googleCompleting = true;
 
-    final idToken = account.authentication.idToken;
-    if (idToken == null || idToken.isEmpty) {
-      _googleCompleting = false;
-      _googleLoading = false;
-      _googleError = 'Google 인증 토큰을 받지 못했습니다.';
-      notifyListeners();
-      return false;
-    }
-
     try {
+      final auth = await account.authentication;
+      final idToken = auth.idToken ?? auth.accessToken;
+
+      if (idToken == null || idToken.isEmpty) {
+        _googleCompleting = false;
+        _googleLoading = false;
+        _googleError = 'Google 인증 토큰을 받지 못했습니다.';
+        notifyListeners();
+        return false;
+      }
+
       final response = await http.post(
         Uri.parse('$baseUrl/api/auth/google'),
         headers: {'Content-Type': 'application/json'},
