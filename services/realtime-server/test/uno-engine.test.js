@@ -67,10 +67,11 @@ test('discard_all card discards every card of its own color only', () => {
 
   const batch = collectDiscardAllBatch(hand, trigger);
 
+  // trigger is last → sits on top of discard pile
   assert.deepEqual(batch.map((card) => card.id), [
-    'blue-discard_all-a',
     'blue-3-a',
     'blue-skip-a',
+    'blue-discard_all-a',
   ]);
   assert.deepEqual(hand.map((card) => card.id), ['red-3-a', 'wild-0']);
 });
