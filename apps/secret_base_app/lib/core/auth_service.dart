@@ -445,6 +445,9 @@ class AuthService extends ChangeNotifier {
         notifyListeners();
         return _user;
       }
+      if (response.statusCode == 401) {
+        await logout();
+      }
       return null;
     } catch (e) {
       debugPrint('[Auth] Get profile error: $e');
