@@ -106,51 +106,6 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     ),
   ];
 
-  Widget _buildStoryIcon(int idx) {
-    final game = _games[idx];
-    final isSelected = _selectedIdx == idx;
-    return GestureDetector(
-      onTap: () => setState(() => _selectedIdx = isSelected ? null : idx),
-      child: SizedBox(
-        width: 64,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 54,
-              height: 54,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: game.background,
-                border: Border.all(
-                  color: isSelected ? game.color : Colors.transparent,
-                  width: 3,
-                ),
-                boxShadow: isSelected
-                    ? [BoxShadow(color: game.color.withValues(alpha: 0.45), blurRadius: 12)]
-                    : null,
-              ),
-              child: Icon(game.icon, color: game.color, size: 26),
-            ),
-            const SizedBox(height: 5),
-            Text(
-              game.title,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
-                color: isSelected ? game.color : kMainSub,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _screen(String type) => switch (type) {
     'yut' => const YutScreen(),
     'bomb' => const BombScreen(),
@@ -197,128 +152,248 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     );
   }
 
+  Widget _buildStoryIcon(int idx) {
+    final game = _games[idx];
+    final isSelected = _selectedIdx == idx;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedIdx = isSelected ? null : idx),
+      child: SizedBox(
+        width: 66,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: 54,
+              height: 54,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: game.background,
+                border: Border.all(
+                  color: isSelected ? game.color : Colors.transparent,
+                  width: 2.5,
+                ),
+                boxShadow: isSelected
+                    ? [BoxShadow(color: game.color.withValues(alpha: 0.35), blurRadius: 10, spreadRadius: 1)]
+                    : null,
+              ),
+              child: Icon(game.icon, color: game.color, size: 26),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              game.title,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
+                color: isSelected ? game.color : kMainSub,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.sports_esports_rounded, size: 60, color: kMainMuted),
+          const SizedBox(height: 14),
+          Text(
+            '위에서 게임을 골라보세요',
+            style: mainBody(size: 15, color: kMainSub),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailCard(BuildContext context, _GameInfo game, bool connected) {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Game info + start button
+          MainCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: game.background,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Icon(game.icon, color: game.color, size: 32),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(game.title, style: mainTitle(size: 22)),
+                          const SizedBox(height: 4),
+                          Text(
+                            game.description,
+                            style: mainBody(size: 13, color: kMainSub),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: connected ? () => _open(context, game) : null,
+                    icon: const Icon(Icons.play_arrow_rounded, size: 22),
+                    label: const Text(
+                      '시작하기',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      backgroundColor: connected ? game.color : kMainMuted,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+                if (!connected) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    '상대방 연결을 확인하고 있어요',
+                    textAlign: TextAlign.center,
+                    style: mainBody(size: 12, color: kMainMuted),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Future: stats row
+          Row(
+            children: [
+              Expanded(
+                child: _buildComingSoonCard(
+                  Icons.bar_chart_rounded,
+                  '기록',
+                  '전적과 통계가 표시될 예정이에요',
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildComingSoonCard(
+                  Icons.diamond_rounded,
+                  '재화',
+                  '게임 보상과 아이템이 올 예정이에요',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildComingSoonCard(IconData icon, String label, String hint) {
+    return MainCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 16, color: kMainSub),
+              const SizedBox(width: 6),
+              Text(label, style: mainTitle(size: 14)),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: kMainHoneySoft,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: kMainHoney.withValues(alpha: 0.45)),
+                ),
+                child: Text(
+                  '준비 중',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: kMainHoney,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Center(
+            child: Column(
+              children: [
+                Icon(icon, size: 32, color: kMainMuted.withValues(alpha: 0.35)),
+                const SizedBox(height: 6),
+                Text(hint, style: mainBody(size: 11, color: kMainMuted), textAlign: TextAlign.center),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final connected = SocketService().isConnected;
     final selected = _selectedIdx != null ? _games[_selectedIdx!] : null;
 
     return CozyPage(
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(18, 16, 18, 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('함께 놀기', style: mainTitle(size: 32)),
-          const SizedBox(height: 4),
-          Text(
-            connected ? '상대방과 실시간으로 시작할 수 있어요' : '상대방 연결을 확인하고 있어요',
-            style: mainBody(size: 13, color: kMainSub),
-          ),
-          const SizedBox(height: 14),
-          // Story-style horizontal scroll
-          SizedBox(
-            height: 90,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              itemCount: _games.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 6),
-              itemBuilder: (_, i) => _buildStoryIcon(i),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('함께 놀기', style: mainTitle(size: 32)),
+                const SizedBox(height: 4),
+                Text(
+                  connected ? '상대방과 실시간으로 시작할 수 있어요' : '상대방 연결을 확인하고 있어요',
+                  style: mainBody(size: 13, color: kMainSub),
+                ),
+                const SizedBox(height: 14),
+              ],
             ),
           ),
-          // Selected game description card
-          AnimatedSize(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-            child: selected == null
-                ? const SizedBox.shrink()
-                : Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child: MainCard(
-                      padding: EdgeInsets.zero,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(8),
-                        onTap: connected ? () => _open(context, selected) : null,
-                        child: Padding(
-                          padding: const EdgeInsets.all(14),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 48,
-                                height: 48,
-                                decoration: BoxDecoration(
-                                  color: selected.background,
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Icon(selected.icon, color: selected.color, size: 26),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(selected.title, style: mainTitle(size: 18)),
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      selected.description,
-                                      style: mainBody(size: 12, color: kMainSub),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Icon(
-                                Icons.play_circle_rounded,
-                                color: connected ? selected.color : kMainSub,
-                                size: 32,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+          SizedBox(
+            height: 88,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              itemCount: _games.length,
+              separatorBuilder: (context, index) => const SizedBox(width: 8),
+              itemBuilder: (context, i) => _buildStoryIcon(i),
+            ),
           ),
-          const SizedBox(height: 14),
-          ..._games.map(
-            (game) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: MainCard(
-                padding: EdgeInsets.zero,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(8),
-                  onTap: connected ? () => _open(context, game) : null,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: game.background,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Icon(game.icon, color: game.color),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(game.title, style: mainTitle(size: 20)),
-                              const SizedBox(height: 3),
-                              Text(
-                                game.description,
-                                style: mainBody(size: 12, color: kMainSub),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const Icon(Icons.arrow_forward_ios_rounded, size: 16),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
+              child: selected == null
+                  ? _buildEmptyState()
+                  : _buildDetailCard(context, selected, connected),
             ),
           ),
         ],
