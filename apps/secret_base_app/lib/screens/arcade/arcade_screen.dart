@@ -13,8 +13,15 @@ import 'games/telepathy_screen.dart';
 import 'games/uno_screen.dart';
 import 'games/yut_screen.dart';
 
-class ArcadeScreen extends StatelessWidget {
+class ArcadeScreen extends StatefulWidget {
   const ArcadeScreen({super.key});
+
+  @override
+  State<ArcadeScreen> createState() => _ArcadeScreenState();
+}
+
+class _ArcadeScreenState extends State<ArcadeScreen> {
+  int? _selectedIdx;
 
   static const _games = [
     _GameInfo(
@@ -99,6 +106,51 @@ class ArcadeScreen extends StatelessWidget {
     ),
   ];
 
+  Widget _buildStoryIcon(int idx) {
+    final game = _games[idx];
+    final isSelected = _selectedIdx == idx;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedIdx = isSelected ? null : idx),
+      child: SizedBox(
+        width: 64,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 54,
+              height: 54,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: game.background,
+                border: Border.all(
+                  color: isSelected ? game.color : Colors.transparent,
+                  width: 3,
+                ),
+                boxShadow: isSelected
+                    ? [BoxShadow(color: game.color.withValues(alpha: 0.45), blurRadius: 12)]
+                    : null,
+              ),
+              child: Icon(game.icon, color: game.color, size: 26),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              game.title,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
+                color: isSelected ? game.color : kMainSub,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _screen(String type) => switch (type) {
     'yut' => const YutScreen(),
     'bomb' => const BombScreen(),
@@ -148,6 +200,8 @@ class ArcadeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final connected = SocketService().isConnected;
+    final selected = _selectedIdx != null ? _games[_selectedIdx!] : null;
+
     return CozyPage(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(18, 16, 18, 32),
@@ -158,7 +212,72 @@ class ArcadeScreen extends StatelessWidget {
             connected ? '상대방과 실시간으로 시작할 수 있어요' : '상대방 연결을 확인하고 있어요',
             style: mainBody(size: 13, color: kMainSub),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
+          // Story-style horizontal scroll
+          SizedBox(
+            height: 90,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              itemCount: _games.length,
+              separatorBuilder: (context, index) => const SizedBox(width: 6),
+              itemBuilder: (_, i) => _buildStoryIcon(i),
+            ),
+          ),
+          // Selected game description card
+          AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            child: selected == null
+                ? const SizedBox.shrink()
+                : Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: MainCard(
+                      padding: EdgeInsets.zero,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: connected ? () => _open(context, selected) : null,
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  color: selected.background,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(selected.icon, color: selected.color, size: 26),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(selected.title, style: mainTitle(size: 18)),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      selected.description,
+                                      style: mainBody(size: 12, color: kMainSub),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Icon(
+                                Icons.play_circle_rounded,
+                                color: connected ? selected.color : kMainSub,
+                                size: 32,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+          ),
+          const SizedBox(height: 14),
           ..._games.map(
             (game) => Padding(
               padding: const EdgeInsets.only(bottom: 10),

@@ -112,6 +112,9 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
           case 'bomb':
             _socket.newBombGame();
             break;
+          case 'uno':
+            _socket.newUnoGame(mode: _socket.selectedUnoMode);
+            break;
         }
       });
     }

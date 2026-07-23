@@ -108,6 +108,7 @@ class SocketService extends ChangeNotifier {
   int yutLastStackedCount = 0;
   int? yutOrderCountdownUntil;
   List<dynamic> yutPendingMoves = [];
+  bool yutHasBonusThrow = false;
   Map<String, dynamic> yutStartRolls = {};
   List<String> yutPlayers = [];
   Map<String, List<int>> yutPieces = {}; // userId -> piece positions (0-20)
@@ -1272,10 +1273,14 @@ class SocketService extends ChangeNotifier {
 
   void rollYutStartDice() => _socket?.emit('game:yut:roll_start');
   void throwYut() => _socket?.emit('game:yut:throw');
-  void moveYut(int pieceId, {int moveIndex = 0}) => _socket?.emit(
-    'game:yut:move',
-    {'pieceId': pieceId, 'moveIndex': moveIndex},
-  );
+  void moveYut(int pieceId, {int moveIndex = 0, int? backdoDir}) {
+    final payload = <String, dynamic>{
+      'pieceId': pieceId,
+      'moveIndex': moveIndex,
+    };
+    if (backdoDir != null) payload['backdoDir'] = backdoDir;
+    _socket?.emit('game:yut:move', payload);
+  }
 
   void setUnoMode(String mode) {
     if (mode != 'classic' && mode != 'go_wild') return;
@@ -1374,6 +1379,7 @@ class SocketService extends ChangeNotifier {
     yutPhase = map['phase'] as String? ?? yutPhase ?? 'throwing';
     yutCurrentTurn = map['currentTurn'] as String?;
     yutCharacters = _stringMap(map['characters']);
+    yutHasBonusThrow = map['hasBonusThrow'] == true;
     yutBgm = map['bgm'] as String? ?? yutBgm;
     yutOrderCountdownUntil = (map['orderCountdownUntil'] as num?)?.toInt();
     yutStartRolls = _m(map['startRolls'] ?? yutStartRolls);

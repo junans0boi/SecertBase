@@ -15,7 +15,7 @@ Widget _board({String? result, int? throwAt}) {
         onNewGame: () {},
         onRollStartDice: () {},
         onThrow: () {},
-        onMovePiece: (_, _) {},
+        onMovePiece: (_, _, {int? backdoDir}) {},
         onMoveNewPiece: () {},
         currentUser: 'me',
         lastResultName: result,

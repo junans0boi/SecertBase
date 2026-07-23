@@ -157,9 +157,10 @@ class _YutScreenState extends State<YutScreen> {
                   orderCountdownUntil: sock.yutOrderCountdownUntil,
                   onNewGame: sock.newYutGame,
                   onRollStartDice: sock.rollYutStartDice,
+                  hasBonusThrow: sock.yutHasBonusThrow,
                   onThrow: sock.throwYut,
-                  onMovePiece: (pieceId, moveIndex) =>
-                      sock.moveYut(pieceId, moveIndex: moveIndex),
+                  onMovePiece: (pieceId, moveIndex, {int? backdoDir}) =>
+                      sock.moveYut(pieceId, moveIndex: moveIndex, backdoDir: backdoDir),
                   onMoveNewPiece: () => sock.moveYut(0),
                   currentUser: boardUser,
                   lastResultName: sock.yutLastThrow,

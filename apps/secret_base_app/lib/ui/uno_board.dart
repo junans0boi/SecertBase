@@ -276,6 +276,10 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
     // In draw stack mode, only matching defense cards are playable
     if (widget.drawStack > 0 && widget.drawStackType != null) {
       if (widget.mode == 'classic') return false;
+      // ALL bypasses draw stack in go_wild mode
+      if (val == 'discard_all') return true;
+      // +4 stack: only wild_draw4 can defend (not draw2)
+      if (widget.drawStackType == 'wild_draw4') return val == 'wild_draw4';
       return val == 'draw2' || val == 'wild_draw4';
     }
     if (widget.mode == 'classic' && val == 'discard_all') return false;

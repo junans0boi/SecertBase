@@ -119,6 +119,7 @@ const piratePickSchema = z.object({
 const yutMoveSchema = z.object({
   pieceId: z.number().int().min(0).max(3),
   moveIndex: z.number().int().min(0).max(20).optional().default(0),
+  backdoDir: z.number().int().optional(),
 });
 
 const unoPlaySchema = z.object({
@@ -1202,9 +1203,17 @@ export const registerSocketHandlers = (io) => {
         ack({ ok: false, reason: "not_your_turn" });
         return;
       }
-      if (gameState.phase !== "throwing") {
+      // Allow throw during moving phase only when bonus throw is available
+      const canThrow = gameState.phase === "throwing" ||
+        (gameState.phase === "moving" && gameState.hasBonusThrow);
+      if (!canThrow) {
         ack({ ok: false, reason: "must_move_first" });
         return;
+      }
+
+      // Consume bonus throw if it was used
+      if (gameState.hasBonusThrow) {
+        gameState.hasBonusThrow = false;
       }
 
       const throwResult = throwYut();
@@ -1218,10 +1227,16 @@ export const registerSocketHandlers = (io) => {
         gameState.pendingMoves.push(throwResult.result);
       }
 
+      // New 윷/모 grants another bonus throw
+      if (throwResult.bonusThrow) {
+        gameState.hasBonusThrow = true;
+      }
+
       if (isNak && gameState.pendingMoves.length === 0) {
+        gameState.hasBonusThrow = false;
         gameState.currentTurn = getNextYutPlayer(gameState, userId);
         gameState.phase = "throwing";
-      } else if (!throwResult.bonusThrow) {
+      } else {
         gameState.phase = "moving";
       }
 
@@ -1266,7 +1281,7 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const { pieceId, moveIndex } = parsed.data;
+      const { pieceId, moveIndex, backdoDir } = parsed.data;
       if (moveIndex >= gameState.pendingMoves.length) {
         ack({ ok: false, reason: "invalid_move_index" });
         return;
@@ -1284,7 +1299,7 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const moveResult = movePiece(piece, steps);
+      const moveResult = movePiece(piece, steps, { backdoDir });
 
       if (moveResult === null) {
         ack({ ok: false, reason: "invalid_move" });

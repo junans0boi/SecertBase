@@ -67,8 +67,9 @@ export function throwYut() {
 /**
  * Move a piece on the visual board.
  * Returns `{ position, lastPos }` or null if the move cannot be made.
+ * opts.backdoDir: for pos 23 with 백도, explicitly choose 22 or 25.
  */
-export function movePiece(piece, steps) {
+export function movePiece(piece, steps, { backdoDir } = {}) {
   if (piece.finished) {
     return null;
   }
@@ -80,7 +81,7 @@ export function movePiece(piece, steps) {
     if (position === 0) {
       return { position: 0, lastPos };
     }
-    return { position: getPrevPosition(position, lastPos), lastPos: position };
+    return { position: getPrevPosition(position, lastPos, backdoDir), lastPos: position };
   }
 
   for (let i = 0; i < steps; i += 1) {
@@ -149,6 +150,7 @@ export function createYutGameState(player1, player2, options = {}) {
     startRolls: {},
     orderCountdownUntil: null,
     pendingMoves: [],
+    hasBonusThrow: false,
     caughtOpponentThisTurn: false,
     winner: null,
     lastThrow: null,
@@ -167,11 +169,19 @@ export function recordCapture(gameState, capturedCount) {
 
 /**
  * Decide the next turn after a move. Only settles when every pending move
- * has been played; a capture anywhere in the turn keeps the turn once.
+ * has been played; a bonus throw or capture keeps the turn.
  */
 export function settleTurnAfterMove(gameState, userId) {
   if (gameState.pendingMoves.length > 0) {
     gameState.phase = "moving";
+    return;
+  }
+  if (gameState.hasBonusThrow) {
+    // Consume the bonus: keep turn and go back to throwing
+    gameState.hasBonusThrow = false;
+    gameState.caughtOpponentThisTurn = false;
+    gameState.currentTurn = userId;
+    gameState.phase = "throwing";
     return;
   }
   if (gameState.caughtOpponentThisTurn) {
@@ -205,6 +215,7 @@ export function serializeYutGame(gameState) {
     startRolls: gameState.startRolls ?? {},
     orderCountdownUntil: gameState.orderCountdownUntil ?? null,
     pendingMoves: gameState.pendingMoves,
+    hasBonusThrow: gameState.hasBonusThrow ?? false,
     lastThrow: gameState.lastThrow,
     winner: gameState.winner,
     pieces: Object.fromEntries(
@@ -260,11 +271,12 @@ function getNextPosition(currentPosition, isFirstStep, lastPos = 0) {
   return nextMap[currentPosition] ?? GOAL_POSITION;
 }
 
-function getPrevPosition(currentPosition, lastPos) {
+function getPrevPosition(currentPosition, lastPos, backdoDir = null) {
   if (currentPosition === GOAL_POSITION) {
     return lastPos || 19;
   }
   if (currentPosition === 23) {
+    if (backdoDir === 22 || backdoDir === 25) return backdoDir;
     return lastPos === 25 || lastPos === 24 || lastPos === 10 ? 25 : 22;
   }
   if (currentPosition === 15 && lastPos === 29) {

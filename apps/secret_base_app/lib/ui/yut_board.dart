@@ -12,10 +12,11 @@ class YutBoard extends StatefulWidget {
   final List<dynamic>? pendingMoves;
   final Map<String, dynamic>? startRolls;
   final int? orderCountdownUntil;
+  final bool hasBonusThrow;
   final VoidCallback onNewGame;
   final VoidCallback onRollStartDice;
   final VoidCallback onThrow;
-  final void Function(int, int) onMovePiece;
+  final void Function(int, int, {int? backdoDir}) onMovePiece;
   final VoidCallback onMoveNewPiece;
   final String currentUser;
   final String? lastResultName; // Added to show the recent throw
@@ -35,6 +36,7 @@ class YutBoard extends StatefulWidget {
     this.pendingMoves,
     this.startRolls,
     this.orderCountdownUntil,
+    this.hasBonusThrow = false,
     required this.onNewGame,
     required this.onRollStartDice,
     required this.onThrow,
@@ -57,11 +59,13 @@ class _MoveGuideOption {
   final int index;
   final int steps;
   final int targetPos;
+  final int? backdoDir;
 
   const _MoveGuideOption({
     required this.index,
     required this.steps,
     required this.targetPos,
+    this.backdoDir,
   });
 }
 
@@ -280,6 +284,12 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     for (var i = 0; i < moves.length; i += 1) {
       final steps = _moveValue(moves[i]);
       if (steps == -1 && position == 0) {
+        continue;
+      }
+      // At pos 23, 백도 is ambiguous: two paths (22 or 25). Show both.
+      if (steps == -1 && position == 23) {
+        options.add(_MoveGuideOption(index: i, steps: steps, targetPos: 22, backdoDir: 22));
+        options.add(_MoveGuideOption(index: i, steps: steps, targetPos: 25, backdoDir: 25));
         continue;
       }
       options.add(
@@ -532,7 +542,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
           _moveUnlockTimer = Timer(const Duration(seconds: 2), () {
             if (mounted) setState(() => _moveInFlight = false);
           });
-          widget.onMovePiece(pieceId, option.index);
+          widget.onMovePiece(pieceId, option.index, backdoDir: option.backdoDir);
         },
         child: Container(
           decoration: BoxDecoration(
@@ -591,6 +601,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
   }
 
   Widget _buildBoardPiece({
+    Key? key,
     required Size boardSize,
     required int pos,
     required Color color,
@@ -603,6 +614,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     final point = _toCanvasPoint(boardSize, pos);
 
     return AnimatedPositioned(
+      key: key,
       duration: const Duration(milliseconds: 600),
       curve: Curves.easeInOutBack,
       left: point.dx - (_cPieceSize / 2),
@@ -848,7 +860,9 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     final isGf = widget.currentUser == 'gf';
     final isRollOrder = widget.phase == 'roll_order';
     final isOrderCountdown = widget.phase == 'order_countdown';
-    final canThrow = isMyTurn && widget.phase == 'throwing';
+    final canThrow = isMyTurn &&
+        (widget.phase == 'throwing' ||
+            (widget.phase == 'moving' && widget.hasBonusThrow));
 
     final myPieces = isGf ? widget.p2Pieces : widget.p1Pieces;
     final opPieces = isGf ? widget.p1Pieces : widget.p2Pieces;
@@ -1005,6 +1019,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                         renderedP1.add(pos);
                                         final count = p1Counts[pos] ?? 1;
                                         return _buildBoardPiece(
+                                          key: ValueKey('p1_${e.key}'),
                                           boardSize: boardSize,
                                           pos: pos,
                                           color: const Color(0xFFE45858),
@@ -1033,6 +1048,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                         renderedP2.add(pos);
                                         final count = p2Counts[pos] ?? 1;
                                         return _buildBoardPiece(
+                                          key: ValueKey('p2_${e.key}'),
                                           boardSize: boardSize,
                                           pos: pos,
                                           color: const Color(0xFF4B8DD8),
@@ -1417,61 +1433,52 @@ class _CharacterTokenPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.shortestSide / 2;
+    final tokenR = radius * 0.82;
 
     final shadow = Paint()
       ..color = Colors.black.withValues(alpha: 0.24)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
-    canvas.drawCircle(center.translate(1.5, 2), radius * 0.82, shadow);
+    canvas.drawCircle(center.translate(1.5, 2), tokenR, shadow);
 
-    final base = Paint()..color = color;
-    canvas.drawCircle(center, radius * 0.82, base);
+    canvas.drawCircle(center, tokenR, Paint()..color = color);
     canvas.drawCircle(
       center,
-      radius * 0.82,
+      tokenR,
       Paint()
         ..color = selected ? const Color(0xFFFFE66B) : Colors.white
         ..strokeWidth = selected ? 3 : 1.5
         ..style = PaintingStyle.stroke,
     );
 
+    // Face in upper portion, body in lower portion
+    final faceR = radius * 0.38;
+    final faceCenter = center.translate(0, -radius * 0.18);
+    final bodyCenter = center.translate(0, radius * 0.32);
+
     switch (character) {
       case 'nolbu':
-        _drawNolbu(canvas, center, radius);
-        break;
+        _drawNolbu(canvas, radius, faceCenter, faceR, bodyCenter);
       case 'miho':
-        _drawMiho(canvas, center, radius);
-        break;
+        _drawMiho(canvas, radius, faceCenter, faceR, bodyCenter);
       default:
-        _drawHong(canvas, center, radius);
+        _drawHong(canvas, radius, faceCenter, faceR, bodyCenter);
     }
   }
 
-  void _drawFace(Canvas canvas, Offset center, double radius, Color skin) {
-    canvas.drawCircle(
-      center.translate(0, radius * 0.02),
-      radius * 0.44,
-      Paint()..color = skin,
-    );
+  void _drawFace(Canvas canvas, Offset faceCenter, double faceR, Color skin) {
+    canvas.drawCircle(faceCenter, faceR, Paint()..color = skin);
     final eye = Paint()..color = const Color(0xFF2B2117);
-    canvas.drawCircle(
-      center.translate(-radius * 0.17, -radius * 0.04),
-      radius * 0.045,
-      eye,
-    );
-    canvas.drawCircle(
-      center.translate(radius * 0.17, -radius * 0.04),
-      radius * 0.045,
-      eye,
-    );
+    canvas.drawCircle(faceCenter.translate(-faceR * 0.38, -faceR * 0.08), faceR * 0.12, eye);
+    canvas.drawCircle(faceCenter.translate(faceR * 0.38, -faceR * 0.08), faceR * 0.12, eye);
     final smile = Paint()
       ..color = const Color(0xFF7B2B22)
-      ..strokeWidth = radius * 0.045
+      ..strokeWidth = faceR * 0.1
       ..style = PaintingStyle.stroke;
     canvas.drawArc(
       Rect.fromCenter(
-        center: center.translate(0, radius * 0.08),
-        width: radius * 0.34,
-        height: radius * 0.22,
+        center: faceCenter.translate(0, faceR * 0.2),
+        width: faceR * 0.7,
+        height: faceR * 0.44,
       ),
       0.15,
       pi - 0.3,
@@ -1480,51 +1487,66 @@ class _CharacterTokenPainter extends CustomPainter {
     );
   }
 
-  void _drawHong(Canvas canvas, Offset center, double radius) {
-    _drawFace(canvas, center, radius, const Color(0xFFFFD7A8));
-    final hat = Paint()..color = const Color(0xFF1F6F54);
+  void _drawHong(Canvas canvas, double radius, Offset faceCenter, double faceR, Offset bodyCenter) {
+    // Hat
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         Rect.fromCenter(
-          center: center.translate(0, -radius * 0.42),
-          width: radius * 0.88,
-          height: radius * 0.26,
+          center: faceCenter.translate(0, -(faceR + radius * 0.11)),
+          width: faceR * 1.6,
+          height: radius * 0.20,
         ),
-        Radius.circular(radius * 0.12),
+        Radius.circular(radius * 0.10),
       ),
-      hat,
+      Paint()..color = const Color(0xFF1F6F54),
     );
-    final sword = Paint()
-      ..color = const Color(0xFFECE7D7)
-      ..strokeWidth = radius * 0.08
-      ..strokeCap = StrokeCap.round;
+    // Face
+    _drawFace(canvas, faceCenter, faceR, const Color(0xFFFFD7A8));
+    // Body (green robe)
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: bodyCenter, width: faceR * 1.6, height: radius * 0.40),
+        Radius.circular(radius * 0.08),
+      ),
+      Paint()..color = const Color(0xFF1F6F54),
+    );
+    // Sword
     canvas.drawLine(
-      center.translate(radius * 0.34, radius * 0.34),
-      center.translate(radius * 0.62, -radius * 0.36),
-      sword,
+      bodyCenter.translate(faceR * 0.66, -radius * 0.14),
+      bodyCenter.translate(faceR * 0.66, radius * 0.20),
+      Paint()
+        ..color = const Color(0xFFECE7D7)
+        ..strokeWidth = radius * 0.06
+        ..strokeCap = StrokeCap.round,
     );
   }
 
-  void _drawNolbu(Canvas canvas, Offset center, double radius) {
-    _drawFace(canvas, center, radius, const Color(0xFFFFC98B));
-    final hat = Paint()..color = const Color(0xFF4D2E83);
+  void _drawNolbu(Canvas canvas, double radius, Offset faceCenter, double faceR, Offset bodyCenter) {
+    // Hat
     canvas.drawOval(
       Rect.fromCenter(
-        center: center.translate(0, -radius * 0.42),
-        width: radius * 0.88,
-        height: radius * 0.34,
+        center: faceCenter.translate(0, -(faceR + radius * 0.10)),
+        width: faceR * 1.7,
+        height: radius * 0.24,
       ),
-      hat,
+      Paint()..color = const Color(0xFF4D2E83),
     );
-    final coin = Paint()..color = const Color(0xFFFFCF45);
-    canvas.drawCircle(
-      center.translate(radius * 0.42, radius * 0.27),
-      radius * 0.16,
-      coin,
+    // Face
+    _drawFace(canvas, faceCenter, faceR, const Color(0xFFFFC98B));
+    // Body (purple robe — wide to show greed)
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: bodyCenter, width: faceR * 1.85, height: radius * 0.40),
+        Radius.circular(radius * 0.08),
+      ),
+      Paint()..color = const Color(0xFF4D2E83),
     );
+    // Gold coin
+    final coinCenter = bodyCenter.translate(faceR * 0.52, 0);
+    canvas.drawCircle(coinCenter, faceR * 0.28, Paint()..color = const Color(0xFFFFCF45));
     canvas.drawCircle(
-      center.translate(radius * 0.42, radius * 0.27),
-      radius * 0.1,
+      coinCenter,
+      faceR * 0.28,
       Paint()
         ..color = const Color(0xFFA86A10)
         ..style = PaintingStyle.stroke
@@ -1532,40 +1554,58 @@ class _CharacterTokenPainter extends CustomPainter {
     );
   }
 
-  void _drawMiho(Canvas canvas, Offset center, double radius) {
+  void _drawMiho(Canvas canvas, double radius, Offset faceCenter, double faceR, Offset bodyCenter) {
+    // Fox ears (above face)
     final ear = Paint()..color = const Color(0xFFF28B35);
     final innerEar = Paint()..color = const Color(0xFFFFD7D0);
-    final leftEar = Path()
-      ..moveTo(center.dx - radius * 0.38, center.dy - radius * 0.28)
-      ..lineTo(center.dx - radius * 0.2, center.dy - radius * 0.76)
-      ..lineTo(center.dx, center.dy - radius * 0.3)
-      ..close();
-    final rightEar = Path()
-      ..moveTo(center.dx + radius * 0.38, center.dy - radius * 0.28)
-      ..lineTo(center.dx + radius * 0.2, center.dy - radius * 0.76)
-      ..lineTo(center.dx, center.dy - radius * 0.3)
-      ..close();
-    canvas.drawPath(leftEar, ear);
-    canvas.drawPath(rightEar, ear);
     canvas.drawPath(
       Path()
-        ..moveTo(center.dx - radius * 0.28, center.dy - radius * 0.33)
-        ..lineTo(center.dx - radius * 0.2, center.dy - radius * 0.57)
-        ..lineTo(center.dx - radius * 0.04, center.dy - radius * 0.32)
+        ..moveTo(faceCenter.dx - faceR * 0.6, faceCenter.dy - faceR * 0.2)
+        ..lineTo(faceCenter.dx - faceR * 0.3, faceCenter.dy - faceR * 1.1)
+        ..lineTo(faceCenter.dx + faceR * 0.1, faceCenter.dy - faceR * 0.3)
+        ..close(),
+      ear,
+    );
+    canvas.drawPath(
+      Path()
+        ..moveTo(faceCenter.dx - faceR * 0.48, faceCenter.dy - faceR * 0.28)
+        ..lineTo(faceCenter.dx - faceR * 0.3, faceCenter.dy - faceR * 0.78)
+        ..lineTo(faceCenter.dx + faceR * 0.02, faceCenter.dy - faceR * 0.34)
         ..close(),
       innerEar,
     );
     canvas.drawPath(
       Path()
-        ..moveTo(center.dx + radius * 0.28, center.dy - radius * 0.33)
-        ..lineTo(center.dx + radius * 0.2, center.dy - radius * 0.57)
-        ..lineTo(center.dx + radius * 0.04, center.dy - radius * 0.32)
+        ..moveTo(faceCenter.dx + faceR * 0.6, faceCenter.dy - faceR * 0.2)
+        ..lineTo(faceCenter.dx + faceR * 0.3, faceCenter.dy - faceR * 1.1)
+        ..lineTo(faceCenter.dx - faceR * 0.1, faceCenter.dy - faceR * 0.3)
+        ..close(),
+      ear,
+    );
+    canvas.drawPath(
+      Path()
+        ..moveTo(faceCenter.dx + faceR * 0.48, faceCenter.dy - faceR * 0.28)
+        ..lineTo(faceCenter.dx + faceR * 0.3, faceCenter.dy - faceR * 0.78)
+        ..lineTo(faceCenter.dx - faceR * 0.02, faceCenter.dy - faceR * 0.34)
         ..close(),
       innerEar,
     );
-    _drawFace(canvas, center, radius, const Color(0xFFFFD2A3));
-    final nose = Paint()..color = const Color(0xFF4B2B20);
-    canvas.drawCircle(center.translate(0, radius * 0.08), radius * 0.06, nose);
+    // Face
+    _drawFace(canvas, faceCenter, faceR, const Color(0xFFFFD2A3));
+    // Nose
+    canvas.drawCircle(
+      faceCenter.translate(0, faceR * 0.16),
+      faceR * 0.1,
+      Paint()..color = const Color(0xFF4B2B20),
+    );
+    // Body (orange fox body)
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: bodyCenter, width: faceR * 1.5, height: radius * 0.40),
+        Radius.circular(radius * 0.10),
+      ),
+      Paint()..color = const Color(0xFFF28B35),
+    );
   }
 
   @override
