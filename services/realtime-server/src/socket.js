@@ -1155,6 +1155,10 @@ export const registerSocketHandlers = (io) => {
           by: userId,
           at: Date.now(),
         });
+        const pirateWinner = gameState.players.find(p => p !== userId);
+        if (pirateWinner) {
+          await saveGameResult(roomCode, pirateWinner, userId, 'pirate', 0).catch(() => {});
+        }
         ack({ ok: true, exploded: true });
       } else {
         gameState.pickedSlots.push(slot);
@@ -1524,6 +1528,10 @@ export const registerSocketHandlers = (io) => {
       gameState = hitBlackjack(gameState, String(userId));
       await redis.set(`game:${roomCode}:blackjack`, JSON.stringify(gameState), "EX", 3600);
       io.to(roomCode).emit("game:blackjack:updated", gameState);
+      if (gameState.status === 'finished' && gameState.result?.winner && gameState.result.winner !== 'draw') {
+        const loser = Object.keys(gameState.players).find(p => p !== gameState.result.winner);
+        await saveGameResult(roomCode, gameState.result.winner, loser, 'blackjack', 0).catch(() => {});
+      }
       ack({ ok: true });
     });
 
@@ -1544,6 +1552,10 @@ export const registerSocketHandlers = (io) => {
       gameState = standBlackjack(gameState, String(userId));
       await redis.set(`game:${roomCode}:blackjack`, JSON.stringify(gameState), "EX", 3600);
       io.to(roomCode).emit("game:blackjack:updated", gameState);
+      if (gameState.status === 'finished' && gameState.result?.winner && gameState.result.winner !== 'draw') {
+        const loser = Object.keys(gameState.players).find(p => p !== gameState.result.winner);
+        await saveGameResult(roomCode, gameState.result.winner, loser, 'blackjack', 0).catch(() => {});
+      }
       ack({ ok: true });
     });
 
@@ -1593,6 +1605,9 @@ export const registerSocketHandlers = (io) => {
       gameState = drawOldMaidCard(gameState, String(userId), String(cardId));
       await redis.set(`game:${roomCode}:oldmaid`, JSON.stringify(gameState), "EX", 3600);
       io.to(roomCode).emit("game:oldmaid:updated", gameState);
+      if (gameState.status === 'finished' && gameState.result?.winner) {
+        await saveGameResult(roomCode, gameState.result.winner, gameState.result.loser, 'oldmaid', 0).catch(() => {});
+      }
       ack({ ok: true });
     });
 
@@ -1685,6 +1700,10 @@ export const registerSocketHandlers = (io) => {
 
       await redis.set(`game:${roomCode}:penalty`, JSON.stringify(gameState), "EX", 3600);
       io.to(roomCode).emit("game:penalty:updated", gameState);
+      if (gameState.status === 'finished' && gameState.result?.winner && gameState.result.winner !== 'draw') {
+        const loser = Object.keys(gameState.scores).find(p => p !== gameState.result.winner);
+        await saveGameResult(roomCode, gameState.result.winner, loser, 'penalty', 0).catch(() => {});
+      }
       ack({ ok: true });
     });
 
@@ -1720,6 +1739,10 @@ export const registerSocketHandlers = (io) => {
 
       await redis.set(`game:${roomCode}:basketball`, JSON.stringify(gameState), "EX", 3600);
       io.to(roomCode).emit("game:basketball:updated", gameState);
+      if (gameState.status === 'finished' && gameState.result?.winner && gameState.result.winner !== 'draw') {
+        const loser = Object.keys(gameState.scores).find(p => p !== gameState.result.winner);
+        await saveGameResult(roomCode, gameState.result.winner, loser, 'basketball', 0).catch(() => {});
+      }
       ack({ ok: true });
     });
 
@@ -1758,6 +1781,10 @@ export const registerSocketHandlers = (io) => {
 
       await redis.set(`game:${roomCode}:bowling`, JSON.stringify(gameState), "EX", 3600);
       io.to(roomCode).emit("game:bowling:updated", withBowlingFrames(gameState));
+      if (gameState.status === 'finished' && gameState.result?.winner && gameState.result.winner !== 'draw') {
+        const loser = Object.keys(gameState.scores).find(p => p !== gameState.result.winner);
+        await saveGameResult(roomCode, gameState.result.winner, loser, 'bowling', 0).catch(() => {});
+      }
       ack({ ok: true });
     });
 
@@ -2252,12 +2279,16 @@ export const registerSocketHandlers = (io) => {
 
       if (isTimeUp(gameState)) {
         gameState.loser = userId;
+        const bombWinner = gameState.players.find(p => p !== userId);
         await redis.del(bombGameKey(roomCode));
 
         io.to(roomCode).emit("game:bomb:exploded", {
           loser: userId,
           correctAnswer: gameState.currentQuiz.answer,
         });
+        if (bombWinner) {
+          await saveGameResult(roomCode, bombWinner, userId, 'bomb', 0).catch(() => {});
+        }
         ack({ ok: false, reason: "time_up", loser: userId });
         return;
       }
@@ -2571,6 +2602,12 @@ export const registerSocketHandlers = (io) => {
           const winner = winners.length === 1 ? winners[0] : "draw";
 
           io.to(roomCode).emit("game:catch:gameover", { winner, scores: state.scores });
+          if (winner !== 'draw') {
+            const catchLoser = Object.keys(state.scores).find(p => p !== winner);
+            if (catchLoser) {
+              await saveGameResult(roomCode, winner, catchLoser, 'catch', 0).catch(() => {});
+            }
+          }
           return ack({ ok: true });
         }
 
