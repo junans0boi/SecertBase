@@ -37,10 +37,14 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
   bool _bonusClaimed = false;
   bool _bonusLoading = false;
 
+  // gameType → {wins, losses, total}
+  Map<String, Map<String, int>> _records = {};
+
   @override
   void initState() {
     super.initState();
     _fetchBalance();
+    _fetchRecords();
     SocketService().addListener(_onSocketUpdate);
   }
 
@@ -165,6 +169,76 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
             )
           else
             Text('오늘 보너스 수령 완료', style: mainBody(size: 12, color: kMainMuted)),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _fetchRecords() async {
+    final token = _auth.token;
+    if (token == null) return;
+    try {
+      final res = await http.get(
+        Uri.parse('${_auth.baseUrl}/api/arcade/records'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (!mounted || res.statusCode != 200) return;
+      final data = jsonDecode(res.body);
+      final raw = data['records'] as Map<String, dynamic>? ?? {};
+      final parsed = <String, Map<String, int>>{};
+      for (final e in raw.entries) {
+        final v = e.value as Map<String, dynamic>;
+        parsed[e.key] = {
+          'wins': (v['wins'] as num?)?.toInt() ?? 0,
+          'losses': (v['losses'] as num?)?.toInt() ?? 0,
+          'total': (v['total'] as num?)?.toInt() ?? 0,
+        };
+      }
+      setState(() => _records = parsed);
+    } catch (_) {}
+  }
+
+  Widget _buildRecordCard(String gameType) {
+    final r = _records[gameType];
+    final wins = r?['wins'] ?? 0;
+    final losses = r?['losses'] ?? 0;
+    final total = r?['total'] ?? 0;
+    return MainCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.bar_chart_rounded, size: 16, color: kMainSub),
+              const SizedBox(width: 6),
+              Text('기록', style: mainTitle(size: 14)),
+            ],
+          ),
+          const SizedBox(height: 14),
+          if (total == 0)
+            Center(
+              child: Column(
+                children: [
+                  Icon(Icons.bar_chart_rounded, size: 32, color: kMainMuted.withValues(alpha: 0.35)),
+                  const SizedBox(height: 6),
+                  Text('아직 플레이 기록이 없어요', style: mainBody(size: 11, color: kMainMuted), textAlign: TextAlign.center),
+                ],
+              ),
+            )
+          else
+            Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _RecordStat('승', '$wins', kMainSky),
+                    _RecordStat('패', '$losses', kMainRose),
+                    _RecordStat('승률', total > 0 ? '${(wins * 100 ~/ total)}%' : '-', kMainSage),
+                  ],
+                ),
+              ],
+            ),
+          const SizedBox(height: 4),
         ],
       ),
     );
@@ -481,13 +555,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
           // Future: stats row
           Row(
             children: [
-              Expanded(
-                child: _buildComingSoonCard(
-                  Icons.bar_chart_rounded,
-                  '기록',
-                  '전적과 통계가 표시될 예정이에요',
-                ),
-              ),
+              Expanded(child: _buildRecordCard(game.type)),
               const SizedBox(width: 10),
               Expanded(child: _buildWalletCard()),
             ],
@@ -523,55 +591,6 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                     fontWeight: FontWeight.w800,
                     color: kMainHoney,
                   ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 4),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildComingSoonCard(IconData icon, String label, String hint) {
-    return MainCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 16, color: kMainSub),
-              const SizedBox(width: 6),
-              Text(label, style: mainTitle(size: 14)),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: kMainHoneySoft,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: kMainHoney.withValues(alpha: 0.45)),
-                ),
-                child: Text(
-                  '준비 중',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: kMainHoney,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Center(
-            child: Column(
-              children: [
-                Icon(icon, size: 32, color: kMainMuted.withValues(alpha: 0.35)),
-                const SizedBox(height: 6),
-                Text(
-                  hint,
-                  style: mainBody(size: 11, color: kMainMuted),
-                  textAlign: TextAlign.center,
                 ),
               ],
             ),
@@ -648,4 +667,22 @@ class _GameInfo {
     required this.color,
     required this.background,
   });
+}
+
+class _RecordStat extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+  const _RecordStat(this.label, this.value, this.color);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: color)),
+        const SizedBox(height: 2),
+        Text(label, style: mainBody(size: 11, color: kMainSub)),
+      ],
+    );
+  }
 }

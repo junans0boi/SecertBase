@@ -193,6 +193,19 @@ const bombNewSchema = z.object({
   duration: z.number().int().min(10).max(120).optional().default(30),
 });
 
+async function saveGameResult(roomCode, winnerCode, loserCode, gameType, stake) {
+  try {
+    const { rows } = await query('SELECT CoupleId FROM Couples WHERE RoomCode = ? LIMIT 1', [roomCode]);
+    if (!rows[0]) return;
+    await query(
+      'INSERT INTO game_results (couple_id, game_type, winner_user_code, loser_user_code, stake) VALUES (?,?,?,?,?)',
+      [rows[0].CoupleId, gameType, winnerCode, loserCode, stake ?? 0],
+    );
+  } catch (err) {
+    console.error('[game_results] insert error:', err.message);
+  }
+}
+
 // 게임 종료 후 지갑 정산 + wallet:updated 브로드캐스트
 async function settleAndEmitWallet(io, roomCode, winnerId, loserId, stake, gameRef) {
   if (!stake || stake <= 0) return;
@@ -1451,10 +1464,13 @@ export const registerSocketHandlers = (io) => {
       ack({ ok: true, event });
 
       if (gameState.winner) {
-        const loserId = gameState.players.find(p => p !== gameState.winner);
+        const yutLoserId = gameState.players.find(p => p !== gameState.winner);
         io.to(roomCode).emit("game:yut:ended", { winner: gameState.winner });
         await redis.del(yutGameKey(roomCode));
-        await settleAndEmitWallet(io, roomCode, gameState.winner, loserId, gameState.stake ?? 0, `yut:${roomCode}:${Date.now()}`);
+        await Promise.all([
+          settleAndEmitWallet(io, roomCode, gameState.winner, yutLoserId, gameState.stake ?? 0, `yut:${roomCode}:${Date.now()}`),
+          saveGameResult(roomCode, gameState.winner, yutLoserId, 'yut', gameState.stake ?? 0),
+        ]);
       }
     });
 
@@ -1916,7 +1932,10 @@ export const registerSocketHandlers = (io) => {
         const unoLoserId = gameState.players.find(p => p !== gameState.winner);
         io.to(roomCode).emit("game:uno:ended", { winner: gameState.winner });
         await redis.del(unoGameKey(roomCode));
-        await settleAndEmitWallet(io, roomCode, gameState.winner, unoLoserId, gameState.stake ?? 0, `uno:${roomCode}:${Date.now()}`);
+        await Promise.all([
+          settleAndEmitWallet(io, roomCode, gameState.winner, unoLoserId, gameState.stake ?? 0, `uno:${roomCode}:${Date.now()}`),
+          saveGameResult(roomCode, gameState.winner, unoLoserId, 'uno', gameState.stake ?? 0),
+        ]);
       }
     });
 

@@ -3781,6 +3781,51 @@ router.post('/premium/cancel', async (req, res) => {
   }
 });
 
+// ── 게임 기록 ────────────────────────────────────────────────────
+router.get('/arcade/records', async (req, res) => {
+  try {
+    const { game_type } = req.query;
+    const userCode = req.auth.userCode;
+    if (!userCode) return res.status(400).json({ ok: false, reason: 'no_user_code' });
+
+    // 내 커플 ID 조회
+    const { rows: coupleRows } = await query(
+      `SELECT c.CoupleId FROM Couples c
+       JOIN Users u ON (c.User1Id = u.UserId OR c.User2Id = u.UserId)
+       WHERE u.UserCode = ? AND c.Status = 'active' LIMIT 1`,
+      [userCode],
+    );
+    if (!coupleRows[0]) return res.json({ ok: true, records: {} });
+    const coupleId = coupleRows[0].CoupleId;
+
+    const typeFilter = game_type ? 'AND game_type = ?' : '';
+    const params = game_type ? [coupleId, game_type] : [coupleId];
+    const { rows } = await query(
+      `SELECT game_type,
+              SUM(winner_user_code = ?) AS wins,
+              SUM(loser_user_code = ?)  AS losses,
+              COUNT(*)                  AS total
+       FROM game_results
+       WHERE couple_id = ? ${typeFilter}
+       GROUP BY game_type`,
+      [userCode, userCode, ...params],
+    );
+
+    const records = {};
+    for (const r of rows) {
+      records[r.game_type] = {
+        wins: Number(r.wins),
+        losses: Number(r.losses),
+        total: Number(r.total),
+      };
+    }
+    res.json({ ok: true, records });
+  } catch (err) {
+    console.error('[API] /arcade/records GET error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
 // ── 재화(Wallet) ────────────────────────────────────────────────
 import { getBalance, claimDailyBonus } from './wallet-engine.js';
 
