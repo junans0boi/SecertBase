@@ -3849,4 +3849,198 @@ router.post('/wallet/daily-bonus', async (req, res) => {
   }
 });
 
+// ── 상점(Shop) ───────────────────────────────────────────────────────────────
+import { transferGameReward } from './wallet-engine.js';
+
+// GET /api/shop/items — full catalog
+router.get('/shop/items', async (req, res) => {
+  try {
+    const items = await query('SELECT id, category, name, description, price, icon FROM shop_items WHERE active = 1 ORDER BY category, id');
+    res.json({ ok: true, items });
+  } catch (err) {
+    console.error('[API] /shop/items GET error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+// GET /api/shop/owned — items owned by couple
+router.get('/shop/owned', async (req, res) => {
+  try {
+    const [coupleRow] = await query(
+      `SELECT c.CoupleId FROM Couples c
+       JOIN Users u ON u.UserId = c.User1Id OR u.UserId = c.User2Id
+       WHERE u.UserCode = ? LIMIT 1`,
+      [req.auth.userCode]
+    );
+    if (!coupleRow) return res.json({ ok: true, owned: [] });
+
+    const owned = await query(
+      `SELECT oi.item_id, oi.quantity, si.name, si.category, si.icon
+       FROM owned_items oi JOIN shop_items si ON si.id = oi.item_id
+       WHERE oi.couple_id = ?`,
+      [coupleRow.CoupleId]
+    );
+    res.json({ ok: true, owned });
+  } catch (err) {
+    console.error('[API] /shop/owned GET error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+// POST /api/shop/buy — purchase item with coins
+router.post('/shop/buy', async (req, res) => {
+  try {
+    const { item_id } = req.body ?? {};
+    if (!item_id) return res.status(400).json({ ok: false, reason: 'missing_item_id' });
+
+    const [item] = await query(
+      'SELECT id, category, name, price FROM shop_items WHERE id = ? AND active = 1',
+      [item_id]
+    );
+    if (!item) return res.status(404).json({ ok: false, reason: 'item_not_found' });
+
+    const [coupleRow] = await query(
+      `SELECT c.CoupleId FROM Couples c
+       JOIN Users u ON u.UserId = c.User1Id OR u.UserId = c.User2Id
+       WHERE u.UserCode = ? LIMIT 1`,
+      [req.auth.userCode]
+    );
+    if (!coupleRow) return res.status(400).json({ ok: false, reason: 'no_couple' });
+
+    // Spend coins (debit from buyer, no credit — shop coins are consumed)
+    const [wallet] = await query('SELECT balance FROM wallets WHERE user_id = ?', [req.auth.userId]);
+    if (!wallet || wallet.balance < item.price) {
+      return res.status(400).json({ ok: false, reason: 'insufficient_coins' });
+    }
+
+    await query('BEGIN');
+    try {
+      await query(
+        'UPDATE wallets SET balance = balance - ? WHERE user_id = ? AND balance >= ?',
+        [item.price, req.auth.userId, item.price]
+      );
+      await query(
+        `INSERT INTO wallet_transactions (user_id, delta, balance_after, reason, ref_id)
+         VALUES (?, ?, ?, 'shop_purchase', ?)`,
+        [req.auth.userId, -item.price, wallet.balance - item.price, `shop:${item.id}`]
+      );
+      await query(
+        `INSERT INTO owned_items (couple_id, item_id, quantity)
+         VALUES (?, ?, 1)
+         ON DUPLICATE KEY UPDATE quantity = quantity + 1`,
+        [coupleRow.CoupleId, item.id]
+      );
+      await query('COMMIT');
+    } catch (e) {
+      await query('ROLLBACK');
+      throw e;
+    }
+
+    const [newWallet] = await query('SELECT balance FROM wallets WHERE user_id = ?', [req.auth.userId]);
+    res.json({ ok: true, new_balance: newWallet?.balance ?? 0 });
+  } catch (err) {
+    console.error('[API] /shop/buy POST error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+// GET /api/shop/coupons — date coupons for this user
+router.get('/shop/coupons', async (req, res) => {
+  try {
+    const coupons = await query(
+      `SELECT id, issuer_user_code, receiver_user_code, title, description,
+              status, issued_at, expires_at, redeemed_at
+       FROM date_coupons
+       WHERE receiver_user_code = ? AND status = 'pending'
+         AND expires_at > NOW()
+       ORDER BY issued_at DESC`,
+      [req.auth.userCode]
+    );
+    res.json({ ok: true, coupons });
+  } catch (err) {
+    console.error('[API] /shop/coupons GET error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+// POST /api/shop/coupons/redeem — receiver redeems coupon
+router.post('/shop/coupons/redeem', async (req, res) => {
+  try {
+    const { coupon_id } = req.body ?? {};
+    if (!coupon_id) return res.status(400).json({ ok: false, reason: 'missing_coupon_id' });
+
+    const result = await query(
+      `UPDATE date_coupons SET status = 'redeemed', redeemed_at = NOW()
+       WHERE id = ? AND receiver_user_code = ? AND status = 'pending' AND expires_at > NOW()`,
+      [coupon_id, req.auth.userCode]
+    );
+    if (!result.affectedRows) return res.status(400).json({ ok: false, reason: 'not_redeemable' });
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[API] /shop/coupons/redeem POST error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+// POST /api/shop/coupons/issue — buyer sends a date coupon
+router.post('/shop/coupons/issue', async (req, res) => {
+  try {
+    const { title, description, template_id } = req.body ?? {};
+    if (!title) return res.status(400).json({ ok: false, reason: 'missing_title' });
+
+    // Deduct coupon item from owned_items OR spend coins directly
+    const COUPON_COST = 500;
+    const [wallet] = await query('SELECT balance FROM wallets WHERE user_id = ?', [req.auth.userId]);
+    if (!wallet || wallet.balance < COUPON_COST) {
+      return res.status(400).json({ ok: false, reason: 'insufficient_coins' });
+    }
+
+    // Find partner
+    const [coupleRow] = await query(
+      `SELECT c.CoupleId,
+              CASE WHEN u.UserId = c.User1Id THEN u2.UserCode ELSE u1.UserCode END AS partnerCode
+       FROM Couples c
+       JOIN Users u  ON u.UserCode  = ?
+       JOIN Users u1 ON u1.UserId   = c.User1Id
+       JOIN Users u2 ON u2.UserId   = c.User2Id
+       WHERE u.UserId = c.User1Id OR u.UserId = c.User2Id LIMIT 1`,
+      [req.auth.userCode]
+    );
+    if (!coupleRow) return res.status(400).json({ ok: false, reason: 'no_couple' });
+
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+    await query('BEGIN');
+    try {
+      await query(
+        'UPDATE wallets SET balance = balance - ? WHERE user_id = ? AND balance >= ?',
+        [COUPON_COST, req.auth.userId, COUPON_COST]
+      );
+      await query(
+        `INSERT INTO wallet_transactions (user_id, delta, balance_after, reason, ref_id)
+         VALUES (?, ?, ?, 'coupon_purchase', NULL)`,
+        [req.auth.userId, -COUPON_COST, wallet.balance - COUPON_COST]
+      );
+      await query(
+        `INSERT INTO date_coupons
+           (couple_id, issuer_user_code, receiver_user_code, template_id, title, description, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [coupleRow.CoupleId, req.auth.userCode, coupleRow.partnerCode,
+         template_id ?? null, title, description ?? null, expiresAt]
+      );
+      await query('COMMIT');
+    } catch (e) {
+      await query('ROLLBACK');
+      throw e;
+    }
+
+    const [newWallet] = await query('SELECT balance FROM wallets WHERE user_id = ?', [req.auth.userId]);
+    res.json({ ok: true, new_balance: newWallet?.balance ?? 0 });
+  } catch (err) {
+    console.error('[API] /shop/coupons/issue POST error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
 export default router;

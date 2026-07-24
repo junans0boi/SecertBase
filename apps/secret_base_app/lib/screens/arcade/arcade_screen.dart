@@ -22,6 +22,7 @@ import 'games/telepathy_screen.dart';
 import 'games/uno_screen.dart';
 import 'games/tank_screen.dart';
 import 'games/yut_screen.dart';
+import '../shop/shop_screen.dart';
 
 class ArcadeScreen extends StatefulWidget {
   const ArcadeScreen({super.key});
@@ -170,6 +171,28 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
             )
           else
             Text('오늘 보너스 수령 완료', style: mainBody(size: 12, color: kMainMuted)),
+          const Spacer(),
+          GestureDetector(
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ShopScreen()),
+            ),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: kMainLilacSoft,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: kMainLilac.withValues(alpha: 0.4)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.storefront_rounded, size: 14, color: kMainLilac),
+                  const SizedBox(width: 4),
+                  Text('상점', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: kMainLilac)),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
