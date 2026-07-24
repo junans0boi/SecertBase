@@ -4,6 +4,8 @@ import '../../core/main_design.dart';
 import '../../core/socket_service.dart';
 import '../../core/yut_audio.dart';
 
+const _kStakeOptions = [0, 500, 1000, 3000];
+
 class GameLobbyScreen extends StatefulWidget {
   final String gameType;
   final String title;
@@ -272,7 +274,14 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
                               selections: characterSelections,
                             ),
                           ],
-                          const SizedBox(height: 26),
+                          const SizedBox(height: 18),
+                          _StakeSelector(
+                            gameType: widget.gameType,
+                            isHost: isHost,
+                            stake: _socket.lobbyStake,
+                            color: widget.color,
+                          ),
+                          const SizedBox(height: 18),
                           if (isHost)
                             SizedBox(
                               width: double.infinity,
@@ -613,6 +622,85 @@ class _YutCharacterSelector extends StatelessWidget {
                             ),
                           ),
                         ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+}
+
+class _StakeSelector extends StatelessWidget {
+  final String gameType;
+  final bool isHost;
+  final int stake;
+  final Color color;
+
+  const _StakeSelector({
+    required this.gameType,
+    required this.isHost,
+    required this.stake,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final socket = SocketService();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Text('🪙', style: TextStyle(fontSize: 13)),
+            const SizedBox(width: 5),
+            Text(
+              '판돈',
+              style: mainBody(size: 13, color: kMainInk, weight: FontWeight.w900, height: 1),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              isHost ? '방장이 선택' : '방장이 선택한 금액',
+              style: mainBody(size: 11, color: kMainMuted, height: 1),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: _kStakeOptions.map((option) {
+            final selected = stake == option;
+            final label = option == 0 ? '무료' : '$option코인';
+            return Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  right: option == _kStakeOptions.last ? 0 : 8,
+                ),
+                child: GestureDetector(
+                  onTap: isHost
+                      ? () => socket.setLobbyStake(gameType, option)
+                      : null,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 140),
+                    padding: const EdgeInsets.symmetric(vertical: 9),
+                    decoration: BoxDecoration(
+                      color: selected ? color.withValues(alpha: 0.12) : kMainPaperSoft,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: selected ? color : kMainLine,
+                        width: selected ? 1.8 : 1,
+                      ),
+                    ),
+                    child: Text(
+                      label,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                        color: selected ? color : kMainSub,
                       ),
                     ),
                   ),

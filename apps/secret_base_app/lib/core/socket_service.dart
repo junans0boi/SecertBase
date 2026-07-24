@@ -53,6 +53,11 @@ class SocketService extends ChangeNotifier {
   Map<String, String> lobbyCharacterSelections = {};
   Map<String, String> lobbyStartedYutCharacters = {};
   String? lobbyStartedYutBgm;
+  int lobbyStake = 0;
+  int lobbyStartedStake = 0;
+
+  // wallet
+  int? walletBalance;
 
   // simple game results
   int? lastDice;
@@ -303,6 +308,7 @@ class SocketService extends ChangeNotifier {
       final players = map['players'];
       lobbyPlayers = players is List ? players.map((e) => '$e').toList() : [];
       lobbyCharacterSelections = _stringMap(map['characterSelections']);
+      lobbyStake = (map['stake'] as num?)?.toInt() ?? 0;
       final emojis = _stringMap(map['profileEmojis']);
       if (emojis.isNotEmpty) profileEmojis = emojis;
       final nicks = _stringMap(map['nicknames']);
@@ -322,6 +328,7 @@ class SocketService extends ChangeNotifier {
       final metadata = _m(map['metadata']);
       lobbyStartedYutBgm = metadata['yutBgm'] as String?;
       lobbyStartedYutCharacters = _stringMap(metadata['yutCharacters']);
+      lobbyStartedStake = (metadata['stake'] as num?)?.toInt() ?? 0;
       final emojis = _stringMap(map['profileEmojis']);
       if (emojis.isNotEmpty) profileEmojis = emojis;
       final nicks = _stringMap(map['nicknames']);
@@ -330,6 +337,15 @@ class SocketService extends ChangeNotifier {
       }
       _log('대기방 게임 시작: $lobbyStartedGameType');
       notifyListeners();
+    });
+
+    socket.on('wallet:updated', (data) {
+      final map = _m(data);
+      final me = userId;
+      if (me != null && map.containsKey(me)) {
+        walletBalance = (map[me] as num?)?.toInt();
+        notifyListeners();
+      }
     });
 
     socket.on('game:dice:result', (data) {
@@ -977,6 +993,8 @@ class SocketService extends ChangeNotifier {
     lobbyCharacterSelections = {};
     lobbyStartedYutCharacters = {};
     lobbyStartedYutBgm = null;
+    lobbyStake = 0;
+    lobbyStartedStake = 0;
     pirateActive = false;
     pirateCurrentTurn = null;
     piratePickedSlots = [];
@@ -1163,6 +1181,12 @@ class SocketService extends ChangeNotifier {
         }
       },
     );
+  }
+
+  void setLobbyStake(String gameType, int stake) {
+    lobbyStake = stake;
+    notifyListeners();
+    _socket?.emit('game:lobby:set_stake', {'gameType': gameType, 'stake': stake});
   }
 
   void clearLobbyStart() {
@@ -1384,9 +1408,8 @@ class SocketService extends ChangeNotifier {
     if (characters != null && characters.isNotEmpty) {
       payload['characters'] = characters;
     }
-    if (bgm != null) {
-      payload['bgm'] = bgm;
-    }
+    if (bgm != null) payload['bgm'] = bgm;
+    if (lobbyStartedStake > 0) payload['stake'] = lobbyStartedStake;
     _socket?.emit('game:yut:new', payload);
   }
 
@@ -1407,8 +1430,10 @@ class SocketService extends ChangeNotifier {
     notifyListeners();
   }
 
-  void newUnoGame({String? mode}) =>
-      _socket?.emit('game:uno:new', {'mode': mode ?? selectedUnoMode});
+  void newUnoGame({String? mode}) => _socket?.emit('game:uno:new', {
+        'mode': mode ?? selectedUnoMode,
+        if (lobbyStartedStake > 0) 'stake': lobbyStartedStake,
+      });
   void playUnoCard(String cardId, {String? color}) {
     final payload = {'cardId': cardId};
     if (color != null) {

@@ -41,6 +41,20 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
   void initState() {
     super.initState();
     _fetchBalance();
+    SocketService().addListener(_onSocketUpdate);
+  }
+
+  @override
+  void dispose() {
+    SocketService().removeListener(_onSocketUpdate);
+    super.dispose();
+  }
+
+  void _onSocketUpdate() {
+    final newBalance = SocketService().walletBalance;
+    if (newBalance != null && newBalance != _balance) {
+      setState(() => _balance = newBalance);
+    }
   }
 
   Future<void> _fetchBalance() async {

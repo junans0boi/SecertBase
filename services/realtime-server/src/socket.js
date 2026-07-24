@@ -3,6 +3,7 @@ import { config } from "./config.js";
 import { installSocketAuthentication, installSocketFeatureGate } from "./backend-access.js";
 import { query } from "./db.js";
 import { redis } from "./redis.js";
+import { transferGameReward, getBalance } from "./wallet-engine.js";
 import {
   throwYut,
   movePiece,
@@ -94,6 +95,12 @@ const gameTypes = [
 
 const lobbySchema = z.object({
   gameType: z.enum(gameTypes),
+  stake: z.number().int().min(0).max(10000).optional().default(0),
+});
+
+const lobbyStakeSchema = z.object({
+  gameType: z.enum(gameTypes),
+  stake: z.number().int().min(0).max(10000),
 });
 
 const yutCharacters = ["honggilldong", "nolbu", "miho"];
@@ -107,16 +114,18 @@ const yutNewSchema = z
   .object({
     characters: z.record(z.string(), z.enum(yutCharacters)).optional().default({}),
     bgm: z.enum(["yut1.mp3", "yut2.mp3", "yut3.mp3"]).optional().nullable(),
+    stake: z.number().int().min(0).max(10000).optional().default(0),
   })
   .optional()
-  .default({ characters: {}, bgm: null });
+  .default({ characters: {}, bgm: null, stake: 0 });
 
 const unoNewSchema = z
   .object({
     mode: z.enum(UNO_MODES).optional().default(DEFAULT_UNO_MODE),
+    stake: z.number().int().min(0).max(10000).optional().default(0),
   })
   .optional()
-  .default({ mode: DEFAULT_UNO_MODE });
+  .default({ mode: DEFAULT_UNO_MODE, stake: 0 });
 
 const rouletteSchema = z.object({
   options: z.array(z.string().min(1)).min(2).max(12),
@@ -183,6 +192,20 @@ const bombAnswerSchema = z.object({
 const bombNewSchema = z.object({
   duration: z.number().int().min(10).max(120).optional().default(30),
 });
+
+// 게임 종료 후 지갑 정산 + wallet:updated 브로드캐스트
+async function settleAndEmitWallet(io, roomCode, winnerId, loserId, stake, gameRef) {
+  if (!stake || stake <= 0) return;
+  try {
+    const result = await transferGameReward(winnerId, loserId, stake, gameRef);
+    io.to(roomCode).emit("wallet:updated", {
+      [winnerId]: result.winnerBalance,
+      [loserId]: result.loserBalance,
+    });
+  } catch (err) {
+    console.error("[wallet] settle error:", err.message);
+  }
+}
 
 const roomKey = (roomCode) => `room:${roomCode}:state`;
 const yutGameKey = (roomCode) => `yut:${roomCode}:game`;
@@ -267,6 +290,7 @@ const normalizeLobby = (lobby, presence) => {
     host,
     players,
     characterSelections,
+    stake: lobby?.stake ?? 0,
     updatedAt: Date.now(),
   };
 };
@@ -419,11 +443,11 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const { gameType } = parsed.data;
+      const { gameType, stake } = parsed.data;
       const key = gameLobbyKey(roomCode, gameType);
       const presence = getPresence(io, roomCode);
       const lobbyText = await redis.get(key);
-      const baseLobby = lobbyText ? JSON.parse(lobbyText) : { gameType, host: null, players: [] };
+      const baseLobby = lobbyText ? JSON.parse(lobbyText) : { gameType, host: null, players: [], stake: 0 };
       const lobby = normalizeLobby({ ...baseLobby, gameType }, presence);
 
       if (!lobby.players.includes(userId)) {
@@ -432,11 +456,37 @@ export const registerSocketHandlers = (io) => {
       if (!lobby.host) {
         lobby.host = userId;
       }
+      // 방장만 stake 변경 가능
+      if (userId === lobby.host && stake > 0) {
+        lobby.stake = stake;
+      } else if (!lobby.stake) {
+        lobby.stake = 0;
+      }
       lobby.updatedAt = Date.now();
 
       await redis.set(key, JSON.stringify(lobby), "EX", 1800);
       emitLobby(io, roomCode, lobby);
       ack({ ok: true, lobby: { ...lobby, profileEmojis: getPresenceProfiles(io, roomCode), nicknames: getPresenceNicknames(io, roomCode) } });
+    });
+
+    socket.on("game:lobby:set_stake", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) { ack({ ok: false, reason: "not_joined" }); return; }
+      const parsed = lobbyStakeSchema.safeParse(payload);
+      if (!parsed.success) { ack({ ok: false, reason: "invalid_payload" }); return; }
+      const { gameType, stake } = parsed.data;
+      const key = gameLobbyKey(roomCode, gameType);
+      const lobbyText = await redis.get(key);
+      if (!lobbyText) { ack({ ok: false, reason: "lobby_not_found" }); return; }
+      const lobby = normalizeLobby(JSON.parse(lobbyText), getPresence(io, roomCode));
+      if (lobby.host !== userId) { ack({ ok: false, reason: "not_host" }); return; }
+      lobby.stake = stake;
+      lobby.updatedAt = Date.now();
+      await redis.set(key, JSON.stringify(lobby), "EX", 1800);
+      emitLobby(io, roomCode, lobby);
+      ack({ ok: true });
     });
 
     socket.on("game:lobby:leave", async (payload, ackRaw) => {
@@ -556,8 +606,9 @@ export const registerSocketHandlers = (io) => {
         ? {
             yutBgm: randomYutBgm(),
             yutCharacters: lobby.characterSelections,
+            stake: lobby.stake ?? 0,
           }
-        : {};
+        : { stake: lobby.stake ?? 0 };
       await redis.del(key);
       io.to(roomCode).emit("game:lobby:started", {
         gameType,
@@ -1141,6 +1192,7 @@ export const registerSocketHandlers = (io) => {
       const gameState = createYutGameState(player1, player2);
       gameState.characters = parsed.data.characters ?? {};
       gameState.bgm = parsed.data.bgm ?? null;
+      gameState.stake = parsed.data.stake ?? 0;
       await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
 
       emitYutState(io, roomCode, "game:yut:started", gameState);
@@ -1399,8 +1451,10 @@ export const registerSocketHandlers = (io) => {
       ack({ ok: true, event });
 
       if (gameState.winner) {
+        const loserId = gameState.players.find(p => p !== gameState.winner);
         io.to(roomCode).emit("game:yut:ended", { winner: gameState.winner });
         await redis.del(yutGameKey(roomCode));
+        await settleAndEmitWallet(io, roomCode, gameState.winner, loserId, gameState.stake ?? 0, `yut:${roomCode}:${Date.now()}`);
       }
     });
 
@@ -1711,6 +1765,7 @@ export const registerSocketHandlers = (io) => {
       }
 
       const gameState = createUnoGameState(orderedPlayers, 7, { mode });
+      gameState.stake = parsed.data.stake ?? 0;
       await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
 
       // Broadcast common info to room
@@ -1858,8 +1913,10 @@ export const registerSocketHandlers = (io) => {
       ack({ ok: true, event });
 
       if (gameState.winner) {
+        const unoLoserId = gameState.players.find(p => p !== gameState.winner);
         io.to(roomCode).emit("game:uno:ended", { winner: gameState.winner });
         await redis.del(unoGameKey(roomCode));
+        await settleAndEmitWallet(io, roomCode, gameState.winner, unoLoserId, gameState.stake ?? 0, `uno:${roomCode}:${Date.now()}`);
       }
     });
 
