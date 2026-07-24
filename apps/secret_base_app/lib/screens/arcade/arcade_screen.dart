@@ -1,5 +1,9 @@
-import 'package:flutter/material.dart';
+import 'dart:convert';
 
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+
+import '../../core/auth_service.dart';
 import '../../core/main_design.dart';
 import '../../core/socket_service.dart';
 import 'game_lobby_screen.dart';
@@ -27,6 +31,139 @@ class ArcadeScreen extends StatefulWidget {
 
 class _ArcadeScreenState extends State<ArcadeScreen> {
   int? _selectedIdx;
+
+  final _auth = AuthService();
+  int? _balance;
+  bool _bonusClaimed = false;
+  bool _bonusLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchBalance();
+  }
+
+  Future<void> _fetchBalance() async {
+    final token = _auth.token;
+    if (token == null) return;
+    try {
+      final res = await http.get(
+        Uri.parse('${_auth.baseUrl}/api/wallet/balance'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (!mounted) return;
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        final today = DateTime.now().toIso8601String().substring(0, 10);
+        final lastBonus = data['last_bonus_date'] as String?;
+        setState(() {
+          _balance = data['balance'] as int;
+          _bonusClaimed = lastBonus != null && lastBonus.substring(0, 10) == today;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _claimBonus() async {
+    if (_bonusClaimed || _bonusLoading) return;
+    final token = _auth.token;
+    if (token == null) return;
+    setState(() => _bonusLoading = true);
+    try {
+      final res = await http.post(
+        Uri.parse('${_auth.baseUrl}/api/wallet/daily-bonus'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (!mounted) return;
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        setState(() {
+          _balance = data['balance'] as int;
+          _bonusClaimed = true;
+        });
+      }
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _bonusLoading = false);
+    }
+  }
+
+  Widget _buildWalletBar() {
+    final balance = _balance;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: kMainHoneySoft,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: kMainHoney.withValues(alpha: 0.4)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('🪙', style: TextStyle(fontSize: 14)),
+                const SizedBox(width: 4),
+                Text(
+                  balance != null
+                      ? '${_formatCoins(balance)}코인'
+                      : '...',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: kMainHoney,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (!_bonusClaimed)
+            GestureDetector(
+              onTap: _bonusLoading ? null : _claimBonus,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: kMainSky,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_bonusLoading)
+                      const SizedBox(
+                        width: 12, height: 12,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    else
+                      const Icon(Icons.card_giftcard_rounded, size: 14, color: Colors.white),
+                    const SizedBox(width: 4),
+                    const Text(
+                      '출석 +500',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            Text('오늘 보너스 수령 완료', style: mainBody(size: 12, color: kMainMuted)),
+        ],
+      ),
+    );
+  }
+
+  String _formatCoins(int v) {
+    if (v >= 10000) {
+      final man = v ~/ 10000;
+      final rem = v % 10000;
+      return rem == 0 ? '$man만' : '$man만$rem';
+    }
+    return v.toString();
+  }
 
   static const _games = [
     _GameInfo(
@@ -338,15 +475,45 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                 ),
               ),
               const SizedBox(width: 10),
-              Expanded(
-                child: _buildComingSoonCard(
-                  Icons.diamond_rounded,
-                  '재화',
-                  '게임 보상과 아이템이 올 예정이에요',
-                ),
-              ),
+              Expanded(child: _buildWalletCard()),
             ],
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWalletCard() {
+    final balance = _balance;
+    return MainCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.diamond_rounded, size: 16, color: kMainHoney),
+              const SizedBox(width: 6),
+              Text('내 코인', style: mainTitle(size: 14)),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Center(
+            child: Column(
+              children: [
+                const Text('🪙', style: TextStyle(fontSize: 28)),
+                const SizedBox(height: 4),
+                Text(
+                  balance != null ? '${_formatCoins(balance)}코인' : '...',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: kMainHoney,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
         ],
       ),
     );
@@ -421,10 +588,11 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                   connected ? '상대방과 실시간으로 시작할 수 있어요' : '상대방 연결을 확인하고 있어요',
                   style: mainBody(size: 13, color: kMainSub),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 10),
               ],
             ),
           ),
+          _buildWalletBar(),
           SizedBox(
             height: 88,
             child: ListView.separated(

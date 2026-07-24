@@ -1,0 +1,20 @@
+-- 재화 시스템: 지갑 + 거래 내역
+CREATE TABLE IF NOT EXISTS wallets (
+  user_id INT PRIMARY KEY,
+  balance BIGINT NOT NULL DEFAULT 10000,
+  last_bonus_date DATE NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES Users(UserId) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS wallet_transactions (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  delta BIGINT NOT NULL,
+  balance_after BIGINT NOT NULL,
+  reason VARCHAR(100) NOT NULL,
+  ref_id VARCHAR(100) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_wallet_tx_user (user_id, created_at)
+);

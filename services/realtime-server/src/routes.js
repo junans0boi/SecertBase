@@ -3781,4 +3781,27 @@ router.post('/premium/cancel', async (req, res) => {
   }
 });
 
+// ── 재화(Wallet) ────────────────────────────────────────────────
+import { getBalance, claimDailyBonus } from './wallet-engine.js';
+
+router.get('/wallet/balance', async (req, res) => {
+  try {
+    const wallet = await getBalance(req.auth.userId);
+    res.json({ ok: true, balance: wallet.balance, last_bonus_date: wallet.last_bonus_date });
+  } catch (err) {
+    console.error('[API] /wallet/balance GET error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.post('/wallet/daily-bonus', async (req, res) => {
+  try {
+    const result = await claimDailyBonus(req.auth.userId);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error('[API] /wallet/daily-bonus POST error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
 export default router;
