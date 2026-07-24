@@ -69,8 +69,10 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
       return g;
     }).toList();
     groups.sort((a, b) {
-      final da = DateTime.tryParse('${a.first['captured_at'] ?? ''}') ?? DateTime(0);
-      final db = DateTime.tryParse('${b.first['captured_at'] ?? ''}') ?? DateTime(0);
+      final da =
+          DateTime.tryParse('${a.first['captured_at'] ?? ''}') ?? DateTime(0);
+      final db =
+          DateTime.tryParse('${b.first['captured_at'] ?? ''}') ?? DateTime(0);
       return db.compareTo(da);
     });
     return groups;
@@ -84,7 +86,9 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
   Map<String, List<List<Map<String, dynamic>>>> get _groupsByDate {
     final map = <String, List<List<Map<String, dynamic>>>>{};
     for (final group in _groups) {
-      final key = _dateKey(group.first['captured_at'] ?? group.first['taken_at']);
+      final key = _dateKey(
+        group.first['captured_at'] ?? group.first['taken_at'],
+      );
       map.putIfAbsent(key, () => []).add(group);
     }
     return map;
@@ -93,14 +97,23 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
   Future<void> _loadPosts() async {
     final userId = _userId;
     if (userId == null) {
-      if (mounted) setState(() { _loading = false; _error = '로그인 정보가 없어요'; });
+      if (mounted)
+        setState(() {
+          _loading = false;
+          _error = '로그인 정보가 없어요';
+        });
       return;
     }
-    if (mounted) setState(() { _loading = true; _error = null; });
+    if (mounted)
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
 
     try {
-      final uri = Uri.parse('${_auth.baseUrl}/api/setlog')
-          .replace(queryParameters: {'user_id': '$userId'});
+      final uri = Uri.parse(
+        '${_auth.baseUrl}/api/setlog',
+      ).replace(queryParameters: {'user_id': '$userId'});
       final response = await http.get(
         uri,
         headers: {'Authorization': 'Bearer ${_auth.token}'},
@@ -111,11 +124,15 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
         if (!mounted) return;
         setState(() {
           _posts = posts is List
-              ? posts.map((item) => Map<String, dynamic>.from(item as Map)).toList()
+              ? posts
+                    .map((item) => Map<String, dynamic>.from(item as Map))
+                    .toList()
               : [];
           _posts.sort((a, b) {
-            final da = DateTime.tryParse('${a['captured_at'] ?? ''}') ?? DateTime(0);
-            final db = DateTime.tryParse('${b['captured_at'] ?? ''}') ?? DateTime(0);
+            final da =
+                DateTime.tryParse('${a['captured_at'] ?? ''}') ?? DateTime(0);
+            final db =
+                DateTime.tryParse('${b['captured_at'] ?? ''}') ?? DateTime(0);
             return db.compareTo(da);
           });
         });
@@ -153,7 +170,10 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
           decoration: const InputDecoration(labelText: '남길 말'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('취소'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(context, controller.text.trim()),
             child: const Text('저장'),
@@ -181,7 +201,10 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
         title: const Text('삭제할까요?'),
         content: const Text('이 순간과 사진을 영구 삭제해요.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             child: const Text('삭제', style: TextStyle(color: Colors.red)),
@@ -202,7 +225,10 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     return '${u?['Nickname'] ?? u?['nickname'] ?? u?['UserName'] ?? u?['userName'] ?? '나'}';
   }
 
-  void _openStoryViewer(List<List<Map<String, dynamic>>> groups, int startGroupIndex) {
+  void _openStoryViewer(
+    List<List<Map<String, dynamic>>> groups,
+    int startGroupIndex,
+  ) {
     if (groups.isEmpty) return;
     Navigator.of(context).push(
       PageRouteBuilder(
@@ -269,7 +295,11 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
                 children: [
                   GestureDetector(
                     onTap: () => Navigator.maybePop(context),
-                    child: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: kMainSub),
+                    child: const Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      size: 20,
+                      color: kMainSub,
+                    ),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -277,7 +307,10 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('MomentLoop', style: mainTitle(size: 24)),
-                        Text('우리 둘의 날짜별 기록', style: mainBody(size: 12, color: kMainMuted)),
+                        Text(
+                          '우리 둘의 날짜별 기록',
+                          style: mainBody(size: 12, color: kMainMuted),
+                        ),
                       ],
                     ),
                   ),
@@ -304,10 +337,15 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
             _WeekNavigator(
               weekStart: _weekStart,
               isCurrentWeek: _isCurrentWeek,
-              onPrev: () => setState(() => _weekStart = _weekStart.subtract(const Duration(days: 7))),
+              onPrev: () => setState(
+                () => _weekStart = _weekStart.subtract(const Duration(days: 7)),
+              ),
               onNext: _isCurrentWeek
                   ? null
-                  : () => setState(() => _weekStart = _weekStart.add(const Duration(days: 7))),
+                  : () => setState(
+                      () =>
+                          _weekStart = _weekStart.add(const Duration(days: 7)),
+                    ),
               onPickWeek: _pickWeek,
             ),
 
@@ -316,7 +354,9 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
             // ── Day list ─────────────────────────────────────────────────────
             Expanded(
               child: _loading
-                  ? const Center(child: CircularProgressIndicator(color: kMainRose))
+                  ? const Center(
+                      child: CircularProgressIndicator(color: kMainRose),
+                    )
                   : _error != null
                   ? _ErrorState(message: _error!, onRetry: _loadPosts)
                   : RefreshIndicator(
@@ -338,7 +378,10 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
         .toList();
 
     if (daysWithGroups.isEmpty) {
-      return _WeekEmptyState(isCurrentWeek: _isCurrentWeek, onRefresh: _loadPosts);
+      return _WeekEmptyState(
+        isCurrentWeek: _isCurrentWeek,
+        onRefresh: _loadPosts,
+      );
     }
 
     return ListView.builder(
@@ -353,25 +396,27 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
           auth: _auth,
           myUserId: _userId,
           onTap: (group) {
-            Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => _PostDetailPage(
-                group: group,
-                auth: _auth,
-                myUserId: _userId,
-                onEdit: _editPost,
-                onDelete: _deletePost,
-                onReactionUpdate: (sessionId, reactions) {
-                  if (!mounted) return;
-                  setState(() {
-                    for (final post in _posts) {
-                      if ('${post['session_id']}' == sessionId) {
-                        post['session_reactions'] = reactions;
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => _PostDetailPage(
+                  group: group,
+                  auth: _auth,
+                  myUserId: _userId,
+                  onEdit: _editPost,
+                  onDelete: _deletePost,
+                  onReactionUpdate: (sessionId, reactions) {
+                    if (!mounted) return;
+                    setState(() {
+                      for (final post in _posts) {
+                        if ('${post['session_id']}' == sessionId) {
+                          post['session_reactions'] = reactions;
+                        }
                       }
-                    }
-                  });
-                },
+                    });
+                  },
+                ),
               ),
-            ));
+            );
           },
         );
       },
@@ -414,11 +459,14 @@ class _HighlightStrip extends StatelessWidget {
           final isMine = '${first['user_id']}' == '$myUserId';
           // Representative thumbnail: first media item in group
           final thumbPost = group.firstWhere(
-            (p) => '${p['media_url'] ?? ''}'.trim().isNotEmpty && p['media_type'] != 'text',
+            (p) =>
+                '${p['media_url'] ?? ''}'.trim().isNotEmpty &&
+                p['media_type'] != 'text',
             orElse: () => first,
           );
           final mediaUrl = '${thumbPost['media_url'] ?? ''}'.trim();
-          final hasMedia = mediaUrl.isNotEmpty && thumbPost['media_type'] != 'text';
+          final hasMedia =
+              mediaUrl.isNotEmpty && thumbPost['media_type'] != 'text';
           final isVideo = thumbPost['media_type'] == 'video';
           final count = group.length;
 
@@ -459,13 +507,18 @@ class _HighlightStrip extends StatelessWidget {
                                 ? Image.network(
                                     _mediaUrl(auth.baseUrl, mediaUrl),
                                     fit: BoxFit.cover,
-                                    errorBuilder: (_, _, _) => _StoryFallback(isMine: isMine),
+                                    errorBuilder: (_, _, _) =>
+                                        _StoryFallback(isMine: isMine),
                                   )
                                 : hasMedia && isVideo
                                 ? Container(
                                     color: const Color(0xFF1A1A2E),
                                     child: const Center(
-                                      child: Icon(Icons.play_arrow_rounded, color: Colors.white54, size: 22),
+                                      child: Icon(
+                                        Icons.play_arrow_rounded,
+                                        color: Colors.white54,
+                                        size: 22,
+                                      ),
                                     ),
                                   )
                                 : _StoryFallback(isMine: isMine),
@@ -477,7 +530,10 @@ class _HighlightStrip extends StatelessWidget {
                           right: -2,
                           bottom: -2,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: isMine ? kMainRose : kMainSky,
                               borderRadius: BorderRadius.circular(99),
@@ -485,7 +541,11 @@ class _HighlightStrip extends StatelessWidget {
                             ),
                             child: Text(
                               '$count',
-                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w900,
+                              ),
                             ),
                           ),
                         ),
@@ -496,7 +556,9 @@ class _HighlightStrip extends StatelessWidget {
                     isMine ? '나' : '상대',
                     style: mainBody(
                       size: 11,
-                      color: seen ? kMainMuted : (isMine ? kMainRose : kMainSky),
+                      color: seen
+                          ? kMainMuted
+                          : (isMine ? kMainRose : kMainSky),
                       weight: FontWeight.w700,
                     ),
                   ),
@@ -669,8 +731,10 @@ class _StoryViewerState extends State<_StoryViewer>
                   if (groupIdx != _groupIdx) return;
                   final x = details.globalPosition.dx;
                   final w = MediaQuery.of(context).size.width;
-                  if (x < w / 3) _retreatMedia();
-                  else _advanceMedia();
+                  if (x < w / 3)
+                    _retreatMedia();
+                  else
+                    _advanceMedia();
                 },
                 onVerticalDragEnd: (details) {
                   if ((details.primaryVelocity ?? 0) > 200) {
@@ -684,17 +748,24 @@ class _StoryViewerState extends State<_StoryViewer>
                       Image.network(
                         _mediaUrl(widget.auth.baseUrl, mUrl),
                         fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => const ColoredBox(color: Colors.black),
+                        errorBuilder: (_, _, _) =>
+                            const ColoredBox(color: Colors.black),
                       )
                     else if (hasMed && vid)
-                      _VideoDetailPlayer(url: _mediaUrl(widget.auth.baseUrl, mUrl))
+                      _VideoDetailPlayer(
+                        url: _mediaUrl(widget.auth.baseUrl, mUrl),
+                      )
                     else
                       Center(
                         child: Padding(
                           padding: const EdgeInsets.all(32),
                           child: Text(
                             cap.isEmpty ? '말없이 남긴 순간' : cap,
-                            style: const TextStyle(color: Colors.white, fontSize: 22, height: 1.6),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 22,
+                              height: 1.6,
+                            ),
                             textAlign: TextAlign.center,
                           ),
                         ),
@@ -719,7 +790,10 @@ class _StoryViewerState extends State<_StoryViewer>
                             gradient: LinearGradient(
                               begin: Alignment.bottomCenter,
                               end: const Alignment(0, 0.5),
-                              colors: const [Color(0x99000000), Colors.transparent],
+                              colors: const [
+                                Color(0x99000000),
+                                Colors.transparent,
+                              ],
                             ),
                           ),
                         ),
@@ -752,7 +826,9 @@ class _StoryViewerState extends State<_StoryViewer>
                                 builder: (_, __) => LinearProgressIndicator(
                                   value: _progress.value,
                                   backgroundColor: Colors.white30,
-                                  valueColor: const AlwaysStoppedAnimation(Colors.white),
+                                  valueColor: const AlwaysStoppedAnimation(
+                                    Colors.white,
+                                  ),
                                   minHeight: 2.5,
                                 ),
                               )
@@ -798,15 +874,29 @@ class _StoryViewerState extends State<_StoryViewer>
                     children: [
                       Text(
                         author,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                        ),
                       ),
-                      Text(timeAgo, style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                      Text(
+                        timeAgo,
+                        style: const TextStyle(
+                          color: Colors.white60,
+                          fontSize: 12,
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 GestureDetector(
                   onTap: () => Navigator.of(context).pop(),
-                  child: const Icon(Icons.close_rounded, color: Colors.white, size: 26),
+                  child: const Icon(
+                    Icons.close_rounded,
+                    color: Colors.white,
+                    size: 26,
+                  ),
                 ),
               ],
             ),
@@ -854,7 +944,11 @@ class _WeekEmptyState extends StatelessWidget {
               color: kMainRoseSoft,
               borderRadius: BorderRadius.circular(20),
             ),
-            child: const Icon(Icons.photo_album_outlined, size: 34, color: kMainRose),
+            child: const Icon(
+              Icons.photo_album_outlined,
+              size: 34,
+              color: kMainRose,
+            ),
           ),
           const SizedBox(height: 16),
           Text(
@@ -921,14 +1015,29 @@ class _WeekNavigator extends StatelessWidget {
                         Text(
                           label,
                           textAlign: TextAlign.center,
-                          style: mainBody(size: 14, color: kMainInk, weight: FontWeight.w800),
+                          style: mainBody(
+                            size: 14,
+                            color: kMainInk,
+                            weight: FontWeight.w800,
+                          ),
                         ),
                         const SizedBox(width: 4),
-                        const Icon(Icons.calendar_month_outlined, size: 14, color: kMainSub),
+                        const Icon(
+                          Icons.calendar_month_outlined,
+                          size: 14,
+                          color: kMainSub,
+                        ),
                       ],
                     ),
                     if (isCurrentWeek)
-                      Text('이번 주', style: mainBody(size: 10, color: kMainRose, weight: FontWeight.w700)),
+                      Text(
+                        '이번 주',
+                        style: mainBody(
+                          size: 10,
+                          color: kMainRose,
+                          weight: FontWeight.w700,
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -949,7 +1058,11 @@ class _NavBtn extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onTap;
   final bool disabled;
-  const _NavBtn({required this.icon, required this.onTap, this.disabled = false});
+  const _NavBtn({
+    required this.icon,
+    required this.onTap,
+    this.disabled = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -988,7 +1101,9 @@ class _DaySection extends StatelessWidget {
     if (groups.isEmpty) return const SizedBox.shrink();
 
     final dayName = _dayShort[day.weekday - 1];
-    final isToday = _dateKey(day.toIso8601String()) == _dateKey(DateTime.now().toIso8601String());
+    final isToday =
+        _dateKey(day.toIso8601String()) ==
+        _dateKey(DateTime.now().toIso8601String());
     final totalMedia = groups.fold(0, (sum, g) => sum + g.length);
 
     return Padding(
@@ -1011,16 +1126,29 @@ class _DaySection extends StatelessWidget {
                 if (isToday) ...[
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: kMainRoseSoft,
                       borderRadius: BorderRadius.circular(99),
                     ),
-                    child: Text('오늘', style: mainBody(size: 11, color: kMainRose, weight: FontWeight.w800)),
+                    child: Text(
+                      '오늘',
+                      style: mainBody(
+                        size: 11,
+                        color: kMainRose,
+                        weight: FontWeight.w800,
+                      ),
+                    ),
                   ),
                 ],
                 const Spacer(),
-                Text('${groups.length}개 게시글 · $totalMedia장', style: mainBody(size: 12, color: kMainMuted)),
+                Text(
+                  '${groups.length}개 게시글 · $totalMedia장',
+                  style: mainBody(size: 12, color: kMainMuted),
+                ),
               ],
             ),
           ),
@@ -1035,12 +1163,15 @@ class _DaySection extends StatelessWidget {
                 final group = groups[i];
                 // Representative thumbnail: first media item
                 final thumbPost = group.firstWhere(
-                  (p) => '${p['media_url'] ?? ''}'.trim().isNotEmpty && p['media_type'] != 'text',
+                  (p) =>
+                      '${p['media_url'] ?? ''}'.trim().isNotEmpty &&
+                      p['media_type'] != 'text',
                   orElse: () => group.first,
                 );
                 final mediaUrl = '${thumbPost['media_url'] ?? ''}'.trim();
                 final isVideo = thumbPost['media_type'] == 'video';
-                final hasMedia = mediaUrl.isNotEmpty && thumbPost['media_type'] != 'text';
+                final hasMedia =
+                    mediaUrl.isNotEmpty && thumbPost['media_type'] != 'text';
                 final caption = '${group.first['caption'] ?? ''}'.trim();
                 final count = group.length;
                 final isMine = '${group.first['user_id']}' == '$myUserId';
@@ -1062,17 +1193,30 @@ class _DaySection extends StatelessWidget {
                           Image.network(
                             _mediaUrl(auth.baseUrl, mediaUrl),
                             fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => const Icon(Icons.broken_image_outlined, color: kMainMuted),
+                            errorBuilder: (_, _, _) => const Icon(
+                              Icons.broken_image_outlined,
+                              color: kMainMuted,
+                            ),
                           )
                         else if (hasMedia && isVideo) ...[
                           Container(color: const Color(0xFF1A1A2E)),
-                          const Center(child: Icon(Icons.play_circle_rounded, color: Colors.white54, size: 36)),
+                          const Center(
+                            child: Icon(
+                              Icons.play_circle_rounded,
+                              color: Colors.white54,
+                              size: 36,
+                            ),
+                          ),
                         ] else
                           Padding(
                             padding: const EdgeInsets.all(12),
                             child: Text(
                               caption.isEmpty ? '순간' : caption,
-                              style: mainBody(size: 13, color: kMainSub, height: 1.5),
+                              style: mainBody(
+                                size: 13,
+                                color: kMainSub,
+                                height: 1.5,
+                              ),
                               maxLines: 5,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -1088,12 +1232,19 @@ class _DaySection extends StatelessWidget {
                                 gradient: LinearGradient(
                                   begin: Alignment.bottomCenter,
                                   end: Alignment.topCenter,
-                                  colors: const [Color(0x99000000), Colors.transparent],
+                                  colors: const [
+                                    Color(0x99000000),
+                                    Colors.transparent,
+                                  ],
                                 ),
                               ),
                               child: Text(
                                 caption,
-                                style: const TextStyle(color: Colors.white, fontSize: 11, height: 1.4),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  height: 1.4,
+                                ),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -1105,7 +1256,10 @@ class _DaySection extends StatelessWidget {
                             top: 8,
                             right: 8,
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 3,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.black54,
                                 borderRadius: BorderRadius.circular(99),
@@ -1113,11 +1267,19 @@ class _DaySection extends StatelessWidget {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.collections_rounded, color: Colors.white, size: 11),
+                                  const Icon(
+                                    Icons.collections_rounded,
+                                    color: Colors.white,
+                                    size: 11,
+                                  ),
                                   const SizedBox(width: 3),
                                   Text(
                                     '$count',
-                                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -1162,7 +1324,8 @@ class _PostDetailPage extends StatefulWidget {
   final int? myUserId;
   final Future<void> Function(Map<String, dynamic>) onEdit;
   final Future<void> Function(Map<String, dynamic>) onDelete;
-  final void Function(String sessionId, List<Map<String, dynamic>> reactions) onReactionUpdate;
+  final void Function(String sessionId, List<Map<String, dynamic>> reactions)
+  onReactionUpdate;
 
   const _PostDetailPage({
     required this.group,
@@ -1275,7 +1438,11 @@ class _PostDetailPageState extends State<_PostDetailPage> {
         title: takenAt != null
             ? Text(
                 '${takenAt.month}월 ${takenAt.day}일 · ${_dayNameFull(takenAt)}',
-                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
               )
             : null,
         centerTitle: true,
@@ -1314,7 +1481,8 @@ class _PostDetailPageState extends State<_PostDetailPage> {
                 final p = widget.group[i];
                 final mediaUrl = '${p['media_url'] ?? ''}'.trim();
                 final isVideo = p['media_type'] == 'video';
-                final hasMedia = mediaUrl.isNotEmpty && p['media_type'] != 'text';
+                final hasMedia =
+                    mediaUrl.isNotEmpty && p['media_type'] != 'text';
 
                 if (hasMedia && !isVideo) {
                   return InteractiveViewer(
@@ -1322,20 +1490,32 @@ class _PostDetailPageState extends State<_PostDetailPage> {
                       _mediaUrl(widget.auth.baseUrl, mediaUrl),
                       fit: BoxFit.contain,
                       errorBuilder: (_, _, _) => const Center(
-                        child: Icon(Icons.broken_image_outlined, color: Colors.white38, size: 48),
+                        child: Icon(
+                          Icons.broken_image_outlined,
+                          color: Colors.white38,
+                          size: 48,
+                        ),
                       ),
                     ),
                   );
                 }
                 if (hasMedia && isVideo) {
-                  return _VideoDetailPlayer(url: _mediaUrl(widget.auth.baseUrl, mediaUrl));
+                  return _VideoDetailPlayer(
+                    url: _mediaUrl(widget.auth.baseUrl, mediaUrl),
+                  );
                 }
                 return Center(
                   child: Padding(
                     padding: const EdgeInsets.all(32),
                     child: Text(
-                      '${p['caption'] ?? ''}'.isEmpty ? '말없이 남긴 순간' : '${p['caption']}',
-                      style: const TextStyle(color: Colors.white, fontSize: 20, height: 1.6),
+                      '${p['caption'] ?? ''}'.isEmpty
+                          ? '말없이 남긴 순간'
+                          : '${p['caption']}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        height: 1.6,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -1347,7 +1527,12 @@ class _PostDetailPageState extends State<_PostDetailPage> {
           // ── Bottom info + reactions ────────────────────────────────────
           Container(
             color: Colors.black,
-            padding: EdgeInsets.fromLTRB(20, 14, 20, MediaQuery.of(context).padding.bottom + 12),
+            padding: EdgeInsets.fromLTRB(
+              20,
+              14,
+              20,
+              MediaQuery.of(context).padding.bottom + 12,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1383,7 +1568,11 @@ class _PostDetailPageState extends State<_PostDetailPage> {
                       child: Center(
                         child: Text(
                           author.isEmpty ? '?' : author.characters.first,
-                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: isMine ? kMainRose : kMainSky),
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w900,
+                            color: isMine ? kMainRose : kMainSky,
+                          ),
                         ),
                       ),
                     ),
@@ -1391,8 +1580,21 @@ class _PostDetailPageState extends State<_PostDetailPage> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(author, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
-                        Text(time, style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                        Text(
+                          author,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                        Text(
+                          time,
+                          style: const TextStyle(
+                            color: Colors.white38,
+                            fontSize: 11,
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -1400,7 +1602,14 @@ class _PostDetailPageState extends State<_PostDetailPage> {
 
                 if (caption.isNotEmpty) ...[
                   const SizedBox(height: 10),
-                  Text(caption, style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.55)),
+                  Text(
+                    caption,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 14,
+                      height: 1.55,
+                    ),
+                  ),
                 ],
 
                 const SizedBox(height: 16),
@@ -1414,7 +1623,10 @@ class _PostDetailPageState extends State<_PostDetailPage> {
                       onTap: () => _toggleReaction(emoji),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 180),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
                           color: isSelected ? kMainRoseSoft : Colors.white10,
                           borderRadius: BorderRadius.circular(99),
@@ -1426,13 +1638,18 @@ class _PostDetailPageState extends State<_PostDetailPage> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(emoji, style: TextStyle(fontSize: isSelected ? 26 : 22)),
+                            Text(
+                              emoji,
+                              style: TextStyle(fontSize: isSelected ? 26 : 22),
+                            ),
                             if (count > 0) ...[
                               const SizedBox(height: 2),
                               Text(
                                 '$count',
                                 style: TextStyle(
-                                  color: isSelected ? kMainRose : Colors.white60,
+                                  color: isSelected
+                                      ? kMainRose
+                                      : Colors.white60,
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
                                 ),
@@ -1470,11 +1687,16 @@ class _VideoDetailPlayerState extends State<_VideoDetailPlayer> {
   void initState() {
     super.initState();
     _ctrl = VideoPlayerController.networkUrl(Uri.parse(widget.url));
-    _ctrl.initialize().then((_) {
-      if (!mounted) return;
-      setState(() => _ready = true);
-      _ctrl..setLooping(true)..play();
-    }).catchError((_) {});
+    _ctrl
+        .initialize()
+        .then((_) {
+          if (!mounted) return;
+          setState(() => _ready = true);
+          _ctrl
+            ..setLooping(true)
+            ..play();
+        })
+        .catchError((_) {});
   }
 
   @override
@@ -1486,7 +1708,9 @@ class _VideoDetailPlayerState extends State<_VideoDetailPlayer> {
   @override
   Widget build(BuildContext context) {
     if (!_ready) {
-      return const Center(child: CircularProgressIndicator(color: Colors.white));
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.white),
+      );
     }
     return GestureDetector(
       onTap: () {
@@ -1496,7 +1720,10 @@ class _VideoDetailPlayerState extends State<_VideoDetailPlayer> {
       child: Stack(
         alignment: Alignment.center,
         children: [
-          AspectRatio(aspectRatio: _ctrl.value.aspectRatio, child: VideoPlayer(_ctrl)),
+          AspectRatio(
+            aspectRatio: _ctrl.value.aspectRatio,
+            child: VideoPlayer(_ctrl),
+          ),
           Positioned(
             right: 16,
             bottom: 16,
@@ -1530,7 +1757,10 @@ class _ErrorState extends StatelessWidget {
           const SizedBox(height: 14),
           FilledButton(
             onPressed: onRetry,
-            style: FilledButton.styleFrom(backgroundColor: kMainInk, foregroundColor: Colors.white),
+            style: FilledButton.styleFrom(
+              backgroundColor: kMainInk,
+              foregroundColor: Colors.white,
+            ),
             child: const Text('다시 불러오기'),
           ),
         ],
@@ -1545,14 +1775,22 @@ class _PickedMomentMedia {
   final String name;
   final Uint8List bytes;
   final bool isVideo;
-  _PickedMomentMedia({required this.name, required this.bytes, required this.isVideo});
+  _PickedMomentMedia({
+    required this.name,
+    required this.bytes,
+    required this.isVideo,
+  });
 }
 
 class _SelectedMapLocation {
   final int? id;
   final String name;
   final String? category;
-  const _SelectedMapLocation({required this.id, required this.name, this.category});
+  const _SelectedMapLocation({
+    required this.id,
+    required this.name,
+    this.category,
+  });
   bool get isNew => id == null;
 }
 
@@ -1583,9 +1821,6 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
 
   static const _maxMedia = 10;
 
-  int get _photoCount => _pickedMedia.where((m) => !m.isVideo).length;
-  int get _videoCount => _pickedMedia.where((m) => m.isVideo).length;
-
   int? get _userId {
     final value = widget.auth.user?['UserId'] ?? widget.auth.user?['id'];
     if (value is int) return value;
@@ -1605,100 +1840,43 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
   }
 
   Future<void> _showMediaPicker() async {
-    await showModalBottomSheet(
-      context: context,
-      backgroundColor: kMainPaper,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(color: kMainLine, borderRadius: BorderRadius.circular(99)),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text('미디어 추가', style: mainTitle(size: 20)),
-              const SizedBox(height: 16),
-              _MediaPickerRow(
-                icon: Icons.image_outlined,
-                label: '사진',
-                count: _photoCount,
-                max: _maxMedia,
-                color: kMainSage,
-                onTap: _pickedMedia.length < _maxMedia ? () async {
-                  Navigator.pop(ctx);
-                  await _addPhotos();
-                } : null,
-              ),
-              const SizedBox(height: 10),
-              _MediaPickerRow(
-                icon: Icons.videocam_outlined,
-                label: '영상',
-                count: _videoCount,
-                max: _maxMedia,
-                color: kMainPeach,
-                onTap: _pickedMedia.length < _maxMedia ? () async {
-                  Navigator.pop(ctx);
-                  await _addVideo();
-                } : null,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _addPhotos() async {
     final remaining = _maxMedia - _pickedMedia.length;
     if (remaining <= 0) return;
     try {
-      final files = await _imagePicker.pickMultiImage(imageQuality: 86, limit: remaining);
+      final files = await _imagePicker.pickMultipleMedia(limit: remaining);
       if (files.isEmpty) return;
       final media = <_PickedMomentMedia>[];
       for (final file in files) {
-        media.add(_PickedMomentMedia(
-          name: file.name,
-          bytes: await file.readAsBytes(),
-          isVideo: false,
-        ));
+        final isVideo = _isVideoFile(file.name);
+        if (isVideo) {
+          final bytes = await file.readAsBytes();
+          if (bytes.length > 30 * 1024 * 1024) {
+            _toast('영상은 30MB 이하만 올릴 수 있어요');
+            continue;
+          }
+          media.add(
+            _PickedMomentMedia(name: file.name, bytes: bytes, isVideo: true),
+          );
+        } else {
+          media.add(
+            _PickedMomentMedia(
+              name: file.name,
+              bytes: await file.readAsBytes(),
+              isVideo: false,
+            ),
+          );
+        }
       }
       if (!mounted) return;
       setState(() => _pickedMedia.addAll(media));
     } catch (_) {
-      _toast('사진을 불러오지 못했어요');
+      _toast('미디어를 불러오지 못했어요');
     }
   }
 
-  Future<void> _addVideo() async {
-    if (_pickedMedia.length >= _maxMedia) return;
-    try {
-      final file = await _imagePicker.pickVideo(
-        source: ImageSource.gallery,
-        maxDuration: const Duration(seconds: 30),
-      );
-      if (file == null) return;
-      final bytes = await file.readAsBytes();
-      if (bytes.length > 30 * 1024 * 1024) {
-        _toast('영상은 30MB 이하만 올릴 수 있어요');
-        return;
-      }
-      if (!mounted) return;
-      setState(() => _pickedMedia.add(
-        _PickedMomentMedia(name: file.name, bytes: bytes, isVideo: true),
-      ));
-    } catch (_) {
-      _toast('영상을 불러오지 못했어요');
-    }
+  static bool _isVideoFile(String name) {
+    final ext = name.split('.').last.toLowerCase();
+    return ['mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v', '3gp'].contains(ext);
   }
 
   Future<void> _loadMapPins() async {
@@ -1706,8 +1884,9 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
     if (userId == null || _loadingLocations) return;
     setState(() => _loadingLocations = true);
     try {
-      final uri = Uri.parse('${widget.auth.baseUrl}/api/map')
-          .replace(queryParameters: {'user_id': '$userId'});
+      final uri = Uri.parse(
+        '${widget.auth.baseUrl}/api/map',
+      ).replace(queryParameters: {'user_id': '$userId'});
       final response = await http.get(
         uri,
         headers: {'Authorization': 'Bearer ${widget.auth.token}'},
@@ -1718,7 +1897,9 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
         if (!mounted) return;
         setState(() {
           _mapPins = pins is List
-              ? pins.map((pin) => Map<String, dynamic>.from(pin as Map)).toList()
+              ? pins
+                    .map((pin) => Map<String, dynamic>.from(pin as Map))
+                    .toList()
               : [];
         });
       }
@@ -1767,13 +1948,15 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
   }) async {
     if (!location.isNew) return location.id;
     final userId = _userId;
-    final userCode = widget.auth.user?['UserCode'] ?? widget.auth.user?['userCode'];
+    final userCode =
+        widget.auth.user?['UserCode'] ?? widget.auth.user?['userCode'];
     if (userId == null || userCode == null) return null;
     final response = await http.post(
       Uri.parse('${widget.auth.baseUrl}/api/map'),
       headers: {
         'Content-Type': 'application/json',
-        if (widget.auth.token != null) 'Authorization': 'Bearer ${widget.auth.token}',
+        if (widget.auth.token != null)
+          'Authorization': 'Bearer ${widget.auth.token}',
       },
       body: jsonEncode({
         'place_name': location.name,
@@ -1798,7 +1981,10 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
     final userId = _userId;
     if (_saving || userId == null) return;
     final caption = _captionCtrl.text.trim();
-    if (caption.isEmpty) { _toast('오늘 남기고 싶은 장면을 적어주세요'); return; }
+    if (caption.isEmpty) {
+      _toast('오늘 남기고 싶은 장면을 적어주세요');
+      return;
+    }
     setState(() => _saving = true);
     final now = DateTime.now();
     // All media in this upload share the same session_id
@@ -1808,7 +1994,11 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
       final location = _selectedLocation;
       final mapPinId = location == null
           ? null
-          : await _ensureMapPinId(location: location, caption: caption, now: now);
+          : await _ensureMapPinId(
+              location: location,
+              caption: caption,
+              now: now,
+            );
       if (location != null && mapPinId == null) {
         _toast('비밀지도 위치를 연결하지 못했어요');
         return;
@@ -1833,11 +2023,14 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
           if (mapPinId != null) 'map_pin_id': '$mapPinId',
         });
         if (media != null) {
-          request.files.add(http.MultipartFile.fromBytes(
-            'media', media.bytes,
-            filename: media.name,
-            contentType: MediaType.parse(_mimeFor(media.name, media.isVideo)),
-          ));
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              'media',
+              media.bytes,
+              filename: media.name,
+              contentType: MediaType.parse(_mimeFor(media.name, media.isVideo)),
+            ),
+          );
         }
         final response = await http.Response.fromStream(await request.send());
         final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -1857,7 +2050,9 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
   void _toast(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg, style: mainBody(color: Colors.white))),
+      SnackBar(
+        content: Text(msg, style: mainBody(color: Colors.white)),
+      ),
     );
   }
 
@@ -1883,8 +2078,19 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
           TextButton(
             onPressed: _saving ? null : _saveMoment,
             child: _saving
-                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                : Text('공유', style: mainBody(color: kMainRose, weight: FontWeight.w900, size: 16)),
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Text(
+                    '공유',
+                    style: mainBody(
+                      color: kMainRose,
+                      weight: FontWeight.w900,
+                      size: 16,
+                    ),
+                  ),
           ),
         ],
       ),
@@ -1917,10 +2123,17 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
                                 borderRadius: BorderRadius.circular(16),
                                 border: Border.all(color: kMainLine),
                               ),
-                              child: const Icon(Icons.add_rounded, size: 32, color: kMainSub),
+                              child: const Icon(
+                                Icons.add_rounded,
+                                size: 32,
+                                color: kMainSub,
+                              ),
                             ),
                             const SizedBox(height: 12),
-                            Text('사진 또는 영상 추가', style: mainBody(color: kMainSub, size: 14)),
+                            Text(
+                              '사진 또는 영상 추가',
+                              style: mainBody(color: kMainSub, size: 14),
+                            ),
                             const SizedBox(height: 4),
                             Text(
                               '사진·영상 합산 최대 10개',
@@ -1933,11 +2146,12 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
                     : GridView.builder(
                         physics: const NeverScrollableScrollPhysics(),
                         padding: const EdgeInsets.all(4),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3,
-                          crossAxisSpacing: 4,
-                          mainAxisSpacing: 4,
-                        ),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 3,
+                              crossAxisSpacing: 4,
+                              mainAxisSpacing: 4,
+                            ),
                         itemCount: totalMedia + (canAddMore ? 1 : 0),
                         itemBuilder: (context, i) {
                           if (i == totalMedia) {
@@ -1949,7 +2163,10 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(color: kMainLine),
                                 ),
-                                child: const Icon(Icons.add_rounded, color: kMainSub),
+                                child: const Icon(
+                                  Icons.add_rounded,
+                                  color: kMainSub,
+                                ),
                               ),
                             );
                           }
@@ -1963,16 +2180,24 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
                                     ? Container(
                                         color: const Color(0xFF1A1A2E),
                                         child: const Center(
-                                          child: Icon(Icons.videocam_rounded, color: Colors.white54, size: 28),
+                                          child: Icon(
+                                            Icons.videocam_rounded,
+                                            color: Colors.white54,
+                                            size: 28,
+                                          ),
                                         ),
                                       )
-                                    : Image.memory(media.bytes, fit: BoxFit.cover),
+                                    : Image.memory(
+                                        media.bytes,
+                                        fit: BoxFit.cover,
+                                      ),
                               ),
                               Positioned(
                                 top: 4,
                                 right: 4,
                                 child: GestureDetector(
-                                  onTap: () => setState(() => _pickedMedia.removeAt(i)),
+                                  onTap: () =>
+                                      setState(() => _pickedMedia.removeAt(i)),
                                   child: Container(
                                     width: 22,
                                     height: 22,
@@ -1980,7 +2205,11 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
                                       color: Colors.black54,
                                       borderRadius: BorderRadius.circular(11),
                                     ),
-                                    child: const Icon(Icons.close_rounded, size: 14, color: Colors.white),
+                                    child: const Icon(
+                                      Icons.close_rounded,
+                                      size: 14,
+                                      color: Colors.white,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -2020,7 +2249,9 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
               location: _selectedLocation,
               loading: _loadingLocations,
               onTap: _saving ? null : _pickLocation,
-              onClear: _saving ? null : () => setState(() => _selectedLocation = null),
+              onClear: _saving
+                  ? null
+                  : () => setState(() => _selectedLocation = null),
             ),
           ],
         ),
@@ -2029,67 +2260,7 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
   }
 }
 
-class _MediaPickerRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final int count;
-  final int max;
-  final Color color;
-  final VoidCallback? onTap;
-
-  const _MediaPickerRow({
-    required this.icon,
-    required this.label,
-    required this.count,
-    required this.max,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final full = count >= max;
-    return GestureDetector(
-      onTap: full ? null : onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: full ? kMainPaperSoft : color.withAlpha(18),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: full ? kMainLine : color.withAlpha(60)),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: full ? kMainMuted : color, size: 22),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                label,
-                style: mainBody(
-                  size: 15,
-                  color: full ? kMainMuted : kMainInk,
-                  weight: FontWeight.w800,
-                ),
-              ),
-            ),
-            Text(
-              '$count / $max',
-              style: mainBody(size: 13, color: full ? kMainMuted : color, weight: FontWeight.w700),
-            ),
-            const SizedBox(width: 8),
-            Icon(
-              full ? Icons.check_circle_rounded : Icons.add_circle_outline_rounded,
-              color: full ? kMainSage : color,
-              size: 20,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Location widgets (unchanged) ──────────────────────────────────────────────
+// ── Location widgets ──────────────────────────────────────────────────────────
 
 class _LocationAddButton extends StatelessWidget {
   final _SelectedMapLocation? location;
@@ -2127,7 +2298,11 @@ class _LocationAddButton extends StatelessWidget {
                 children: [
                   Text(
                     selected?.name ?? '위치 추가',
-                    style: mainBody(size: 15, color: kMainInk, weight: FontWeight.w800),
+                    style: mainBody(
+                      size: 15,
+                      color: kMainInk,
+                      weight: FontWeight.w800,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -2142,7 +2317,11 @@ class _LocationAddButton extends StatelessWidget {
               ),
             ),
             if (loading)
-              const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+              const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
             else if (selected != null)
               IconButton(
                 onPressed: onClear,
@@ -2174,7 +2353,8 @@ class _MapLocationPickerSheet extends StatefulWidget {
   });
 
   @override
-  State<_MapLocationPickerSheet> createState() => _MapLocationPickerSheetState();
+  State<_MapLocationPickerSheet> createState() =>
+      _MapLocationPickerSheetState();
 }
 
 class _MapLocationPickerSheetState extends State<_MapLocationPickerSheet> {
@@ -2202,7 +2382,9 @@ class _MapLocationPickerSheetState extends State<_MapLocationPickerSheet> {
     final pins = _filteredPins;
 
     return Container(
-      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.82),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.82,
+      ),
       decoration: const BoxDecoration(
         color: kMainPaper,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -2214,15 +2396,21 @@ class _MapLocationPickerSheetState extends State<_MapLocationPickerSheet> {
         children: [
           Center(
             child: Container(
-              width: 40, height: 4,
-              decoration: BoxDecoration(color: kMainLine, borderRadius: BorderRadius.circular(99)),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: kMainLine,
+                borderRadius: BorderRadius.circular(99),
+              ),
             ),
           ),
           const SizedBox(height: 18),
           Text('비밀지도 위치', style: mainTitle(size: 22)),
           const SizedBox(height: 6),
-          Text('이미 등록한 위치를 검색하거나 비밀지도에서 새로 추가하세요.',
-              style: mainBody(size: 13, color: kMainMuted)),
+          Text(
+            '이미 등록한 위치를 검색하거나 비밀지도에서 새로 추가하세요.',
+            style: mainBody(size: 13, color: kMainMuted),
+          ),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -2241,7 +2429,10 @@ class _MapLocationPickerSheetState extends State<_MapLocationPickerSheet> {
                     suffixIcon: _searchCtrl.text.isEmpty
                         ? null
                         : IconButton(
-                            onPressed: () { _searchCtrl.clear(); setState(() {}); },
+                            onPressed: () {
+                              _searchCtrl.clear();
+                              setState(() {});
+                            },
                             icon: const Icon(Icons.close_rounded),
                           ),
                     border: OutlineInputBorder(
@@ -2253,14 +2444,19 @@ class _MapLocationPickerSheetState extends State<_MapLocationPickerSheet> {
               ),
               const SizedBox(width: 10),
               IconButton.filled(
-                onPressed: () => Navigator.pop(context, const _MapLocationPickerResult.openMap()),
+                onPressed: () => Navigator.pop(
+                  context,
+                  const _MapLocationPickerResult.openMap(),
+                ),
                 icon: const Icon(Icons.add_location_alt_outlined),
                 tooltip: '비밀지도에서 추가',
                 style: IconButton.styleFrom(
                   backgroundColor: kMainInk,
                   foregroundColor: Colors.white,
                   fixedSize: const Size(48, 48),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                 ),
               ),
             ],
@@ -2276,10 +2472,16 @@ class _MapLocationPickerSheetState extends State<_MapLocationPickerSheet> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.map_outlined, color: kMainMuted, size: 34),
+                          const Icon(
+                            Icons.map_outlined,
+                            color: kMainMuted,
+                            size: 34,
+                          ),
                           const SizedBox(height: 10),
                           Text(
-                            widget.pins.isEmpty ? '비밀지도에 저장된 위치가 없어요' : '검색 결과가 없어요',
+                            widget.pins.isEmpty
+                                ? '비밀지도에 저장된 위치가 없어요'
+                                : '검색 결과가 없어요',
                             style: mainBody(size: 14, color: kMainMuted),
                             textAlign: TextAlign.center,
                           ),
@@ -2300,21 +2502,32 @@ class _MapLocationPickerSheetState extends State<_MapLocationPickerSheet> {
                         onTap: () => Navigator.pop(
                           context,
                           _MapLocationPickerResult.location(
-                            _SelectedMapLocation(id: id, name: name, category: category),
+                            _SelectedMapLocation(
+                              id: id,
+                              name: name,
+                              category: category,
+                            ),
                           ),
                         ),
                         borderRadius: BorderRadius.circular(12),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 13,
+                          ),
                           decoration: BoxDecoration(
                             color: selected ? kMainRoseSoft : kMainPaperSoft,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: selected ? kMainRose : kMainLine),
+                            border: Border.all(
+                              color: selected ? kMainRose : kMainLine,
+                            ),
                           ),
                           child: Row(
                             children: [
                               Icon(
-                                selected ? Icons.radio_button_checked_rounded : Icons.place_outlined,
+                                selected
+                                    ? Icons.radio_button_checked_rounded
+                                    : Icons.place_outlined,
                                 color: selected ? kMainRose : kMainInk,
                                 size: 20,
                               ),
@@ -2323,8 +2536,21 @@ class _MapLocationPickerSheetState extends State<_MapLocationPickerSheet> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(name, style: mainBody(size: 15, color: kMainInk, weight: FontWeight.w900)),
-                                    Text(category, style: mainBody(size: 12, color: kMainMuted)),
+                                    Text(
+                                      name,
+                                      style: mainBody(
+                                        size: 15,
+                                        color: kMainInk,
+                                        weight: FontWeight.w900,
+                                      ),
+                                    ),
+                                    Text(
+                                      category,
+                                      style: mainBody(
+                                        size: 12,
+                                        color: kMainMuted,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -2344,7 +2570,9 @@ class _MapLocationPickerSheetState extends State<_MapLocationPickerSheet> {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 String _dateKey(dynamic value) {
-  final date = value is DateTime ? value : DateTime.tryParse('${value ?? ''}')?.toLocal();
+  final date = value is DateTime
+      ? value
+      : DateTime.tryParse('${value ?? ''}')?.toLocal();
   if (date == null) return '';
   return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 }
@@ -2357,7 +2585,9 @@ String _authorName(Map<String, dynamic> post, bool isMine) {
 String _timeLabel(dynamic value) {
   final date = DateTime.tryParse('${value ?? ''}')?.toLocal();
   if (date == null) return '';
-  final hour = date.hour > 12 ? date.hour - 12 : (date.hour == 0 ? 12 : date.hour);
+  final hour = date.hour > 12
+      ? date.hour - 12
+      : (date.hour == 0 ? 12 : date.hour);
   final ampm = date.hour >= 12 ? '오후' : '오전';
   return '$ampm $hour:${date.minute.toString().padLeft(2, '0')}';
 }
@@ -2368,7 +2598,8 @@ String _dayNameFull(DateTime d) {
 }
 
 String _mediaUrl(String baseUrl, String mediaUrl) {
-  if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) return mediaUrl;
+  if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://'))
+    return mediaUrl;
   return '$baseUrl$mediaUrl';
 }
 
@@ -2392,9 +2623,14 @@ String _timeAgo(dynamic value) {
 String _mimeFor(String name, bool isVideo) {
   final ext = name.split('.').last.toLowerCase();
   const map = {
-    'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
-    'gif': 'image/gif', 'webp': 'image/webp',
-    'mp4': 'video/mp4', 'mov': 'video/quicktime', 'm4v': 'video/mp4',
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'gif': 'image/gif',
+    'webp': 'image/webp',
+    'mp4': 'video/mp4',
+    'mov': 'video/quicktime',
+    'm4v': 'video/mp4',
   };
   return map[ext] ?? (isVideo ? 'video/mp4' : 'image/jpeg');
 }

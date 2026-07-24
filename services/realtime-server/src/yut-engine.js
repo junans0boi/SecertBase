@@ -100,7 +100,7 @@ export function movePiece(piece, steps, { backdoDir } = {}) {
  * Check if a piece catches opponent's piece
  */
 export function checkCatch(position, opponentPieces) {
-  if (position === 0 || position === GOAL_POSITION) {
+  if (position === 0) {
     return [];
   }
   return opponentPieces.filter((p) => p.position === position && !p.finished);
@@ -273,14 +273,16 @@ function getNextPosition(currentPosition, isFirstStep, lastPos = 0) {
 
 function getPrevPosition(currentPosition, lastPos, backdoDir = null) {
   if (currentPosition === GOAL_POSITION) {
-    return lastPos || 19;
+    if (backdoDir === 19 || backdoDir === 27) return backdoDir;
+    return lastPos === 27 ? 27 : 19;
   }
   if (currentPosition === 23) {
     if (backdoDir === 22 || backdoDir === 25) return backdoDir;
     return lastPos === 25 || lastPos === 24 || lastPos === 10 ? 25 : 22;
   }
-  if (currentPosition === 15 && lastPos === 29) {
-    return 29;
+  if (currentPosition === 15) {
+    if (backdoDir === 14 || backdoDir === 29) return backdoDir;
+    return lastPos === 29 ? 29 : 14;
   }
 
   const prevMap = {

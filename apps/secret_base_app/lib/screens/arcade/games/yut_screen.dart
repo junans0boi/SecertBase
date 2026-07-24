@@ -150,7 +150,11 @@ class _YutScreenState extends State<YutScreen> {
                   hasBonusThrow: sock.yutHasBonusThrow,
                   onThrow: sock.throwYut,
                   onMovePiece: (pieceId, moveIndex, {int? backdoDir}) =>
-                      sock.moveYut(pieceId, moveIndex: moveIndex, backdoDir: backdoDir),
+                      sock.moveYut(
+                        pieceId,
+                        moveIndex: moveIndex,
+                        backdoDir: backdoDir,
+                      ),
                   onMoveNewPiece: () => sock.moveYut(0),
                   currentUser: currentUser,
                   lastResultName: sock.yutLastThrow,

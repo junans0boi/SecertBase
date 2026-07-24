@@ -174,6 +174,27 @@ class SocketService extends ChangeNotifier {
   String? catchGameWinner;
   String? catchHint;
   List<Map<String, dynamic>> catchGuessLog = [];
+
+  // blackjack
+  bool blackjackActive = false;
+  Map<String, dynamic>? blackjackState;
+
+  // oldmaid (도둑잡기)
+  bool oldmaidActive = false;
+  Map<String, dynamic>? oldmaidState;
+
+  // penalty (패널티킥)
+  bool penaltyActive = false;
+  Map<String, dynamic>? penaltyState;
+
+  // basketball (농구 자유투)
+  bool basketballActive = false;
+  Map<String, dynamic>? basketballState;
+
+  // bowling (볼링)
+  bool bowlingActive = false;
+  Map<String, dynamic>? bowlingState;
+
   // 드로잉 데이터는 콜백으로 직접 처리 (ChangeNotifier 우회 → 성능)
   Function(Map<String, dynamic>)? _onCatchDraw;
   VoidCallback? _onCatchClear;
@@ -734,6 +755,46 @@ class SocketService extends ChangeNotifier {
       notifyListeners();
     });
 
+    socket.on('game:blackjack:updated', (data) {
+      blackjackState = _m(data);
+      blackjackActive = blackjackState?['status'] == 'playing';
+      restartWaiting = false;
+      _log('블랙잭 업데이트');
+      notifyListeners();
+    });
+
+    socket.on('game:oldmaid:updated', (data) {
+      oldmaidState = _m(data);
+      oldmaidActive = oldmaidState?['status'] == 'playing';
+      restartWaiting = false;
+      _log('도둑잡기 업데이트');
+      notifyListeners();
+    });
+
+    socket.on('game:penalty:updated', (data) {
+      penaltyState = _m(data);
+      penaltyActive = penaltyState?['status'] == 'playing';
+      restartWaiting = false;
+      _log('패널티킥 업데이트');
+      notifyListeners();
+    });
+
+    socket.on('game:basketball:updated', (data) {
+      basketballState = _m(data);
+      basketballActive = basketballState?['status'] == 'playing';
+      restartWaiting = false;
+      _log('농구 자유투 업데이트');
+      notifyListeners();
+    });
+
+    socket.on('game:bowling:updated', (data) {
+      bowlingState = _m(data);
+      bowlingActive = bowlingState?['status'] == 'playing';
+      restartWaiting = false;
+      _log('볼링 업데이트');
+      notifyListeners();
+    });
+
     socket.on('game:restart:requested', (data) {
       restartPending = true;
       restartWaiting = false;
@@ -1188,6 +1249,64 @@ class SocketService extends ChangeNotifier {
     piratePlayers = [];
     notifyListeners();
     _socket?.emit('game:pirate:reset', {});
+  }
+
+  // ── blackjack ─────────────────────────────────────────────────────────────
+
+  void startBlackjack() {
+    _socket?.emit('game:blackjack:start', {});
+  }
+
+  void hitBlackjack() {
+    _socket?.emit('game:blackjack:hit', {});
+  }
+
+  void standBlackjack() {
+    _socket?.emit('game:blackjack:stand', {});
+  }
+
+  // ── oldmaid (도둑잡기) ──────────────────────────────────────────────────
+
+  void startOldMaid() {
+    _socket?.emit('game:oldmaid:start', {});
+  }
+
+  void drawOldMaidCard(String cardId) {
+    _socket?.emit('game:oldmaid:draw', {'cardId': cardId});
+  }
+
+  // ── penalty (패널티킥) ──────────────────────────────────────────────────
+
+  void startPenalty() {
+    _socket?.emit('game:penalty:start', {});
+  }
+
+  void submitPenaltyChoice(int choice) {
+    _socket?.emit('game:penalty:submit', {'choice': choice});
+  }
+
+  // ── basketball (농구 자유투) ──────────────────────────────────────────────
+
+  void startBasketball() {
+    _socket?.emit('game:basketball:start', {});
+  }
+
+  void submitBasketballShot(bool isMade, {int points = 2}) {
+    _socket?.emit('game:basketball:shot', {'isMade': isMade, 'points': points});
+  }
+
+  // ── bowling (볼링) ───────────────────────────────────────────────────────
+
+  void startBowling() {
+    _socket?.emit('game:bowling:start', {});
+  }
+
+  void rollBowling(int pins, {double aim = 0, double curve = 0}) {
+    _socket?.emit('game:bowling:roll', {
+      'pins': pins,
+      'aim': aim,
+      'curve': curve,
+    });
   }
 
   // ── catch mind ────────────────────────────────────────────────────────────

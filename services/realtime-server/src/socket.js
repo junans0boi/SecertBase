@@ -36,6 +36,36 @@ import {
   passBomb,
 } from "./bomb-engine.js";
 
+import {
+  initGame as initBlackjackGame,
+  playerHit as hitBlackjack,
+  playerStand as standBlackjack,
+} from "./blackjack-engine.js";
+
+import {
+  initGame as initOldMaidGame,
+  drawCard as drawOldMaidCard,
+} from "./oldmaid-engine.js";
+
+import {
+  initBasketballGame,
+  submitShot as submitBasketballShot,
+} from "./basketball-engine.js";
+
+import {
+  initBowlingGame,
+  rollFrame as rollBowlingFrame,
+  buildFrameDisplayData,
+} from "./bowling-engine.js";
+
+function withBowlingFrames(gameState) {
+  const frames = {};
+  for (const [pid, rolls] of Object.entries(gameState.rolls || {})) {
+    frames[pid] = buildFrameDisplayData(rolls);
+  }
+  return { ...gameState, frames };
+}
+
 const joinSchema = z.object({
   profileEmoji: z.string().min(1).max(16).optional(),
 });
@@ -46,7 +76,6 @@ const profileSchema = z.object({
 
 const gameTypes = [
   "dice",
-  "roulette",
   "rps",
   "zero",
   "telepathy",
@@ -55,8 +84,12 @@ const gameTypes = [
   "uno",
   "uno_classic",
   "uno_go_wild",
-  "bomb",
   "catch",
+  "blackjack",
+  "oldmaid",
+  "penalty",
+  "basketball",
+  "bowling",
 ];
 
 const lobbySchema = z.object({
@@ -1369,6 +1402,284 @@ export const registerSocketHandlers = (io) => {
         io.to(roomCode).emit("game:yut:ended", { winner: gameState.winner });
         await redis.del(yutGameKey(roomCode));
       }
+    });
+
+    socket.on("game:blackjack:start", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+      const presence = getPresence(io, roomCode);
+      if (presence.length !== 2) {
+        ack({ ok: false, reason: "need_two_players" });
+        return;
+      }
+      const orderedPlayers = await getOrderedPlayers(roomCode, presence);
+      if (orderedPlayers.length !== 2) {
+        ack({ ok: false, reason: "need_two_players" });
+        return;
+      }
+      const gameState = initBlackjackGame(orderedPlayers[0], orderedPlayers[1]);
+      await redis.set(`game:${roomCode}:blackjack`, JSON.stringify(gameState), "EX", 3600);
+      io.to(roomCode).emit("game:blackjack:updated", gameState);
+      ack({ ok: true });
+    });
+
+    socket.on("game:blackjack:hit", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+      const raw = await redis.get(`game:${roomCode}:blackjack`);
+      if (!raw) {
+        ack({ ok: false, reason: "no_game" });
+        return;
+      }
+      let gameState = JSON.parse(raw);
+      gameState = hitBlackjack(gameState, String(userId));
+      await redis.set(`game:${roomCode}:blackjack`, JSON.stringify(gameState), "EX", 3600);
+      io.to(roomCode).emit("game:blackjack:updated", gameState);
+      ack({ ok: true });
+    });
+
+    socket.on("game:blackjack:stand", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+      const raw = await redis.get(`game:${roomCode}:blackjack`);
+      if (!raw) {
+        ack({ ok: false, reason: "no_game" });
+        return;
+      }
+      let gameState = JSON.parse(raw);
+      gameState = standBlackjack(gameState, String(userId));
+      await redis.set(`game:${roomCode}:blackjack`, JSON.stringify(gameState), "EX", 3600);
+      io.to(roomCode).emit("game:blackjack:updated", gameState);
+      ack({ ok: true });
+    });
+
+    socket.on("game:oldmaid:start", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+      const presence = getPresence(io, roomCode);
+      if (presence.length !== 2) {
+        ack({ ok: false, reason: "need_two_players" });
+        return;
+      }
+      const orderedPlayers = await getOrderedPlayers(roomCode, presence);
+      if (orderedPlayers.length !== 2) {
+        ack({ ok: false, reason: "need_two_players" });
+        return;
+      }
+      const gameState = initOldMaidGame(orderedPlayers[0], orderedPlayers[1]);
+      await redis.set(`game:${roomCode}:oldmaid`, JSON.stringify(gameState), "EX", 3600);
+      io.to(roomCode).emit("game:oldmaid:updated", gameState);
+      ack({ ok: true });
+    });
+
+    socket.on("game:oldmaid:draw", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+      const raw = await redis.get(`game:${roomCode}:oldmaid`);
+      if (!raw) {
+        ack({ ok: false, reason: "no_game" });
+        return;
+      }
+      const cardId = payload?.cardId;
+      if (!cardId) {
+        ack({ ok: false, reason: "invalid_payload" });
+        return;
+      }
+      let gameState = JSON.parse(raw);
+      gameState = drawOldMaidCard(gameState, String(userId), String(cardId));
+      await redis.set(`game:${roomCode}:oldmaid`, JSON.stringify(gameState), "EX", 3600);
+      io.to(roomCode).emit("game:oldmaid:updated", gameState);
+      ack({ ok: true });
+    });
+
+    // ── Penalty Shootout ──────────────────────────────────────────────────
+    socket.on("game:penalty:start", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+      const presence = getPresence(io, roomCode);
+      if (presence.length !== 2) return ack({ ok: false, reason: "need_two_players" });
+      const orderedPlayers = await getOrderedPlayers(roomCode, presence);
+      if (orderedPlayers.length !== 2) return ack({ ok: false, reason: "need_two_players" });
+
+      const gameState = {
+        status: "playing",
+        round: 1, // 1 ~ 10
+        kicker: orderedPlayers[0],
+        keeper: orderedPlayers[1],
+        submissions: {},
+        scores: { [orderedPlayers[0]]: 0, [orderedPlayers[1]]: 0 },
+        rounds: [],
+        result: null,
+      };
+      await redis.set(`game:${roomCode}:penalty`, JSON.stringify(gameState), "EX", 3600);
+      io.to(roomCode).emit("game:penalty:updated", gameState);
+      ack({ ok: true });
+    });
+
+    socket.on("game:penalty:submit", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+      const raw = await redis.get(`game:${roomCode}:penalty`);
+      if (!raw) return ack({ ok: false, reason: "no_game" });
+
+      let gameState = JSON.parse(raw);
+      if (gameState.status !== "playing") return ack({ ok: false, reason: "finished" });
+
+      const choice = Number(payload?.choice);
+      if (!Number.isInteger(choice)) return ack({ ok: false, reason: "invalid_choice" });
+
+      gameState.submissions[String(userId)] = choice;
+
+      const kickerId = String(gameState.kicker);
+      const keeperId = String(gameState.keeper);
+
+      if (
+        gameState.submissions[kickerId] !== undefined &&
+        gameState.submissions[keeperId] !== undefined
+      ) {
+        const kickerDir = gameState.submissions[kickerId]; // 0~8 (3x3)
+        const keeperDir = gameState.submissions[keeperId]; // 0~8 (3x3 exact match)
+
+        // Exact match required to save!
+        const isSaved = kickerDir === keeperDir;
+        const isGoal = !isSaved;
+
+        if (isGoal) {
+          gameState.scores[kickerId] = (gameState.scores[kickerId] || 0) + 1;
+        }
+
+        gameState.rounds.push({
+          round: gameState.round,
+          kicker: kickerId,
+          keeper: keeperId,
+          kickerDir,
+          keeperDir,
+          isGoal,
+        });
+
+        gameState.submissions = {};
+
+        if (gameState.round >= 10) {
+          gameState.status = "finished";
+          const s1 = gameState.scores[kickerId];
+          const s2 = gameState.scores[keeperId];
+          let winner = "draw";
+          if (s1 > s2) winner = kickerId;
+          else if (s2 > s1) winner = keeperId;
+          gameState.result = { winner, scores: gameState.scores };
+        } else {
+          gameState.round += 1;
+          // Swap roles
+          gameState.kicker = keeperId;
+          gameState.keeper = kickerId;
+        }
+      }
+
+      await redis.set(`game:${roomCode}:penalty`, JSON.stringify(gameState), "EX", 3600);
+      io.to(roomCode).emit("game:penalty:updated", gameState);
+      ack({ ok: true });
+    });
+
+    // ── Basketball ────────────────────────────────────────────────────────
+    socket.on("game:basketball:start", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+      const presence = getPresence(io, roomCode);
+      if (presence.length !== 2) return ack({ ok: false, reason: "need_two_players" });
+      const orderedPlayers = await getOrderedPlayers(roomCode, presence);
+      if (orderedPlayers.length !== 2) return ack({ ok: false, reason: "need_two_players" });
+
+      const gameState = initBasketballGame(orderedPlayers[0], orderedPlayers[1]);
+      await redis.set(`game:${roomCode}:basketball`, JSON.stringify(gameState), "EX", 3600);
+      io.to(roomCode).emit("game:basketball:updated", gameState);
+      ack({ ok: true });
+    });
+
+    socket.on("game:basketball:shot", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+      const raw = await redis.get(`game:${roomCode}:basketball`);
+      if (!raw) return ack({ ok: false, reason: "no_game" });
+
+      let gameState = JSON.parse(raw);
+      const isMade = Boolean(payload?.isMade);
+      const points = Number(payload?.points) || 2;
+      gameState = submitBasketballShot(gameState, String(userId), isMade, points);
+
+      await redis.set(`game:${roomCode}:basketball`, JSON.stringify(gameState), "EX", 3600);
+      io.to(roomCode).emit("game:basketball:updated", gameState);
+      ack({ ok: true });
+    });
+
+    // ── Bowling ───────────────────────────────────────────────────────────
+    socket.on("game:bowling:start", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+      const presence = getPresence(io, roomCode);
+      if (presence.length !== 2) return ack({ ok: false, reason: "need_two_players" });
+      const orderedPlayers = await getOrderedPlayers(roomCode, presence);
+      if (orderedPlayers.length !== 2) return ack({ ok: false, reason: "need_two_players" });
+
+      const gameState = initBowlingGame(orderedPlayers[0], orderedPlayers[1]);
+      await redis.set(`game:${roomCode}:bowling`, JSON.stringify(gameState), "EX", 3600);
+      io.to(roomCode).emit("game:bowling:updated", withBowlingFrames(gameState));
+      ack({ ok: true });
+    });
+
+    socket.on("game:bowling:roll", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+      const raw = await redis.get(`game:${roomCode}:bowling`);
+      if (!raw) return ack({ ok: false, reason: "no_game" });
+
+      let gameState = JSON.parse(raw);
+      const pins = Math.min(10, Math.max(0, Number(payload?.pins) || 0));
+      const clampUnit = (v) => Math.min(1, Math.max(-1, Number(v) || 0));
+      gameState = rollBowlingFrame(gameState, String(userId), pins, {
+        aim: clampUnit(payload?.aim),
+        curve: clampUnit(payload?.curve),
+      });
+
+      await redis.set(`game:${roomCode}:bowling`, JSON.stringify(gameState), "EX", 3600);
+      io.to(roomCode).emit("game:bowling:updated", withBowlingFrames(gameState));
+      ack({ ok: true });
     });
 
     socket.on("game:uno:new", async (payload, ackRaw) => {

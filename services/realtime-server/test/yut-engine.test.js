@@ -218,14 +218,16 @@ test('consumed extra turn does not leak into the next settle', () => {
   assert.equal(gameState.currentTurn, 'B');
 });
 
-test('checkCatch ignores start and goal positions', () => {
+test('checkCatch ignores start; goal piece only safe when finished', () => {
   const opponentPieces = [
     { id: 0, position: 0, finished: false },
     { id: 1, position: 3, finished: false },
     { id: 2, position: 20, finished: true },
+    { id: 3, position: 20, finished: false },
   ];
 
-  assert.equal(checkCatch(0, opponentPieces).length, 0);
-  assert.equal(checkCatch(20, opponentPieces).length, 0);
+  assert.equal(checkCatch(0, opponentPieces).length, 0, 'start is always safe');
+  assert.equal(checkCatch(20, opponentPieces).filter((p) => p.finished).length, 0, 'finished pieces are not caught');
+  assert.deepEqual(checkCatch(20, opponentPieces).map((p) => p.id), [3], 'pre-finish piece at pos 20 can be caught');
   assert.deepEqual(checkCatch(3, opponentPieces).map((piece) => piece.id), [1]);
 });

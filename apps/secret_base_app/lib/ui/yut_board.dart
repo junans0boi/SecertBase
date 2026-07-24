@@ -298,8 +298,62 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
       }
       // At pos 23, 백도 is ambiguous: two paths (22 or 25). Show both.
       if (steps == -1 && position == 23) {
-        options.add(_MoveGuideOption(index: i, steps: steps, targetPos: 22, backdoDir: 22));
-        options.add(_MoveGuideOption(index: i, steps: steps, targetPos: 25, backdoDir: 25));
+        options.add(
+          _MoveGuideOption(
+            index: i,
+            steps: steps,
+            targetPos: 22,
+            backdoDir: 22,
+          ),
+        );
+        options.add(
+          _MoveGuideOption(
+            index: i,
+            steps: steps,
+            targetPos: 25,
+            backdoDir: 25,
+          ),
+        );
+        continue;
+      }
+      // At pos 15 (bottom-left corner), 백도 is ambiguous: outer left (14) or diagonal (29).
+      if (steps == -1 && position == 15) {
+        options.add(
+          _MoveGuideOption(
+            index: i,
+            steps: steps,
+            targetPos: 14,
+            backdoDir: 14,
+          ),
+        );
+        options.add(
+          _MoveGuideOption(
+            index: i,
+            steps: steps,
+            targetPos: 29,
+            backdoDir: 29,
+          ),
+        );
+        continue;
+      }
+      // At pos 20 (goal checkpoint, not yet finished), 백도 is ambiguous: outer (19) or diagonal (27).
+      if (steps == -1 && position == 20) {
+        options.add(
+          _MoveGuideOption(
+            index: i,
+            steps: steps,
+            targetPos: 19,
+            backdoDir: 19,
+          ),
+        );
+        options.add(
+          _MoveGuideOption(
+            index: i,
+            steps: steps,
+            targetPos: 27,
+            backdoDir: 27,
+          ),
+        );
         continue;
       }
       options.add(
@@ -552,7 +606,11 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
           _moveUnlockTimer = Timer(const Duration(seconds: 2), () {
             if (mounted) setState(() => _moveInFlight = false);
           });
-          widget.onMovePiece(pieceId, option.index, backdoDir: option.backdoDir);
+          widget.onMovePiece(
+            pieceId,
+            option.index,
+            backdoDir: option.backdoDir,
+          );
         },
         child: Container(
           decoration: BoxDecoration(
@@ -856,11 +914,14 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     }
 
     final isMyTurn = widget.turn == widget.currentUser;
-    final opponent = widget.currentUser == widget.p1UserId ? widget.p2UserId : widget.p1UserId;
+    final opponent = widget.currentUser == widget.p1UserId
+        ? widget.p2UserId
+        : widget.p1UserId;
     final isP2 = widget.currentUser == widget.p2UserId;
     final isRollOrder = widget.phase == 'roll_order';
     final isOrderCountdown = widget.phase == 'order_countdown';
-    final canThrow = isMyTurn &&
+    final canThrow =
+        isMyTurn &&
         (widget.phase == 'throwing' ||
             (widget.phase == 'moving' && widget.hasBonusThrow));
 
@@ -1468,8 +1529,16 @@ class _CharacterTokenPainter extends CustomPainter {
   void _drawFace(Canvas canvas, Offset faceCenter, double faceR, Color skin) {
     canvas.drawCircle(faceCenter, faceR, Paint()..color = skin);
     final eye = Paint()..color = const Color(0xFF2B2117);
-    canvas.drawCircle(faceCenter.translate(-faceR * 0.38, -faceR * 0.08), faceR * 0.12, eye);
-    canvas.drawCircle(faceCenter.translate(faceR * 0.38, -faceR * 0.08), faceR * 0.12, eye);
+    canvas.drawCircle(
+      faceCenter.translate(-faceR * 0.38, -faceR * 0.08),
+      faceR * 0.12,
+      eye,
+    );
+    canvas.drawCircle(
+      faceCenter.translate(faceR * 0.38, -faceR * 0.08),
+      faceR * 0.12,
+      eye,
+    );
     final smile = Paint()
       ..color = const Color(0xFF7B2B22)
       ..strokeWidth = faceR * 0.1
@@ -1487,7 +1556,13 @@ class _CharacterTokenPainter extends CustomPainter {
     );
   }
 
-  void _drawHong(Canvas canvas, double radius, Offset faceCenter, double faceR, Offset bodyCenter) {
+  void _drawHong(
+    Canvas canvas,
+    double radius,
+    Offset faceCenter,
+    double faceR,
+    Offset bodyCenter,
+  ) {
     // Hat
     canvas.drawRRect(
       RRect.fromRectAndRadius(
@@ -1505,7 +1580,11 @@ class _CharacterTokenPainter extends CustomPainter {
     // Body (green robe)
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromCenter(center: bodyCenter, width: faceR * 1.6, height: radius * 0.40),
+        Rect.fromCenter(
+          center: bodyCenter,
+          width: faceR * 1.6,
+          height: radius * 0.40,
+        ),
         Radius.circular(radius * 0.08),
       ),
       Paint()..color = const Color(0xFF1F6F54),
@@ -1521,7 +1600,13 @@ class _CharacterTokenPainter extends CustomPainter {
     );
   }
 
-  void _drawNolbu(Canvas canvas, double radius, Offset faceCenter, double faceR, Offset bodyCenter) {
+  void _drawNolbu(
+    Canvas canvas,
+    double radius,
+    Offset faceCenter,
+    double faceR,
+    Offset bodyCenter,
+  ) {
     // Hat
     canvas.drawOval(
       Rect.fromCenter(
@@ -1536,14 +1621,22 @@ class _CharacterTokenPainter extends CustomPainter {
     // Body (purple robe — wide to show greed)
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromCenter(center: bodyCenter, width: faceR * 1.85, height: radius * 0.40),
+        Rect.fromCenter(
+          center: bodyCenter,
+          width: faceR * 1.85,
+          height: radius * 0.40,
+        ),
         Radius.circular(radius * 0.08),
       ),
       Paint()..color = const Color(0xFF4D2E83),
     );
     // Gold coin
     final coinCenter = bodyCenter.translate(faceR * 0.52, 0);
-    canvas.drawCircle(coinCenter, faceR * 0.28, Paint()..color = const Color(0xFFFFCF45));
+    canvas.drawCircle(
+      coinCenter,
+      faceR * 0.28,
+      Paint()..color = const Color(0xFFFFCF45),
+    );
     canvas.drawCircle(
       coinCenter,
       faceR * 0.28,
@@ -1554,7 +1647,13 @@ class _CharacterTokenPainter extends CustomPainter {
     );
   }
 
-  void _drawMiho(Canvas canvas, double radius, Offset faceCenter, double faceR, Offset bodyCenter) {
+  void _drawMiho(
+    Canvas canvas,
+    double radius,
+    Offset faceCenter,
+    double faceR,
+    Offset bodyCenter,
+  ) {
     // Fox ears (above face)
     final ear = Paint()..color = const Color(0xFFF28B35);
     final innerEar = Paint()..color = const Color(0xFFFFD7D0);
@@ -1601,7 +1700,11 @@ class _CharacterTokenPainter extends CustomPainter {
     // Body (orange fox body)
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromCenter(center: bodyCenter, width: faceR * 1.5, height: radius * 0.40),
+        Rect.fromCenter(
+          center: bodyCenter,
+          width: faceR * 1.5,
+          height: radius * 0.40,
+        ),
         Radius.circular(radius * 0.10),
       ),
       Paint()..color = const Color(0xFFF28B35),

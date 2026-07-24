@@ -1,11 +1,14 @@
 import cors from "cors";
 import express from "express";
+import { mkdirSync } from "node:fs";
 import { createServer } from "node:http";
 import { Server } from "socket.io";
 import { config } from "./config.js";
 import { redis } from "./redis.js";
 import { registerSocketHandlers } from "./socket.js";
 import apiRoutes from "./routes.js";
+
+mkdirSync(config.UPLOADS_ROOT, { recursive: true });
 
 const app = express();
 app.use(cors({ origin: config.CORS_ORIGIN, credentials: true }));

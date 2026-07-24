@@ -21,15 +21,18 @@ const disabledRestPrefixes = new Map([
 // disabledSocketPrefixes에서 해당 prefix를 제거한다 (epic #20).
 export const PUBLIC_GAME_TYPES = [
   'yut',
-  'bomb',
   'rps',
   'zero',
   'uno',
   'dice',
-  'roulette',
   'telepathy',
   'pirate',
   'catch',
+  'blackjack',
+  'oldmaid',
+  'penalty',
+  'basketball',
+  'bowling',
 ];
 
 const disabledSocketPrefixes = new Map([

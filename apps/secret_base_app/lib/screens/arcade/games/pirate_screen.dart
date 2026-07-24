@@ -433,7 +433,7 @@ class _PirateScreenState extends State<PirateScreen>
 
   Widget _buildResultGrid(bool compact, int bombSlot) {
     final picked = _socket.piratePickedSlots;
-    final total = _socket.pirateTotalSlots + 1; // slots before explosion
+    final total = _socket.pirateTotalSlots;
     const cols = 4;
     final holeSize = compact ? 52.0 : 62.0;
     final spacing = compact ? 7.0 : 9.0;

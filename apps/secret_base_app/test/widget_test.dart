@@ -16,7 +16,8 @@ void main() {
   ) async {
     // 게임 목록이 길어 기본 뷰포트(600px)에서는 하단 항목이 lazy build로
     // 트리에 없다. 전체 목록이 한 화면에 들어오도록 뷰포트를 키운다.
-    tester.view.physicalSize = const Size(800, 2400);
+    // 게임 아이콘 스트립(가로 스크롤)이 13종을 전부 lazy build 하도록 넓힌다.
+    tester.view.physicalSize = const Size(1600, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
@@ -25,20 +26,30 @@ void main() {
     );
 
     expect(find.text('윷놀이'), findsOneWidget);
-    expect(find.text('폭탄 돌리기'), findsOneWidget);
     expect(find.text('가위바위보'), findsOneWidget);
     expect(find.text('원카드'), findsOneWidget);
     expect(find.text('제로'), findsOneWidget);
     // 하나빼기는 제로로 분리 — 가위바위보 설명에서 제외.
+    // (설명은 아이콘 선택 시 상세 카드에 노출된다.)
+    await tester.tap(find.text('가위바위보'));
+    await tester.pumpAndSettle();
     expect(find.text('단판, 3판, 묵찌빠 세 가지 모드'), findsOneWidget);
     // 상표 노출 금지 (ADR 0001) — 사용자 노출명은 원카드만.
     expect(find.text('UNO'), findsNothing);
     expect(find.text('주사위'), findsOneWidget);
-    expect(find.text('룰렛'), findsOneWidget);
     expect(find.text('텔레파시'), findsOneWidget);
     expect(find.text('해적 룰렛'), findsOneWidget);
     expect(find.text('그림 맞히기'), findsOneWidget);
     // 타 게임 상표 노출 금지.
     expect(find.text('캐치마인드'), findsNothing);
+    // 폭탄 돌리기/룰렛은 Phase 2에서 폐기 — 노출 금지.
+    expect(find.text('폭탄 돌리기'), findsNothing);
+    expect(find.text('룰렛'), findsNothing);
+    // Phase 1~2 신규 게임 노출 확인.
+    expect(find.text('블랙잭'), findsOneWidget);
+    expect(find.text('도둑잡기'), findsOneWidget);
+    expect(find.text('패널티킥'), findsOneWidget);
+    expect(find.text('농구 자유투'), findsOneWidget);
+    expect(find.text('볼링'), findsOneWidget);
   });
 }

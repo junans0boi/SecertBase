@@ -115,6 +115,21 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
           case 'uno':
             _socket.newUnoGame(mode: _socket.selectedUnoMode);
             break;
+          case 'blackjack':
+            _socket.startBlackjack();
+            break;
+          case 'oldmaid':
+            _socket.startOldMaid();
+            break;
+          case 'penalty':
+            _socket.startPenalty();
+            break;
+          case 'basketball':
+            _socket.startBasketball();
+            break;
+          case 'bowling':
+            _socket.startBowling();
+            break;
         }
       });
     }

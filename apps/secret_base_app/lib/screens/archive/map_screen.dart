@@ -520,6 +520,162 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
+  Future<void> _editPin(Map<String, dynamic> pin) async {
+    final status = _pinStatus(pin);
+    final isVisited = status == 'visited';
+    final existingDate = _parseDateString(pin['visit_date']);
+    DateTime selectedDate = existingDate ?? DateTime.now();
+    int selectedRating = placeIntForMap(pin['rating']) ?? 0;
+    final selectedTags = <String>{..._extractTags(pin)};
+    final memoCtrl = TextEditingController(text: _cleanMemo(pin['memo']));
+
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) => _SheetFrame(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              20,
+              16,
+              20,
+              MediaQuery.of(ctx).viewInsets.bottom + 20,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 42,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: kMainLine,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text('장소 수정', style: mainTitle(size: 24)),
+                const SizedBox(height: 4),
+                Text(
+                  pin['place_name'] ?? '',
+                  style: mainBody(
+                    size: 14,
+                    color: kMainSub,
+                    weight: FontWeight.w700,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 18),
+                if (isVisited) ...[
+                  _DatePickerTile(
+                    date: selectedDate,
+                    label: '방문 날짜',
+                    onPick: () async {
+                      final picked = await _pickDate(ctx, selectedDate);
+                      if (picked != null) setSheet(() => selectedDate = picked);
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  _RatingPicker(
+                    rating: selectedRating,
+                    onChanged: (value) =>
+                        setSheet(() => selectedRating = value),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                _EmotionPicker(
+                  selectedTags: selectedTags,
+                  onToggle: (tag) => setSheet(() {
+                    selectedTags.contains(tag)
+                        ? selectedTags.remove(tag)
+                        : selectedTags.add(tag);
+                  }),
+                ),
+                const SizedBox(height: 16),
+                _SoftTextField(
+                  controller: memoCtrl,
+                  hintText: isVisited ? '오늘 어땠는지 짧게 남겨줘' : '가보고 싶은 이유를 남겨봐',
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: kMainSky,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                    ),
+                    child: Text(
+                      '저장',
+                      style: mainBody(
+                        color: Colors.white,
+                        weight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    if (saved != true) return;
+
+    final id = pin['id'];
+    if (id == null) {
+      _toast('수정할 수 없어요');
+      return;
+    }
+
+    final updatedMemo = _composeMemo(memoCtrl.text, selectedTags.toList());
+    final body = <String, dynamic>{
+      'memo': updatedMemo,
+      'emotion_tags': selectedTags.toList(),
+    };
+    if (isVisited) {
+      body['rating'] = selectedRating;
+      body['visit_date'] = _dateValue(selectedDate);
+    }
+
+    try {
+      final response = await http.patch(
+        Uri.parse('${_auth.baseUrl}/api/map/$id'),
+        headers: _jsonHeaders(includeAuth: true),
+        body: jsonEncode(body),
+      );
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      if (response.statusCode != 200 || data['ok'] != true) {
+        _toast('수정하지 못했어요');
+        return;
+      }
+    } catch (_) {
+      _toast('수정하지 못했어요');
+      return;
+    }
+
+    setState(() {
+      pin['memo'] = updatedMemo;
+      pin['emotion_tags'] = selectedTags.toList();
+      if (isVisited) {
+        pin['rating'] = selectedRating;
+        pin['visit_date'] = _dateValue(selectedDate);
+      }
+    });
+
+    if (mounted) _toast('수정됐어요');
+  }
+
   void _showAddDialog(
     LatLng latLng, {
     String? initialName,
@@ -997,8 +1153,17 @@ class _MapScreenState extends State<MapScreen> {
                       ),
                     ),
                   ],
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _editPin(pin);
+                    },
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('장소 수정'),
+                    style: TextButton.styleFrom(foregroundColor: kMainSky),
+                  ),
                   if (isCreator) ...[
-                    const SizedBox(height: 8),
                     TextButton.icon(
                       onPressed: () {
                         Navigator.pop(ctx);
@@ -2821,6 +2986,16 @@ String _composeMemo(String memo, List<String> tags) {
 
 String _dateValue(DateTime date) {
   return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+}
+
+DateTime? _parseDateString(dynamic value) {
+  final str = _dateKey(value);
+  if (str == null) return null;
+  try {
+    return DateTime.parse(str);
+  } catch (_) {
+    return null;
+  }
 }
 
 String _dateLabel(DateTime date) {

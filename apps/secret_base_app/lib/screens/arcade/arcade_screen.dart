@@ -3,9 +3,14 @@ import 'package:flutter/material.dart';
 import '../../core/main_design.dart';
 import '../../core/socket_service.dart';
 import 'game_lobby_screen.dart';
+import 'games/basketball_screen.dart';
+import 'games/blackjack_screen.dart';
 import 'games/bomb_screen.dart';
+import 'games/bowling_screen.dart';
 import 'games/catch_screen.dart';
 import 'games/dice_screen.dart';
+import 'games/oldmaid_screen.dart';
+import 'games/penalty_screen.dart';
 import 'games/pirate_screen.dart';
 import 'games/roulette_screen.dart';
 import 'games/rps_screen.dart';
@@ -25,20 +30,28 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
 
   static const _games = [
     _GameInfo(
+      type: 'blackjack',
+      icon: Icons.style,
+      title: '블랙잭',
+      description: '각자 딜러 상대로 21점 대결 후 승패 결정',
+      color: kMainRose,
+      background: kMainRoseSoft,
+    ),
+    _GameInfo(
+      type: 'oldmaid',
+      icon: Icons.elderly_rounded,
+      title: '도둑잡기',
+      description: '상대 카드를 뽑아 짝을 맞추고 조커를 피하는 카드 심리전',
+      color: kMainHoney,
+      background: kMainHoneySoft,
+    ),
+    _GameInfo(
       type: 'yut',
       icon: Icons.grid_view_rounded,
       title: '윷놀이',
       description: '말 업기와 잡기까지 함께 즐기는 2인 보드게임',
       color: kMainSky,
       background: kMainSkySoft,
-    ),
-    _GameInfo(
-      type: 'bomb',
-      icon: Icons.timer_outlined,
-      title: '폭탄 돌리기',
-      description: '문제를 맞히고 시간이 끝나기 전에 폭탄을 넘겨요',
-      color: kMainHoney,
-      background: kMainHoneySoft,
     ),
     _GameInfo(
       type: 'rps',
@@ -73,14 +86,6 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       background: kMainSkySoft,
     ),
     _GameInfo(
-      type: 'roulette',
-      icon: Icons.track_changes_rounded,
-      title: '룰렛',
-      description: '선택지를 적고 돌려서 정하는 결정 도우미',
-      color: kMainPeach,
-      background: kMainPeachSoft,
-    ),
-    _GameInfo(
       type: 'telepathy',
       icon: Icons.psychology_outlined,
       title: '텔레파시',
@@ -97,6 +102,30 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       background: kMainRoseSoft,
     ),
     _GameInfo(
+      type: 'penalty',
+      icon: Icons.sports_soccer_rounded,
+      title: '패널티킥',
+      description: '키커와 키퍼 역할을 번갈아가며 펼치는 승부차기 대결',
+      color: kMainSky,
+      background: kMainSkySoft,
+    ),
+    _GameInfo(
+      type: 'basketball',
+      icon: Icons.sports_basketball_rounded,
+      title: '농구 자유투',
+      description: '스와이프 컨트롤로 10번의 슛을 던져 점수 대결',
+      color: kMainPeach,
+      background: kMainPeachSoft,
+    ),
+    _GameInfo(
+      type: 'bowling',
+      icon: Icons.sports_baseball_rounded,
+      title: '볼링',
+      description: '타이밍 조준으로 10프레임 투구하여 점수 대결',
+      color: kMainLilac,
+      background: kMainLilacSoft,
+    ),
+    _GameInfo(
       type: 'catch',
       icon: Icons.brush_outlined,
       title: '그림 맞히기',
@@ -107,6 +136,11 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
   ];
 
   Widget _screen(String type) => switch (type) {
+    'blackjack' => const BlackjackScreen(),
+    'oldmaid' => const OldMaidScreen(),
+    'penalty' => const PenaltyScreen(),
+    'basketball' => const BasketballScreen(),
+    'bowling' => const BowlingScreen(),
     'yut' => const YutScreen(),
     'bomb' => const BombScreen(),
     'uno' => const UnoScreen(),
@@ -174,7 +208,13 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                   width: 2.5,
                 ),
                 boxShadow: isSelected
-                    ? [BoxShadow(color: game.color.withValues(alpha: 0.35), blurRadius: 10, spreadRadius: 1)]
+                    ? [
+                        BoxShadow(
+                          color: game.color.withValues(alpha: 0.35),
+                          blurRadius: 10,
+                          spreadRadius: 1,
+                        ),
+                      ]
                     : null,
               ),
               child: Icon(game.icon, color: game.color, size: 26),
@@ -204,16 +244,17 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
         children: [
           Icon(Icons.sports_esports_rounded, size: 60, color: kMainMuted),
           const SizedBox(height: 14),
-          Text(
-            '위에서 게임을 골라보세요',
-            style: mainBody(size: 15, color: kMainSub),
-          ),
+          Text('위에서 게임을 골라보세요', style: mainBody(size: 15, color: kMainSub)),
         ],
       ),
     );
   }
 
-  Widget _buildDetailCard(BuildContext context, _GameInfo game, bool connected) {
+  Widget _buildDetailCard(
+    BuildContext context,
+    _GameInfo game,
+    bool connected,
+  ) {
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -258,7 +299,10 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                     icon: const Icon(Icons.play_arrow_rounded, size: 22),
                     label: const Text(
                       '시작하기',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
@@ -343,7 +387,11 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
               children: [
                 Icon(icon, size: 32, color: kMainMuted.withValues(alpha: 0.35)),
                 const SizedBox(height: 6),
-                Text(hint, style: mainBody(size: 11, color: kMainMuted), textAlign: TextAlign.center),
+                Text(
+                  hint,
+                  style: mainBody(size: 11, color: kMainMuted),
+                  textAlign: TextAlign.center,
+                ),
               ],
             ),
           ),

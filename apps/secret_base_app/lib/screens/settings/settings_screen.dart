@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/app_theme.dart';
 import '../../core/main_design.dart';
 import '../../core/socket_service.dart';
@@ -371,17 +372,81 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 24),
+            _developerCard(),
+            const SizedBox(height: 20),
             Center(
-              child: Text(
-                '비밀기지 Secret Base',
-                style: mainBody(size: 12, color: kMainMuted),
+              child: Column(
+                children: [
+                  Text(
+                    '스테디투비비드 | 2026년 7월 설립',
+                    style: mainBody(size: 11, color: kMainMuted),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 4),
+                  GestureDetector(
+                    onTap: () => launchUrl(
+                      Uri.parse('mailto:admin@steady2vivid.kro.kr'),
+                    ),
+                    child: Text(
+                      '고객센터: admin@steady2vivid.kro.kr',
+                      style: mainBody(
+                        size: 11,
+                        color: kMainMuted,
+                      ).copyWith(decoration: TextDecoration.underline),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '© 2026 STEADY TO VIVID STUDIO. All Rights Reserved.',
+                    style: mainBody(size: 10, color: kMainMuted),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
               ),
             ),
+            const SizedBox(height: 16),
           ],
         ),
       ),
     );
   }
+
+  Widget _developerCard() => _Card(
+    title: '개발자 정보',
+    child: Column(
+      children: [
+        _InfoRow(
+          Icons.person_outline_rounded,
+          kMainSky,
+          '개발자',
+          'Lee JunHwan',
+          null,
+        ),
+        const SizedBox(height: 10),
+        _InfoRow(
+          Icons.business_outlined,
+          kMainSage,
+          '팀',
+          'STEADY TO VIVID STUDIO',
+          null,
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () => launchUrl(
+              Uri.parse('https://steady2vivid.kro.kr/'),
+              mode: LaunchMode.externalApplication,
+            ),
+            icon: const Icon(Icons.open_in_new_rounded, size: 15),
+            label: const Text('팀 홈페이지 방문'),
+            style: _compactButtonStyle(),
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _accountCard() => _Card(
     title: '계정 및 연결',
@@ -1231,7 +1296,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final res = await http.patch(
         Uri.parse('${_auth.baseUrl}/api/couple/info'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${_auth.token}',
+        },
         body: jsonEncode({
           'user_id': uid,
           'start_date': _dateOnly(_anniversaryDate!),
