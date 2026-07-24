@@ -200,6 +200,12 @@ class SocketService extends ChangeNotifier {
   bool bowlingActive = false;
   Map<String, dynamic>? bowlingState;
 
+  // tank 대작전
+  bool tankActive = false;
+  Map<String, dynamic>? tankState;
+  Map<String, dynamic>? tankLastShot;
+  String? tankWinner;
+
   // 드로잉 데이터는 콜백으로 직접 처리 (ChangeNotifier 우회 → 성능)
   Function(Map<String, dynamic>)? _onCatchDraw;
   VoidCallback? _onCatchClear;
@@ -811,6 +817,34 @@ class SocketService extends ChangeNotifier {
       notifyListeners();
     });
 
+    socket.on('game:tank:started', (data) {
+      tankState = _m(data);
+      tankLastShot = null;
+      tankWinner = null;
+      tankActive = true;
+      _log('탱크 대작전 시작');
+      notifyListeners();
+    });
+
+    socket.on('game:tank:updated', (data) {
+      tankState = _m(data);
+      _log('탱크 상태 업데이트');
+      notifyListeners();
+    });
+
+    socket.on('game:tank:shot', (data) {
+      tankLastShot = _m(data);
+      _log('탱크 발사');
+      notifyListeners();
+    });
+
+    socket.on('game:tank:ended', (data) {
+      tankWinner = _m(data)['winner'] as String?;
+      tankActive = false;
+      _log('탱크 게임 종료: 승자 $tankWinner');
+      notifyListeners();
+    });
+
     socket.on('game:restart:requested', (data) {
       restartPending = true;
       restartWaiting = false;
@@ -1331,6 +1365,28 @@ class SocketService extends ChangeNotifier {
       'aim': aim,
       'curve': curve,
     });
+  }
+
+  // ── tank 대작전 ───────────────────────────────────────────────────────────
+
+  void startTank({int stake = 0}) {
+    _socket?.emit('game:tank:new', {'stake': stake});
+  }
+
+  void moveTank(int delta) {
+    _socket?.emit('game:tank:move', {'delta': delta});
+  }
+
+  void aimTank(int angle, int power) {
+    _socket?.emit('game:tank:aim', {'angle': angle, 'power': power});
+  }
+
+  void selectTankWeapon(String weapon) {
+    _socket?.emit('game:tank:weapon', {'weapon': weapon});
+  }
+
+  void fireTank() {
+    _socket?.emit('game:tank:fire', null);
   }
 
   // ── catch mind ────────────────────────────────────────────────────────────

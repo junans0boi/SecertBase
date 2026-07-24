@@ -59,6 +59,14 @@ import {
   buildFrameDisplayData,
 } from "./bowling-engine.js";
 
+import {
+  createFortressState,
+  moveTank,
+  aimTank,
+  selectWeapon,
+  fireTank,
+} from "./fortress-engine.js";
+
 function withBowlingFrames(gameState) {
   const frames = {};
   for (const [pid, rolls] of Object.entries(gameState.rolls || {})) {
@@ -91,6 +99,7 @@ const gameTypes = [
   "penalty",
   "basketball",
   "bowling",
+  "tank",
 ];
 
 const lobbySchema = z.object({
@@ -2620,6 +2629,135 @@ export const registerSocketHandlers = (io) => {
         console.error("game:catch:reset error", err);
         ack({ ok: false });
       }
+    });
+
+    // ── Tank 대작전 ─────────────────────────────────────────────────────────────
+    const tankGameKey = (rc) => `game:${rc}:tank`;
+
+    const tankNewSchema = z.object({
+      stake: z.number().int().min(0).max(10000).optional().default(0),
+    }).optional().default({ stake: 0 });
+
+    socket.on("game:tank:new", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const { roomCode, userId } = socket.data;
+      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+
+      const presence = getPresence(io, roomCode);
+      if (presence.length !== 2) return ack({ ok: false, reason: "need_two_players" });
+
+      const parsed = tankNewSchema.safeParse(payload);
+      if (!parsed.success) return ack({ ok: false, reason: "invalid_payload" });
+
+      const orderedPlayers = await getOrderedPlayers(roomCode, presence);
+      if (orderedPlayers.length !== 2) return ack({ ok: false, reason: "need_two_players" });
+
+      const [p1, p2] = orderedPlayers;
+      const stake = parsed.data?.stake ?? 0;
+      const state = createFortressState(p1, p2, { stake });
+      await redis.set(tankGameKey(roomCode), JSON.stringify(state), "EX", 7200);
+      io.to(roomCode).emit("game:tank:started", state);
+      ack({ ok: true });
+    });
+
+    socket.on("game:tank:move", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const { roomCode, userId } = socket.data;
+      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+
+      const schema = z.object({ delta: z.number().int().min(-10).max(10) });
+      const parsed = schema.safeParse(payload);
+      if (!parsed.success) return ack({ ok: false, reason: "invalid_payload" });
+
+      const raw = await redis.get(tankGameKey(roomCode));
+      if (!raw) return ack({ ok: false, reason: "no_game" });
+      const state = JSON.parse(raw);
+
+      const result = moveTank(state, userId, parsed.data.delta);
+      if (!result.ok) return ack({ ok: false, reason: result.error });
+
+      await redis.set(tankGameKey(roomCode), JSON.stringify(result.state), "EX", 7200);
+      io.to(roomCode).emit("game:tank:updated", result.state);
+      ack({ ok: true });
+    });
+
+    socket.on("game:tank:aim", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const { roomCode, userId } = socket.data;
+      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+
+      const schema = z.object({
+        angle: z.number().min(0).max(180),
+        power: z.number().min(1).max(100),
+      });
+      const parsed = schema.safeParse(payload);
+      if (!parsed.success) return ack({ ok: false, reason: "invalid_payload" });
+
+      const raw = await redis.get(tankGameKey(roomCode));
+      if (!raw) return ack({ ok: false, reason: "no_game" });
+      const state = JSON.parse(raw);
+
+      const result = aimTank(state, userId, parsed.data.angle, parsed.data.power);
+      if (!result.ok) return ack({ ok: false, reason: result.error });
+
+      await redis.set(tankGameKey(roomCode), JSON.stringify(result.state), "EX", 7200);
+      // Aim updates go only to the shooter (others see on fire)
+      socket.emit("game:tank:updated", result.state);
+      ack({ ok: true });
+    });
+
+    socket.on("game:tank:weapon", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const { roomCode, userId } = socket.data;
+      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+
+      const schema = z.object({ weapon: z.enum(["basic", "heavy", "triple", "mole"]) });
+      const parsed = schema.safeParse(payload);
+      if (!parsed.success) return ack({ ok: false, reason: "invalid_payload" });
+
+      const raw = await redis.get(tankGameKey(roomCode));
+      if (!raw) return ack({ ok: false, reason: "no_game" });
+      const state = JSON.parse(raw);
+
+      const result = selectWeapon(state, userId, parsed.data.weapon);
+      if (!result.ok) return ack({ ok: false, reason: result.error });
+
+      await redis.set(tankGameKey(roomCode), JSON.stringify(result.state), "EX", 7200);
+      io.to(roomCode).emit("game:tank:updated", result.state);
+      ack({ ok: true });
+    });
+
+    socket.on("game:tank:fire", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const { roomCode, userId } = socket.data;
+      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+
+      const raw = await redis.get(tankGameKey(roomCode));
+      if (!raw) return ack({ ok: false, reason: "no_game" });
+      const state = JSON.parse(raw);
+
+      const result = fireTank(state, userId);
+      if (!result.ok) return ack({ ok: false, reason: result.error });
+
+      if (result.state.winner) {
+        const winnerId = result.state.winner;
+        const loserId = result.state.players.find(p => p.id !== winnerId)?.id;
+        const stake = result.state.stake ?? 0;
+        await redis.del(tankGameKey(roomCode));
+        io.to(roomCode).emit("game:tank:shot", result.shotResult);
+        io.to(roomCode).emit("game:tank:ended", { winner: winnerId });
+        if (loserId) {
+          await Promise.all([
+            settleAndEmitWallet(io, roomCode, winnerId, loserId, stake, `tank:${roomCode}:${Date.now()}`),
+            saveGameResult(roomCode, winnerId, loserId, 'tank', stake),
+          ]);
+        }
+      } else {
+        await redis.set(tankGameKey(roomCode), JSON.stringify(result.state), "EX", 7200);
+        io.to(roomCode).emit("game:tank:shot", result.shotResult);
+        io.to(roomCode).emit("game:tank:updated", result.state);
+      }
+      ack({ ok: true });
     });
 
     socket.on("disconnect", () => {

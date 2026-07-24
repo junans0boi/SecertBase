@@ -20,6 +20,7 @@ import 'games/roulette_screen.dart';
 import 'games/rps_screen.dart';
 import 'games/telepathy_screen.dart';
 import 'games/uno_screen.dart';
+import 'games/tank_screen.dart';
 import 'games/yut_screen.dart';
 
 class ArcadeScreen extends StatefulWidget {
@@ -358,6 +359,14 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       color: kMainSage,
       background: kMainSageSoft,
     ),
+    _GameInfo(
+      type: 'tank',
+      icon: Icons.military_tech_rounded,
+      title: '탱크 대작전',
+      description: '각도와 파워를 조절해 상대 탱크를 포격하는 전략 게임',
+      color: kMainHoney,
+      background: kMainHoneySoft,
+    ),
   ];
 
   Widget _screen(String type) => switch (type) {
@@ -375,6 +384,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     'telepathy' => const TelepathyScreen(),
     'pirate' => const PirateScreen(),
     'catch' => const CatchScreen(),
+    'tank' => const TankScreen(),
     _ => const RpsScreen(),
   };
 
