@@ -3,10 +3,16 @@ import { query, transaction } from './db.js';
 const DAILY_BONUS = 500;
 const STARTING_BALANCE = 10000;
 
-async function _ensureWallet(conn, userId) {
+async function _resolveUserId(userCode) {
+  const { rows } = await query('SELECT UserId FROM Users WHERE UserCode = ?', [userCode]);
+  if (!rows[0]) throw new Error(`Unknown UserCode: ${userCode}`);
+  return rows[0].UserId;
+}
+
+async function _ensureWallet(conn, numericUserId) {
   await conn.execute(
     'INSERT IGNORE INTO wallets (user_id, balance) VALUES (?, ?)',
-    [userId, STARTING_BALANCE]
+    [numericUserId, STARTING_BALANCE]
   );
 }
 
@@ -50,7 +56,12 @@ export async function claimDailyBonus(userId) {
 }
 
 // 게임 결과 정산: 올인 캡 적용 원자적 이체
-export async function transferGameReward(winnerId, loserId, amount, gameRef) {
+// winnerCode/loserCode는 UserCode(소켓 userId) — 내부에서 numeric UserId로 변환
+export async function transferGameReward(winnerCode, loserCode, amount, gameRef) {
+  const [winnerId, loserId] = await Promise.all([
+    _resolveUserId(winnerCode),
+    _resolveUserId(loserCode),
+  ]);
   return await transaction(async (conn) => {
     await _ensureWallet(conn, winnerId);
     await _ensureWallet(conn, loserId);
