@@ -206,6 +206,12 @@ class SocketService extends ChangeNotifier {
   Map<String, dynamic>? tankLastShot;
   String? tankWinner;
 
+  // 고스톱 (2인 맞고)
+  bool gostopActive = false;
+  Map<String, dynamic>? gostopState; // 내 시점 직렬화 (상대 손패 숨김)
+  Map<String, dynamic>? gostopSettlement; // 정산 결과 (finished 시)
+  int? gostopNageoriMultiplier; // 나가리 발생 시 이월 배수 알림
+
   // 드로잉 데이터는 콜백으로 직접 처리 (ChangeNotifier 우회 → 성능)
   Function(Map<String, dynamic>)? _onCatchDraw;
   VoidCallback? _onCatchClear;
@@ -845,6 +851,36 @@ class SocketService extends ChangeNotifier {
       notifyListeners();
     });
 
+    socket.on('game:gostop:started', (data) {
+      gostopState = _m(data);
+      gostopSettlement = null;
+      gostopNageoriMultiplier = null;
+      gostopActive = true;
+      _log('고스톱 시작');
+      notifyListeners();
+    });
+
+    socket.on('game:gostop:updated', (data) {
+      gostopState = _m(data);
+      _log('고스톱 상태 업데이트');
+      notifyListeners();
+    });
+
+    socket.on('game:gostop:ended', (data) {
+      gostopState = _m(data);
+      gostopSettlement = _m(gostopState?['settlement']);
+      gostopActive = false;
+      _log('고스톱 종료: 승자 ${gostopState?['winner']}');
+      notifyListeners();
+    });
+
+    socket.on('game:gostop:nageori', (data) {
+      gostopNageoriMultiplier =
+          (_m(data)['baseMultiplier'] as num?)?.toInt();
+      _log('고스톱 나가리! 배수 이월 ×$gostopNageoriMultiplier');
+      notifyListeners();
+    });
+
     socket.on('game:restart:requested', (data) {
       restartPending = true;
       restartWaiting = false;
@@ -1093,7 +1129,7 @@ class SocketService extends ChangeNotifier {
   void joinGameLobby(String gameType) {
     final me = userId;
     lobbyGameType = gameType;
-    lobbyHost = me;
+    lobbyHost = null;
     lobbyPlayers = me == null ? [] : [me];
     lobbyStartedGameType = null;
     lobbyCharacterSelections = {};
@@ -1386,7 +1422,40 @@ class SocketService extends ChangeNotifier {
   }
 
   void fireTank() {
-    _socket?.emit('game:tank:fire', null);
+    _socket?.emitWithAck('game:tank:fire', null, ack: (r) {
+      final map = _m(r);
+      if (map['ok'] != true) {
+        _log('탱크 발사 실패: ${map['reason'] ?? map['error']}');
+      }
+    });
+  }
+
+  // ── 고스톱 (2인 맞고) ─────────────────────────────────────────────────────
+
+  void _gostopEmit(String event, Map<String, dynamic>? payload) {
+    _socket?.emitWithAck(event, payload, ack: (r) {
+      final map = _m(r);
+      if (map['ok'] != true) {
+        _log('$event 실패: ${map['reason'] ?? map['error']}');
+      }
+    });
+  }
+
+  void startGostop({int perPointBet = 100}) =>
+      _gostopEmit('game:gostop:new', {'perPointBet': perPointBet});
+
+  void playGostopCard(String cardId) =>
+      _gostopEmit('game:gostop:play', {'cardId': cardId});
+
+  void pickGostopField(String fieldCardId) =>
+      _gostopEmit('game:gostop:pick', {'fieldCardId': fieldCardId});
+
+  void declareGostop(String decision) =>
+      _gostopEmit('game:gostop:gostop', {'decision': decision});
+
+  void clearGostopNageori() {
+    gostopNageoriMultiplier = null;
+    notifyListeners();
   }
 
   // ── catch mind ────────────────────────────────────────────────────────────
@@ -1459,13 +1528,14 @@ class SocketService extends ChangeNotifier {
     _socket?.emit('game:catch:reset');
   }
 
-  void newYutGame({Map<String, String>? characters, String? bgm}) {
+  void newYutGame({Map<String, String>? characters, String? bgm, int? stake}) {
     final payload = <String, dynamic>{};
     if (characters != null && characters.isNotEmpty) {
       payload['characters'] = characters;
     }
     if (bgm != null) payload['bgm'] = bgm;
-    if (lobbyStartedStake > 0) payload['stake'] = lobbyStartedStake;
+    final finalStake = stake ?? (lobbyStartedStake > 0 ? lobbyStartedStake : 0);
+    if (finalStake > 0) payload['stake'] = finalStake;
     _socket?.emit('game:yut:new', payload);
   }
 
@@ -1486,10 +1556,13 @@ class SocketService extends ChangeNotifier {
     notifyListeners();
   }
 
-  void newUnoGame({String? mode}) => _socket?.emit('game:uno:new', {
-        'mode': mode ?? selectedUnoMode,
-        if (lobbyStartedStake > 0) 'stake': lobbyStartedStake,
-      });
+  void newUnoGame({String? mode, int? stake}) {
+    final finalStake = stake ?? (lobbyStartedStake > 0 ? lobbyStartedStake : 0);
+    _socket?.emit('game:uno:new', {
+      'mode': mode ?? selectedUnoMode,
+      if (finalStake > 0) 'stake': finalStake,
+    });
+  }
   void playUnoCard(String cardId, {String? color}) {
     final payload = {'cardId': cardId};
     if (color != null) {

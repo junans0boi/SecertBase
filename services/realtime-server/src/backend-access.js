@@ -33,6 +33,8 @@ export const PUBLIC_GAME_TYPES = [
   'penalty',
   'basketball',
   'bowling',
+  'tank',
+  'gostop',
 ];
 
 const disabledSocketPrefixes = new Map([

@@ -109,13 +109,17 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
             _socket.newYutGame(
               characters: _startedYutCharacters,
               bgm: _startedYutBgm,
+              stake: _socket.lobbyStartedStake,
             );
             break;
           case 'bomb':
             _socket.newBombGame();
             break;
           case 'uno':
-            _socket.newUnoGame(mode: _socket.selectedUnoMode);
+            _socket.newUnoGame(
+              mode: _socket.selectedUnoMode,
+              stake: _socket.lobbyStartedStake,
+            );
             break;
           case 'blackjack':
             _socket.startBlackjack();
@@ -131,6 +135,12 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
             break;
           case 'bowling':
             _socket.startBowling();
+            break;
+          case 'tank':
+            _socket.startTank(stake: _socket.lobbyStartedStake);
+            break;
+          case 'gostop':
+            _socket.startGostop(perPointBet: _socket.lobbyStake > 0 ? _socket.lobbyStake : 100);
             break;
         }
       });

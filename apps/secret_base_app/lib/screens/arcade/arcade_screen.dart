@@ -21,6 +21,7 @@ import 'games/rps_screen.dart';
 import 'games/telepathy_screen.dart';
 import 'games/uno_screen.dart';
 import 'games/tank_screen.dart';
+import 'games/gostop_screen.dart';
 import 'games/yut_screen.dart';
 import '../shop/shop_screen.dart';
 
@@ -390,6 +391,14 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       color: kMainHoney,
       background: kMainHoneySoft,
     ),
+    _GameInfo(
+      type: 'gostop',
+      icon: Icons.style_outlined,
+      title: '고스톱 (맞고)',
+      description: '초보자도 획득 하이라이트로 쉽게 즐기는 2인 전통 맞고',
+      color: kMainSage,
+      background: kMainSageSoft,
+    ),
   ];
 
   Widget _screen(String type) => switch (type) {
@@ -408,6 +417,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     'pirate' => const PirateScreen(),
     'catch' => const CatchScreen(),
     'tank' => const TankScreen(),
+    'gostop' => const GostopScreen(),
     _ => const RpsScreen(),
   };
 
@@ -417,6 +427,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       'yut' => socket.yutActive,
       'bomb' => socket.bombActive,
       'uno' => socket.unoActive,
+      'gostop' => socket.gostopActive,
       _ => false,
     };
 
