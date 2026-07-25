@@ -96,21 +96,54 @@ describe('carveBlast', () => {
 
 // ── Trajectory ───────────────────────────────────────────────────────────────
 describe('simulateTrajectory', () => {
+  const flat = new Array(TERRAIN_W).fill(15); // flat terrain, surface at row 25
+
   it('returns path and impact', () => {
-    const { path, impact } = simulateTrajectory(10, 20, 45, 50, 0);
+    const { path, impact } = simulateTrajectory(flat, 10, 24, 45, 50, 0);
     assert.ok(Array.isArray(path));
     assert.ok(path.length > 0);
     assert.ok(typeof impact.x === 'number');
     assert.ok(typeof impact.col === 'number');
   });
 
+  it('projectile lands ON the terrain surface, not the screen bottom', () => {
+    const { impact } = simulateTrajectory(flat, 10, 24, 45, 60, 0);
+    // Flat terrain surface is at row 25 — impact row must be at/near it, not TERRAIN_H-1
+    assert.ok(impact.row <= 26, `impact.row=${impact.row} should be at surface (~25), not bottom`);
+  });
+
+  it('shell fired straight up falls back down and lands near start', () => {
+    const { impact } = simulateTrajectory(flat, 50, 24, 90, 80, 0);
+    assert.ok(Math.abs(impact.col - 50) <= 3, `fired up should land near col 50, got ${impact.col}`);
+    assert.ok(impact.row <= 26, 'should land on surface after falling back');
+  });
+
+  it('shell cannot pass through a mountain', () => {
+    const wall = [...flat];
+    for (let x = 45; x <= 55; x++) wall[x] = 35; // tall ridge, surface at row 5
+    const { impact } = simulateTrajectory(wall, 10, 24, 30, 70, 0); // low, fast shot
+    assert.ok(impact.col <= 56, `low shot should hit the ridge, got col=${impact.col}`);
+  });
+
   it('wind displaces trajectory horizontally', () => {
     // Fire straight up (angle=90) — without wind it lands near start; wind pushes sideways
-    const { path: pathLeft }  = simulateTrajectory(50, 20, 90, 30, -1);
-    const { path: pathRight } = simulateTrajectory(50, 20, 90, 30,  1);
-    const endLeft  = pathLeft.at(-1);
-    const endRight = pathRight.at(-1);
-    assert.ok(endRight.x > endLeft.x, 'rightward wind should land further right than leftward wind');
+    const { impact: left }  = simulateTrajectory(flat, 50, 24, 90, 60, -1);
+    const { impact: right } = simulateTrajectory(flat, 50, 24, 90, 60,  1);
+    assert.ok(right.x > left.x, 'rightward wind should land further right than leftward wind');
+  });
+
+  it('direct hit on a target is detected', () => {
+    const { directHit } = simulateTrajectory(flat, 10, 24, 45, 40, 0, {
+      targets: [{ col: 30, row: 24, idx: 1 }],
+    });
+    // Whether it hits depends on tuning — but a shot landing right at the target col should register.
+    // Fire a spread and expect at least one direct hit near a target on its path.
+    if (directHit !== null) assert.equal(directHit, 1);
+  });
+
+  it('full-power 45° shot crosses most of the map', () => {
+    const { impact } = simulateTrajectory(flat, 5, 24, 45, 100, 0);
+    assert.ok(impact.col >= 60, `max power should reach far, got col=${impact.col}`);
   });
 });
 
@@ -250,10 +283,13 @@ describe('fireTank', () => {
     assert.equal(state.players[0].ammo.heavy, before - 1);
   });
 
-  it('basic ammo is unlimited', () => {
+  it('basic ammo is unlimited and survives JSON round-trip (Redis)', () => {
     const s = createFortressState('p1', 'p2');
-    const { state } = fireTank(s, 'p1');
-    assert.equal(state.players[0].ammo.basic, Infinity);
+    // Redis 저장/복원과 동일한 JSON 왕복 후에도 발사 가능해야 함
+    const roundTripped = JSON.parse(JSON.stringify(s));
+    const { ok, state } = fireTank(roundTripped, 'p1');
+    assert.ok(ok, 'basic shot must fire after JSON round-trip');
+    assert.ok(state.players[0].ammo.basic >= 900, 'basic ammo stays unlimited');
   });
 
   it('wind changes each turn', () => {

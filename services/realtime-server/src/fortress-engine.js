@@ -9,12 +9,16 @@ export const MAX_TURNS = 15; // sudden death after this
 export const GRAVITY = 9.8;  // m/s² equivalent per simulation step
 
 // Weapon definitions
+// count >= UNLIMITED_AMMO means 무제한 — Infinity는 JSON(Redis) 직렬화에서 null이 되므로 금지
+export const UNLIMITED_AMMO = 999;
 export const WEAPONS = {
-  basic:    { name: '기본탄',   damage: 30, blastR: 3, count: Infinity, cost: 0 },
-  heavy:    { name: '대형탄',   damage: 60, blastR: 6, count: 3,        cost: 0 },
-  triple:   { name: '3연발탄',  damage: 20, blastR: 2, count: 2,        cost: 0, shots: 3 },
-  mole:     { name: '두더지탄', damage: 40, blastR: 2, count: 1,        cost: 0, penetrates: true },
+  basic:    { name: '기본탄',   damage: 35, blastR: 4, count: UNLIMITED_AMMO, cost: 0 },
+  heavy:    { name: '대형탄',   damage: 70, blastR: 7, count: 3,        cost: 0 },
+  triple:   { name: '3연발탄',  damage: 25, blastR: 3, count: 2,        cost: 0, shots: 3 },
+  mole:     { name: '두더지탄', damage: 55, blastR: 3, count: 1,        cost: 0, penetrates: true },
 };
+
+export const DIRECT_HIT_RADIUS = 1.8; // 직격 판정 반경 (넉넉하게)
 
 // ── Terrain ──────────────────────────────────────────────────────────────────
 
@@ -71,41 +75,81 @@ export function surfaceY(terrain, x) {
 
 // ── Ballistic simulation ──────────────────────────────────────────────────────
 
+// Physics constants — mirrored in the Flutter client for aim preview.
+export const PROJ_SPEED_SCALE = 0.35; // velocity = power * scale
+export const PROJ_GRAVITY = 12;       // cells/s²
+export const PROJ_WIND_SCALE = 1.5;   // wind accel = wind * scale (cells/s²)
+export const PROJ_DT = 0.02;          // integration step (s)
+
 /**
- * Simulate projectile trajectory.
- * angle: degrees above horizontal (0=right, 180=left for negative)
- * power: 0..100
- * wind: -1..1 (negative=left, positive=right)
- * Returns array of {x, y} floats and the final impact {x, y, col, row}.
+ * Simulate projectile trajectory with real terrain collision (포트리스 스타일).
+ * terrain: heightmap array — projectile explodes on first solid contact
+ * angle: degrees above horizontal (0=right, 90=up, 180=left)
+ * power: 1..100, wind: -1..1 (negative=left)
+ * opts.targets: [{col, row, idx}] — direct-hit check against tanks
+ * opts.penetrates: burrow 3 cells into terrain before exploding (두더지탄)
+ * Returns { path, impact: {x, y, col, row}, directHit: idx|null }.
  */
-export function simulateTrajectory(startX, startY, angleDeg, power, wind) {
+export function simulateTrajectory(terrain, startX, startY, angleDeg, power, wind, opts = {}) {
   const radians = (angleDeg * Math.PI) / 180;
-  const speed = power * 0.5; // scale power to meaningful velocity
+  const speed = power * PROJ_SPEED_SCALE;
   let vx = Math.cos(radians) * speed;
   let vy = -Math.sin(radians) * speed; // negative = upward in screen coords
   let px = startX;
-  let py = startY;
-  const dt = 0.1;
-  const windAcc = wind * 0.8;
-  const gravAcc = 0.4; // screen-units per dt²
+  let py = startY - 1; // muzzle sits above the tank body
+  const dt = PROJ_DT;
+  const windAcc = wind * PROJ_WIND_SCALE;
+  const targets = opts.targets ?? [];
 
-  const path = [];
-  const MAX_STEPS = 2000;
+  const path = [{ x: px, y: py }];
+  const MAX_STEPS = 12000;
+  let entry = null; // where a penetrating shell entered terrain
+
+  const clampCol = (c) => Math.max(0, Math.min(TERRAIN_W - 1, c));
 
   for (let i = 0; i < MAX_STEPS; i++) {
     vx += windAcc * dt;
-    vy += gravAcc;
+    vy += PROJ_GRAVITY * dt;
     px += vx * dt;
     py += vy * dt;
-    path.push({ x: px, y: py });
+    if (i % 5 === 0) path.push({ x: +px.toFixed(2), y: +py.toFixed(2) });
 
     const col = Math.round(px);
     const row = Math.round(py);
-    if (isSolid(null, col, -1) || row >= TERRAIN_H || col < 0 || col >= TERRAIN_W) {
-      return { path, impact: { x: px, y: py, col, row } };
+
+    // Direct hit on a tank
+    for (const t of targets) {
+      if (Math.hypot(px - t.col, py - t.row) <= DIRECT_HIT_RADIUS) {
+        path.push({ x: +px.toFixed(2), y: +py.toFixed(2) });
+        return { path, impact: { x: px, y: py, col: clampCol(col), row }, directHit: t.idx };
+      }
+    }
+
+    // Off the sides or below the floor → explode at the boundary
+    if (col < 0 || col >= TERRAIN_W || row >= TERRAIN_H) {
+      path.push({ x: +px.toFixed(2), y: +py.toFixed(2) });
+      return {
+        path,
+        impact: { x: px, y: py, col: clampCol(col), row: Math.min(row, TERRAIN_H - 1) },
+        directHit: null,
+      };
+    }
+
+    // Terrain collision (shells above the screen keep flying and fall back)
+    if (py >= 0 && isSolid(terrain, col, row)) {
+      if (opts.penetrates) {
+        if (!entry) entry = { x: px, y: py };
+        if (Math.hypot(px - entry.x, py - entry.y) < 3) continue; // burrow deeper
+      }
+      path.push({ x: +px.toFixed(2), y: +py.toFixed(2) });
+      return { path, impact: { x: px, y: py, col, row }, directHit: null };
     }
   }
-  return { path, impact: { x: px, y: py, col: Math.round(px), row: Math.round(py) } };
+  return {
+    path,
+    impact: { x: px, y: py, col: clampCol(Math.round(px)), row: Math.min(Math.round(py), TERRAIN_H - 1) },
+    directHit: null,
+  };
 }
 
 // ── Terrain destruction ───────────────────────────────────────────────────────
@@ -142,7 +186,7 @@ export function createFortressState(p1Id, p2Id, opts = {}) {
   const t2col = 91;
 
   const makeAmmo = () => Object.fromEntries(
-    Object.entries(WEAPONS).map(([k, w]) => [k, w.count === Infinity ? Infinity : w.count])
+    Object.entries(WEAPONS).map(([k, w]) => [k, w.count])
   );
 
   return {
@@ -264,7 +308,7 @@ export function fireTank(state, playerId) {
   if (!weapon) return { ok: false, error: 'unknown weapon' };
 
   const ammoLeft = shooter.ammo[shooter.weapon];
-  if (ammoLeft !== Infinity && ammoLeft <= 0)
+  if (!(ammoLeft > 0))
     return { ok: false, error: 'out of ammo' };
 
   const shots = weapon.shots ?? 1;
@@ -277,12 +321,19 @@ export function fireTank(state, playerId) {
   for (let s = 0; s < shots; s++) {
     // Slight spread for triple shot
     const spread = shots > 1 ? (s - 1) * 5 : 0;
-    const { path, impact } = simulateTrajectory(
+    const enemyIdx = 1 - idx;
+    const enemy = nextState.players[enemyIdx];
+    const { path, impact, directHit } = simulateTrajectory(
+      nextState.terrain,
       shooter.col,
       shooter.row,
       shooter.angle + spread,
       shooter.power,
       state.wind,
+      {
+        penetrates: weapon.penetrates,
+        targets: [{ col: enemy.col, row: enemy.row, idx: enemyIdx }],
+      },
     );
     allPaths.push(path);
 
@@ -295,12 +346,19 @@ export function fireTank(state, playerId) {
       allChanges.push(...changed);
     }
 
-    // Damage players in blast radius
+    // Damage players: direct hit = full damage, otherwise blast falloff
     for (let pi = 0; pi < 2; pi++) {
       const p = nextState.players[pi];
-      const dist = Math.sqrt((p.col - impact.col) ** 2 + (p.row - impact.row) ** 2);
-      if (dist <= weapon.blastR * 1.5) {
-        const dmg = Math.round(weapon.damage * (1 - dist / (weapon.blastR * 1.5 + 1)));
+      let dmg = 0;
+      if (directHit === pi) {
+        dmg = weapon.damage;
+      } else {
+        const dist = Math.sqrt((p.col - impact.col) ** 2 + (p.row - impact.row) ** 2);
+        if (dist <= weapon.blastR * 1.5) {
+          dmg = Math.round(weapon.damage * (1 - dist / (weapon.blastR * 1.5 + 1)));
+        }
+      }
+      if (dmg > 0) {
         p.hp = Math.max(0, p.hp - dmg);
         totalDamage[pi] += dmg;
       }
@@ -308,7 +366,7 @@ export function fireTank(state, playerId) {
   }
 
   // Consume ammo
-  if (nextState.players[idx].ammo[shooter.weapon] !== Infinity) {
+  if (nextState.players[idx].ammo[shooter.weapon] < UNLIMITED_AMMO) {
     nextState.players[idx].ammo[shooter.weapon]--;
   }
 

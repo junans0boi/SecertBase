@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/main_design.dart';
@@ -27,6 +28,7 @@ class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
   Object? _lastAnimatedShot;
 
   late final AnimationController _explosionCtrl;
+  late final AnimationController _flightCtrl; // 포탄 비행 애니메이션
 
   static const _weaponNames = {
     'basic': '기본탄',
@@ -42,29 +44,40 @@ class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
 
     _explosionCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 600),
+      duration: const Duration(milliseconds: 700),
     )..addListener(() => setState(() {}));
-
-    // Start a new game
-    _socket.startTank(stake: _socket.lobbyStartedStake);
+    _flightCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..addListener(() => setState(() {}));
   }
 
   @override
   void dispose() {
     _socket.removeListener(_onSocket);
     _explosionCtrl.dispose();
+    _flightCtrl.dispose();
     super.dispose();
   }
 
   void _onSocket() {
     if (!mounted) return;
 
-    // New shot arrived — animate explosion once
+    // New shot arrived — fly the shell along its path, then explode
     final shot = _socket.tankLastShot;
     if (shot != null && !identical(shot, _lastAnimatedShot)) {
       _lastAnimatedShot = shot;
+      final paths = shot['paths'] as List?;
+      final len = (paths != null && paths.isNotEmpty)
+          ? (paths.first as List).length
+          : 0;
+      _flightCtrl.duration =
+          Duration(milliseconds: (len * 14).clamp(600, 2400));
       _explosionCtrl.reset();
-      _explosionCtrl.forward();
+      _flightCtrl.reset();
+      _flightCtrl.forward().whenComplete(() {
+        if (mounted) _explosionCtrl.forward();
+      });
     }
 
     // Sync local aim to new server state (after turn end)
@@ -100,6 +113,43 @@ class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
 
   void _sendAim() {
     _socket.aimTank(_localAngle.round(), _localPower.round());
+  }
+
+  /// 서버 fortress-engine.js와 동일한 물리로 예상 궤적 계산 (조준 가이드).
+  /// 전체 비행의 앞 60%만 보여줘서 정확한 착탄점은 감으로 맞추게 한다.
+  List<Offset> _previewPath(Map<String, dynamic> state) {
+    final me = _myPlayer();
+    if (me == null) return const [];
+    final terrain = (state['terrain'] as List).cast<int>();
+    final wind = (state['wind'] as num).toDouble();
+
+    const speedScale = 0.35, gravity = 12.0, windScale = 1.5, dt = 0.02;
+    final radians = _localAngle * math.pi / 180;
+    final speed = _localPower * speedScale;
+    var vx = math.cos(radians) * speed;
+    var vy = -math.sin(radians) * speed;
+    var px = (me['col'] as num).toDouble();
+    var py = (me['row'] as num).toDouble() - 1;
+    final windAcc = wind * windScale;
+
+    final pts = <Offset>[Offset(px, py)];
+    for (int i = 0; i < 12000; i++) {
+      vx += windAcc * dt;
+      vy += gravity * dt;
+      px += vx * dt;
+      py += vy * dt;
+      if (i % 5 == 0) pts.add(Offset(px, py));
+      final col = px.round(), row = py.round();
+      if (col < 0 || col >= kTerrainW || row >= kTerrainH) break;
+      if (py >= 0 &&
+          col >= 0 &&
+          col < kTerrainW &&
+          row >= kTerrainH - terrain[col]) {
+        break;
+      }
+    }
+    final keep = (pts.length * 0.75).round();
+    return pts.sublist(0, math.max(2, keep));
   }
 
   void _move(int delta) => _socket.moveTank(delta);
@@ -175,7 +225,9 @@ class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
     final terrain = (state['terrain'] as List).cast<int>();
     final players = (state['players'] as List).cast<Map>();
     final shot = _socket.tankLastShot;
-    final exploding = _explosionCtrl.isAnimating || _explosionCtrl.value > 0;
+    final flying = _flightCtrl.isAnimating;
+    final exploding =
+        !flying && (_explosionCtrl.isAnimating || _explosionCtrl.value > 0);
 
     return Stack(
       fit: StackFit.expand,
@@ -189,7 +241,11 @@ class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
               lastShot: shot,
               showExplosion: exploding,
               explosionProgress: _explosionCtrl.value,
+              flying: flying,
+              flightProgress: _flightCtrl.value,
               myUserId: _socket.userId ?? '',
+              previewPath:
+                  (winner == null && _isMyTurn) ? _previewPath(state) : const [],
             ),
           ),
         ),
@@ -358,7 +414,10 @@ class _BattlefieldPainter extends CustomPainter {
   final Map<String, dynamic>? lastShot;
   final bool showExplosion;
   final double explosionProgress;
+  final bool flying;
+  final double flightProgress;
   final String myUserId;
+  final List<Offset> previewPath;
 
   const _BattlefieldPainter({
     required this.terrain,
@@ -366,7 +425,10 @@ class _BattlefieldPainter extends CustomPainter {
     required this.lastShot,
     required this.showExplosion,
     required this.explosionProgress,
+    required this.flying,
+    required this.flightProgress,
     required this.myUserId,
+    required this.previewPath,
   });
 
   @override
@@ -413,25 +475,51 @@ class _BattlefieldPainter extends CustomPainter {
       );
     }
 
-    // Trajectory lines
-    if (lastShot != null) {
+    // Aim preview (dotted, fading — 내 턴일 때만)
+    if (previewPath.length >= 2) {
+      for (int i = 0; i < previewPath.length; i += 2) {
+        final pt = previewPath[i];
+        final fade = 1.0 - (i / previewPath.length) * 0.7;
+        canvas.drawCircle(
+          Offset(pt.dx * cellW, pt.dy * cellH),
+          1.6,
+          Paint()..color = Colors.white.withValues(alpha: 0.55 * fade),
+        );
+      }
+    }
+
+    // Flying shell: shell head + fading trail behind it (포트리스 스타일)
+    if (flying && lastShot != null) {
       final paths = lastShot!['paths'] as List?;
       if (paths != null) {
-        final trajPaint = Paint()
-          ..color = Colors.yellow.withValues(alpha: 0.55)
-          ..strokeWidth = 1.5
-          ..style = PaintingStyle.stroke;
         for (final pts in paths) {
           final ptList = (pts as List);
           if (ptList.length < 2) continue;
-          final trajPath = Path();
-          for (int i = 0; i < ptList.length; i++) {
+          final headIdx =
+              (flightProgress * (ptList.length - 1)).round().clamp(0, ptList.length - 1);
+
+          // Trail: last ~14 points behind the head, fading out
+          const trailLen = 14;
+          for (int i = math.max(0, headIdx - trailLen); i < headIdx; i++) {
             final pt = ptList[i] as Map;
-            final px = (pt['x'] as num).toDouble() * cellW;
-            final py = (pt['y'] as num).toDouble() * cellH;
-            if (i == 0) { trajPath.moveTo(px, py); } else { trajPath.lineTo(px, py); }
+            final fade = 1.0 - (headIdx - i) / trailLen;
+            canvas.drawCircle(
+              Offset((pt['x'] as num).toDouble() * cellW,
+                  (pt['y'] as num).toDouble() * cellH),
+              1.2 + fade * 1.3,
+              Paint()..color = Colors.orangeAccent.withValues(alpha: 0.5 * fade),
+            );
           }
-          canvas.drawPath(trajPath, trajPaint);
+
+          // Shell head with glow
+          final head = ptList[headIdx] as Map;
+          final hx = (head['x'] as num).toDouble() * cellW;
+          final hy = (head['y'] as num).toDouble() * cellH;
+          canvas.drawCircle(Offset(hx, hy), 6,
+              Paint()..color = Colors.orange.withValues(alpha: 0.35));
+          canvas.drawCircle(
+              Offset(hx, hy), 3.2, Paint()..color = Colors.yellowAccent);
+          canvas.drawCircle(Offset(hx, hy), 1.6, Paint()..color = Colors.white);
         }
       }
     }
@@ -541,7 +629,10 @@ class _BattlefieldPainter extends CustomPainter {
       old.showExplosion != showExplosion ||
       old.explosionProgress != explosionProgress ||
       old.lastShot != lastShot ||
-      old.players != players;
+      old.players != players ||
+      old.flying != flying ||
+      old.flightProgress != flightProgress ||
+      !listEquals(old.previewPath, previewPath);
 }
 
 // ── Sub-widgets ───────────────────────────────────────────────────────────────
