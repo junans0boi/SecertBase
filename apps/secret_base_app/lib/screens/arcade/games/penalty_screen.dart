@@ -741,21 +741,51 @@ class _PitchPainter extends CustomPainter {
 
   void _paintTargetGrid(Canvas canvas, _PitchGeometry geo) {
     final g = geo.goal;
-    final grid = Paint()
-      ..color = Colors.white.withValues(alpha: 0.25)
-      ..strokeWidth = 1.2;
-    for (int i = 1; i < 3; i++) {
-      canvas.drawLine(
-        Offset(g.left + g.width * i / 3, g.top),
-        Offset(g.left + g.width * i / 3, g.bottom),
-        grid,
+    final accent =
+        isKickerView ? const Color(0xFFFF5252) : const Color(0xFF40E0FF);
+
+    // 9개의 탭 가능한 타겟존을 명확히 표시
+    final cellW = g.width / 3;
+    final cellH = g.height / 3;
+    for (int dir = 0; dir < 9; dir++) {
+      if (dir == selectedCell) continue; // 선택 셀은 아래 링으로 그림
+      final col = dir % 3;
+      final row = dir ~/ 3;
+      final cellRect = Rect.fromLTWH(
+        g.left + col * cellW + 3,
+        g.top + row * cellH + 3,
+        cellW - 6,
+        cellH - 6,
       );
-      canvas.drawLine(
-        Offset(g.left, g.top + g.height * i / 3),
-        Offset(g.right, g.top + g.height * i / 3),
-        grid,
+      // 살짝 채워진 존 박스
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(cellRect, const Radius.circular(6)),
+        Paint()..color = Colors.white.withValues(alpha: 0.10),
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(cellRect, const Radius.circular(6)),
+        Paint()
+          ..color = Colors.white.withValues(alpha: 0.45)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.4,
+      );
+      // 중앙 과녁 점
+      final c = geo.cellCenter(dir);
+      canvas.drawCircle(
+        c,
+        7,
+        Paint()
+          ..color = accent.withValues(alpha: 0.45)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.6,
+      );
+      canvas.drawCircle(
+        c,
+        2.5,
+        Paint()..color = accent.withValues(alpha: 0.55),
       );
     }
+
     final sel = selectedCell;
     if (sel != null) {
       final c = geo.cellCenter(sel);

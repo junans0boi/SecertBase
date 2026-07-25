@@ -210,6 +210,7 @@ const ensureTables = async () => {
   await query(`ALTER TABLE map_pins ADD COLUMN IF NOT EXISTS user_id INT NULL`);
   await query(`ALTER TABLE map_pins ADD COLUMN IF NOT EXISTS status VARCHAR(20) NULL`);
   await query(`ALTER TABLE map_pins ADD COLUMN IF NOT EXISTS emotion_tags JSON NULL`);
+  await query(`ALTER TABLE map_pins ADD COLUMN IF NOT EXISTS media_url TEXT NULL`);
 
   _tablesReady = true;
 };
@@ -1642,14 +1643,21 @@ router.patch('/setlog/:id', async (req, res) => {
     const caption = typeof req.body.caption === 'string' ? req.body.caption.trim() : null;
     const takenAt = typeof req.body.taken_at === 'string' ? req.body.taken_at : null;
     const tags = req.body.tags === undefined ? null : JSON.stringify(parseJsonArray(req.body.tags));
-    if (caption === null && takenAt === null && tags === null) {
+    const hasMapPinId = Object.prototype.hasOwnProperty.call(req.body, 'map_pin_id');
+    const mapPinId = hasMapPinId ? (req.body.map_pin_id ? Number(req.body.map_pin_id) : null) : null;
+    if (caption === null && takenAt === null && tags === null && !hasMapPinId) {
       return res.status(400).json({ ok: false, reason: 'no_changes' });
     }
+    const updates = [];
+    const params = [];
+    if (caption !== null) { updates.push('caption = ?'); params.push(caption); }
+    if (takenAt !== null) { updates.push('taken_at = ?'); params.push(takenAt); }
+    if (tags !== null) { updates.push('tags = ?'); params.push(tags); }
+    if (hasMapPinId) { updates.push('map_pin_id = ?'); params.push(mapPinId); }
+
     await query(
-      `UPDATE setlog_posts
-       SET caption = COALESCE(?, caption), taken_at = COALESCE(?, taken_at), tags = COALESCE(?, tags)
-       WHERE id = ?`,
-      [caption, takenAt, tags, postId],
+      `UPDATE setlog_posts SET ${updates.join(', ')} WHERE id = ?`,
+      [...params, postId],
     );
     const updated = await query(
       `SELECT p.*, u.Nickname, COALESCE(u.Nickname, u.UserName) AS UserName
@@ -1753,7 +1761,7 @@ router.get('/map', async (req, res) => {
 });
 
 // 지도 핀 생성 (lat/lng 선택사항, couple_id 자동 설정)
-router.post('/map', async (req, res) => {
+router.post('/map', upload.single('media'), async (req, res) => {
   try {
     await ensureTables();
     const { place_name, latitude, longitude, category, rating, visit_date, memo, status, emotion_tags } = req.body;
@@ -1769,10 +1777,11 @@ router.post('/map', async (req, res) => {
     }
     const userResult = await query('SELECT UserCode FROM Users WHERE UserId = ? LIMIT 1', [uid]);
     const createdBy = userResult.rows[0]?.UserCode;
+    const mediaUrl = req.file ? `/uploads/${req.file.filename}` : (req.body.media_url || null);
 
     const result = await query(
-      `INSERT INTO map_pins (place_name, latitude, longitude, category, rating, visit_date, memo, created_by, user_id, couple_id, status, emotion_tags)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO map_pins (place_name, latitude, longitude, category, rating, visit_date, memo, created_by, user_id, couple_id, status, emotion_tags, media_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         place_name,
         latitude ?? 0,
@@ -1785,11 +1794,12 @@ router.post('/map', async (req, res) => {
         uid,
         coupleId,
         status ?? null,
-        emotion_tags ? JSON.stringify(emotion_tags) : null,
+        emotion_tags ? (typeof emotion_tags === 'string' ? emotion_tags : JSON.stringify(emotion_tags)) : null,
+        mediaUrl,
       ]
     );
 
-    res.json({ ok: true, id: result.rows.insertId });
+    res.json({ ok: true, id: result.rows.insertId, media_url: mediaUrl });
   } catch (err) {
     console.error('[API] /map POST error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
@@ -1823,7 +1833,7 @@ const parseMapEmotionTags = (value) => {
 };
 
 // 지도 핀 업데이트 (활성 커플 공동 편집)
-router.patch('/map/:id', async (req, res) => {
+router.patch('/map/:id', upload.single('media'), async (req, res) => {
   try {
     await ensureTables();
     const { id } = req.params;
@@ -1844,6 +1854,8 @@ router.patch('/map/:id', async (req, res) => {
       return res.status(403).json({ ok: false, reason: 'forbidden' });
     }
 
+    const mediaUrl = req.file ? `/uploads/${req.file.filename}` : req.body.media_url;
+
     const allowedFields = {
       rating: req.body.rating ?? null,
       memo: req.body.memo ?? null,
@@ -1852,6 +1864,7 @@ router.patch('/map/:id', async (req, res) => {
       emotion_tags: Object.prototype.hasOwnProperty.call(req.body, 'emotion_tags')
         ? parseMapEmotionTags(req.body.emotion_tags)
         : null,
+      media_url: mediaUrl ?? null,
     };
 
     if (allowedFields.status && !['visited', 'wishlist'].includes(allowedFields.status)) {
@@ -1861,7 +1874,7 @@ router.patch('/map/:id', async (req, res) => {
     const updates = [];
     const params = [];
     for (const [field, value] of Object.entries(allowedFields)) {
-      if (!Object.prototype.hasOwnProperty.call(req.body, field)) continue;
+      if (!Object.prototype.hasOwnProperty.call(req.body, field) && !(field === 'media_url' && req.file)) continue;
       updates.push(`${field} = ?`);
       params.push(value);
     }
@@ -3855,7 +3868,7 @@ import { transferGameReward } from './wallet-engine.js';
 // GET /api/shop/items — full catalog
 router.get('/shop/items', async (req, res) => {
   try {
-    const items = await query('SELECT id, category, name, description, price, icon FROM shop_items WHERE active = 1 ORDER BY category, id');
+    const { rows: items } = await query('SELECT id, category, name, description, price, icon FROM shop_items WHERE active = 1 ORDER BY category, id');
     res.json({ ok: true, items });
   } catch (err) {
     console.error('[API] /shop/items GET error:', err);
@@ -3866,15 +3879,16 @@ router.get('/shop/items', async (req, res) => {
 // GET /api/shop/owned — items owned by couple
 router.get('/shop/owned', async (req, res) => {
   try {
-    const [coupleRow] = await query(
+    const { rows: coupleRows } = await query(
       `SELECT c.CoupleId FROM Couples c
        JOIN Users u ON u.UserId = c.User1Id OR u.UserId = c.User2Id
        WHERE u.UserCode = ? LIMIT 1`,
       [req.auth.userCode]
     );
+    const coupleRow = coupleRows[0];
     if (!coupleRow) return res.json({ ok: true, owned: [] });
 
-    const owned = await query(
+    const { rows: owned } = await query(
       `SELECT oi.item_id, oi.quantity, si.name, si.category, si.icon
        FROM owned_items oi JOIN shop_items si ON si.id = oi.item_id
        WHERE oi.couple_id = ?`,
@@ -3893,51 +3907,61 @@ router.post('/shop/buy', async (req, res) => {
     const { item_id } = req.body ?? {};
     if (!item_id) return res.status(400).json({ ok: false, reason: 'missing_item_id' });
 
-    const [item] = await query(
+    const { rows: itemRows } = await query(
       'SELECT id, category, name, price FROM shop_items WHERE id = ? AND active = 1',
       [item_id]
     );
+    const item = itemRows[0];
     if (!item) return res.status(404).json({ ok: false, reason: 'item_not_found' });
 
-    const [coupleRow] = await query(
+    const { rows: coupleRows } = await query(
       `SELECT c.CoupleId FROM Couples c
        JOIN Users u ON u.UserId = c.User1Id OR u.UserId = c.User2Id
        WHERE u.UserCode = ? LIMIT 1`,
       [req.auth.userCode]
     );
+    const coupleRow = coupleRows[0];
     if (!coupleRow) return res.status(400).json({ ok: false, reason: 'no_couple' });
 
-    // Spend coins (debit from buyer, no credit — shop coins are consumed)
-    const [wallet] = await query('SELECT balance FROM wallets WHERE user_id = ?', [req.auth.userId]);
-    if (!wallet || wallet.balance < item.price) {
-      return res.status(400).json({ ok: false, reason: 'insufficient_coins' });
-    }
-
-    await query('BEGIN');
+    // Spend coins atomically (debit from buyer, no credit — shop coins are consumed)
+    let newBalance;
     try {
-      await query(
-        'UPDATE wallets SET balance = balance - ? WHERE user_id = ? AND balance >= ?',
-        [item.price, req.auth.userId, item.price]
-      );
-      await query(
-        `INSERT INTO wallet_transactions (user_id, delta, balance_after, reason, ref_id)
-         VALUES (?, ?, ?, 'shop_purchase', ?)`,
-        [req.auth.userId, -item.price, wallet.balance - item.price, `shop:${item.id}`]
-      );
-      await query(
-        `INSERT INTO owned_items (couple_id, item_id, quantity)
-         VALUES (?, ?, 1)
-         ON DUPLICATE KEY UPDATE quantity = quantity + 1`,
-        [coupleRow.CoupleId, item.id]
-      );
-      await query('COMMIT');
+      newBalance = await transaction(async (conn) => {
+        const [[wallet]] = await conn.execute(
+          'SELECT balance FROM wallets WHERE user_id = ? FOR UPDATE',
+          [req.auth.userId]
+        );
+        if (!wallet || wallet.balance < item.price) {
+          const err = new Error('insufficient_coins');
+          err.code = 'INSUFFICIENT_COINS';
+          throw err;
+        }
+        const after = wallet.balance - item.price;
+        await conn.execute(
+          'UPDATE wallets SET balance = ? WHERE user_id = ?',
+          [after, req.auth.userId]
+        );
+        await conn.execute(
+          `INSERT INTO wallet_transactions (user_id, delta, balance_after, reason, ref_id)
+           VALUES (?, ?, ?, 'shop_purchase', ?)`,
+          [req.auth.userId, -item.price, after, `shop:${item.id}`]
+        );
+        await conn.execute(
+          `INSERT INTO owned_items (couple_id, item_id, quantity)
+           VALUES (?, ?, 1)
+           ON DUPLICATE KEY UPDATE quantity = quantity + 1`,
+          [coupleRow.CoupleId, item.id]
+        );
+        return after;
+      });
     } catch (e) {
-      await query('ROLLBACK');
+      if (e.code === 'INSUFFICIENT_COINS') {
+        return res.status(400).json({ ok: false, reason: 'insufficient_coins' });
+      }
       throw e;
     }
 
-    const [newWallet] = await query('SELECT balance FROM wallets WHERE user_id = ?', [req.auth.userId]);
-    res.json({ ok: true, new_balance: newWallet?.balance ?? 0 });
+    res.json({ ok: true, new_balance: newBalance });
   } catch (err) {
     console.error('[API] /shop/buy POST error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
@@ -3947,7 +3971,7 @@ router.post('/shop/buy', async (req, res) => {
 // GET /api/shop/coupons — date coupons for this user
 router.get('/shop/coupons', async (req, res) => {
   try {
-    const coupons = await query(
+    const { rows: coupons } = await query(
       `SELECT id, issuer_user_code, receiver_user_code, title, description,
               status, issued_at, expires_at, redeemed_at
        FROM date_coupons
@@ -3974,7 +3998,7 @@ router.post('/shop/coupons/redeem', async (req, res) => {
        WHERE id = ? AND receiver_user_code = ? AND status = 'pending' AND expires_at > NOW()`,
       [coupon_id, req.auth.userCode]
     );
-    if (!result.affectedRows) return res.status(400).json({ ok: false, reason: 'not_redeemable' });
+    if (!result.rows.affectedRows) return res.status(400).json({ ok: false, reason: 'not_redeemable' });
 
     res.json({ ok: true });
   } catch (err) {
@@ -3989,15 +4013,10 @@ router.post('/shop/coupons/issue', async (req, res) => {
     const { title, description, template_id } = req.body ?? {};
     if (!title) return res.status(400).json({ ok: false, reason: 'missing_title' });
 
-    // Deduct coupon item from owned_items OR spend coins directly
     const COUPON_COST = 500;
-    const [wallet] = await query('SELECT balance FROM wallets WHERE user_id = ?', [req.auth.userId]);
-    if (!wallet || wallet.balance < COUPON_COST) {
-      return res.status(400).json({ ok: false, reason: 'insufficient_coins' });
-    }
 
     // Find partner
-    const [coupleRow] = await query(
+    const { rows: coupleRows } = await query(
       `SELECT c.CoupleId,
               CASE WHEN u.UserId = c.User1Id THEN u2.UserCode ELSE u1.UserCode END AS partnerCode
        FROM Couples c
@@ -4007,36 +4026,50 @@ router.post('/shop/coupons/issue', async (req, res) => {
        WHERE u.UserId = c.User1Id OR u.UserId = c.User2Id LIMIT 1`,
       [req.auth.userCode]
     );
+    const coupleRow = coupleRows[0];
     if (!coupleRow) return res.status(400).json({ ok: false, reason: 'no_couple' });
 
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-    await query('BEGIN');
+    let newBalance;
     try {
-      await query(
-        'UPDATE wallets SET balance = balance - ? WHERE user_id = ? AND balance >= ?',
-        [COUPON_COST, req.auth.userId, COUPON_COST]
-      );
-      await query(
-        `INSERT INTO wallet_transactions (user_id, delta, balance_after, reason, ref_id)
-         VALUES (?, ?, ?, 'coupon_purchase', NULL)`,
-        [req.auth.userId, -COUPON_COST, wallet.balance - COUPON_COST]
-      );
-      await query(
-        `INSERT INTO date_coupons
-           (couple_id, issuer_user_code, receiver_user_code, template_id, title, description, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [coupleRow.CoupleId, req.auth.userCode, coupleRow.partnerCode,
-         template_id ?? null, title, description ?? null, expiresAt]
-      );
-      await query('COMMIT');
+      newBalance = await transaction(async (conn) => {
+        const [[wallet]] = await conn.execute(
+          'SELECT balance FROM wallets WHERE user_id = ? FOR UPDATE',
+          [req.auth.userId]
+        );
+        if (!wallet || wallet.balance < COUPON_COST) {
+          const err = new Error('insufficient_coins');
+          err.code = 'INSUFFICIENT_COINS';
+          throw err;
+        }
+        const after = wallet.balance - COUPON_COST;
+        await conn.execute(
+          'UPDATE wallets SET balance = ? WHERE user_id = ?',
+          [after, req.auth.userId]
+        );
+        await conn.execute(
+          `INSERT INTO wallet_transactions (user_id, delta, balance_after, reason, ref_id)
+           VALUES (?, ?, ?, 'coupon_purchase', NULL)`,
+          [req.auth.userId, -COUPON_COST, after]
+        );
+        await conn.execute(
+          `INSERT INTO date_coupons
+             (couple_id, issuer_user_code, receiver_user_code, template_id, title, description, expires_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [coupleRow.CoupleId, req.auth.userCode, coupleRow.partnerCode,
+           template_id ?? null, title, description ?? null, expiresAt]
+        );
+        return after;
+      });
     } catch (e) {
-      await query('ROLLBACK');
+      if (e.code === 'INSUFFICIENT_COINS') {
+        return res.status(400).json({ ok: false, reason: 'insufficient_coins' });
+      }
       throw e;
     }
 
-    const [newWallet] = await query('SELECT balance FROM wallets WHERE user_id = ?', [req.auth.userId]);
-    res.json({ ok: true, new_balance: newWallet?.balance ?? 0 });
+    res.json({ ok: true, new_balance: newBalance });
   } catch (err) {
     console.error('[API] /shop/coupons/issue POST error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });

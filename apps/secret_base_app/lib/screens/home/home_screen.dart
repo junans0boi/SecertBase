@@ -19,6 +19,8 @@ class _HomeScreenState extends State<HomeScreen> {
   final _auth = AuthService();
   Map<String, dynamic>? _coupleInfo;
   List<Map<String, dynamic>> _recentMoments = [];
+  List<Map<String, dynamic>> _todayPins = [];
+  List<Map<String, dynamic>> _todayMoments = [];
   bool _loading = true;
 
   Map<String, String> get _authHeaders => {
@@ -45,23 +47,44 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           headers: _authHeaders,
         ),
+        http.get(
+          Uri.parse('${_auth.baseUrl}/api/map'),
+          headers: _authHeaders,
+        ),
       ]);
       if (!mounted) return;
       final couple = jsonDecode(responses[0].body) as Map<String, dynamic>;
       final moments = jsonDecode(responses[1].body) as Map<String, dynamic>;
+      final mapData = jsonDecode(responses[2].body) as Map<String, dynamic>;
+      final now = DateTime.now();
+      final nowStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+
       setState(() {
         if (responses[0].statusCode == 200 && couple['ok'] == true) {
           _coupleInfo = couple;
         }
         if (responses[1].statusCode == 200 && moments['ok'] == true) {
-          _recentMoments = (moments['posts'] as List? ?? const [])
-              .take(3)
+          final allPosts = (moments['posts'] as List? ?? const [])
               .map((post) => Map<String, dynamic>.from(post as Map))
               .toList();
+          _recentMoments = allPosts.take(3).toList();
+          _todayMoments = allPosts.where((post) {
+            final dateStr = '${post['taken_at'] ?? post['captured_at'] ?? ''}';
+            return dateStr.startsWith(nowStr) || dateStr.contains(nowStr);
+          }).toList();
+        }
+        if (responses[2].statusCode == 200 && mapData['ok'] == true) {
+          final allPins = (mapData['pins'] as List? ?? const [])
+              .map((pin) => Map<String, dynamic>.from(pin as Map))
+              .toList();
+          _todayPins = allPins.where((pin) {
+            final dateStr = '${pin['visit_date'] ?? pin['created_at'] ?? ''}';
+            return dateStr.startsWith(nowStr) || dateStr.contains(nowStr);
+          }).toList();
         }
       });
     } catch (_) {
-      // Individual feature screens expose retry states; home stays usable.
+      // Home remains resilient
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -79,7 +102,7 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             _coupleCard(),
             const SizedBox(height: 18),
-            _sectionTitle('최근 MomentLoop', () => widget.onNavigate(1)),
+            _sectionTitle('오늘의 소식 & MomentLoop', () => widget.onNavigate(1)),
             const SizedBox(height: 8),
             _momentPreview(),
             const SizedBox(height: 18),
@@ -171,38 +194,120 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Center(child: CircularProgressIndicator(color: kMainRose)),
       );
     }
-    if (_recentMoments.isEmpty) {
+
+    final hasTodayPins = _todayPins.isNotEmpty;
+    final hasTodayMoments = _todayMoments.isNotEmpty;
+
+    if (!hasTodayPins && !hasTodayMoments) {
       return MainCard(
         child: ListTile(
           leading: const Icon(Icons.auto_stories_outlined, color: kMainRose),
-          title: Text('아직 남긴 순간이 없어요', style: mainBody()),
-          trailing: const Icon(Icons.add_rounded),
+          title: Text('아직 오늘 남긴 기록이 없어요', style: mainBody(weight: FontWeight.w700)),
+          subtitle: Text('오늘의 추억이나 장소를 기록해보세요!', style: mainBody(size: 12, color: kMainSub)),
+          trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: kMainMuted),
           onTap: () => widget.onNavigate(1),
         ),
       );
     }
+
     return Column(
-      children: _recentMoments.map((moment) {
-        final text =
-            '${moment['caption'] ?? moment['content'] ?? '사진으로 남긴 순간'}';
-        final author = '${moment['Nickname'] ?? moment['UserName'] ?? ''}';
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: MainCard(
-            child: ListTile(
-              leading: const Icon(Icons.favorite_outline, color: kMainRose),
-              title: Text(
-                text,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: mainBody(weight: FontWeight.w700),
-              ),
-              subtitle: author.isEmpty ? null : Text(author),
-              onTap: () => widget.onNavigate(1),
+      children: [
+        if (hasTodayPins) ...[
+          MainCard(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.place_rounded, color: kMainSage, size: 18),
+                    const SizedBox(width: 6),
+                    Text('오늘 추가한 비밀지도 장소', style: mainBody(weight: FontWeight.w800, size: 13)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: _todayPins.map((pin) {
+                    final cat = pin['category'] ?? '기타';
+                    return InkWell(
+                      onTap: () => widget.onNavigate(1),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: kMainSageSoft,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '📍 ${pin['place_name']} ($cat)',
+                          style: mainBody(size: 12, color: kMainInk, weight: FontWeight.w700),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
             ),
           ),
-        );
-      }).toList(),
+          const SizedBox(height: 8),
+        ],
+        if (hasTodayMoments) ...[
+          MainCard(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.photo_library_rounded, color: kMainRose, size: 18),
+                    const SizedBox(width: 6),
+                    Text('오늘 업로드한 이미지/순간', style: mainBody(weight: FontWeight.w800, size: 13)),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 100,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _todayMoments.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 10),
+                    itemBuilder: (ctx, i) {
+                      final m = _todayMoments[i];
+                      final mediaUrl = '${m['media_url'] ?? ''}'.trim();
+                      final fullUrl = mediaUrl.isEmpty ? '' : (mediaUrl.startsWith('http') ? mediaUrl : '${_auth.baseUrl}$mediaUrl');
+                      return GestureDetector(
+                        onTap: () => widget.onNavigate(1),
+                        child: AspectRatio(
+                          aspectRatio: 1.0,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              color: kMainRoseSoft,
+                              child: fullUrl.isNotEmpty
+                                  ? Image.network(
+                                      fullUrl,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => const Center(
+                                        child: Icon(Icons.broken_image_outlined, color: kMainMuted),
+                                      ),
+                                    )
+                                  : const Center(
+                                      child: Icon(Icons.note_alt_outlined, color: kMainRose, size: 28),
+                                    ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

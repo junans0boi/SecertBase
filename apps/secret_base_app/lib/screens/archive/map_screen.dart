@@ -1,10 +1,13 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -528,105 +531,275 @@ class _MapScreenState extends State<MapScreen> {
     int selectedRating = placeIntForMap(pin['rating']) ?? 0;
     final selectedTags = <String>{..._extractTags(pin)};
     final memoCtrl = TextEditingController(text: _cleanMemo(pin['memo']));
+    final pinId = pin['id'];
+    final candidatePosts = _setlogPosts;
+
+    XFile? pickedNewImage;
+    bool removeExistingImage = false;
 
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheet) => _SheetFrame(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              20,
-              16,
-              20,
-              MediaQuery.of(ctx).viewInsets.bottom + 20,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 42,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: kMainLine,
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 18),
-                Text('장소 수정', style: mainTitle(size: 24)),
-                const SizedBox(height: 4),
-                Text(
-                  pin['place_name'] ?? '',
-                  style: mainBody(
-                    size: 14,
-                    color: kMainSub,
-                    weight: FontWeight.w700,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 18),
-                if (isVisited) ...[
-                  _DatePickerTile(
-                    date: selectedDate,
-                    label: '방문 날짜',
-                    onPick: () async {
-                      final picked = await _pickDate(ctx, selectedDate);
-                      if (picked != null) setSheet(() => selectedDate = picked);
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  _RatingPicker(
-                    rating: selectedRating,
-                    onChanged: (value) =>
-                        setSheet(() => selectedRating = value),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-                _EmotionPicker(
-                  selectedTags: selectedTags,
-                  onToggle: (tag) => setSheet(() {
-                    selectedTags.contains(tag)
-                        ? selectedTags.remove(tag)
-                        : selectedTags.add(tag);
-                  }),
-                ),
-                const SizedBox(height: 16),
-                _SoftTextField(
-                  controller: memoCtrl,
-                  hintText: isVisited ? '오늘 어땠는지 짧게 남겨줘' : '가보고 싶은 이유를 남겨봐',
-                  maxLines: 3,
-                ),
-                const SizedBox(height: 18),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: () => Navigator.pop(ctx, true),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: kMainSky,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
+        builder: (ctx, setSheet) {
+          final currentMediaUrl = '${pin['media_url'] ?? ''}'.trim();
+          final displayMediaUrl = currentMediaUrl.isEmpty
+              ? ''
+              : (currentMediaUrl.startsWith('http') ? currentMediaUrl : '${_auth.baseUrl}$currentMediaUrl');
+
+          return _SheetFrame(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                20,
+                16,
+                20,
+                MediaQuery.of(ctx).viewInsets.bottom + 20,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 42,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: kMainLine,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
                       ),
                     ),
-                    child: Text(
-                      '저장',
+                    const SizedBox(height: 18),
+                    Text('장소 수정', style: mainTitle(size: 24)),
+                    const SizedBox(height: 4),
+                    Text(
+                      pin['place_name'] ?? '',
                       style: mainBody(
-                        color: Colors.white,
-                        weight: FontWeight.w900,
+                        size: 14,
+                        color: kMainSub,
+                        weight: FontWeight.w700,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      '매장 대표 사진',
+                      style: mainBody(size: 13, color: kMainInk, weight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 8),
+                    if (pickedNewImage != null) ...[
+                      FutureBuilder<Uint8List>(
+                        future: pickedNewImage!.readAsBytes(),
+                        builder: (context, snapshot) {
+                          if (snapshot.hasData) {
+                            return ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.memory(snapshot.data!, height: 160, width: double.infinity, fit: BoxFit.cover),
+                            );
+                          }
+                          return const SizedBox(height: 100, child: Center(child: CircularProgressIndicator()));
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          TextButton.icon(
+                            onPressed: () async {
+                              final picker = ImagePicker();
+                              final file = await picker.pickImage(source: ImageSource.gallery);
+                              if (file != null) setSheet(() => pickedNewImage = file);
+                            },
+                            icon: const Icon(Icons.photo_library_outlined, size: 18),
+                            label: const Text('사진 변경'),
+                          ),
+                          TextButton.icon(
+                            onPressed: () => setSheet(() {
+                              pickedNewImage = null;
+                              removeExistingImage = true;
+                            }),
+                            icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                            label: const Text('사진 취소', style: TextStyle(color: Colors.red)),
+                          ),
+                        ],
+                      ),
+                    ] else if (!removeExistingImage && displayMediaUrl.isNotEmpty) ...[
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.network(
+                          displayMediaUrl,
+                          height: 160,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          TextButton.icon(
+                            onPressed: () async {
+                              final picker = ImagePicker();
+                              final file = await picker.pickImage(source: ImageSource.gallery);
+                              if (file != null) setSheet(() => pickedNewImage = file);
+                            },
+                            icon: const Icon(Icons.photo_library_outlined, size: 18),
+                            label: const Text('사진 변경'),
+                          ),
+                          TextButton.icon(
+                            onPressed: () => setSheet(() => removeExistingImage = true),
+                            icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                            label: const Text('사진 삭제', style: TextStyle(color: Colors.red)),
+                          ),
+                        ],
+                      ),
+                    ] else ...[
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          final picker = ImagePicker();
+                          final file = await picker.pickImage(source: ImageSource.gallery);
+                          if (file != null) {
+                            setSheet(() {
+                              pickedNewImage = file;
+                              removeExistingImage = false;
+                            });
+                          }
+                        },
+                        icon: const Icon(Icons.add_a_photo_outlined),
+                        label: const Text('매장 이미지 업로드'),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(48),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    if (isVisited) ...[
+                      _DatePickerTile(
+                        date: selectedDate,
+                        label: '방문 날짜',
+                        onPick: () async {
+                          final picked = await _pickDate(ctx, selectedDate);
+                          if (picked != null) setSheet(() => selectedDate = picked);
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      _RatingPicker(
+                        rating: selectedRating,
+                        onChanged: (value) =>
+                            setSheet(() => selectedRating = value),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    _EmotionPicker(
+                      selectedTags: selectedTags,
+                      onToggle: (tag) => setSheet(() {
+                        selectedTags.contains(tag)
+                            ? selectedTags.remove(tag)
+                            : selectedTags.add(tag);
+                      }),
+                    ),
+                    const SizedBox(height: 16),
+                    _SoftTextField(
+                      controller: memoCtrl,
+                      hintText: isVisited ? '오늘 어땠는지 짧게 남겨줘' : '가보고 싶은 이유를 남겨봐',
+                      maxLines: 3,
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      'MomentLoop 연결 설정',
+                      style: mainBody(size: 13, color: kMainInk, weight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '이 장소와 연결된 MomentLoop 순간을 추가하거나 해제할 수 있어요',
+                      style: mainBody(size: 11.5, color: kMainMuted),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      constraints: const BoxConstraints(maxHeight: 180),
+                      decoration: BoxDecoration(
+                        color: kMainPaperSoft,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: kMainLine),
+                      ),
+                      child: candidatePosts.isEmpty
+                          ? Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Text('연결할 MomentLoop 순간이 없습니다.', style: mainBody(size: 12, color: kMainMuted)),
+                            )
+                          : ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: candidatePosts.length,
+                              itemBuilder: (context, idx) {
+                                final post = candidatePosts[idx];
+                                final isLinked = '${post['map_pin_id'] ?? ''}' == '$pinId';
+                                final caption = '${post['caption'] ?? ''}'.trim();
+                                final label = caption.isEmpty ? 'MomentLoop 기록 (#${post['id']})' : caption;
+                                return CheckboxListTile(
+                                  dense: true,
+                                  activeColor: kMainRose,
+                                  title: Text(
+                                    label,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: mainBody(size: 12, weight: isLinked ? FontWeight.w800 : FontWeight.w500),
+                                  ),
+                                  value: isLinked,
+                                  onChanged: (val) async {
+                                    if (pinId == null) return;
+                                    try {
+                                      final newPinId = val == true ? pinId : null;
+                                      await http.patch(
+                                        Uri.parse('${_auth.baseUrl}/api/setlog/${post['id']}'),
+                                        headers: _jsonHeaders(includeAuth: true),
+                                        body: jsonEncode({'map_pin_id': newPinId}),
+                                      );
+                                      setSheet(() {
+                                        if (val == true) {
+                                          post['map_pin_id'] = pinId;
+                                        } else {
+                                          post['map_pin_id'] = null;
+                                        }
+                                      });
+                                    } catch (_) {
+                                      _toast('연결 변경에 실패했어요');
+                                    }
+                                  },
+                                );
+                              },
+                            ),
+                    ),
+                    const SizedBox(height: 18),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: kMainSky,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                        ),
+                        child: Text(
+                          '저장',
+                          style: mainBody(
+                            color: Colors.white,
+                            weight: FontWeight.w900,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
 
@@ -639,39 +812,60 @@ class _MapScreenState extends State<MapScreen> {
     }
 
     final updatedMemo = _composeMemo(memoCtrl.text, selectedTags.toList());
-    final body = <String, dynamic>{
-      'memo': updatedMemo,
-      'emotion_tags': selectedTags.toList(),
-    };
-    if (isVisited) {
-      body['rating'] = selectedRating;
-      body['visit_date'] = _dateValue(selectedDate);
-    }
 
     try {
-      final response = await http.patch(
-        Uri.parse('${_auth.baseUrl}/api/map/$id'),
-        headers: _jsonHeaders(includeAuth: true),
-        body: jsonEncode(body),
-      );
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode != 200 || data['ok'] != true) {
-        _toast('수정하지 못했어요');
-        return;
+      if (pickedNewImage != null) {
+        final req = http.MultipartRequest('PATCH', Uri.parse('${_auth.baseUrl}/api/map/$id'));
+        if (_auth.token != null) req.headers['Authorization'] = 'Bearer ${_auth.token}';
+        req.fields['memo'] = updatedMemo;
+        req.fields['emotion_tags'] = jsonEncode(selectedTags.toList());
+        if (isVisited) {
+          req.fields['rating'] = '$selectedRating';
+          req.fields['visit_date'] = _dateValue(selectedDate);
+        }
+        final bytes = await pickedNewImage!.readAsBytes();
+        req.files.add(http.MultipartFile.fromBytes(
+          'media',
+          bytes,
+          filename: pickedNewImage!.name,
+          contentType: MediaType('image', 'jpeg'),
+        ));
+        final streamedRes = await req.send();
+        final res = await http.Response.fromStream(streamedRes);
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        if (res.statusCode != 200 || data['ok'] != true) {
+          _toast('수정하지 못했어요');
+          return;
+        }
+      } else {
+        final body = <String, dynamic>{
+          'memo': updatedMemo,
+          'emotion_tags': selectedTags.toList(),
+        };
+        if (removeExistingImage) {
+          body['media_url'] = '';
+        }
+        if (isVisited) {
+          body['rating'] = selectedRating;
+          body['visit_date'] = _dateValue(selectedDate);
+        }
+
+        final response = await http.patch(
+          Uri.parse('${_auth.baseUrl}/api/map/$id'),
+          headers: _jsonHeaders(includeAuth: true),
+          body: jsonEncode(body),
+        );
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        if (response.statusCode != 200 || data['ok'] != true) {
+          _toast('수정하지 못했어요');
+          return;
+        }
       }
+      await _load();
     } catch (_) {
       _toast('수정하지 못했어요');
       return;
     }
-
-    setState(() {
-      pin['memo'] = updatedMemo;
-      pin['emotion_tags'] = selectedTags.toList();
-      if (isVisited) {
-        pin['rating'] = selectedRating;
-        pin['visit_date'] = _dateValue(selectedDate);
-      }
-    });
 
     if (mounted) _toast('수정됐어요');
   }
@@ -930,6 +1124,10 @@ class _MapScreenState extends State<MapScreen> {
             '${_auth.user?['UserCode'] ?? _auth.user?['userCode'] ?? ''}';
         final isCreator = myCode.isNotEmpty && author == myCode;
         final linkedPosts = linkedSetlogPostsForMap(pin, _setlogPosts);
+        final rawMediaUrl = '${pin['media_url'] ?? ''}'.trim();
+        final pinMediaUrl = rawMediaUrl.isEmpty
+            ? ''
+            : (rawMediaUrl.startsWith('http') ? rawMediaUrl : '${_auth.baseUrl}$rawMediaUrl');
 
         return _SheetFrame(
           child: Padding(
@@ -955,6 +1153,19 @@ class _MapScreenState extends State<MapScreen> {
                     ),
                   ),
                   const SizedBox(height: 18),
+                  if (pinMediaUrl.isNotEmpty) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.network(
+                        pinMediaUrl,
+                        height: 180,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
