@@ -62,15 +62,15 @@ const DECK_DEF = [
   { id: 'm10_ribbon',  month: 10, type: T.RIBBON, subtype: SUB.RED },
   { id: 'm10_junk_1',  month: 10, type: T.JUNK,   subtype: null },
   { id: 'm10_junk_2',  month: 10, type: T.JUNK,   subtype: null },
-  // 11월 (비/버들) — 비광(rain), 쌍피
-  { id: 'm11_bright',  month: 11, type: T.BRIGHT, subtype: SUB.RAIN },
-  { id: 'm11_animal',  month: 11, type: T.ANIMAL, subtype: null },
-  { id: 'm11_ribbon',  month: 11, type: T.RIBBON, subtype: null },
+  // 11월 (오동)
+  { id: 'm11_bright',  month: 11, type: T.BRIGHT, subtype: null },
+  { id: 'm11_junk_1',  month: 11, type: T.JUNK,   subtype: null },
+  { id: 'm11_junk_2',  month: 11, type: T.JUNK,   subtype: null },
   { id: 'm11_junk_d',  month: 11, type: T.JUNK,   subtype: SUB.DOUBLE },
-  // 12월 (오동)
-  { id: 'm12_bright',  month: 12, type: T.BRIGHT, subtype: null },
-  { id: 'm12_junk_1',  month: 12, type: T.JUNK,   subtype: null },
-  { id: 'm12_junk_2',  month: 12, type: T.JUNK,   subtype: null },
+  // 12월 (비/버들) — 비광(rain), 쌍피
+  { id: 'm12_bright',  month: 12, type: T.BRIGHT, subtype: SUB.RAIN },
+  { id: 'm12_animal',  month: 12, type: T.ANIMAL, subtype: null },
+  { id: 'm12_ribbon',  month: 12, type: T.RIBBON, subtype: null },
   { id: 'm12_junk_d',  month: 12, type: T.JUNK,   subtype: SUB.DOUBLE },
 ];
 

@@ -1,9 +1,13 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/socket_service.dart';
 import '../../../widgets/game_scaffold.dart';
 import '../../../widgets/game_menu.dart';
+
+const int kTelepathyQuestionsPerRound = 5;
 
 class TelepathyQuestion {
   final String category;
@@ -193,12 +197,16 @@ class _TelepathyScreenState extends State<TelepathyScreen> {
   String? _myChoice;
   bool _waiting = false;
   int _questionIndex = 0;
+  int _round = 0;
+  int _roundSuccessCount = 0;
+  bool _roundComplete = false;
+  late List<TelepathyQuestion> _roundQuestions;
 
   @override
   void initState() {
     super.initState();
     _socket.addListener(_rebuild);
-    _syncQuestionWithRoom();
+    _roundQuestions = _pickRoundQuestions(_socket.roomCode ?? 'default', _round);
   }
 
   @override
@@ -207,12 +215,15 @@ class _TelepathyScreenState extends State<TelepathyScreen> {
     super.dispose();
   }
 
-  void _syncQuestionWithRoom() {
-    final room = _socket.roomCode ?? 'default';
-    final seed = room.codeUnits.fold(0, (a, b) => a + b);
-    setState(() {
-      _questionIndex = seed % kTelepathyQuestions.length;
-    });
+  // Both partners derive the same 5-question round independently from the
+  // room code + round number, so they see identical questions in the same
+  // order without any server-side round state.
+  List<TelepathyQuestion> _pickRoundQuestions(String room, int round) {
+    final base = room.codeUnits.fold(0, (a, b) => a + b);
+    final seed = base * 1000003 + round;
+    final pool = List<TelepathyQuestion>.from(kTelepathyQuestions)
+      ..shuffle(math.Random(seed));
+    return pool.take(kTelepathyQuestionsPerRound).toList();
   }
 
   void _rebuild() {
@@ -222,7 +233,7 @@ class _TelepathyScreenState extends State<TelepathyScreen> {
     });
   }
 
-  TelepathyQuestion get _currentQ => kTelepathyQuestions[_questionIndex];
+  TelepathyQuestion get _currentQ => _roundQuestions[_questionIndex];
 
   void _pick(String opt) {
     if (_waiting) return;
@@ -234,14 +245,32 @@ class _TelepathyScreenState extends State<TelepathyScreen> {
   }
 
   void _nextQuestion() {
+    final wasSuccess = _socket.telepathySuccess == true;
     setState(() {
-      _questionIndex = (_questionIndex + 1) % kTelepathyQuestions.length;
+      if (wasSuccess) _roundSuccessCount++;
+      if (_questionIndex + 1 >= _roundQuestions.length) {
+        _roundComplete = true;
+      } else {
+        _questionIndex++;
+      }
       _myChoice = null;
       _waiting = false;
     });
     _socket.telepathySuccess = null;
     _socket.telepathySelected = null;
     _socket.telepathyChoices = null;
+  }
+
+  void _startNewRound() {
+    setState(() {
+      _round++;
+      _roundQuestions = _pickRoundQuestions(_socket.roomCode ?? 'default', _round);
+      _questionIndex = 0;
+      _roundSuccessCount = 0;
+      _roundComplete = false;
+      _myChoice = null;
+      _waiting = false;
+    });
   }
 
   @override
@@ -259,33 +288,35 @@ class _TelepathyScreenState extends State<TelepathyScreen> {
         child: Column(
           children: [
             // 주제 카테고리 태그 + 문제 질문
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              decoration: BoxDecoration(
-                color: kPrimary.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                '${q.category}  (문제 ${_questionIndex + 1}/${kTelepathyQuestions.length})',
-                style: GoogleFonts.notoSans(
-                  color: kPrimary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
+            if (!_roundComplete) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: kPrimary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '${q.category}  (문제 ${_questionIndex + 1}/$kTelepathyQuestionsPerRound)',
+                  style: GoogleFonts.notoSans(
+                    color: kPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              q.question,
-              style: GoogleFonts.notoSans(
-                color: kText,
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                height: 1.3,
+              const SizedBox(height: 14),
+              Text(
+                q.question,
+                style: GoogleFonts.notoSans(
+                  color: kText,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  height: 1.3,
+                ),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 20),
+              const SizedBox(height: 20),
+            ],
 
             Expanded(
               child: Center(
@@ -293,10 +324,17 @@ class _TelepathyScreenState extends State<TelepathyScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      if (success != null) ...[
+                      if (_roundComplete) ...[
+                        _buildRoundSummary(),
+                      ] else if (success != null) ...[
                         _buildResult(success, selected, choices),
                         const SizedBox(height: 28),
-                        _ResetBtn(onTap: _nextQuestion),
+                        _ResetBtn(
+                          onTap: _nextQuestion,
+                          label: _questionIndex + 1 >= _roundQuestions.length
+                              ? '라운드 결과 보기'
+                              : '다음 문제 풀어보기',
+                        ),
                       ] else if (_waiting) ...[
                         const _WaitWidget(),
                         const SizedBox(height: 20),
@@ -506,6 +544,41 @@ class _TelepathyScreenState extends State<TelepathyScreen> {
       ],
     );
   }
+
+  Widget _buildRoundSummary() {
+    return Column(
+      children: [
+        const Text('🎉', style: TextStyle(fontSize: 64)),
+        const SizedBox(height: 10),
+        Text(
+          '라운드 완료!',
+          style: GoogleFonts.notoSans(
+            color: kText,
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: kPrimary.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Text(
+            '$kTelepathyQuestionsPerRound문항 중 $_roundSuccessCount개 텔레파시 성공!',
+            style: GoogleFonts.notoSans(
+              color: kPrimary,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        const SizedBox(height: 28),
+        _ResetBtn(onTap: _startNewRound, label: '새 라운드 시작'),
+      ],
+    );
+  }
 }
 
 class _WaitWidget extends StatelessWidget {
@@ -531,13 +604,14 @@ class _WaitWidget extends StatelessWidget {
 
 class _ResetBtn extends StatelessWidget {
   final VoidCallback onTap;
-  const _ResetBtn({required this.onTap});
+  final String label;
+  const _ResetBtn({required this.onTap, this.label = '다음 문제 풀어보기'});
   @override
   Widget build(BuildContext context) {
     return ElevatedButton.icon(
       onPressed: onTap,
       icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-      label: const Text('다음 문제 풀어보기'),
+      label: Text(label),
       style: ElevatedButton.styleFrom(
         backgroundColor: kPrimary,
         foregroundColor: Colors.white,

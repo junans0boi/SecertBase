@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 // 화투 카드 위젯 — 코드 기반 렌더링 (전통 화투 감성: 홍/흑/금 팔레트)
@@ -21,8 +23,24 @@ const Map<int, String> kHwatuPlantNames = {
   8: '공산',
   9: '국화',
   10: '단풍',
-  11: '비',
-  12: '오동',
+  11: '오동',
+  12: '비',
+};
+
+// 월별 테마 컬러 — 실제 화투의 월별 배경 톤을 흉내낸 팔레트.
+const Map<int, Color> kHwatuMonthColor = {
+  1: Color(0xFF2F5D3A), // 송학 — 소나무 초록
+  2: Color(0xFFB33A62), // 매조 — 매화 자홍
+  3: Color(0xFFE8829A), // 벚꽃 — 연분홍
+  4: Color(0xFF3A3A3A), // 흑싸리 — 검정
+  5: Color(0xFF5B4B8A), // 난초 — 보라
+  6: Color(0xFFC23B6B), // 모란 — 진분홍
+  7: Color(0xFF3F7D4A), // 홍싸리 — 초록
+  8: Color(0xFF20242E), // 공산 — 짙은 남색
+  9: Color(0xFFC9971C), // 국화 — 금색
+  10: Color(0xFFB2451C), // 단풍 — 주황
+  11: Color(0xFF5A3D7A), // 오동 — 보라
+  12: Color(0xFF1E2A4A), // 비 — 남색
 };
 
 class HwatuCard extends StatelessWidget {
@@ -142,8 +160,9 @@ class _HwatuFacePainter extends CustomPainter {
       Radius.circular(w * 0.14),
     );
 
-    // 바탕 + 테두리
-    canvas.drawRRect(r, Paint()..color = kHwatuCream);
+    // 바탕(월별 톤으로 살짝 물들임) + 테두리
+    final monthColor = kHwatuMonthColor[month] ?? kHwatuBlack;
+    canvas.drawRRect(r, Paint()..color = Color.lerp(kHwatuCream, monthColor, 0.12)!);
     canvas.drawRRect(
       r,
       Paint()
@@ -151,6 +170,9 @@ class _HwatuFacePainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.4,
     );
+
+    // 월별 상징 문양(솔잎/매화/벚꽃/흑싸리 등) — 종류 배지 뒤에 깔리는 배경 그림
+    _paintMonthMotif(canvas, size, month, monthColor);
 
     // 상단: 월 숫자 + 식물명
     _text(canvas, '$month월', Offset(w * 0.5, h * 0.13),
@@ -172,6 +194,174 @@ class _HwatuFacePainter extends CustomPainter {
       default:
         _paintJunk(canvas, size);
     }
+  }
+
+  // 월별 상징 배경 문양. 카드가 아주 작게(20~48px) 그려지므로 정교한 묘사
+  // 대신 굵고 단순한 실루엣 몇 개 + 월 고유색으로 구분되도록 한다.
+  void _paintMonthMotif(Canvas canvas, Size size, int m, Color color) {
+    final w = size.width, h = size.height;
+    final fill = Paint()..color = color.withValues(alpha: 0.55);
+    switch (m) {
+      case 1: // 송학: 소나무 잎 부채꼴
+        for (final dx in [0.16, 0.30, 0.44]) {
+          final base = Offset(w * dx, h * 0.98);
+          final path = Path()
+            ..moveTo(base.dx, base.dy)
+            ..lineTo(base.dx - w * 0.06, base.dy - h * 0.22)
+            ..lineTo(base.dx + w * 0.06, base.dy - h * 0.22)
+            ..close();
+          canvas.drawPath(path, fill);
+        }
+        break;
+      case 2: // 매조: 뾰족한 매화 점점이
+        for (final o in [Offset(w * 0.18, h * 0.20), Offset(w * 0.32, h * 0.14), Offset(w * 0.14, h * 0.34)]) {
+          _drawBlossom(canvas, o, w * 0.09, color, pointed: true);
+        }
+        break;
+      case 3: // 벚꽃: 둥근 벚꽃 점점이
+        for (final o in [Offset(w * 0.20, h * 0.18), Offset(w * 0.34, h * 0.13), Offset(w * 0.14, h * 0.30)]) {
+          _drawBlossom(canvas, o, w * 0.09, color, pointed: false);
+        }
+        break;
+      case 4: // 흑싸리: 늘어진 잎
+        for (final dx in [0.20, 0.36]) {
+          final path = Path()
+            ..moveTo(w * dx, h * 0.06)
+            ..quadraticBezierTo(w * (dx + 0.11), h * 0.20, w * dx, h * 0.36)
+            ..quadraticBezierTo(w * (dx - 0.11), h * 0.20, w * dx, h * 0.06)
+            ..close();
+          canvas.drawPath(path, fill);
+        }
+        break;
+      case 5: // 난초: 칼모양 잎 부채꼴
+        for (final a in [-0.16, 0.0, 0.16]) {
+          final path = Path()
+            ..moveTo(w * 0.5 + a * w, h * 0.98)
+            ..quadraticBezierTo(w * 0.5 + a * w * 2.6, h * 0.55, w * 0.5 + a * w * 0.6, h * 0.10)
+            ..quadraticBezierTo(w * 0.5 + a * w * 1.3, h * 0.55, w * 0.5 + a * w, h * 0.98)
+            ..close();
+          canvas.drawPath(path, fill);
+        }
+        break;
+      case 6: // 모란: 겹겹이 둥근 꽃잎
+        final c = Offset(w * 0.26, h * 0.20);
+        for (int i = 0; i < 6; i++) {
+          final ang = i * math.pi / 3;
+          canvas.drawOval(
+            Rect.fromCenter(
+              center: c.translate(math.cos(ang) * w * 0.08, math.sin(ang) * w * 0.08),
+              width: w * 0.11,
+              height: w * 0.15,
+            ),
+            fill,
+          );
+        }
+        break;
+      case 7: // 홍싸리: 클로버형 잎 세 장
+        for (final o in [Offset(w * 0.18, h * 0.16), Offset(w * 0.32, h * 0.22), Offset(w * 0.14, h * 0.30)]) {
+          canvas.drawOval(Rect.fromCenter(center: o, width: w * 0.11, height: w * 0.17), fill);
+        }
+        break;
+      case 8: // 공산: 산 능선 실루엣
+        final path = Path()
+          ..moveTo(0, h * 0.98)
+          ..lineTo(w * 0.20, h * 0.70)
+          ..lineTo(w * 0.38, h * 0.90)
+          ..lineTo(w * 0.55, h * 0.60)
+          ..lineTo(w * 0.72, h * 0.85)
+          ..lineTo(w, h * 0.75)
+          ..lineTo(w, h * 0.98)
+          ..close();
+        canvas.drawPath(path, fill);
+        break;
+      case 9: // 국화: 방사형 꽃잎
+        final c = Offset(w * 0.26, h * 0.20);
+        final stroke = Paint()
+          ..color = color.withValues(alpha: 0.65)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = w * 0.03
+          ..strokeCap = StrokeCap.round;
+        for (int i = 0; i < 8; i++) {
+          final ang = i * math.pi / 4;
+          canvas.drawLine(c, c.translate(math.cos(ang) * w * 0.15, math.sin(ang) * w * 0.15), stroke);
+        }
+        break;
+      case 10: // 단풍: 별모양 단풍잎
+        canvas.drawPath(_starPath(Offset(w * 0.26, h * 0.20), w * 0.055, w * 0.15, 5), fill);
+        break;
+      case 11: // 오동: 하트형 잎 두 장
+        for (final o in [Offset(w * 0.20, h * 0.18), Offset(w * 0.36, h * 0.25)]) {
+          canvas.drawPath(_heartPath(o, w * 0.11), fill);
+        }
+        break;
+      case 12: // 비: 빗줄기
+        final stroke = Paint()
+          ..color = color.withValues(alpha: 0.6)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = w * 0.028
+          ..strokeCap = StrokeCap.round;
+        for (final dx in [0.14, 0.28, 0.42, 0.56]) {
+          canvas.drawLine(Offset(w * dx, h * 0.04), Offset(w * dx - w * 0.09, h * 0.32), stroke);
+        }
+        break;
+    }
+  }
+
+  void _drawBlossom(Canvas canvas, Offset center, double r, Color color, {required bool pointed}) {
+    final paint = Paint()..color = color.withValues(alpha: 0.55);
+    for (int i = 0; i < 5; i++) {
+      final angle = i * (2 * math.pi / 5);
+      final petalCenter = center.translate(math.cos(angle) * r, math.sin(angle) * r);
+      if (pointed) {
+        final path = Path()
+          ..moveTo(center.dx, center.dy)
+          ..lineTo(petalCenter.dx - r * 0.4, petalCenter.dy)
+          ..lineTo(petalCenter.dx, petalCenter.dy + r * 0.7)
+          ..lineTo(petalCenter.dx + r * 0.4, petalCenter.dy)
+          ..close();
+        canvas.drawPath(path, paint);
+      } else {
+        canvas.drawOval(
+          Rect.fromCenter(center: petalCenter, width: r * 0.95, height: r * 0.95),
+          paint,
+        );
+      }
+    }
+    canvas.drawCircle(center, r * 0.32, Paint()..color = color.withValues(alpha: 0.85));
+  }
+
+  Path _starPath(Offset center, double innerR, double outerR, int points) {
+    final path = Path();
+    final step = math.pi / points;
+    for (int i = 0; i < points * 2; i++) {
+      final radius = i.isEven ? outerR : innerR;
+      final angle = i * step - math.pi / 2;
+      final p = center.translate(math.cos(angle) * radius, math.sin(angle) * radius);
+      if (i == 0) {
+        path.moveTo(p.dx, p.dy);
+      } else {
+        path.lineTo(p.dx, p.dy);
+      }
+    }
+    path.close();
+    return path;
+  }
+
+  Path _heartPath(Offset center, double size) {
+    final path = Path()
+      ..moveTo(center.dx, center.dy + size * 0.35)
+      ..cubicTo(
+        center.dx - size * 1.1, center.dy - size * 0.5,
+        center.dx - size * 0.5, center.dy - size * 1.1,
+        center.dx, center.dy - size * 0.35,
+      )
+      ..cubicTo(
+        center.dx + size * 0.5, center.dy - size * 1.1,
+        center.dx + size * 1.1, center.dy - size * 0.5,
+        center.dx, center.dy + size * 0.35,
+      )
+      ..close();
+    return path;
   }
 
   void _paintBright(Canvas canvas, Size size) {

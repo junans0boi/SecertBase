@@ -99,17 +99,20 @@ _RollSim _simulateRoll(List<bool> standing, double aim, double curve) {
     if (down[i]) continue;
     final bx = _trajX(aim, curve, _pinT[i]);
     final dx = _pinX[i] - bx;
-    if (dx.abs() >= 0.14) continue;
+    // Hit tolerance tightened (was 0.14, nearly as wide as the 0.15 pin
+    // spacing) so a rough aim no longer sweeps the whole rack.
+    if (dx.abs() >= 0.10) continue;
 
-    if (i == 0 && dx.abs() >= 0.06) {
+    if (i == 0 && dx.abs() >= 0.045) {
       // Pocket hit on the head pin: the classic strike ball. The head pin
-      // sweeps both rear neighbours with real power.
+      // sweeps both rear neighbours, but with less power than before so a
+      // marginal pocket hit can leave standing pins instead of a free strike.
       down[0] = true;
       if (standing[0]) {
         knocks.add(_PinKnock(0, _pinT[0], dx.sign.toInt()));
       }
-      fall(1, _pinT[0] + 0.045, -1, 0.8);
-      fall(2, _pinT[0] + 0.045, 1, 0.8);
+      fall(1, _pinT[0] + 0.045, -1, 0.62);
+      fall(2, _pinT[0] + 0.045, 1, 0.62);
     } else if (dx.abs() < 0.05) {
       fall(i, _pinT[i], 0, 1.0);
     } else {
@@ -463,6 +466,7 @@ class _BowlingScreenState extends State<BowlingScreen>
     }
 
     if (!mounted) return;
+    final wasMyRoll = !_isReplay;
     setState(() {
       _isRolling = false;
       _isReplay = false;
@@ -470,6 +474,12 @@ class _BowlingScreenState extends State<BowlingScreen>
       _fxEvent = null;
       _activeSim = null;
       _rollCtrl.reset();
+      // Reset aim/curve after my own throw finishes so the next roll starts
+      // neutral instead of silently reusing the aim that just scored.
+      if (wasMyRoll) {
+        _aim = 0.0;
+        _curve = 0.0;
+      }
     });
     // A roll that arrived while we were animating is replayed now instead of
     // being dropped; otherwise just redraw the deck from the latest state.
@@ -1008,8 +1018,12 @@ class _BowlingScreenState extends State<BowlingScreen>
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: () {
-                  _deckCache.clear();
-                  _appliedRollKey = null;
+                  setState(() {
+                    _deckCache.clear();
+                    _appliedRollKey = null;
+                    _aim = 0.0;
+                    _curve = 0.0;
+                  });
                   _socket.startBowling();
                 },
                 style: ElevatedButton.styleFrom(
