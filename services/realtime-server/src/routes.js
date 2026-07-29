@@ -550,6 +550,20 @@ const sendTodayMomentError = (res, error) => {
   return true;
 };
 
+class AfterglowRequestError extends Error {
+  constructor(status, reason) {
+    super(reason);
+    this.status = status;
+    this.reason = reason;
+  }
+}
+
+const sendAfterglowError = (res, error) => {
+  if (!(error instanceof AfterglowRequestError)) return false;
+  res.status(error.status).json({ ok: false, reason: error.reason });
+  return true;
+};
+
 const selectTodayMoment = async (connection, { coupleId, userId, postId, date }) => {
   await connection.execute(
     'SELECT CoupleId FROM Couples WHERE CoupleId = ? AND Status = \'active\' FOR UPDATE',
@@ -2066,6 +2080,73 @@ router.delete('/retention/today/moment', async (req, res) => {
 // 2. Map API (데이트 장소 핀)
 // ============================================
 
+router.post('/retention/afterglow/:pinId/visit', async (req, res) => {
+  try {
+    await ensureTables();
+    const pinId = Number(req.params.pinId);
+    if (!Number.isInteger(pinId) || pinId <= 0) {
+      return res.status(404).json({ ok: false, reason: 'afterglow_pin_not_found' });
+    }
+    const userId = req.auth.userId;
+    const coupleId = await getCoupleIdForUser(userId);
+    if (!coupleId) {
+      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+    }
+    const visitDate = businessDate();
+    const result = await transaction(async (connection) => {
+      const [pins] = await connection.execute(
+        `SELECT id, status FROM map_pins
+         WHERE id = ? AND couple_id = ? AND archived_at IS NULL
+         LIMIT 1 FOR UPDATE`,
+        [pinId, coupleId],
+      );
+      const pin = pins[0];
+      if (!pin) throw new AfterglowRequestError(404, 'afterglow_pin_not_found');
+
+      const [existingRows] = await connection.execute(
+        `SELECT id, map_pin_id, visit_date, marked_by_user_id, created_at
+         FROM afterglow_visits WHERE map_pin_id = ? LIMIT 1`,
+        [pinId],
+      );
+      if (existingRows[0]) return { created: false, row: existingRows[0] };
+      if (pin.status !== 'wishlist') {
+        throw new AfterglowRequestError(409, 'afterglow_requires_wishlist');
+      }
+
+      const [inserted] = await connection.execute(
+        `INSERT INTO afterglow_visits
+           (couple_id, map_pin_id, visit_date, marked_by_user_id)
+         VALUES (?, ?, ?, ?)`,
+        [coupleId, pinId, visitDate, userId],
+      );
+      await connection.execute(
+        `UPDATE map_pins
+         SET status = 'visited', visit_date = ?, updated_at = NOW()
+         WHERE id = ?`,
+        [visitDate, pinId],
+      );
+      const [rows] = await connection.execute(
+        `SELECT id, map_pin_id, visit_date, marked_by_user_id, created_at
+         FROM afterglow_visits WHERE id = ? LIMIT 1`,
+        [inserted.insertId],
+      );
+      return { created: true, row: rows[0] };
+    });
+    const visit = {
+      id: Number(result.row.id),
+      mapPinId: Number(result.row.map_pin_id),
+      visitDate: dateOnly(result.row.visit_date),
+      markedByUserId: Number(result.row.marked_by_user_id),
+      createdAt: result.row.created_at,
+    };
+    res.status(result.created ? 201 : 200).json({ ok: true, visit });
+  } catch (err) {
+    if (sendAfterglowError(res, err)) return;
+    console.error('[API] /retention/afterglow/:pinId/visit POST error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
 // 장소 검색 프록시 (Kakao Local 우선, Naver Local 보강)
 router.get('/places/search', async (req, res) => {
   try {
@@ -2115,7 +2196,13 @@ router.get('/map', async (req, res) => {
       'SELECT * FROM map_pins WHERE couple_id = ? AND archived_at IS NULL ORDER BY visit_date DESC, created_at DESC',
       [coupleId],
     );
-    res.json({ ok: true, pins: result.rows });
+    res.json({
+      ok: true,
+      pins: result.rows.map((pin) => ({
+        ...pin,
+        visit_date: dateOnly(pin.visit_date),
+      })),
+    });
   } catch (err) {
     console.error('[API] /map GET error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });

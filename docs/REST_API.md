@@ -42,6 +42,7 @@ GET    /retention/today
 POST   /retention/today/view
 PUT|DELETE /retention/today/moment
 GET    /retention/beta/summary
+POST   /retention/afterglow/:pinId/visit
 GET|POST /map
 PATCH|DELETE /map/:id
 GET    /places/search
@@ -634,6 +635,12 @@ Records the authenticated user's first open of the revealed Today Loop for the c
 ### GET `/retention/beta/summary?days=7`
 
 Returns Couple-scoped MVP beta totals for 1–30 Business Dates: completed loop days, Today Moments, partner views within 24 hours, and the resulting view rate. It never returns captions, media, or location data. Ad metrics are intentionally excluded until the ad path ships.
+
+## Date Afterglow
+
+### POST `/retention/afterglow/:pinId/visit`
+
+Turns an active-Couple `wishlist` pin into an Afterglow visit for the server Business Date and atomically updates the pin to `visited`. The first call returns `201`; retries by either Couple member return the same visit with `200`. Pins outside the active Couple return `404`, and a legacy visited pin without an Afterglow visit returns `afterglow_requires_wishlist`.
 
 ## Map
 
