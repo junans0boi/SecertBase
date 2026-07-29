@@ -43,6 +43,7 @@ POST   /retention/today/view
 PUT|DELETE /retention/today/moment
 GET    /retention/beta/summary
 POST   /retention/afterglow/:pinId/visit
+PUT    /retention/afterglow/:visitId/contribution
 GET|POST /map
 PATCH|DELETE /map/:id
 GET    /places/search
@@ -641,6 +642,10 @@ Returns Couple-scoped MVP beta totals for 1–30 Business Dates: completed loop 
 ### POST `/retention/afterglow/:pinId/visit`
 
 Turns an active-Couple `wishlist` pin into an Afterglow visit for the server Business Date and atomically updates the pin to `visited`. The first call returns `201`; retries by either Couple member return the same visit with `200`. Pins outside the active Couple return `404`, and a legacy visited pin without an Afterglow visit returns `afterglow_requires_wishlist`.
+
+### PUT `/retention/afterglow/:visitId/contribution`
+
+Creates or replaces only the authenticated member's contribution. `post_id` must identify that member's MomentLoop on the visit date, directly linked to the visit's pin. `caption` is optional up to 120 characters and `emotion_tag` is optional up to 24 characters. The partner does not need to contribute. Deleting the MomentLoop later preserves a content-free tombstone.
 
 ## Map
 

@@ -1857,6 +1857,12 @@ router.delete('/setlog/:id', async (req, res) => {
       } else if (todayMoment) {
         await connection.execute('DELETE FROM today_moments WHERE id = ?', [todayMoment.id]);
       }
+      await connection.execute(
+        `UPDATE afterglow_contributions
+         SET setlog_post_id = NULL, deleted_at = NOW()
+         WHERE setlog_post_id = ?`,
+        [id],
+      );
       await connection.execute('DELETE FROM setlog_posts WHERE id = ?', [id]);
     });
     const filePath = mediaFilePath(post.media_url);
@@ -2143,6 +2149,85 @@ router.post('/retention/afterglow/:pinId/visit', async (req, res) => {
   } catch (err) {
     if (sendAfterglowError(res, err)) return;
     console.error('[API] /retention/afterglow/:pinId/visit POST error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.put('/retention/afterglow/:visitId/contribution', async (req, res) => {
+  try {
+    const visitId = Number(req.params.visitId);
+    const postId = Number(req.body.post_id);
+    if (!Number.isInteger(visitId) || visitId <= 0 || !Number.isInteger(postId) || postId <= 0) {
+      return res.status(400).json({ ok: false, reason: 'invalid_afterglow_contribution' });
+    }
+    const caption = req.body.caption == null ? null : String(req.body.caption).trim() || null;
+    const emotionTag = req.body.emotion_tag == null
+      ? null
+      : String(req.body.emotion_tag).trim() || null;
+    if (caption && caption.length > 120) {
+      return res.status(400).json({ ok: false, reason: 'afterglow_caption_too_long' });
+    }
+    if (emotionTag && emotionTag.length > 24) {
+      return res.status(400).json({ ok: false, reason: 'afterglow_emotion_tag_too_long' });
+    }
+    const userId = req.auth.userId;
+    const coupleId = await getCoupleIdForUser(userId);
+    if (!coupleId) {
+      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+    }
+    const contribution = await transaction(async (connection) => {
+      const [visits] = await connection.execute(
+        `SELECT v.id, v.map_pin_id, v.visit_date
+         FROM afterglow_visits v
+         JOIN map_pins mp ON mp.id = v.map_pin_id
+         WHERE v.id = ? AND v.couple_id = ? AND mp.archived_at IS NULL
+         LIMIT 1 FOR UPDATE`,
+        [visitId, coupleId],
+      );
+      const visit = visits[0];
+      if (!visit) throw new AfterglowRequestError(404, 'afterglow_visit_not_found');
+
+      const [posts] = await connection.execute(
+        `SELECT id FROM setlog_posts
+         WHERE id = ? AND user_id = ? AND couple_id = ?
+           AND map_pin_id = ? AND taken_at = ?
+         LIMIT 1`,
+        [postId, userId, coupleId, visit.map_pin_id, visit.visit_date],
+      );
+      if (!posts[0]) throw new AfterglowRequestError(404, 'afterglow_moment_not_found');
+
+      await connection.execute(
+        `INSERT INTO afterglow_contributions
+           (visit_id, user_id, setlog_post_id, caption, emotion_tag, deleted_at)
+         VALUES (?, ?, ?, ?, ?, NULL)
+         ON DUPLICATE KEY UPDATE
+           setlog_post_id = VALUES(setlog_post_id), caption = VALUES(caption),
+           emotion_tag = VALUES(emotion_tag), deleted_at = NULL`,
+        [visitId, userId, postId, caption, emotionTag],
+      );
+      const [rows] = await connection.execute(
+        `SELECT id, visit_id, user_id, setlog_post_id, caption, emotion_tag, created_at
+         FROM afterglow_contributions
+         WHERE visit_id = ? AND user_id = ? LIMIT 1`,
+        [visitId, userId],
+      );
+      return rows[0];
+    });
+    res.json({
+      ok: true,
+      contribution: {
+        id: Number(contribution.id),
+        visitId: Number(contribution.visit_id),
+        userId: Number(contribution.user_id),
+        postId: Number(contribution.setlog_post_id),
+        caption: contribution.caption,
+        emotionTag: contribution.emotion_tag,
+        createdAt: contribution.created_at,
+      },
+    });
+  } catch (err) {
+    if (sendAfterglowError(res, err)) return;
+    console.error('[API] /retention/afterglow/:visitId/contribution PUT error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
   }
 });

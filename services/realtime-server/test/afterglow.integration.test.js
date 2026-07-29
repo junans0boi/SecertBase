@@ -40,6 +40,21 @@ const createPin = async (server, user, status = 'wishlist') => {
   return response.json();
 };
 
+const createMoment = async (server, user, pinId, caption = 'moment') => {
+  const response = await server.request('/setlog', {
+    token: user.token,
+    method: 'POST',
+    body: {
+      caption,
+      media_type: 'text',
+      taken_at: businessDate(),
+      map_pin_id: pinId,
+    },
+  });
+  assert.equal(response.status, 201);
+  return (await response.json()).post;
+};
+
 test('a wishlist pin becomes one Couple-scoped Afterglow visit', { skip: !adminUrl || !redisUrl }, async () => {
   const server = await createApiTestServer({ adminUrl, redisUrl });
   try {
@@ -81,6 +96,56 @@ test('a wishlist pin becomes one Couple-scoped Afterglow visit', { skip: !adminU
     });
     assert.equal(invalid.status, 409);
     assert.equal((await invalid.json()).reason, 'afterglow_requires_wishlist');
+
+    const aliceMoment = await createMoment(server, alice, pin.id, 'Alice glow');
+    const contributed = await server.request(`/retention/afterglow/${visit.id}/contribution`, {
+      token: alice.token,
+      method: 'PUT',
+      body: { post_id: aliceMoment.id, caption: '또 걷고 싶어', emotion_tag: '포근함' },
+    });
+    assert.equal(contributed.status, 200);
+    const aliceContribution = (await contributed.json()).contribution;
+    assert.equal(aliceContribution.postId, aliceMoment.id);
+    assert.equal(aliceContribution.caption, '또 걷고 싶어');
+    assert.equal(aliceContribution.emotionTag, '포근함');
+
+    const partnerPostRejected = await server.request(`/retention/afterglow/${visit.id}/contribution`, {
+      token: bob.token, method: 'PUT', body: { post_id: aliceMoment.id },
+    });
+    assert.equal(partnerPostRejected.status, 404);
+
+    const otherPin = await createPin(server, alice);
+    const wrongPinMoment = await createMoment(server, alice, otherPin.id, 'wrong pin');
+    const wrongPinRejected = await server.request(`/retention/afterglow/${visit.id}/contribution`, {
+      token: alice.token, method: 'PUT', body: { post_id: wrongPinMoment.id },
+    });
+    assert.equal(wrongPinRejected.status, 404);
+
+    const crossVisit = await server.request(`/retention/afterglow/${visit.id}/contribution`, {
+      token: carol.token, method: 'PUT', body: { post_id: wrongPinMoment.id },
+    });
+    assert.equal(crossVisit.status, 404);
+
+    const tooLong = await server.request(`/retention/afterglow/${visit.id}/contribution`, {
+      token: alice.token,
+      method: 'PUT',
+      body: { post_id: aliceMoment.id, caption: 'x'.repeat(121) },
+    });
+    assert.equal(tooLong.status, 400);
+    assert.equal((await tooLong.json()).reason, 'afterglow_caption_too_long');
+
+    const replacement = await createMoment(server, alice, pin.id, 'replacement');
+    const replaced = await server.request(`/retention/afterglow/${visit.id}/contribution`, {
+      token: alice.token,
+      method: 'PUT',
+      body: { post_id: replacement.id, emotion_tag: '설렘' },
+    });
+    assert.equal(replaced.status, 200);
+    assert.equal((await replaced.json()).contribution.postId, replacement.id);
+    const deleted = await server.request(`/setlog/${replacement.id}`, {
+      token: alice.token, method: 'DELETE',
+    });
+    assert.equal(deleted.status, 200);
   } finally {
     await server.close();
   }
