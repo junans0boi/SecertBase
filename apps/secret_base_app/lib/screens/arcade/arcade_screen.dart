@@ -7,7 +7,6 @@ import '../../core/auth_service.dart';
 import '../../core/main_design.dart';
 import '../../core/socket_service.dart';
 import 'game_lobby_screen.dart';
-import 'games/basketball_screen.dart';
 import 'games/blackjack_screen.dart';
 import 'games/bomb_screen.dart';
 import 'games/bowling_screen.dart';
@@ -360,14 +359,6 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       background: kMainSkySoft,
     ),
     _GameInfo(
-      type: 'basketball',
-      icon: Icons.sports_basketball_rounded,
-      title: '농구 자유투',
-      description: '스와이프 컨트롤로 10번의 슛을 던져 점수 대결',
-      color: kMainPeach,
-      background: kMainPeachSoft,
-    ),
-    _GameInfo(
       type: 'bowling',
       icon: Icons.sports_baseball_rounded,
       title: '볼링',
@@ -405,7 +396,6 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     'blackjack' => const BlackjackScreen(),
     'oldmaid' => const OldMaidScreen(),
     'penalty' => const PenaltyScreen(),
-    'basketball' => const BasketballScreen(),
     'bowling' => const BowlingScreen(),
     'yut' => const YutScreen(),
     'bomb' => const BombScreen(),

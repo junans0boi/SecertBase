@@ -16,7 +16,7 @@ void main() {
   ) async {
     // 게임 목록이 길어 기본 뷰포트(600px)에서는 하단 항목이 lazy build로
     // 트리에 없다. 전체 목록이 한 화면에 들어오도록 뷰포트를 키운다.
-    // 게임 아이콘 스트립(가로 스크롤)이 13종을 전부 lazy build 하도록 넓힌다.
+    // 게임 아이콘 스트립의 전체 목록을 lazy build 하도록 넓힌다.
     tester.view.physicalSize = const Size(1600, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -49,7 +49,8 @@ void main() {
     expect(find.text('블랙잭'), findsOneWidget);
     expect(find.text('도둑잡기'), findsOneWidget);
     expect(find.text('패널티킥'), findsOneWidget);
-    expect(find.text('농구 자유투'), findsOneWidget);
+    // 사용자 피드백으로 농구 자유투는 서비스에서 완전히 제외했다.
+    expect(find.text('농구 자유투'), findsNothing);
     expect(find.text('볼링'), findsOneWidget);
   });
 }

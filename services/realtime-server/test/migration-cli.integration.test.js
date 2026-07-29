@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -113,6 +113,76 @@ test(
       const retry = runMigrationCli(environment, 'up', [], extraEnv);
       assert.equal(retry.status, 0, retry.stderr);
       assert.deepEqual(JSON.parse(retry.stdout).applied, ['0001_retry_safe.sql']);
+    } finally {
+      await rm(migrationsDir, { recursive: true, force: true });
+      await environment.cleanup();
+    }
+  },
+);
+
+test(
+  'shop repair migration fixes mojibake without changing business state',
+  { skip: !adminUrl || !redisUrl },
+  async () => {
+    const environment = await createIntegrationEnvironment({ adminUrl, redisUrl });
+    const migrationsDir = await mkdtemp(
+      path.join(os.tmpdir(), 'secretbase-shop-repair-'),
+    );
+    const extraEnv = { TEST_MIGRATIONS_DIR: migrationsDir };
+
+    try {
+      await writeFile(
+        path.join(migrationsDir, '0001_mojibake_shop.sql'),
+        `
+          CREATE TABLE shop_items (
+            id INT PRIMARY KEY,
+            category VARCHAR(20) NOT NULL,
+            name VARCHAR(100) NOT NULL,
+            description TEXT,
+            price INT NOT NULL,
+            icon VARCHAR(50),
+            active TINYINT(1) NOT NULL
+          );
+          INSERT INTO shop_items
+            (id, category, name, description, price, icon, active)
+          VALUES
+            (1, 'coupon',
+             CONVERT(CAST('데이트 쿠폰' AS BINARY) USING latin1),
+             CONVERT(CAST('상대방에게 주는 특별한 약속 쿠폰' AS BINARY) USING latin1),
+             777,
+             CONVERT(CAST('🎟️' AS BINARY) USING latin1),
+             0);
+        `,
+      );
+      const repairSql = await readFile(
+        new URL('../migrations/0009_repair_shop_catalog_encoding.sql', import.meta.url),
+        'utf8',
+      );
+      await writeFile(
+        path.join(migrationsDir, '0002_repair_shop.sql'),
+        repairSql,
+      );
+
+      const applied = runMigrationCli(environment, 'up', [], extraEnv);
+      assert.equal(applied.status, 0, applied.stderr);
+
+      const connection = await mysql.createConnection(environment.databaseUrl);
+      const [rows] = await connection.query(
+        'SELECT name, description, price, icon, HEX(icon) AS icon_hex, active FROM shop_items WHERE id = 1',
+      );
+      assert.deepEqual(rows[0], {
+        name: '데이트 쿠폰',
+        description: '상대방에게 주는 특별한 약속 쿠폰',
+        price: 777,
+        icon: '🎟️',
+        icon_hex: Buffer.from('🎟️').toString('hex').toUpperCase(),
+        active: 0,
+      });
+      await connection.end();
+
+      const secondRun = runMigrationCli(environment, 'up', [], extraEnv);
+      assert.equal(secondRun.status, 0, secondRun.stderr);
+      assert.deepEqual(JSON.parse(secondRun.stdout).applied, []);
     } finally {
       await rm(migrationsDir, { recursive: true, force: true });
       await environment.cleanup();

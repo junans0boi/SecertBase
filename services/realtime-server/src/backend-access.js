@@ -31,7 +31,6 @@ export const PUBLIC_GAME_TYPES = [
   'blackjack',
   'oldmaid',
   'penalty',
-  'basketball',
   'bowling',
   'tank',
   'gostop',

@@ -13,30 +13,6 @@ test('Penalty Shootout: saved when kicker and keeper exact 3x3 target match', ()
   assert.equal(checkPenaltySave(5, 0), false); // right-mid vs top-left => goal!
 });
 
-// Basketball Engine tests
-import { initBasketballGame, submitShot, isBasketballFinished } from '../src/basketball-engine.js';
-
-test('Basketball Engine: initializes 10 shots per player and seed', () => {
-  const game = initBasketballGame('p1', 'p2');
-  assert.equal(game.status, 'playing');
-  assert.ok(game.seed > 0);
-  assert.equal(game.shots.p1.length, 0);
-  assert.equal(game.shots.p2.length, 0);
-});
-
-test('Basketball Engine: records shots and finishes when both complete 10 shots', () => {
-  let game = initBasketballGame('p1', 'p2');
-  for (let i = 0; i < 10; i++) {
-    game = submitShot(game, 'p1', true, 2);
-    game = submitShot(game, 'p2', i % 2 === 0, 3);
-  }
-  assert.equal(isBasketballFinished(game), true);
-  assert.equal(game.status, 'finished');
-  assert.equal(game.scores.p1, 20);
-  assert.equal(game.scores.p2, 15);
-  assert.equal(game.result.winner, 'p1');
-});
-
 // Bowling Engine tests
 import {
   initBowlingGame,

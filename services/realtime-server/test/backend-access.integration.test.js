@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken';
 import { Server } from 'socket.io';
 import { io as createClient } from 'socket.io-client';
 import {
+  PUBLIC_GAME_TYPES,
   installSocketFeatureGate,
   installSocketAuthentication,
   mvpRestFeatureGate,
@@ -13,6 +14,10 @@ import {
 } from '../src/backend-access.js';
 
 const secret = 'integration-jwt-secret-at-least-32-characters';
+
+test('retired basketball game is not publicly available', () => {
+  assert.equal(PUBLIC_GAME_TYPES.includes('basketball'), false);
+});
 
 const listen = (server) =>
   new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));

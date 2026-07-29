@@ -49,11 +49,6 @@ import {
 } from "./oldmaid-engine.js";
 
 import {
-  initBasketballGame,
-  submitShot as submitBasketballShot,
-} from "./basketball-engine.js";
-
-import {
   initBowlingGame,
   rollFrame as rollBowlingFrame,
   buildFrameDisplayData,
@@ -105,7 +100,6 @@ const gameTypes = [
   "blackjack",
   "oldmaid",
   "penalty",
-  "basketball",
   "bowling",
   "tank",
   "gostop",
@@ -1712,45 +1706,6 @@ export const registerSocketHandlers = (io) => {
       if (gameState.status === 'finished' && gameState.result?.winner && gameState.result.winner !== 'draw') {
         const loser = Object.keys(gameState.scores).find(p => p !== gameState.result.winner);
         await saveGameResult(roomCode, gameState.result.winner, loser, 'penalty', 0).catch(() => {});
-      }
-      ack({ ok: true });
-    });
-
-    // ── Basketball ────────────────────────────────────────────────────────
-    socket.on("game:basketball:start", async (payload, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const roomCode = socket.data.roomCode;
-      const userId = socket.data.userId;
-      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
-      const presence = getPresence(io, roomCode);
-      if (presence.length !== 2) return ack({ ok: false, reason: "need_two_players" });
-      const orderedPlayers = await getOrderedPlayers(roomCode, presence);
-      if (orderedPlayers.length !== 2) return ack({ ok: false, reason: "need_two_players" });
-
-      const gameState = initBasketballGame(orderedPlayers[0], orderedPlayers[1]);
-      await redis.set(`game:${roomCode}:basketball`, JSON.stringify(gameState), "EX", 3600);
-      io.to(roomCode).emit("game:basketball:updated", gameState);
-      ack({ ok: true });
-    });
-
-    socket.on("game:basketball:shot", async (payload, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const roomCode = socket.data.roomCode;
-      const userId = socket.data.userId;
-      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
-      const raw = await redis.get(`game:${roomCode}:basketball`);
-      if (!raw) return ack({ ok: false, reason: "no_game" });
-
-      let gameState = JSON.parse(raw);
-      const isMade = Boolean(payload?.isMade);
-      const points = Number(payload?.points) || 2;
-      gameState = submitBasketballShot(gameState, String(userId), isMade, points);
-
-      await redis.set(`game:${roomCode}:basketball`, JSON.stringify(gameState), "EX", 3600);
-      io.to(roomCode).emit("game:basketball:updated", gameState);
-      if (gameState.status === 'finished' && gameState.result?.winner && gameState.result.winner !== 'draw') {
-        const loser = Object.keys(gameState.scores).find(p => p !== gameState.result.winner);
-        await saveGameResult(roomCode, gameState.result.winner, loser, 'basketball', 0).catch(() => {});
       }
       ack({ ok: true });
     });

@@ -130,9 +130,6 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
           case 'penalty':
             _socket.startPenalty();
             break;
-          case 'basketball':
-            _socket.startBasketball();
-            break;
           case 'bowling':
             _socket.startBowling();
             break;

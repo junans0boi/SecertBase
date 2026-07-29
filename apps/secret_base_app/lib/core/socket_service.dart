@@ -192,10 +192,6 @@ class SocketService extends ChangeNotifier {
   bool penaltyActive = false;
   Map<String, dynamic>? penaltyState;
 
-  // basketball (농구 자유투)
-  bool basketballActive = false;
-  Map<String, dynamic>? basketballState;
-
   // bowling (볼링)
   bool bowlingActive = false;
   Map<String, dynamic>? bowlingState;
@@ -807,14 +803,6 @@ class SocketService extends ChangeNotifier {
       notifyListeners();
     });
 
-    socket.on('game:basketball:updated', (data) {
-      basketballState = _m(data);
-      basketballActive = basketballState?['status'] == 'playing';
-      restartWaiting = false;
-      _log('농구 자유투 업데이트');
-      notifyListeners();
-    });
-
     socket.on('game:bowling:updated', (data) {
       bowlingState = _m(data);
       bowlingActive = bowlingState?['status'] == 'playing';
@@ -1377,16 +1365,6 @@ class SocketService extends ChangeNotifier {
 
   void submitPenaltyChoice(int choice) {
     _socket?.emit('game:penalty:submit', {'choice': choice});
-  }
-
-  // ── basketball (농구 자유투) ──────────────────────────────────────────────
-
-  void startBasketball() {
-    _socket?.emit('game:basketball:start', {});
-  }
-
-  void submitBasketballShot(bool isMade, {int points = 2}) {
-    _socket?.emit('game:basketball:shot', {'isMade': isMade, 'points': points});
   }
 
   // ── bowling (볼링) ───────────────────────────────────────────────────────
