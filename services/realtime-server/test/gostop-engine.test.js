@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readdirSync } from 'node:fs';
 import {
   createHwatuDeck,
   createGostopGameState,
   calculateScore,
+  normalizeGostopGameState,
   playHandCard,
   selectDeckCapture,
   declareGoStop,
@@ -22,12 +24,39 @@ test('deck has 48 unique cards', () => {
   assert.equal(ids.size, 48);
 });
 
-test('deck has 5 brights, 11 animals, 8 ribbons, 24 junks', () => {
+test('Flutter artwork filenames match the server deck contract', () => {
+  const assetDir = new URL(
+    '../../../apps/secret_base_app/assets/images/hwatu/',
+    import.meta.url,
+  );
+  const assetIds = readdirSync(assetDir)
+    .filter(name => name.endsWith('.png'))
+    .map(name => name.slice(0, -4))
+    .sort();
+  const deckIds = createHwatuDeck().map(card => card.id).sort();
+  assert.deepEqual(assetIds, deckIds);
+});
+
+test('deck has the standard 5 brights, 9 animals, 10 ribbons, 24 junks', () => {
   const deck = createHwatuDeck();
   assert.equal(deck.filter(c => c.type === 'bright').length, 5);
-  assert.equal(deck.filter(c => c.type === 'animal').length, 11);
-  assert.equal(deck.filter(c => c.type === 'ribbon').length, 8);
+  assert.equal(deck.filter(c => c.type === 'animal').length, 9);
+  assert.equal(deck.filter(c => c.type === 'ribbon').length, 10);
   assert.equal(deck.filter(c => c.type === 'junk').length, 24);
+});
+
+test('홍단과 청단 월 구성이 실제 화투와 일치한다', () => {
+  const deck = createHwatuDeck();
+  const redMonths = deck
+    .filter(c => c.type === 'ribbon' && c.subtype === 'red')
+    .map(c => c.month)
+    .sort((a, b) => a - b);
+  const blueMonths = deck
+    .filter(c => c.type === 'ribbon' && c.subtype === 'blue')
+    .map(c => c.month)
+    .sort((a, b) => a - b);
+  assert.deepEqual(redMonths, [1, 2, 3]);
+  assert.deepEqual(blueMonths, [6, 9, 10]);
 });
 
 test('deck has exactly 4 cards per month', () => {
@@ -45,6 +74,29 @@ test('deck has 2 double-junk (쌍피) cards: month 11 and 12', () => {
   assert.ok(ssangpi.some(c => c.month === 12));
 });
 
+test('legacy Redis cards are normalized before grouping and scoring', () => {
+  const legacy = makeState({
+    captures: {
+      [P1]: [
+        { id: 'm1_animal', month: 1, type: 'animal', subtype: null },
+        { id: 'm7_animal_2', month: 7, type: 'animal', subtype: null },
+      ],
+      [P2]: [],
+    },
+  });
+
+  const normalized = normalizeGostopGameState(legacy);
+  assert.deepEqual(
+    normalized.captures[P1].map(card => [card.id, card.type, card.subtype]),
+    [
+      ['m1_animal', 'ribbon', 'red'],
+      ['m7_animal_2', 'ribbon', null],
+    ],
+  );
+  assert.equal(normalized.scores[P1].ribCount, 2);
+  assert.equal(normalized.scores[P1].animCount, 0);
+});
+
 // ── 점수 계산 ─────────────────────────────────────────────────────
 test('광 3장 = 3점, 비광 포함 시 2점', () => {
   const brights3 = [
@@ -57,7 +109,7 @@ test('광 3장 = 3점, 비광 포함 시 2점', () => {
   const withRain = [
     { id: 'm1_bright', month: 1, type: 'bright', subtype: null },
     { id: 'm3_bright', month: 3, type: 'bright', subtype: null },
-    { id: 'm11_bright', month: 11, type: 'bright', subtype: 'rain' },
+    { id: 'm12_bright', month: 12, type: 'bright', subtype: 'rain' },
   ];
   assert.equal(calculateScore(withRain).gwangScore, 2);
 });
@@ -67,12 +119,12 @@ test('광 5장 = 15점, 비광 포함 시 14점', () => {
     { id: 'm1_bright', month: 1,  type: 'bright', subtype: null },
     { id: 'm3_bright', month: 3,  type: 'bright', subtype: null },
     { id: 'm8_bright', month: 8,  type: 'bright', subtype: null },
-    { id: 'm11_bright',month: 11, type: 'bright', subtype: 'rain' },
-    { id: 'm12_bright',month: 12, type: 'bright', subtype: null },
+    { id: 'm11_bright',month: 11, type: 'bright', subtype: null },
+    { id: 'm12_bright',month: 12, type: 'bright', subtype: 'rain' },
   ];
   assert.equal(calculateScore(all5).gwangScore, 14);
 
-  const noRain = all5.map(c => c.month === 11 ? { ...c, subtype: null } : c);
+  const noRain = all5.map(c => c.month === 12 ? { ...c, subtype: null } : c);
   assert.equal(calculateScore(noRain).gwangScore, 15);
 });
 
@@ -86,11 +138,11 @@ test('열끗 5장=1점, 6장=2점', () => {
 
 test('단 5장=1점, 홍단 세트 보너스 +3', () => {
   const ribbons = [
+    { id: 'm1_animal', month: 1,  type: 'ribbon', subtype: 'red' },
     { id: 'm2_ribbon', month: 2,  type: 'ribbon', subtype: 'red' },
     { id: 'm3_ribbon', month: 3,  type: 'ribbon', subtype: 'red' },
-    { id: 'm10_ribbon',month: 10, type: 'ribbon', subtype: 'red' },
-    { id: 'm4_ribbon', month: 4,  type: 'ribbon', subtype: 'blue' },
-    { id: 'm9_ribbon', month: 9,  type: 'ribbon', subtype: null },
+    { id: 'm4_ribbon', month: 4,  type: 'ribbon', subtype: null },
+    { id: 'm5_ribbon', month: 5,  type: 'ribbon', subtype: null },
   ];
   const s = calculateScore(ribbons);
   assert.equal(s.ribScore, 1);
@@ -100,11 +152,11 @@ test('단 5장=1점, 홍단 세트 보너스 +3', () => {
 
 test('청단 세트 보너스 +3', () => {
   const ribbons = [
-    { id: 'm4_ribbon', month: 4, type: 'ribbon', subtype: 'blue' },
-    { id: 'm5_ribbon', month: 5, type: 'ribbon', subtype: 'blue' },
     { id: 'm6_ribbon', month: 6, type: 'ribbon', subtype: 'blue' },
-    { id: 'm2_ribbon', month: 2, type: 'ribbon', subtype: 'red' },
-    { id: 'm3_ribbon', month: 3, type: 'ribbon', subtype: 'red' },
+    { id: 'm9_ribbon', month: 9, type: 'ribbon', subtype: 'blue' },
+    { id: 'm10_ribbon', month: 10, type: 'ribbon', subtype: 'blue' },
+    { id: 'm4_ribbon', month: 4, type: 'ribbon', subtype: null },
+    { id: 'm5_ribbon', month: 5, type: 'ribbon', subtype: null },
   ];
   const s = calculateScore(ribbons);
   assert.equal(s.cheongdanBonus, 3);

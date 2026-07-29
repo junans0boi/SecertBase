@@ -501,7 +501,7 @@ class _CaptureShelf extends StatelessWidget {
     final cardW = compact ? 20.0 : 26.0;
 
     return SizedBox(
-      height: cardW * 1.55 + 4,
+      height: cardW * kHwatuCardHeightRatio + 4,
       child: ListView(
         scrollDirection: Axis.horizontal,
         children: [

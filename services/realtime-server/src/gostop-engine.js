@@ -14,7 +14,8 @@ const SUB = { RAIN: 'rain', DOUBLE: 'double', RED: 'red', BLUE: 'blue' };
 const DECK_DEF = [
   // 1월 (소나무)
   { id: 'm1_bright',   month: 1,  type: T.BRIGHT, subtype: null },
-  { id: 'm1_animal',   month: 1,  type: T.ANIMAL, subtype: null },
+  // 기존 ID는 클라이언트/진행 중 게임 호환용으로 유지. 실제 패는 홍단 띠다.
+  { id: 'm1_animal',   month: 1,  type: T.RIBBON, subtype: SUB.RED },
   { id: 'm1_junk_1',   month: 1,  type: T.JUNK,   subtype: null },
   { id: 'm1_junk_2',   month: 1,  type: T.JUNK,   subtype: null },
   // 2월 (매화)
@@ -29,12 +30,12 @@ const DECK_DEF = [
   { id: 'm3_junk_2',   month: 3,  type: T.JUNK,   subtype: null },
   // 4월 (등나무)
   { id: 'm4_animal',   month: 4,  type: T.ANIMAL, subtype: null },
-  { id: 'm4_ribbon',   month: 4,  type: T.RIBBON, subtype: SUB.BLUE },
+  { id: 'm4_ribbon',   month: 4,  type: T.RIBBON, subtype: null },
   { id: 'm4_junk_1',   month: 4,  type: T.JUNK,   subtype: null },
   { id: 'm4_junk_2',   month: 4,  type: T.JUNK,   subtype: null },
   // 5월 (창포)
   { id: 'm5_animal',   month: 5,  type: T.ANIMAL, subtype: null },
-  { id: 'm5_ribbon',   month: 5,  type: T.RIBBON, subtype: SUB.BLUE },
+  { id: 'm5_ribbon',   month: 5,  type: T.RIBBON, subtype: null },
   { id: 'm5_junk_1',   month: 5,  type: T.JUNK,   subtype: null },
   { id: 'm5_junk_2',   month: 5,  type: T.JUNK,   subtype: null },
   // 6월 (모란)
@@ -44,7 +45,8 @@ const DECK_DEF = [
   { id: 'm6_junk_2',   month: 6,  type: T.JUNK,   subtype: null },
   // 7월 (싸리)
   { id: 'm7_animal_1', month: 7,  type: T.ANIMAL, subtype: null },
-  { id: 'm7_animal_2', month: 7,  type: T.ANIMAL, subtype: null },
+  // 기존 ID는 호환용으로 유지. 실제 패는 초단 띠다.
+  { id: 'm7_animal_2', month: 7,  type: T.RIBBON, subtype: null },
   { id: 'm7_junk_1',   month: 7,  type: T.JUNK,   subtype: null },
   { id: 'm7_junk_2',   month: 7,  type: T.JUNK,   subtype: null },
   // 8월 (억새)
@@ -54,12 +56,12 @@ const DECK_DEF = [
   { id: 'm8_junk_2',   month: 8,  type: T.JUNK,   subtype: null },
   // 9월 (국화)
   { id: 'm9_animal',   month: 9,  type: T.ANIMAL, subtype: null },
-  { id: 'm9_ribbon',   month: 9,  type: T.RIBBON, subtype: null },
+  { id: 'm9_ribbon',   month: 9,  type: T.RIBBON, subtype: SUB.BLUE },
   { id: 'm9_junk_1',   month: 9,  type: T.JUNK,   subtype: null },
   { id: 'm9_junk_2',   month: 9,  type: T.JUNK,   subtype: null },
   // 10월 (단풍)
   { id: 'm10_animal',  month: 10, type: T.ANIMAL, subtype: null },
-  { id: 'm10_ribbon',  month: 10, type: T.RIBBON, subtype: SUB.RED },
+  { id: 'm10_ribbon',  month: 10, type: T.RIBBON, subtype: SUB.BLUE },
   { id: 'm10_junk_1',  month: 10, type: T.JUNK,   subtype: null },
   { id: 'm10_junk_2',  month: 10, type: T.JUNK,   subtype: null },
   // 11월 (오동)
@@ -73,6 +75,66 @@ const DECK_DEF = [
   { id: 'm12_ribbon',  month: 12, type: T.RIBBON, subtype: null },
   { id: 'm12_junk_d',  month: 12, type: T.JUNK,   subtype: SUB.DOUBLE },
 ];
+
+const DECK_BY_ID = new Map(DECK_DEF.map(card => [card.id, card]));
+
+function _normalizeCard(card) {
+  const canonical = DECK_BY_ID.get(card?.id);
+  if (!canonical || (
+    card.month === canonical.month &&
+    card.type === canonical.type &&
+    card.subtype === canonical.subtype
+  )) {
+    return card;
+  }
+  return { ...card, ...canonical };
+}
+
+// 배포 전 Redis 상태에는 지금과 같은 ID에 과거 type/subtype이 남아 있을 수 있다.
+// 모든 공개 진입점에서 정규화해 그림, 획득 그룹, 점수 계산을 같은 계약으로 맞춘다.
+export function normalizeGostopGameState(state) {
+  if (!state || typeof state !== 'object') return state;
+
+  let cardMetadataChanged = false;
+  const normalizeCard = card => {
+    const normalized = _normalizeCard(card);
+    if (normalized !== card) cardMetadataChanged = true;
+    return normalized;
+  };
+  const normalizeGroups = groups => Object.fromEntries(
+    Object.entries(groups ?? {}).map(([playerId, cards]) => [
+      playerId,
+      (cards ?? []).map(normalizeCard),
+    ]),
+  );
+  const hands = normalizeGroups(state.hands);
+  const captures = normalizeGroups(state.captures);
+  const pending = state.pending
+    ? {
+        ...state.pending,
+        card: normalizeCard(state.pending.card),
+        fieldOptions: (state.pending.fieldOptions ?? []).map(normalizeCard),
+      }
+    : null;
+  const scores = cardMetadataChanged || !state.scores
+    ? Object.fromEntries(
+        (state.players ?? []).map(playerId => [
+          playerId,
+          calculateScore(captures[playerId] ?? []),
+        ]),
+      )
+    : state.scores;
+
+  return {
+    ...state,
+    deck: (state.deck ?? []).map(normalizeCard),
+    field: (state.field ?? []).map(normalizeCard),
+    hands,
+    captures,
+    pending,
+    scores,
+  };
+}
 
 function _shuffle(arr) {
   const a = [...arr];
@@ -93,9 +155,9 @@ function _piValue(card) {
 }
 
 // ── 점수 계산 ────────────────────────────────────────────────────
-// 홍단: 2,3,10월 단 / 청단: 4,5,6월 단
-const HONGDAN_MONTHS = new Set([2, 3, 10]);
-const CHEONGDAN_MONTHS = new Set([4, 5, 6]);
+// 홍단: 1,2,3월 단 / 청단: 6,9,10월 단
+const HONGDAN_MONTHS = new Set([1, 2, 3]);
+const CHEONGDAN_MONTHS = new Set([6, 9, 10]);
 
 export function calculateScore(captures) {
   const brights = captures.filter(c => c.type === T.BRIGHT);
@@ -333,6 +395,7 @@ function _nextTurn(state) {
 
 // ── 손패 카드 내기 ───────────────────────────────────────────────
 export function playHandCard(state, playerId, cardId) {
+  state = normalizeGostopGameState(state);
   if (state.phase !== 'playing') throw new Error(`invalid phase: ${state.phase}`);
   const curId = state.players[state.currentPlayerIdx];
   if (playerId !== curId) throw new Error('not your turn');
@@ -376,6 +439,7 @@ export function playHandCard(state, playerId, cardId) {
 
 // ── 덱 포획 선택 (deck_choice 단계) ────────────────────────────
 export function selectDeckCapture(state, playerId, fieldCardId) {
+  state = normalizeGostopGameState(state);
   if (state.phase !== 'deck_choice') throw new Error('not in deck_choice phase');
   const curId = state.players[state.currentPlayerIdx];
   if (playerId !== curId) throw new Error('not your turn');
@@ -396,6 +460,7 @@ export function selectDeckCapture(state, playerId, fieldCardId) {
 
 // ── 고/스톱 선언 ────────────────────────────────────────────────
 export function declareGoStop(state, playerId, decision) {
+  state = normalizeGostopGameState(state);
   if (state.phase !== 'go_stop_choice') throw new Error('not in go_stop_choice phase');
   const curId = state.players[state.currentPlayerIdx];
   if (playerId !== curId) throw new Error('not your turn');
@@ -480,6 +545,7 @@ export function validHandCards(state, playerId) {
 
 // 상태 직렬화 (소켓 전송용 — 상대 손패 숨김)
 export function serializeFor(state, viewerId) {
+  state = normalizeGostopGameState(state);
   const hidden = state.players.find(p => p !== viewerId);
   return {
     ...state,
@@ -492,5 +558,6 @@ export function serializeFor(state, viewerId) {
 }
 
 export function serializeGostopGame(state) {
+  state = normalizeGostopGameState(state);
   return { ...state, deck: state.deck.map(() => ({ id: 'back' })) };
 }
