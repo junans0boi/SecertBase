@@ -45,11 +45,12 @@ This document outlines the current server configuration and deployment steps for
 ## Caddy Configuration (Server 2)
 - **Config Path:** `/etc/caddy/Caddyfile`
 - **Template:** `docs/deployment/Caddyfile`
-- **Review domain:** `secertbase.kro.kr`
+- **Production domain:** `secretbase.cloud`
+- **Legacy production alias:** `secertbase.kro.kr`
 - **Tester domain:** `test.secertbase.kro.kr`
 - **HTTPS:** Handled automatically by Caddy. It provisions and renews Let's Encrypt certificates without manual cert paths.
 - **Proxying:**
-  - `secertbase.kro.kr/` -> Served from `/var/www/secretbase` with SPA fallback to `index.html`
+  - `secretbase.cloud/` and `secertbase.kro.kr/` -> Served from `/var/www/secretbase` with SPA fallback to `index.html`
   - `test.secertbase.kro.kr/` -> Served from `/var/www/secretbase-test` with SPA fallback to `index.html`
   - `/api/*`, `/uploads/*`, `/health`, `/socket.io/*` -> Proxied to `http://127.0.0.1:4100`
 
@@ -62,7 +63,7 @@ sudo caddy validate --config /etc/caddy/Caddyfile
 sudo systemctl reload caddy
 ```
 
-The DNS records for `secertbase.kro.kr` and `test.secertbase.kro.kr` must point at Server 2's public IP, and ports 80/443 must be reachable so Caddy can complete the HTTP-01 challenge.
+The DNS records for `secretbase.cloud`, `secertbase.kro.kr`, and `test.secertbase.kro.kr` must point at Server 2's public IP, and ports 80/443 must be reachable so Caddy can complete the ACME challenge.
 
 ## Deployment Commands
 
@@ -85,7 +86,7 @@ cd /home/ubuntu/SecertBase
 Backend CORS must allow both deployed origins:
 
 ```text
-CORS_ORIGIN=https://secertbase.kro.kr,https://test.secertbase.kro.kr
+CORS_ORIGIN=https://secretbase.cloud,https://secertbase.kro.kr,https://test.secertbase.kro.kr
 ```
 
 Production/review manual equivalent for Server 2:
@@ -93,7 +94,7 @@ Production/review manual equivalent for Server 2:
 ```bash
 cd /home/ubuntu/SecertBase/apps/secret_base_app
 flutter build web --release --no-wasm-dry-run \
-  --dart-define=SOCKET_URL=https://secertbase.kro.kr \
+  --dart-define=SOCKET_URL=https://secretbase.cloud \
   --dart-define=GOOGLE_CLIENT_ID=<google-web-client-id> \
   --dart-define=KAKAO_REVIEW_AUTO_LOGIN=false
 rsync -a --delete build/web/ /var/www/secretbase/
@@ -102,7 +103,7 @@ cd /home/ubuntu/SecertBase/services/realtime-server
 pm2 restart secretbase-realtime --update-env
 ```
 
-HTTPS is enabled with Let's Encrypt. Port 80 should redirect to `https://secertbase.kro.kr` while keeping `/.well-known/acme-challenge/` available for renewal.
+HTTPS is enabled with Let's Encrypt. Port 80 should redirect each production hostname to its HTTPS equivalent while keeping ACME validation available for renewal.
 
 ## Firewall (UFW)
 - Public access required: 80, 443

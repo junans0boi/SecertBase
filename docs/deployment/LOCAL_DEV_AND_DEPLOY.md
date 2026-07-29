@@ -120,7 +120,7 @@ npm run check
 cd ../../apps/secret_base_app
 flutter analyze
 flutter build web --release --no-wasm-dry-run \
-  --dart-define=SOCKET_URL=https://secertbase.kro.kr \
+  --dart-define=SOCKET_URL=https://secretbase.cloud \
   --dart-define=GOOGLE_CLIENT_ID=<google-web-client-id>
 ```
 
@@ -147,7 +147,7 @@ cd /home/ubuntu/SecertBase
 
 The server keeps its own `services/realtime-server/.env`. Do not commit that file. If new env keys are added, update the server `.env` from `.env.example` before restarting PM2.
 
-As of 2026-07-13, `secertbase.kro.kr` is back to the normal production/login build. The server also has `test.secertbase.kro.kr` for friend/tester access. The tester build is served from `/var/www/secretbase-test` and should be deployed with:
+As of 2026-07-29, `secretbase.cloud` is the primary production/login domain. The legacy `secertbase.kro.kr` domain serves the same production build during migration. The server also has `test.secertbase.kro.kr` for friend/tester access. The tester build is served from `/var/www/secretbase-test` and should be deployed with:
 
 ```bash
 cd /home/ubuntu/SecertBase
@@ -188,7 +188,7 @@ kill <pid>
 ## Useful Overrides
 
 ```bash
-BRANCH=main WEB_ROOT=/var/www/secretbase SOCKET_URL=https://secertbase.kro.kr ./scripts/deploy_server.sh
+BRANCH=main WEB_ROOT=/var/www/secretbase SOCKET_URL=https://secretbase.cloud ./scripts/deploy_server.sh
 ```
 
 Do not rely on `SOCKET_URL` or `KAKAO_REVIEW_AUTO_LOGIN` environment overrides when `apps/secret_base_app/.env` exists, because the deploy script reads the `.env` file first.

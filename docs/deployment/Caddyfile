@@ -1,4 +1,4 @@
-secertbase.kro.kr {
+secretbase.cloud, secertbase.kro.kr {
 	root * /var/www/secretbase
 	encode zstd gzip
 
