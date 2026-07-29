@@ -5,6 +5,9 @@ import 'package:http/http.dart' as http;
 
 import '../../core/auth_service.dart';
 import '../../core/main_design.dart';
+import '../../core/today_api.dart';
+import 'today_card.dart';
+import 'today_loop_viewer.dart';
 
 class HomeScreen extends StatefulWidget {
   final ValueChanged<int> onNavigate;
@@ -21,6 +24,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Map<String, dynamic>> _recentMoments = [];
   List<Map<String, dynamic>> _todayPins = [];
   List<Map<String, dynamic>> _todayMoments = [];
+  TodayState? _todayState;
   bool _loading = true;
 
   Map<String, String> get _authHeaders => {
@@ -34,6 +38,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _load() async {
+    if (mounted) setState(() => _loading = true);
+    final todayFuture = _loadTodayState();
     try {
       final userId = _auth.user?['UserId'] ?? _auth.user?['id'];
       final responses = await Future.wait([
@@ -47,19 +53,19 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           headers: _authHeaders,
         ),
-        http.get(
-          Uri.parse('${_auth.baseUrl}/api/map'),
-          headers: _authHeaders,
-        ),
+        http.get(Uri.parse('${_auth.baseUrl}/api/map'), headers: _authHeaders),
       ]);
       if (!mounted) return;
       final couple = jsonDecode(responses[0].body) as Map<String, dynamic>;
       final moments = jsonDecode(responses[1].body) as Map<String, dynamic>;
       final mapData = jsonDecode(responses[2].body) as Map<String, dynamic>;
+      final todayState = await todayFuture;
       final now = DateTime.now();
-      final nowStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final nowStr =
+          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
 
       setState(() {
+        _todayState = todayState;
         if (responses[0].statusCode == 200 && couple['ok'] == true) {
           _coupleInfo = couple;
         }
@@ -90,6 +96,29 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<TodayState?> _loadTodayState() async {
+    final token = _auth.token;
+    if (token == null) return null;
+    final api = TodayApi(baseUrl: _auth.baseUrl, token: token);
+    try {
+      return await api.fetchState();
+    } catch (_) {
+      return null;
+    } finally {
+      api.close();
+    }
+  }
+
+  void _openTodayLoop() {
+    final state = _todayState;
+    if (state == null) return;
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => TodayLoopViewer(state: state, baseUrl: _auth.baseUrl),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return CozyPage(
@@ -100,6 +129,22 @@ class _HomeScreenState extends State<HomeScreen> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(18, 16, 18, 32),
           children: [
+            if (_loading && _todayState == null)
+              const MainCard(
+                child: SizedBox(
+                  height: 96,
+                  child: Center(
+                    child: CircularProgressIndicator(color: kMainRose),
+                  ),
+                ),
+              )
+            else if (_todayState != null)
+              TodayCard(
+                state: _todayState!,
+                onCreateMoment: () => widget.onNavigate(1),
+                onOpenLoop: _openTodayLoop,
+              ),
+            if (_loading || _todayState != null) const SizedBox(height: 18),
             _coupleCard(),
             const SizedBox(height: 18),
             _sectionTitle('오늘의 소식 & MomentLoop', () => widget.onNavigate(1)),
@@ -202,9 +247,19 @@ class _HomeScreenState extends State<HomeScreen> {
       return MainCard(
         child: ListTile(
           leading: const Icon(Icons.auto_stories_outlined, color: kMainRose),
-          title: Text('아직 오늘 남긴 기록이 없어요', style: mainBody(weight: FontWeight.w700)),
-          subtitle: Text('오늘의 추억이나 장소를 기록해보세요!', style: mainBody(size: 12, color: kMainSub)),
-          trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: kMainMuted),
+          title: Text(
+            '아직 오늘 남긴 기록이 없어요',
+            style: mainBody(weight: FontWeight.w700),
+          ),
+          subtitle: Text(
+            '오늘의 추억이나 장소를 기록해보세요!',
+            style: mainBody(size: 12, color: kMainSub),
+          ),
+          trailing: const Icon(
+            Icons.arrow_forward_ios_rounded,
+            size: 16,
+            color: kMainMuted,
+          ),
           onTap: () => widget.onNavigate(1),
         ),
       );
@@ -222,7 +277,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     const Icon(Icons.place_rounded, color: kMainSage, size: 18),
                     const SizedBox(width: 6),
-                    Text('오늘 추가한 비밀지도 장소', style: mainBody(weight: FontWeight.w800, size: 13)),
+                    Text(
+                      '오늘 추가한 비밀지도 장소',
+                      style: mainBody(weight: FontWeight.w800, size: 13),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -235,14 +293,21 @@ class _HomeScreenState extends State<HomeScreen> {
                       onTap: () => widget.onNavigate(1),
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: kMainSageSoft,
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
                           '📍 ${pin['place_name']} ($cat)',
-                          style: mainBody(size: 12, color: kMainInk, weight: FontWeight.w700),
+                          style: mainBody(
+                            size: 12,
+                            color: kMainInk,
+                            weight: FontWeight.w700,
+                          ),
                         ),
                       ),
                     );
@@ -261,9 +326,16 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.photo_library_rounded, color: kMainRose, size: 18),
+                    const Icon(
+                      Icons.photo_library_rounded,
+                      color: kMainRose,
+                      size: 18,
+                    ),
                     const SizedBox(width: 6),
-                    Text('오늘 업로드한 이미지/순간', style: mainBody(weight: FontWeight.w800, size: 13)),
+                    Text(
+                      '오늘 업로드한 이미지/순간',
+                      style: mainBody(weight: FontWeight.w800, size: 13),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 10),
@@ -276,7 +348,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     itemBuilder: (ctx, i) {
                       final m = _todayMoments[i];
                       final mediaUrl = '${m['media_url'] ?? ''}'.trim();
-                      final fullUrl = mediaUrl.isEmpty ? '' : (mediaUrl.startsWith('http') ? mediaUrl : '${_auth.baseUrl}$mediaUrl');
+                      final fullUrl = mediaUrl.isEmpty
+                          ? ''
+                          : (mediaUrl.startsWith('http')
+                                ? mediaUrl
+                                : '${_auth.baseUrl}$mediaUrl');
                       return GestureDetector(
                         onTap: () => widget.onNavigate(1),
                         child: AspectRatio(
@@ -289,12 +365,20 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ? Image.network(
                                       fullUrl,
                                       fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => const Center(
-                                        child: Icon(Icons.broken_image_outlined, color: kMainMuted),
-                                      ),
+                                      errorBuilder: (_, __, ___) =>
+                                          const Center(
+                                            child: Icon(
+                                              Icons.broken_image_outlined,
+                                              color: kMainMuted,
+                                            ),
+                                          ),
                                     )
                                   : const Center(
-                                      child: Icon(Icons.note_alt_outlined, color: kMainRose, size: 28),
+                                      child: Icon(
+                                        Icons.note_alt_outlined,
+                                        color: kMainRose,
+                                        size: 28,
+                                      ),
                                     ),
                             ),
                           ),
