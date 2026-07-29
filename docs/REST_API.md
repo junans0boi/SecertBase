@@ -39,7 +39,9 @@ POST   /couple/reunion-notice/seen
 GET|POST /setlog
 PATCH|DELETE /setlog/:id
 GET    /retention/today
+POST   /retention/today/view
 PUT|DELETE /retention/today/moment
+GET    /retention/beta/summary
 GET|POST /map
 PATCH|DELETE /map/:id
 GET    /places/search
@@ -624,6 +626,14 @@ active_couple_required
 ### DELETE `/retention/today/moment`
 
 Removes the authenticated user's designation before reveal without deleting the underlying MomentLoop. The operation is idempotent. A revealed Today Loop returns `today_loop_locked`.
+
+### POST `/retention/today/view`
+
+Records the authenticated user's first open of the revealed Today Loop for the current Business Date. Repeated calls are idempotent and return the original `viewedAt`. Calling before both users contribute returns `today_loop_not_revealed`.
+
+### GET `/retention/beta/summary?days=7`
+
+Returns Couple-scoped MVP beta totals for 1–30 Business Dates: completed loop days, Today Moments, partner views within 24 hours, and the resulting view rate. It never returns captions, media, or location data. Ad metrics are intentionally excluded until the ad path ships.
 
 ## Map
 

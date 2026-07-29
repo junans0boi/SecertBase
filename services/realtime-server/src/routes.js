@@ -530,6 +530,12 @@ const getCoupleIdForUser = async (userId) => {
   return result.rows[0]?.CoupleId ?? null;
 };
 
+const shiftDate = (date, days) => {
+  const value = new Date(`${date}T12:00:00.000Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+};
+
 class TodayMomentRequestError extends Error {
   constructor(status, reason) {
     super(reason);
@@ -1877,6 +1883,12 @@ router.get('/retention/today', async (req, res) => {
     const hasMine = Boolean(mine);
     const hasPartner = Boolean(partner);
     const revealedAt = mine?.revealed_at ?? partner?.revealed_at ?? null;
+    const viewResult = await query(
+      `SELECT viewed_at FROM today_loop_views
+       WHERE couple_id = ? AND user_id = ? AND business_date = ? LIMIT 1`,
+      [coupleId, userId, date],
+    );
+    const viewedAt = viewResult.rows[0]?.viewed_at ?? null;
     const canViewPartner = hasPartner && canViewTodayMoment({
       isAuthor: false,
       revealed: Boolean(revealedAt),
@@ -1885,14 +1897,111 @@ router.get('/retention/today', async (req, res) => {
     res.json({
       ok: true,
       date,
-      status: todayMomentStatus({ hasMine, hasPartner }),
+      status: todayMomentStatus({ hasMine, hasPartner, viewed: Boolean(viewedAt) }),
       hasPartnerMoment: hasPartner,
       revealedAt: revealedAt,
+      viewedAt,
       myMoment: serializeTodayMomentRow(mine),
       partnerMoment: canViewPartner ? serializeTodayMomentRow(partner) : null,
     });
   } catch (err) {
     console.error('[API] /retention/today GET error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.post('/retention/today/view', async (req, res) => {
+  try {
+    const userId = req.auth.userId;
+    const coupleId = await getCoupleIdForUser(userId);
+    if (!coupleId) {
+      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+    }
+    const date = businessDate();
+    const result = await transaction(async (connection) => {
+      const [moments] = await connection.execute(
+        `SELECT COUNT(*) AS count, MIN(revealed_at) AS revealed_at
+         FROM today_moments
+         WHERE couple_id = ? AND business_date = ? AND revealed_at IS NOT NULL`,
+        [coupleId, date],
+      );
+      if (Number(moments[0]?.count) < 2 || !moments[0]?.revealed_at) {
+        throw new TodayMomentRequestError(409, 'today_loop_not_revealed');
+      }
+      await connection.execute(
+        `INSERT INTO today_loop_views (couple_id, user_id, business_date, viewed_at)
+         VALUES (?, ?, ?, NOW())
+         ON DUPLICATE KEY UPDATE viewed_at = LEAST(viewed_at, VALUES(viewed_at))`,
+        [coupleId, userId, date],
+      );
+      const [views] = await connection.execute(
+        `SELECT viewed_at FROM today_loop_views
+         WHERE couple_id = ? AND user_id = ? AND business_date = ? LIMIT 1`,
+        [coupleId, userId, date],
+      );
+      return views[0]?.viewed_at;
+    });
+    res.json({ ok: true, date, viewedAt: result });
+  } catch (err) {
+    if (sendTodayMomentError(res, err)) return;
+    console.error('[API] /retention/today/view POST error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.get('/retention/beta/summary', async (req, res) => {
+  try {
+    const userId = req.auth.userId;
+    const coupleId = await getCoupleIdForUser(userId);
+    if (!coupleId) {
+      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+    }
+    const requestedDays = Number(req.query.days ?? 7);
+    const days = Number.isFinite(requestedDays)
+      ? Math.min(Math.max(Math.trunc(requestedDays), 1), 30)
+      : 7;
+    const endDate = businessDate();
+    const startDate = shiftDate(endDate, -(days - 1));
+    const result = await query(
+      `SELECT
+         COUNT(DISTINCT CASE WHEN daily.contribution_count >= 2 THEN daily.business_date END) AS loop_days,
+         COUNT(tm.id) AS moments_total,
+         COALESCE(SUM(CASE
+           WHEN v.viewed_at >= tm.selected_at
+             AND v.viewed_at <= DATE_ADD(tm.selected_at, INTERVAL 24 HOUR)
+           THEN 1 ELSE 0 END), 0) AS viewed_within_24_hours
+       FROM today_moments tm
+       JOIN Couples c ON c.CoupleId = tm.couple_id AND c.Status = 'active'
+       JOIN (
+         SELECT couple_id, business_date, COUNT(*) AS contribution_count
+         FROM today_moments
+         WHERE revealed_at IS NOT NULL
+         GROUP BY couple_id, business_date
+       ) daily ON daily.couple_id = tm.couple_id AND daily.business_date = tm.business_date
+       LEFT JOIN today_loop_views v
+         ON v.couple_id = tm.couple_id
+        AND v.business_date = tm.business_date
+        AND v.user_id = CASE WHEN tm.user_id = c.User1Id THEN c.User2Id ELSE c.User1Id END
+       WHERE tm.couple_id = ? AND tm.business_date BETWEEN ? AND ?`,
+      [coupleId, startDate, endDate],
+    );
+    const row = result.rows[0] ?? {};
+    const momentsTotal = Number(row.moments_total ?? 0);
+    const momentsViewedWithin24Hours = Number(row.viewed_within_24_hours ?? 0);
+    res.json({
+      ok: true,
+      days,
+      startDate,
+      endDate,
+      loopDays: Number(row.loop_days ?? 0),
+      momentsTotal,
+      momentsViewedWithin24Hours,
+      viewRateWithin24Hours: momentsTotal === 0
+        ? 0
+        : momentsViewedWithin24Hours / momentsTotal,
+    });
+  } catch (err) {
+    console.error('[API] /retention/beta/summary GET error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
   }
 });

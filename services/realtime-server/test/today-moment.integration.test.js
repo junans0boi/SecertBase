@@ -141,6 +141,30 @@ test('an author selects one Today Moment and cannot replace it after reveal', { 
     assert.equal(completeToday.status, 'complete');
     assert.equal(completeToday.partnerMoment.caption, 'partner');
 
+    const viewed = await server.request('/retention/today/view', {
+      token: alice.token, method: 'POST',
+    });
+    assert.equal(viewed.status, 200);
+    const viewedAgain = await server.request('/retention/today/view', {
+      token: alice.token, method: 'POST',
+    });
+    assert.equal(viewedAgain.status, 200);
+    assert.equal((await viewedAgain.json()).viewedAt, (await viewed.json()).viewedAt);
+    const viewedState = await server.request('/retention/today', { token: alice.token });
+    assert.equal((await viewedState.json()).status, 'viewed');
+    const partnerUnviewedState = await server.request('/retention/today', { token: bob.token });
+    assert.equal((await partnerUnviewedState.json()).status, 'complete');
+
+    const betaSummary = await server.request('/retention/beta/summary?days=7', {
+      token: alice.token,
+    });
+    const summary = await betaSummary.json();
+    assert.equal(betaSummary.status, 200);
+    assert.equal(summary.loopDays, 1);
+    assert.equal(summary.momentsTotal, 2);
+    assert.equal(summary.momentsViewedWithin24Hours, 1);
+    assert.equal(summary.viewRateWithin24Hours, 0.5);
+
     const locked = await server.request('/retention/today/moment', {
       token: alice.token, method: 'PUT', body: { post_id: first.body.post.id },
     });
@@ -156,6 +180,12 @@ test('an author selects one Today Moment and cannot replace it after reveal', { 
     assert.equal(tombstoneToday.status, 'complete');
     assert.equal(tombstoneToday.partnerMoment.deleted, true);
     assert.equal(tombstoneToday.partnerMoment.caption, undefined);
+    const tombstoneViewed = await server.request('/retention/today/view', {
+      token: bob.token, method: 'POST',
+    });
+    assert.equal(tombstoneViewed.status, 200);
+    const tombstoneViewedState = await server.request('/retention/today', { token: bob.token });
+    assert.equal((await tombstoneViewedState.json()).status, 'viewed');
 
     const [carolCreated, daveCreated] = await Promise.all([
       createMoment(server, carol, 'carol simultaneous', true),

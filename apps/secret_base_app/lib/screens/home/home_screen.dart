@@ -117,6 +117,33 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (_) => TodayLoopViewer(state: state, baseUrl: _auth.baseUrl),
       ),
     );
+    _markTodayLoopViewed();
+  }
+
+  Future<void> _markTodayLoopViewed() async {
+    final token = _auth.token;
+    final state = _todayState;
+    if (token == null || state == null || !state.canOpenLoop) return;
+    final api = TodayApi(baseUrl: _auth.baseUrl, token: token);
+    try {
+      final viewedAt = await api.markViewed();
+      if (!mounted) return;
+      setState(() {
+        _todayState = TodayState(
+          date: state.date,
+          status: TodayStatus.viewed,
+          hasPartnerMoment: state.hasPartnerMoment,
+          revealedAt: state.revealedAt,
+          viewedAt: viewedAt,
+          myMoment: state.myMoment,
+          partnerMoment: state.partnerMoment,
+        );
+      });
+    } catch (_) {
+      // Viewing remains available even if the analytics acknowledgement fails.
+    } finally {
+      api.close();
+    }
   }
 
   @override

@@ -75,6 +75,7 @@ class TodayState {
   final TodayStatus status;
   final bool hasPartnerMoment;
   final String? revealedAt;
+  final String? viewedAt;
   final TodayMoment? myMoment;
   final TodayMoment? partnerMoment;
 
@@ -83,6 +84,7 @@ class TodayState {
     required this.status,
     this.hasPartnerMoment = false,
     this.revealedAt,
+    this.viewedAt,
     this.myMoment,
     this.partnerMoment,
   });
@@ -95,6 +97,7 @@ class TodayState {
     status: _todayStatusFromJson(json['status']),
     hasPartnerMoment: json['hasPartnerMoment'] == true,
     revealedAt: _optionalString(json['revealedAt']),
+    viewedAt: _optionalString(json['viewedAt']),
     myMoment: json['myMoment'] is Map
         ? TodayMoment.fromJson(
             Map<String, dynamic>.from(json['myMoment'] as Map),
@@ -168,6 +171,14 @@ class TodayApi {
     );
 
     _successfulBody(response);
+  }
+
+  Future<String?> markViewed() async {
+    final response = await _client.post(
+      Uri.parse('$baseUrl/api/retention/today/view'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    return _optionalString(_successfulBody(response)['viewedAt']);
   }
 
   Map<String, dynamic> _successfulBody(http.Response response) {

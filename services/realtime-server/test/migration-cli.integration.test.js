@@ -20,6 +20,7 @@ const canonicalMigrations = [
   '0008_shop.sql',
   '0009_repair_shop_catalog_encoding.sql',
   '0010_today_moments.sql',
+  '0011_today_loop_views.sql',
 ];
 
 const runMigrationCli = (environment, command, extraArgs = [], extraEnv = {}) =>

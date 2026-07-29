@@ -140,4 +140,29 @@ void main() {
     );
     expect(captured.headers['authorization'], 'Bearer jwt-token');
   });
+
+  test('opening a revealed Today Loop records the authenticated view', () async {
+    late http.Request captured;
+    final api = TodayApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient((request) async {
+        captured = request;
+        return http.Response(
+          '{"ok":true,"viewedAt":"2026-07-29T12:00:00.000Z"}',
+          200,
+        );
+      }),
+    );
+
+    final viewedAt = await api.markViewed();
+
+    expect(captured.method, 'POST');
+    expect(
+      captured.url,
+      Uri.parse('https://secretbase.example/api/retention/today/view'),
+    );
+    expect(captured.headers['authorization'], 'Bearer jwt-token');
+    expect(viewedAt, '2026-07-29T12:00:00.000Z');
+  });
 }
