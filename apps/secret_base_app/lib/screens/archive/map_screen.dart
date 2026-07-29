@@ -12,7 +12,9 @@ import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth_service.dart';
+import '../../core/afterglow_api.dart';
 import '../../core/main_design.dart';
+import 'afterglow_section.dart';
 
 const _categories = ['식당', '카페', '활동', '여행', '쇼핑', '기타'];
 const _categoryEmojis = {
@@ -66,6 +68,7 @@ class _MapScreenState extends State<MapScreen> {
   String? _tempSelectedName;
   String? _tempSelectedCategory;
   int _activeCardIndex = 0;
+  bool _afterglowStarting = false;
 
   @override
   void initState() {
@@ -363,164 +366,184 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  Future<void> _markVisited(Map<String, dynamic> pin) async {
-    DateTime selectedDate = DateTime.now();
-    int selectedRating = placeIntForMap(pin['rating']) ?? 5;
-    final selectedTags = <String>{..._extractTags(pin)};
-    final memoCtrl = TextEditingController(text: _cleanMemo(pin['memo']));
+  Future<AfterglowState?> _loadAfterglow(Map<String, dynamic> pin) async {
+    final token = _auth.token;
+    final pinId = placeIntForMap(pin['id']);
+    if (token == null || pinId == null) return null;
+    final api = AfterglowApi(baseUrl: _auth.baseUrl, token: token);
+    try {
+      return await api.fetchForPin(pinId);
+    } catch (_) {
+      return null;
+    } finally {
+      api.close();
+    }
+  }
 
+  Future<void> _startAfterglow(
+    Map<String, dynamic> pin,
+    BuildContext detailContext,
+  ) async {
+    if (_afterglowStarting) return;
+    final token = _auth.token;
+    final pinId = placeIntForMap(pin['id']);
+    if (token == null || pinId == null) return;
+    _afterglowStarting = true;
+    final api = AfterglowApi(baseUrl: _auth.baseUrl, token: token);
+    try {
+      final visit = await api.createVisit(pinId);
+      if (!mounted) return;
+      setState(() {
+        pin['status'] = 'visited';
+        pin['visit_date'] = visit.visitDate;
+        _activeStatus = 'visited';
+      });
+      if (!detailContext.mounted) return;
+      Navigator.of(detailContext).pop();
+      if (!mounted) return;
+      await _showAfterglowContributionSheet(pin, visit);
+    } on AfterglowApiException {
+      _toast('방문을 기록하지 못했어요');
+    } finally {
+      _afterglowStarting = false;
+      api.close();
+    }
+  }
+
+  Future<void> _showAfterglowContributionSheet(
+    Map<String, dynamic> pin,
+    AfterglowVisit visit,
+  ) async {
+    final userId = _currentUserId;
+    final token = _auth.token;
+    if (!mounted || userId == null || token == null) return;
+    final candidates = afterglowMomentCandidates(
+      pinId: visit.mapPinId,
+      visitDate: visit.visitDate,
+      userId: userId,
+      posts: _setlogPosts,
+    );
+    int? selectedPostId;
+    String? selectedEmotion;
+    final caption = TextEditingController();
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setSheet) => _SheetFrame(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                20,
-                16,
-                20,
-                MediaQuery.of(ctx).viewInsets.bottom + 20,
-              ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) => _SheetFrame(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              20,
+              16,
+              20,
+              MediaQuery.of(ctx).viewInsets.bottom + 20,
+            ),
+            child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Center(
-                    child: Container(
-                      width: 42,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: kMainLine,
-                        borderRadius: BorderRadius.circular(99),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Text('다녀온 기록 남기기', style: mainTitle(size: 24)),
-                  const SizedBox(height: 4),
+                  Text('오늘의 여운 한 장', style: mainTitle(size: 24)),
+                  const SizedBox(height: 5),
                   Text(
-                    pin['place_name'] ?? '',
-                    style: mainBody(
-                      size: 14,
-                      color: kMainSub,
-                      weight: FontWeight.w700,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    '각자 한 장만 남겨도 충분해요. 상대를 기다리지 않아도 돼요.',
+                    style: mainBody(size: 13, color: kMainSub),
                   ),
-                  const SizedBox(height: 18),
-                  _DatePickerTile(
-                    date: selectedDate,
-                    label: '방문 날짜',
-                    onPick: () async {
-                      final picked = await _pickDate(ctx, selectedDate);
-                      if (picked != null) setSheet(() => selectedDate = picked);
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  _RatingPicker(
-                    rating: selectedRating,
-                    onChanged: (value) =>
-                        setSheet(() => selectedRating = value),
-                  ),
-                  const SizedBox(height: 16),
-                  _EmotionPicker(
-                    selectedTags: selectedTags,
-                    onToggle: (tag) => setSheet(() {
-                      selectedTags.contains(tag)
-                          ? selectedTags.remove(tag)
-                          : selectedTags.add(tag);
+                  const SizedBox(height: 14),
+                  if (candidates.isEmpty)
+                    Text(
+                      '이 장소와 오늘 직접 연결된 내 MomentLoop가 없어요. 나중에 남겨도 괜찮아요.',
+                      style: mainBody(size: 13, color: kMainMuted, height: 1.5),
+                    )
+                  else ...[
+                    ...candidates.map((post) {
+                      final id = placeIntForMap(post['id']);
+                      final selected = selectedPostId == id;
+                      return ListTile(
+                        onTap: id == null
+                            ? null
+                            : () => setSheet(() => selectedPostId = id),
+                        leading: Icon(
+                          selected
+                              ? Icons.radio_button_checked_rounded
+                              : Icons.radio_button_unchecked_rounded,
+                          color: selected ? kMainRose : kMainMuted,
+                        ),
+                        title: Text(
+                          '${post['caption'] ?? 'MomentLoop 한 장'}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        contentPadding: EdgeInsets.zero,
+                      );
                     }),
-                  ),
-                  const SizedBox(height: 16),
-                  _SoftTextField(
-                    controller: memoCtrl,
-                    hintText: '오늘 어땠는지 짧게 남겨줘',
-                    maxLines: 3,
-                  ),
+                    const SizedBox(height: 8),
+                    _SoftTextField(
+                      controller: caption,
+                      hintText: '한마디 (선택)',
+                      maxLines: 2,
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 7,
+                      runSpacing: 7,
+                      children: _emotionTags
+                          .take(5)
+                          .map(
+                            (tag) => ChoiceChip(
+                              label: Text(tag),
+                              selected: selectedEmotion == tag,
+                              onSelected: (selected) => setSheet(
+                                () => selectedEmotion = selected ? tag : null,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ],
                   const SizedBox(height: 18),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: () => Navigator.pop(ctx, true),
-                      icon: const Icon(Icons.card_giftcard_rounded, size: 18),
-                      label: Text(
-                        '기록하고 리워드 받기',
-                        style: mainBody(
-                          color: Colors.white,
-                          weight: FontWeight.w800,
-                        ),
+                  if (candidates.isNotEmpty)
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: selectedPostId == null
+                            ? null
+                            : () => Navigator.pop(ctx, true),
+                        child: const Text('한 장 남기기'),
                       ),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: kMainRose,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                      ),
+                    ),
+                  Center(
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('나중에 남기기'),
                     ),
                   ),
                 ],
               ),
             ),
           ),
-        );
-      },
-    );
-
-    if (saved != true) return;
-
-    final updatedMemo = _composeMemo(memoCtrl.text, selectedTags.toList());
-    final id = pin['id'];
-    final userId = _currentUserId;
-    if (id == null || userId == null) {
-      _toast('방문 기록을 저장하지 못했어요');
-      return;
-    }
-
-    try {
-      final response = await http.patch(
-        Uri.parse('${_auth.baseUrl}/api/map/$id'),
-        headers: _jsonHeaders(includeAuth: true),
-        body: jsonEncode({
-          'rating': selectedRating,
-          'memo': updatedMemo,
-          'visit_date': _dateValue(selectedDate),
-          'status': 'visited',
-          'emotion_tags': selectedTags.toList(),
-        }),
-      );
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode != 200 || data['ok'] != true) {
-        _toast('작성자만 방문 기록을 수정할 수 있어요');
-        return;
-      }
-    } catch (_) {
-      debugPrint('map visit patch error');
-      _toast('방문 기록을 저장하지 못했어요');
-      return;
-    }
-
-    setState(() {
-      pin['rating'] = selectedRating;
-      pin['memo'] = updatedMemo;
-      pin['visit_date'] = _dateValue(selectedDate);
-      _activeStatus = 'visited';
-    });
-
-    if (!mounted) return;
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '방문 기록 +12 포인트',
-          style: mainBody(color: Colors.white, weight: FontWeight.w700),
         ),
       ),
     );
+    if (saved == true && selectedPostId != null) {
+      final api = AfterglowApi(baseUrl: _auth.baseUrl, token: token);
+      try {
+        await api.contribute(
+          visitId: visit.id,
+          postId: selectedPostId!,
+          caption: caption.text,
+          emotionTag: selectedEmotion,
+        );
+        _toast('우리의 여운에 한 장을 남겼어요');
+      } catch (_) {
+        _toast('여운을 저장하지 못했어요');
+      } finally {
+        api.close();
+      }
+    }
+    caption.dispose();
+    if (mounted) _showPinDetail(pin);
   }
 
   Future<void> _editPin(Map<String, dynamic> pin) async {
@@ -546,7 +569,9 @@ class _MapScreenState extends State<MapScreen> {
           final currentMediaUrl = '${pin['media_url'] ?? ''}'.trim();
           final displayMediaUrl = currentMediaUrl.isEmpty
               ? ''
-              : (currentMediaUrl.startsWith('http') ? currentMediaUrl : '${_auth.baseUrl}$currentMediaUrl');
+              : (currentMediaUrl.startsWith('http')
+                    ? currentMediaUrl
+                    : '${_auth.baseUrl}$currentMediaUrl');
 
           return _SheetFrame(
             child: Padding(
@@ -587,7 +612,11 @@ class _MapScreenState extends State<MapScreen> {
                     const SizedBox(height: 18),
                     Text(
                       '매장 대표 사진',
-                      style: mainBody(size: 13, color: kMainInk, weight: FontWeight.w800),
+                      style: mainBody(
+                        size: 13,
+                        color: kMainInk,
+                        weight: FontWeight.w800,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     if (pickedNewImage != null) ...[
@@ -597,10 +626,18 @@ class _MapScreenState extends State<MapScreen> {
                           if (snapshot.hasData) {
                             return ClipRRect(
                               borderRadius: BorderRadius.circular(12),
-                              child: Image.memory(snapshot.data!, height: 160, width: double.infinity, fit: BoxFit.cover),
+                              child: Image.memory(
+                                snapshot.data!,
+                                height: 160,
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                              ),
                             );
                           }
-                          return const SizedBox(height: 100, child: Center(child: CircularProgressIndicator()));
+                          return const SizedBox(
+                            height: 100,
+                            child: Center(child: CircularProgressIndicator()),
+                          );
                         },
                       ),
                       const SizedBox(height: 8),
@@ -609,10 +646,16 @@ class _MapScreenState extends State<MapScreen> {
                           TextButton.icon(
                             onPressed: () async {
                               final picker = ImagePicker();
-                              final file = await picker.pickImage(source: ImageSource.gallery);
-                              if (file != null) setSheet(() => pickedNewImage = file);
+                              final file = await picker.pickImage(
+                                source: ImageSource.gallery,
+                              );
+                              if (file != null)
+                                setSheet(() => pickedNewImage = file);
                             },
-                            icon: const Icon(Icons.photo_library_outlined, size: 18),
+                            icon: const Icon(
+                              Icons.photo_library_outlined,
+                              size: 18,
+                            ),
                             label: const Text('사진 변경'),
                           ),
                           TextButton.icon(
@@ -620,12 +663,20 @@ class _MapScreenState extends State<MapScreen> {
                               pickedNewImage = null;
                               removeExistingImage = true;
                             }),
-                            icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
-                            label: const Text('사진 취소', style: TextStyle(color: Colors.red)),
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              size: 18,
+                              color: Colors.red,
+                            ),
+                            label: const Text(
+                              '사진 취소',
+                              style: TextStyle(color: Colors.red),
+                            ),
                           ),
                         ],
                       ),
-                    ] else if (!removeExistingImage && displayMediaUrl.isNotEmpty) ...[
+                    ] else if (!removeExistingImage &&
+                        displayMediaUrl.isNotEmpty) ...[
                       ClipRRect(
                         borderRadius: BorderRadius.circular(12),
                         child: Image.network(
@@ -642,16 +693,30 @@ class _MapScreenState extends State<MapScreen> {
                           TextButton.icon(
                             onPressed: () async {
                               final picker = ImagePicker();
-                              final file = await picker.pickImage(source: ImageSource.gallery);
-                              if (file != null) setSheet(() => pickedNewImage = file);
+                              final file = await picker.pickImage(
+                                source: ImageSource.gallery,
+                              );
+                              if (file != null)
+                                setSheet(() => pickedNewImage = file);
                             },
-                            icon: const Icon(Icons.photo_library_outlined, size: 18),
+                            icon: const Icon(
+                              Icons.photo_library_outlined,
+                              size: 18,
+                            ),
                             label: const Text('사진 변경'),
                           ),
                           TextButton.icon(
-                            onPressed: () => setSheet(() => removeExistingImage = true),
-                            icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
-                            label: const Text('사진 삭제', style: TextStyle(color: Colors.red)),
+                            onPressed: () =>
+                                setSheet(() => removeExistingImage = true),
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              size: 18,
+                              color: Colors.red,
+                            ),
+                            label: const Text(
+                              '사진 삭제',
+                              style: TextStyle(color: Colors.red),
+                            ),
                           ),
                         ],
                       ),
@@ -659,7 +724,9 @@ class _MapScreenState extends State<MapScreen> {
                       OutlinedButton.icon(
                         onPressed: () async {
                           final picker = ImagePicker();
-                          final file = await picker.pickImage(source: ImageSource.gallery);
+                          final file = await picker.pickImage(
+                            source: ImageSource.gallery,
+                          );
                           if (file != null) {
                             setSheet(() {
                               pickedNewImage = file;
@@ -671,7 +738,9 @@ class _MapScreenState extends State<MapScreen> {
                         label: const Text('매장 이미지 업로드'),
                         style: OutlinedButton.styleFrom(
                           minimumSize: const Size.fromHeight(48),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
                     ],
@@ -682,7 +751,8 @@ class _MapScreenState extends State<MapScreen> {
                         label: '방문 날짜',
                         onPick: () async {
                           final picked = await _pickDate(ctx, selectedDate);
-                          if (picked != null) setSheet(() => selectedDate = picked);
+                          if (picked != null)
+                            setSheet(() => selectedDate = picked);
                         },
                       ),
                       const SizedBox(height: 16),
@@ -710,7 +780,11 @@ class _MapScreenState extends State<MapScreen> {
                     const SizedBox(height: 18),
                     Text(
                       'MomentLoop 연결 설정',
-                      style: mainBody(size: 13, color: kMainInk, weight: FontWeight.w800),
+                      style: mainBody(
+                        size: 13,
+                        color: kMainInk,
+                        weight: FontWeight.w800,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Text(
@@ -728,16 +802,23 @@ class _MapScreenState extends State<MapScreen> {
                       child: candidatePosts.isEmpty
                           ? Padding(
                               padding: const EdgeInsets.all(12),
-                              child: Text('연결할 MomentLoop 순간이 없습니다.', style: mainBody(size: 12, color: kMainMuted)),
+                              child: Text(
+                                '연결할 MomentLoop 순간이 없습니다.',
+                                style: mainBody(size: 12, color: kMainMuted),
+                              ),
                             )
                           : ListView.builder(
                               shrinkWrap: true,
                               itemCount: candidatePosts.length,
                               itemBuilder: (context, idx) {
                                 final post = candidatePosts[idx];
-                                final isLinked = '${post['map_pin_id'] ?? ''}' == '$pinId';
-                                final caption = '${post['caption'] ?? ''}'.trim();
-                                final label = caption.isEmpty ? 'MomentLoop 기록 (#${post['id']})' : caption;
+                                final isLinked =
+                                    '${post['map_pin_id'] ?? ''}' == '$pinId';
+                                final caption = '${post['caption'] ?? ''}'
+                                    .trim();
+                                final label = caption.isEmpty
+                                    ? 'MomentLoop 기록 (#${post['id']})'
+                                    : caption;
                                 return CheckboxListTile(
                                   dense: true,
                                   activeColor: kMainRose,
@@ -745,17 +826,30 @@ class _MapScreenState extends State<MapScreen> {
                                     label,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: mainBody(size: 12, weight: isLinked ? FontWeight.w800 : FontWeight.w500),
+                                    style: mainBody(
+                                      size: 12,
+                                      weight: isLinked
+                                          ? FontWeight.w800
+                                          : FontWeight.w500,
+                                    ),
                                   ),
                                   value: isLinked,
                                   onChanged: (val) async {
                                     if (pinId == null) return;
                                     try {
-                                      final newPinId = val == true ? pinId : null;
+                                      final newPinId = val == true
+                                          ? pinId
+                                          : null;
                                       await http.patch(
-                                        Uri.parse('${_auth.baseUrl}/api/setlog/${post['id']}'),
-                                        headers: _jsonHeaders(includeAuth: true),
-                                        body: jsonEncode({'map_pin_id': newPinId}),
+                                        Uri.parse(
+                                          '${_auth.baseUrl}/api/setlog/${post['id']}',
+                                        ),
+                                        headers: _jsonHeaders(
+                                          includeAuth: true,
+                                        ),
+                                        body: jsonEncode({
+                                          'map_pin_id': newPinId,
+                                        }),
                                       );
                                       setSheet(() {
                                         if (val == true) {
@@ -815,8 +909,12 @@ class _MapScreenState extends State<MapScreen> {
 
     try {
       if (pickedNewImage != null) {
-        final req = http.MultipartRequest('PATCH', Uri.parse('${_auth.baseUrl}/api/map/$id'));
-        if (_auth.token != null) req.headers['Authorization'] = 'Bearer ${_auth.token}';
+        final req = http.MultipartRequest(
+          'PATCH',
+          Uri.parse('${_auth.baseUrl}/api/map/$id'),
+        );
+        if (_auth.token != null)
+          req.headers['Authorization'] = 'Bearer ${_auth.token}';
         req.fields['memo'] = updatedMemo;
         req.fields['emotion_tags'] = jsonEncode(selectedTags.toList());
         if (isVisited) {
@@ -824,12 +922,14 @@ class _MapScreenState extends State<MapScreen> {
           req.fields['visit_date'] = _dateValue(selectedDate);
         }
         final bytes = await pickedNewImage!.readAsBytes();
-        req.files.add(http.MultipartFile.fromBytes(
-          'media',
-          bytes,
-          filename: pickedNewImage!.name,
-          contentType: MediaType('image', 'jpeg'),
-        ));
+        req.files.add(
+          http.MultipartFile.fromBytes(
+            'media',
+            bytes,
+            filename: pickedNewImage!.name,
+            contentType: MediaType('image', 'jpeg'),
+          ),
+        );
         final streamedRes = await req.send();
         final res = await http.Response.fromStream(streamedRes);
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -1106,6 +1206,9 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _showPinDetail(Map<String, dynamic> pin) {
+    final afterglowFuture = _pinStatus(pin) == 'visited'
+        ? _loadAfterglow(pin)
+        : Future<AfterglowState?>.value(null);
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -1127,7 +1230,9 @@ class _MapScreenState extends State<MapScreen> {
         final rawMediaUrl = '${pin['media_url'] ?? ''}'.trim();
         final pinMediaUrl = rawMediaUrl.isEmpty
             ? ''
-            : (rawMediaUrl.startsWith('http') ? rawMediaUrl : '${_auth.baseUrl}$rawMediaUrl');
+            : (rawMediaUrl.startsWith('http')
+                  ? rawMediaUrl
+                  : '${_auth.baseUrl}$rawMediaUrl');
 
         return _SheetFrame(
           child: Padding(
@@ -1280,6 +1385,31 @@ class _MapScreenState extends State<MapScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
+                  FutureBuilder<AfterglowState?>(
+                    future: afterglowFuture,
+                    builder: (context, snapshot) {
+                      final state = snapshot.data;
+                      if (state?.visit == null) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _DetailBlock(
+                          icon: Icons.auto_awesome_rounded,
+                          title: 'Date Afterglow',
+                          child: AfterglowSection(
+                            state: state!,
+                            baseUrl: _auth.baseUrl,
+                            onContribute: () {
+                              Navigator.pop(ctx);
+                              _showAfterglowContributionSheet(
+                                pin,
+                                state.visit!,
+                              );
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                   _DetailBlock(
                     icon: Icons.photo_library_outlined,
                     title: '연결된 추억',
@@ -1344,10 +1474,10 @@ class _MapScreenState extends State<MapScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton.icon(
-                        onPressed: () => _markVisited(pin),
+                        onPressed: () => _startAfterglow(pin, ctx),
                         icon: const Icon(Icons.check_circle_rounded, size: 18),
                         label: Text(
-                          '다녀왔어요',
+                          '오늘 다녀왔어요',
                           style: mainBody(
                             color: Colors.white,
                             weight: FontWeight.w900,

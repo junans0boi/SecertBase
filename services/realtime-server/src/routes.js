@@ -1841,6 +1841,11 @@ router.delete('/setlog/:id', async (req, res) => {
       return res.status(403).json({ ok: false, reason: 'active_couple_required' });
     }
     await transaction(async (connection) => {
+      const [lockedPosts] = await connection.execute(
+        'SELECT id FROM setlog_posts WHERE id = ? LIMIT 1 FOR UPDATE',
+        [id],
+      );
+      if (!lockedPosts[0]) return;
       const [todayRows] = await connection.execute(
         `SELECT id, revealed_at FROM today_moments
          WHERE setlog_post_id = ? LIMIT 1 FOR UPDATE`,
@@ -2191,7 +2196,7 @@ router.put('/retention/afterglow/:visitId/contribution', async (req, res) => {
         `SELECT id FROM setlog_posts
          WHERE id = ? AND user_id = ? AND couple_id = ?
            AND map_pin_id = ? AND taken_at = ?
-         LIMIT 1`,
+         LIMIT 1 FOR UPDATE`,
         [postId, userId, coupleId, visit.map_pin_id, visit.visit_date],
       );
       if (!posts[0]) throw new AfterglowRequestError(404, 'afterglow_moment_not_found');
@@ -2228,6 +2233,127 @@ router.put('/retention/afterglow/:visitId/contribution', async (req, res) => {
   } catch (err) {
     if (sendAfterglowError(res, err)) return;
     console.error('[API] /retention/afterglow/:visitId/contribution PUT error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.get('/retention/afterglow/pin/:pinId', async (req, res) => {
+  try {
+    const pinId = Number(req.params.pinId);
+    if (!Number.isInteger(pinId) || pinId <= 0) {
+      return res.status(404).json({ ok: false, reason: 'afterglow_pin_not_found' });
+    }
+    const userId = req.auth.userId;
+    const coupleId = await getCoupleIdForUser(userId);
+    if (!coupleId) {
+      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+    }
+    const pins = await query(
+      `SELECT id, place_name, status, visit_date
+       FROM map_pins
+       WHERE id = ? AND couple_id = ? AND archived_at IS NULL LIMIT 1`,
+      [pinId, coupleId],
+    );
+    const pin = pins.rows[0];
+    if (!pin) return res.status(404).json({ ok: false, reason: 'afterglow_pin_not_found' });
+
+    const visits = await query(
+      `SELECT id, map_pin_id, visit_date, marked_by_user_id, created_at
+       FROM afterglow_visits
+       WHERE map_pin_id = ? AND couple_id = ? LIMIT 1`,
+      [pinId, coupleId],
+    );
+    const visit = visits.rows[0];
+    if (!visit) {
+      return res.json({ ok: true, pin: { id: pinId, placeName: pin.place_name }, visit: null, contributions: [] });
+    }
+
+    const slots = await query(
+      `SELECT u.UserId AS user_id, COALESCE(u.Nickname, u.UserName) AS user_name,
+              ac.id AS contribution_id, ac.caption, ac.emotion_tag, ac.deleted_at,
+              p.id AS post_id, p.media_type, p.media_url, p.caption AS moment_caption
+       FROM Couples c
+       JOIN Users u ON (u.UserId = c.User1Id OR u.UserId = c.User2Id)
+       LEFT JOIN afterglow_contributions ac ON ac.visit_id = ? AND ac.user_id = u.UserId
+       LEFT JOIN setlog_posts p ON p.id = ac.setlog_post_id
+       WHERE c.CoupleId = ? AND c.Status = 'active'
+       ORDER BY CASE WHEN u.UserId = ? THEN 0 ELSE 1 END`,
+      [visit.id, coupleId, userId],
+    );
+    const contributions = slots.rows.map((slot) => {
+      const contributed = Boolean(slot.contribution_id);
+      const deleted = contributed && Boolean(slot.deleted_at || !slot.post_id);
+      return {
+        userId: Number(slot.user_id),
+        userName: slot.user_name,
+        contributed,
+        deleted,
+        contributionId: contributed ? Number(slot.contribution_id) : null,
+        postId: contributed && !deleted ? Number(slot.post_id) : null,
+        caption: contributed && !deleted ? slot.caption : null,
+        emotionTag: contributed && !deleted ? slot.emotion_tag : null,
+        mediaType: contributed && !deleted ? slot.media_type : null,
+        mediaUrl: contributed && !deleted ? slot.media_url : null,
+        momentCaption: contributed && !deleted ? slot.moment_caption : null,
+      };
+    });
+    res.json({
+      ok: true,
+      pin: { id: pinId, placeName: pin.place_name },
+      visit: {
+        id: Number(visit.id),
+        mapPinId: Number(visit.map_pin_id),
+        visitDate: dateOnly(visit.visit_date),
+        markedByUserId: Number(visit.marked_by_user_id),
+        createdAt: visit.created_at,
+      },
+      contributions,
+    });
+  } catch (err) {
+    console.error('[API] /retention/afterglow/pin/:pinId GET error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.get('/retention/afterglow/beta/summary', async (req, res) => {
+  try {
+    const userId = req.auth.userId;
+    const coupleId = await getCoupleIdForUser(userId);
+    if (!coupleId) {
+      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+    }
+    const requestedDays = Number(req.query.days ?? 7);
+    const days = Number.isFinite(requestedDays)
+      ? Math.min(Math.max(Math.trunc(requestedDays), 1), 30)
+      : 7;
+    const endDate = businessDate();
+    const startDate = shiftDate(endDate, -(days - 1));
+    const result = await query(
+      `SELECT COUNT(DISTINCT v.id) AS visits,
+              COUNT(DISTINCT CASE WHEN c.id IS NOT NULL THEN v.id END) AS visits_with_contribution,
+              COUNT(c.id) AS contributions
+       FROM afterglow_visits v
+       LEFT JOIN afterglow_contributions c
+         ON c.visit_id = v.id AND c.setlog_post_id IS NOT NULL AND c.deleted_at IS NULL
+       WHERE v.couple_id = ? AND v.visit_date BETWEEN ? AND ?`,
+      [coupleId, startDate, endDate],
+    );
+    const visits = Number(result.rows[0]?.visits ?? 0);
+    const visitsWithContribution = Number(result.rows[0]?.visits_with_contribution ?? 0);
+    const contributions = Number(result.rows[0]?.contributions ?? 0);
+    res.json({
+      ok: true,
+      days,
+      startDate,
+      endDate,
+      visits,
+      visitsWithContribution,
+      contributions,
+      visitContributionRate: visits === 0 ? 0 : visitsWithContribution / visits,
+      contributionRate: visits === 0 ? 0 : contributions / (visits * 2),
+    });
+  } catch (err) {
+    console.error('[API] /retention/afterglow/beta/summary GET error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
   }
 });
@@ -2417,13 +2543,41 @@ router.patch('/map/:id', upload.single('media'), async (req, res) => {
       return res.status(400).json({ ok: false, reason: 'missing_fields' });
     }
 
-    await query(
-      `UPDATE map_pins SET ${updates.join(', ')}, updated_at = NOW() WHERE id = ?`,
-      [...params, id]
-    );
+    const updated = await transaction(async (connection) => {
+      const [lockedPins] = await connection.execute(
+        `SELECT id FROM map_pins
+         WHERE id = ? AND couple_id = ? AND archived_at IS NULL
+         LIMIT 1 FOR UPDATE`,
+        [id, coupleId],
+      );
+      if (!lockedPins[0]) return false;
+      const [afterglowRows] = await connection.execute(
+        'SELECT visit_date FROM afterglow_visits WHERE map_pin_id = ? LIMIT 1',
+        [id],
+      );
+      const afterglowVisitDate = dateOnly(afterglowRows[0]?.visit_date);
+      if (afterglowVisitDate) {
+        const requestedStatus = Object.prototype.hasOwnProperty.call(req.body, 'status')
+          ? req.body.status
+          : 'visited';
+        const requestedVisitDate = Object.prototype.hasOwnProperty.call(req.body, 'visit_date')
+          ? String(req.body.visit_date || '').slice(0, 10)
+          : afterglowVisitDate;
+        if (requestedStatus !== 'visited' || requestedVisitDate !== afterglowVisitDate) {
+          throw new AfterglowRequestError(409, 'afterglow_visit_managed');
+        }
+      }
+      await connection.execute(
+        `UPDATE map_pins SET ${updates.join(', ')}, updated_at = NOW() WHERE id = ?`,
+        [...params, id],
+      );
+      return true;
+    });
+    if (!updated) return res.status(403).json({ ok: false, reason: 'forbidden' });
 
     res.json({ ok: true });
   } catch (err) {
+    if (sendAfterglowError(res, err)) return;
     console.error('[API] /map PATCH error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
   }
@@ -2451,13 +2605,32 @@ router.delete('/map/:id', async (req, res) => {
       return res.status(403).json({ ok: false, reason: 'forbidden' });
     }
 
-    const links = await query('SELECT COUNT(*) AS count FROM setlog_posts WHERE map_pin_id = ?', [id]);
-    const linked = Number(links.rows[0]?.count) > 0;
-    if (linked) {
-      await query('UPDATE map_pins SET archived_at = CURRENT_TIMESTAMP WHERE id = ?', [id]);
-    } else {
-      await query('DELETE FROM map_pins WHERE id = ?', [id]);
-    }
+    const linked = await transaction(async (connection) => {
+      const [lockedPins] = await connection.execute(
+        `SELECT id FROM map_pins
+         WHERE id = ? AND couple_id = ? AND archived_at IS NULL
+         LIMIT 1 FOR UPDATE`,
+        [id, activeCoupleId],
+      );
+      if (!lockedPins[0]) return null;
+      const [links] = await connection.execute(
+        `SELECT
+           (SELECT COUNT(*) FROM setlog_posts WHERE map_pin_id = ?) +
+           (SELECT COUNT(*) FROM afterglow_visits WHERE map_pin_id = ?) AS count`,
+        [id, id],
+      );
+      const hasLinks = Number(links[0]?.count) > 0;
+      if (hasLinks) {
+        await connection.execute(
+          'UPDATE map_pins SET archived_at = CURRENT_TIMESTAMP WHERE id = ?',
+          [id],
+        );
+      } else {
+        await connection.execute('DELETE FROM map_pins WHERE id = ?', [id]);
+      }
+      return hasLinks;
+    });
+    if (linked == null) return res.status(403).json({ ok: false, reason: 'forbidden' });
     res.json({ ok: true, archived: linked });
   } catch (err) {
     console.error('[API] /map DELETE error:', err);

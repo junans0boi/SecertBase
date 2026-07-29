@@ -85,6 +85,19 @@ test('a wishlist pin becomes one Couple-scoped Afterglow visit', { skip: !adminU
     assert.equal(retried.status, 200);
     assert.equal((await retried.json()).visit.id, visit.id);
 
+    const dateMutation = await server.request(`/map/${pin.id}`, {
+      token: alice.token,
+      method: 'PATCH',
+      body: { visit_date: '2026-01-01', status: 'visited' },
+    });
+    assert.equal(dateMutation.status, 409);
+    assert.equal((await dateMutation.json()).reason, 'afterglow_visit_managed');
+
+    const zeroDetail = await server.request(`/retention/afterglow/pin/${pin.id}`, {
+      token: alice.token,
+    });
+    assert.equal((await zeroDetail.json()).contributions.filter((slot) => slot.contributed).length, 0);
+
     const map = await server.request('/map', { token: alice.token });
     const updatedPin = (await map.json()).pins.find((candidate) => candidate.id === pin.id);
     assert.equal(updatedPin.status, 'visited');
@@ -97,6 +110,16 @@ test('a wishlist pin becomes one Couple-scoped Afterglow visit', { skip: !adminU
     assert.equal(invalid.status, 409);
     assert.equal((await invalid.json()).reason, 'afterglow_requires_wishlist');
 
+    const visitOnlyPin = await createPin(server, alice);
+    await server.request(`/retention/afterglow/${visitOnlyPin.id}/visit`, {
+      token: alice.token, method: 'POST',
+    });
+    const archivedVisitOnly = await server.request(`/map/${visitOnlyPin.id}`, {
+      token: alice.token, method: 'DELETE',
+    });
+    assert.equal(archivedVisitOnly.status, 200);
+    assert.equal((await archivedVisitOnly.json()).archived, true);
+
     const aliceMoment = await createMoment(server, alice, pin.id, 'Alice glow');
     const contributed = await server.request(`/retention/afterglow/${visit.id}/contribution`, {
       token: alice.token,
@@ -108,6 +131,32 @@ test('a wishlist pin becomes one Couple-scoped Afterglow visit', { skip: !adminU
     assert.equal(aliceContribution.postId, aliceMoment.id);
     assert.equal(aliceContribution.caption, '또 걷고 싶어');
     assert.equal(aliceContribution.emotionTag, '포근함');
+
+    const oneSidedDetail = await server.request(`/retention/afterglow/pin/${pin.id}`, {
+      token: bob.token,
+    });
+    assert.equal(oneSidedDetail.status, 200);
+    const oneSided = await oneSidedDetail.json();
+    assert.equal(oneSided.contributions.length, 2);
+    assert.equal(oneSided.contributions.filter((slot) => slot.contributed).length, 1);
+    assert.equal(oneSided.contributions.find((slot) => slot.contributed).caption, '또 걷고 싶어');
+
+    const bobMoment = await createMoment(server, bob, pin.id, 'Bob glow');
+    const bobContributed = await server.request(`/retention/afterglow/${visit.id}/contribution`, {
+      token: bob.token,
+      method: 'PUT',
+      body: { post_id: bobMoment.id, caption: '다음에도 같이', emotion_tag: '설렘' },
+    });
+    assert.equal(bobContributed.status, 200);
+    const twoSidedDetail = await server.request(`/retention/afterglow/pin/${pin.id}`, {
+      token: alice.token,
+    });
+    assert.equal((await twoSidedDetail.json()).contributions.filter((slot) => slot.contributed).length, 2);
+
+    const crossDetail = await server.request(`/retention/afterglow/pin/${pin.id}`, {
+      token: carol.token,
+    });
+    assert.equal(crossDetail.status, 404);
 
     const partnerPostRejected = await server.request(`/retention/afterglow/${visit.id}/contribution`, {
       token: bob.token, method: 'PUT', body: { post_id: aliceMoment.id },
@@ -146,6 +195,26 @@ test('a wishlist pin becomes one Couple-scoped Afterglow visit', { skip: !adminU
       token: alice.token, method: 'DELETE',
     });
     assert.equal(deleted.status, 200);
+    const tombstoneDetail = await server.request(`/retention/afterglow/pin/${pin.id}`, {
+      token: alice.token,
+    });
+    const tombstone = (await tombstoneDetail.json()).contributions.find(
+      (slot) => slot.userId === aliceContribution.userId,
+    );
+    assert.equal(tombstone.deleted, true);
+    assert.equal(tombstone.caption, null);
+    assert.equal(tombstone.mediaUrl, null);
+
+    const summaryResponse = await server.request('/retention/afterglow/beta/summary?days=7', {
+      token: alice.token,
+    });
+    assert.equal(summaryResponse.status, 200);
+    const summary = await summaryResponse.json();
+    assert.equal(summary.visits, 2);
+    assert.equal(summary.visitsWithContribution, 1);
+    assert.equal(summary.contributions, 1);
+    assert.equal(summary.visitContributionRate, 0.5);
+    assert.equal(summary.contributionRate, 0.25);
   } finally {
     await server.close();
   }

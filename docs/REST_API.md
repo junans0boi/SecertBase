@@ -44,6 +44,8 @@ PUT|DELETE /retention/today/moment
 GET    /retention/beta/summary
 POST   /retention/afterglow/:pinId/visit
 PUT    /retention/afterglow/:visitId/contribution
+GET    /retention/afterglow/pin/:pinId
+GET    /retention/afterglow/beta/summary
 GET|POST /map
 PATCH|DELETE /map/:id
 GET    /places/search
@@ -646,6 +648,14 @@ Turns an active-Couple `wishlist` pin into an Afterglow visit for the server Bus
 ### PUT `/retention/afterglow/:visitId/contribution`
 
 Creates or replaces only the authenticated member's contribution. `post_id` must identify that member's MomentLoop on the visit date, directly linked to the visit's pin. `caption` is optional up to 120 characters and `emotion_tag` is optional up to 24 characters. The partner does not need to contribute. Deleting the MomentLoop later preserves a content-free tombstone.
+
+### GET `/retention/afterglow/pin/:pinId`
+
+Returns the current visit and one stable slot per Couple member. Each slot reports empty, contributed, or deleted state. Content and media are present only for a live contribution in the active Couple.
+
+### GET `/retention/afterglow/beta/summary?days=7`
+
+Returns content-free, Couple-scoped visit and contribution totals for 1–30 Business Dates. `visitContributionRate` measures visits with at least one contribution; `contributionRate` uses two possible contribution slots per visit.
 
 ## Map
 
