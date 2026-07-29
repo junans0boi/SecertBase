@@ -22,6 +22,7 @@ import {
 } from './account-deletion.js';
 import { normalizeMomentClip } from './moment-clip.js';
 import { businessDate } from './business-date.js';
+import { canReplaceTodayMoment, todayMomentStatus } from './today-moment-policy.js';
 import {
   disabledFeature,
   mvpRestFeatureGate,
@@ -522,6 +523,66 @@ const getCoupleIdForUser = async (userId) => {
   );
 
   return result.rows[0]?.CoupleId ?? null;
+};
+
+class TodayMomentRequestError extends Error {
+  constructor(status, reason) {
+    super(reason);
+    this.status = status;
+    this.reason = reason;
+  }
+}
+
+const sendTodayMomentError = (res, error) => {
+  if (!(error instanceof TodayMomentRequestError)) return false;
+  res.status(error.status).json({ ok: false, reason: error.reason });
+  return true;
+};
+
+const selectTodayMoment = async (connection, { coupleId, userId, postId, date }) => {
+  await connection.execute(
+    'SELECT CoupleId FROM Couples WHERE CoupleId = ? AND Status = \'active\' FOR UPDATE',
+    [coupleId],
+  );
+  const [posts] = await connection.execute(
+    `SELECT id FROM setlog_posts
+     WHERE id = ? AND couple_id = ? AND user_id = ? AND taken_at = ?
+     LIMIT 1`,
+    [postId, coupleId, userId, date],
+  );
+  if (!posts[0]) throw new TodayMomentRequestError(404, 'today_moment_not_found');
+
+  const [current] = await connection.execute(
+    `SELECT revealed_at FROM today_moments
+     WHERE couple_id = ? AND user_id = ? AND business_date = ?
+     LIMIT 1 FOR UPDATE`,
+    [coupleId, userId, date],
+  );
+  if (current[0] && !canReplaceTodayMoment(current[0].revealed_at)) {
+    throw new TodayMomentRequestError(409, 'today_loop_locked');
+  }
+
+  await connection.execute(
+    `INSERT INTO today_moments
+       (couple_id, user_id, business_date, setlog_post_id, selected_at, revealed_at, deleted_at)
+     VALUES (?, ?, ?, ?, NOW(), NULL, NULL)
+     ON DUPLICATE KEY UPDATE
+       setlog_post_id = VALUES(setlog_post_id), selected_at = NOW(), deleted_at = NULL`,
+    [coupleId, userId, date, postId],
+  );
+
+  const [participants] = await connection.execute(
+    `SELECT COUNT(*) AS count FROM today_moments
+     WHERE couple_id = ? AND business_date = ? AND setlog_post_id IS NOT NULL`,
+    [coupleId, date],
+  );
+  if (Number(participants[0]?.count) >= 2) {
+    await connection.execute(
+      `UPDATE today_moments SET revealed_at = COALESCE(revealed_at, NOW())
+       WHERE couple_id = ? AND business_date = ?`,
+      [coupleId, date],
+    );
+  }
 };
 
 // ============================================
@@ -1478,6 +1539,7 @@ router.post('/setlog', upload.single('media'), async (req, res) => {
       media_type,
       map_pin_id,
       session_id,
+      today_moment,
     } = req.body;
     let mediaUrl = req.file ? `/uploads/${req.file.filename}` : null;
     const uploadedMediaType = req.file?.mimetype.startsWith('video/') ? 'video' : 'image';
@@ -1533,42 +1595,58 @@ router.post('/setlog', upload.single('media'), async (req, res) => {
     }
     const tagsArray = parseJsonArray(tags);
     const user = await query('SELECT UserCode FROM Users WHERE UserId = ? LIMIT 1', [userId]);
-    
-    const result = await query(
-      `INSERT INTO setlog_posts
-       (couple_id, user_id, map_pin_id, user_code, media_type, media_url, caption, tags, taken_at, captured_at, session_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, NOW()), ?)`,
-      [
-        coupleId,
-        userId,
-        resolvedMapPin?.id ?? null,
-        user.rows[0]?.UserCode || null,
-        normalizedMediaType,
-        mediaUrl,
-        caption || null,
-        JSON.stringify(tagsArray),
-        taken_at,
-        captured_at || null,
-        session_id || null,
-      ]
-    );
+    const designateAsToday = today_moment === true || today_moment === 'true';
+    const today = businessDate();
+    if (designateAsToday && taken_at !== today) {
+      return reject(400, 'today_moment_date_required');
+    }
+
+    const createdPost = await transaction(async (connection) => {
+      const [result] = await connection.execute(
+        `INSERT INTO setlog_posts
+         (couple_id, user_id, map_pin_id, user_code, media_type, media_url, caption, tags, taken_at, captured_at, session_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, NOW()), ?)`,
+        [
+          coupleId,
+          userId,
+          resolvedMapPin?.id ?? null,
+          user.rows[0]?.UserCode || null,
+          normalizedMediaType,
+          mediaUrl,
+          caption || null,
+          JSON.stringify(tagsArray),
+          taken_at,
+          captured_at || null,
+          session_id || null,
+        ],
+      );
+      if (designateAsToday) {
+        await selectTodayMoment(connection, {
+          coupleId,
+          userId,
+          postId: result.insertId,
+          date: today,
+        });
+      }
+      const [created] = await connection.execute(
+        `SELECT p.*, u.Nickname, COALESCE(u.Nickname, u.UserName) AS UserName,
+                mp.place_name AS linked_place_name, mp.category AS linked_place_category,
+                mp.archived_at AS linked_place_archived_at
+         FROM setlog_posts p
+         LEFT JOIN Users u ON p.user_id = u.UserId
+         LEFT JOIN map_pins mp ON mp.id = p.map_pin_id
+         WHERE p.id = ?`,
+        [result.insertId],
+      );
+      return created[0];
+    });
     keepUpload = true;
 
-    const created = await query(
-      `SELECT p.*, u.Nickname, COALESCE(u.Nickname, u.UserName) AS UserName,
-              mp.place_name AS linked_place_name, mp.category AS linked_place_category,
-              mp.archived_at AS linked_place_archived_at
-       FROM setlog_posts p
-       LEFT JOIN Users u ON p.user_id = u.UserId
-       LEFT JOIN map_pins mp ON mp.id = p.map_pin_id
-       WHERE p.id = ?`,
-      [result.rows.insertId]
-    );
-
-    res.status(201).json({ ok: true, post: created.rows[0] });
+    res.status(201).json({ ok: true, post: createdPost });
   } catch (err) {
     console.error('[API] /setlog POST error:', err);
     await removeUploadedFile(req.file).catch(() => {});
+    if (sendTodayMomentError(res, err)) return;
     res.status(500).json({ ok: false, reason: 'internal_error' });
   } finally {
     if (req.file && !keepUpload) {
@@ -1698,12 +1776,140 @@ router.delete('/setlog/:id', async (req, res) => {
     if (!coupleId || Number(post.couple_id) !== Number(coupleId)) {
       return res.status(403).json({ ok: false, reason: 'active_couple_required' });
     }
-    await query('DELETE FROM setlog_posts WHERE id = ?', [id]);
+    await transaction(async (connection) => {
+      const [todayRows] = await connection.execute(
+        `SELECT id, revealed_at FROM today_moments
+         WHERE setlog_post_id = ? LIMIT 1 FOR UPDATE`,
+        [id],
+      );
+      const todayMoment = todayRows[0];
+      if (todayMoment?.revealed_at) {
+        await connection.execute(
+          `UPDATE today_moments
+           SET setlog_post_id = NULL, deleted_at = NOW()
+           WHERE id = ?`,
+          [todayMoment.id],
+        );
+      } else if (todayMoment) {
+        await connection.execute('DELETE FROM today_moments WHERE id = ?', [todayMoment.id]);
+      }
+      await connection.execute('DELETE FROM setlog_posts WHERE id = ?', [id]);
+    });
     const filePath = mediaFilePath(post.media_url);
     if (filePath) await fs.promises.rm(filePath, { force: true });
     res.json({ ok: true });
   } catch (err) {
     console.error('[API] /setlog DELETE error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+// ============================================
+// 1.1 Today Moment / Today Loop
+// ============================================
+
+router.get('/retention/today', async (req, res) => {
+  try {
+    const userId = req.auth.userId;
+    const coupleId = await getCoupleIdForUser(userId);
+    if (!coupleId) {
+      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+    }
+    const date = businessDate();
+    const result = await query(
+      `SELECT tm.user_id, tm.revealed_at, tm.deleted_at,
+              p.id, p.media_type, p.media_url, p.caption, p.tags, p.taken_at, p.captured_at,
+              p.map_pin_id, mp.place_name AS linked_place_name,
+              COALESCE(u.Nickname, u.UserName) AS UserName
+       FROM today_moments tm
+       LEFT JOIN setlog_posts p ON p.id = tm.setlog_post_id
+       LEFT JOIN map_pins mp ON mp.id = p.map_pin_id
+       LEFT JOIN Users u ON u.UserId = tm.user_id
+       WHERE tm.couple_id = ? AND tm.business_date = ?`,
+      [coupleId, date],
+    );
+    const mine = result.rows.find((row) => Number(row.user_id) === userId) ?? null;
+    const partner = result.rows.find((row) => Number(row.user_id) !== userId) ?? null;
+    const hasMine = Boolean(mine);
+    const hasPartner = Boolean(partner);
+    res.json({
+      ok: true,
+      date,
+      status: todayMomentStatus({ hasMine, hasPartner }),
+      hasPartnerMoment: hasPartner,
+      myMoment: mine ? {
+        id: mine.id,
+        user_id: mine.user_id,
+        UserName: mine.UserName,
+        media_type: mine.media_type,
+        media_url: mine.media_url,
+        caption: mine.caption,
+        tags: parseJsonArray(mine.tags),
+        taken_at: dateOnly(mine.taken_at),
+        captured_at: mine.captured_at,
+        map_pin_id: mine.map_pin_id,
+        linked_place_name: mine.linked_place_name,
+        deleted: Boolean(mine.deleted_at),
+      } : null,
+    });
+  } catch (err) {
+    console.error('[API] /retention/today GET error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.put('/retention/today/moment', async (req, res) => {
+  try {
+    const postId = Number(req.body.post_id);
+    if (!Number.isInteger(postId) || postId <= 0) {
+      return res.status(400).json({ ok: false, reason: 'invalid_post_id' });
+    }
+    const userId = req.auth.userId;
+    const coupleId = await getCoupleIdForUser(userId);
+    if (!coupleId) {
+      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+    }
+    const date = businessDate();
+    await transaction((connection) => selectTodayMoment(connection, {
+      coupleId,
+      userId,
+      postId,
+      date,
+    }));
+    res.json({ ok: true, date, postId });
+  } catch (err) {
+    if (sendTodayMomentError(res, err)) return;
+    console.error('[API] /retention/today/moment PUT error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.delete('/retention/today/moment', async (req, res) => {
+  try {
+    const userId = req.auth.userId;
+    const coupleId = await getCoupleIdForUser(userId);
+    if (!coupleId) {
+      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+    }
+    const date = businessDate();
+    const removed = await transaction(async (connection) => {
+      const [rows] = await connection.execute(
+        `SELECT id, revealed_at FROM today_moments
+         WHERE couple_id = ? AND user_id = ? AND business_date = ?
+         LIMIT 1 FOR UPDATE`,
+        [coupleId, userId, date],
+      );
+      if (!rows[0]) return false;
+      if (!canReplaceTodayMoment(rows[0].revealed_at)) {
+        throw new TodayMomentRequestError(409, 'today_loop_locked');
+      }
+      await connection.execute('DELETE FROM today_moments WHERE id = ?', [rows[0].id]);
+      return true;
+    });
+    res.json({ ok: true, removed });
+  } catch (err) {
+    if (sendTodayMomentError(res, err)) return;
+    console.error('[API] /retention/today/moment DELETE error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
   }
 });

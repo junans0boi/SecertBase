@@ -9,6 +9,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../core/auth_service.dart';
 import '../../core/main_design.dart';
+import '../../core/today_api.dart';
 import 'map_screen.dart';
 
 // ── Screen ────────────────────────────────────────────────────────────────────
@@ -1345,6 +1346,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
   int _current = 0;
   List<Map<String, dynamic>> _reactions = [];
   bool _reacting = false;
+  bool _designatingToday = false;
 
   static const _emojiOptions = ['❤️', '😍', '🥰', '😂', '😮'];
 
@@ -1415,6 +1417,64 @@ class _PostDetailPageState extends State<_PostDetailPage> {
   bool _isMine(Map<String, dynamic> post) =>
       '${post['user_id']}' == '${widget.myUserId}';
 
+  Future<void> _designateTodayMoment(Map<String, dynamic> post) async {
+    final postId = int.tryParse('${post['id']}');
+    final token = widget.auth.token;
+    if (postId == null || token == null || _designatingToday) return;
+
+    setState(() => _designatingToday = true);
+    final api = TodayApi(baseUrl: widget.auth.baseUrl, token: token);
+    try {
+      await api.designateMoment(TodayMomentSelection(postId: postId));
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('오늘의 순간으로 선택했어요')));
+    } on TodayApiException catch (error) {
+      if (!mounted) return;
+      final message = switch (error.reason) {
+        'today_loop_locked' => '오늘의 루프가 열린 뒤에는 바꿀 수 없어요',
+        'today_moment_not_found' => '오늘 작성한 내 순간만 선택할 수 있어요',
+        _ => '오늘의 순간으로 선택하지 못했어요',
+      };
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('네트워크 연결을 확인해주세요')));
+    } finally {
+      api.close();
+      if (mounted) setState(() => _designatingToday = false);
+    }
+  }
+
+  Future<void> _removeTodayDesignation() async {
+    final token = widget.auth.token;
+    if (token == null || _designatingToday) return;
+    setState(() => _designatingToday = true);
+    try {
+      await TodayApi(
+        baseUrl: widget.auth.baseUrl,
+        token: token,
+      ).removeDesignation();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('오늘의 순간 선택을 해제했어요')));
+    } on TodayApiException catch (error) {
+      if (!mounted) return;
+      final message = error.reason == 'today_loop_locked'
+          ? '오늘의 루프가 열린 뒤에는 해제할 수 없어요'
+          : '오늘의 순간 선택을 해제하지 못했어요';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    } finally {
+      if (mounted) setState(() => _designatingToday = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final post = widget.group[_current];
@@ -1452,19 +1512,33 @@ class _PostDetailPageState extends State<_PostDetailPage> {
               icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
               onSelected: (value) async {
                 final nav = Navigator.of(context);
-                if (value == 'edit') {
+                if (value == 'today') {
+                  await _designateTodayMoment(post);
+                } else if (value == 'today_remove') {
+                  await _removeTodayDesignation();
+                } else if (value == 'edit') {
                   await widget.onEdit(post);
                   if (!mounted) return;
                   setState(() {});
-                } else {
+                } else if (value == 'delete') {
                   await widget.onDelete(post);
                   if (!mounted) return;
                   nav.pop();
                 }
               },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'edit', child: Text('수정')),
-                PopupMenuItem(value: 'delete', child: Text('삭제')),
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 'today',
+                  enabled: !_designatingToday,
+                  child: const Text('오늘의 순간으로 선택'),
+                ),
+                PopupMenuItem(
+                  value: 'today_remove',
+                  enabled: !_designatingToday,
+                  child: const Text('오늘의 순간 선택 해제'),
+                ),
+                const PopupMenuItem(value: 'edit', child: Text('수정')),
+                const PopupMenuItem(value: 'delete', child: Text('삭제')),
               ],
             ),
         ],
@@ -1818,6 +1892,8 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
   _SelectedMapLocation? _selectedLocation;
   bool _saving = false;
   bool _loadingLocations = false;
+  bool _todayMoment = false;
+  bool _useTodayPrompt = false;
 
   static const _maxMedia = 10;
 
@@ -2008,7 +2084,8 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
           ? <_PickedMomentMedia?>[null]
           : _pickedMedia.map<_PickedMomentMedia?>((m) => m).toList();
 
-      for (final media in mediaItems) {
+      for (var index = 0; index < mediaItems.length; index++) {
+        final media = mediaItems[index];
         final request = http.MultipartRequest(
           'POST',
           Uri.parse('${widget.auth.baseUrl}/api/setlog'),
@@ -2020,6 +2097,7 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
           'taken_at': _dateOnly(now),
           'captured_at': _mysqlDateTime(now),
           'session_id': sessionId,
+          if (_todayMoment && index == 0) 'today_moment': 'true',
           if (mapPinId != null) 'map_pin_id': '$mapPinId',
         });
         if (media != null) {
@@ -2222,6 +2300,47 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
 
             const SizedBox(height: 16),
 
+            SwitchListTile.adaptive(
+              value: _todayMoment,
+              onChanged: _saving
+                  ? null
+                  : (value) => setState(() {
+                      _todayMoment = value;
+                      if (!value) _useTodayPrompt = false;
+                    }),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+              activeTrackColor: kMainRoseSoft,
+              activeThumbColor: kMainRose,
+              title: Text(
+                '오늘의 순간으로 남기기',
+                style: mainBody(size: 15, weight: FontWeight.w900),
+              ),
+              subtitle: Text(
+                '오늘의 루프에 사용할 기록으로 지정해요',
+                style: mainBody(size: 12, color: kMainMuted),
+              ),
+            ),
+
+            if (_todayMoment) ...[
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilterChip(
+                  selected: _useTodayPrompt,
+                  onSelected: _saving
+                      ? null
+                      : (value) => setState(() => _useTodayPrompt = value),
+                  avatar: const Icon(Icons.lightbulb_outline_rounded, size: 17),
+                  label: const Text('오늘 가장 기억에 남은 순간은?'),
+                  selectedColor: kMainHoneySoft,
+                  checkmarkColor: kMainInk,
+                  side: const BorderSide(color: kMainLine),
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 12),
+
             // ── Caption ───────────────────────────────────────────────────
             TextField(
               controller: _captionCtrl,
@@ -2230,7 +2349,9 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
               textInputAction: TextInputAction.newline,
               style: mainBody(size: 16, color: kMainInk, height: 1.55),
               decoration: InputDecoration(
-                hintText: '오늘 남기고 싶은 장면을 적어주세요',
+                hintText: _useTodayPrompt
+                    ? '그 순간을 한 문장으로 남겨보세요'
+                    : '오늘 남기고 싶은 장면을 적어주세요',
                 hintStyle: mainBody(size: 16, color: kMainMuted),
                 filled: true,
                 fillColor: kMainPaperSoft,

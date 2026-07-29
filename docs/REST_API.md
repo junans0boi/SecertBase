@@ -38,6 +38,8 @@ GET|PATCH /couple/info
 POST   /couple/reunion-notice/seen
 GET|POST /setlog
 PATCH|DELETE /setlog/:id
+GET    /retention/today
+PUT|DELETE /retention/today/moment
 GET|POST /map
 PATCH|DELETE /map/:id
 GET    /places/search
@@ -544,14 +546,14 @@ multipart/form-data
 Fields:
 
 - `media`: optional file, max 30MB
-- `user_id`: required
-- `user_code`: optional
+- user identity is derived from the JWT
 - `caption`: required for text-only posts
 - `tags`: JSON array string, optional
 - `taken_at`: required `YYYY-MM-DD`
 - `captured_at`: optional timestamp
 - `media_type`: optional `text`, `image`, `video`
 - `map_pin_id`: optional Secret Map pin id. The pin must belong to the same user or couple scope.
+- `today_moment`: optional boolean. When true, `taken_at` must equal the current `Asia/Seoul` Business Date and MomentLoop creation plus Today Moment designation commit atomically.
 
 Response:
 
@@ -569,6 +571,53 @@ Response:
 ```json
 { "ok": true }
 ```
+
+## Today Moment / Today Loop
+
+All Today endpoints derive the user and active Couple from the JWT. The Business Date is calculated by the server in `Asia/Seoul`.
+
+### GET `/retention/today`
+
+Returns the authenticated user's Today state. Before the partner contributes, the response only exposes whether a partner Today Moment exists; partner content is not returned by this endpoint.
+
+```json
+{
+  "ok": true,
+  "date": "2026-07-29",
+  "status": "self_waiting",
+  "hasPartnerMoment": false,
+  "myMoment": {
+    "id": 47,
+    "media_type": "text",
+    "caption": "오늘의 한 장면",
+    "map_pin_id": null,
+    "linked_place_name": null
+  }
+}
+```
+
+Statuses: `empty`, `partner_waiting`, `self_waiting`, `complete`, `viewed`.
+
+### PUT `/retention/today/moment`
+
+Designates an existing MomentLoop authored by the authenticated user on the current Business Date. It can be replaced until both users contribute and the Today Loop is revealed.
+
+```json
+{ "post_id": 47 }
+```
+
+Failure reasons:
+
+```text
+invalid_post_id
+today_moment_not_found
+today_loop_locked
+active_couple_required
+```
+
+### DELETE `/retention/today/moment`
+
+Removes the authenticated user's designation before reveal without deleting the underlying MomentLoop. The operation is idempotent. A revealed Today Loop returns `today_loop_locked`.
 
 ## Map
 

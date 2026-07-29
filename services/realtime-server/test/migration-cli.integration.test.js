@@ -9,6 +9,18 @@ import { createIntegrationEnvironment } from '../src/integration-environment.js'
 
 const adminUrl = process.env.TEST_DATABASE_ADMIN_URL;
 const redisUrl = process.env.TEST_REDIS_URL;
+const canonicalMigrations = [
+  '0001_initial_schema.sql',
+  '0002_runtime_schema_repairs.sql',
+  '0003_pairing_requests.sql',
+  '0004_couple_lifecycle.sql',
+  '0005_map_pin_archival.sql',
+  '0006_wallet_system.sql',
+  '0007_game_results.sql',
+  '0008_shop.sql',
+  '0009_repair_shop_catalog_encoding.sql',
+  '0010_today_moments.sql',
+];
 
 const runMigrationCli = (environment, command, extraArgs = [], extraEnv = {}) =>
   spawnSync(process.execPath, ['scripts/migrate.js', command, '--json', ...extraArgs], {
@@ -28,13 +40,7 @@ test(
       assert.equal(dryRun.status, 0, dryRun.stderr);
       assert.deepEqual(JSON.parse(dryRun.stdout), {
         applied: [],
-        pending: [
-          '0001_initial_schema.sql',
-          '0002_runtime_schema_repairs.sql',
-          '0003_pairing_requests.sql',
-          '0004_couple_lifecycle.sql',
-          '0005_map_pin_archival.sql',
-        ],
+        pending: canonicalMigrations,
       });
 
       const beforeConnection = await mysql.createConnection(environment.databaseUrl);
@@ -45,13 +51,7 @@ test(
       const firstRun = runMigrationCli(environment, 'up');
       assert.equal(firstRun.status, 0, firstRun.stderr);
       const firstResult = JSON.parse(firstRun.stdout);
-      assert.deepEqual(firstResult.applied, [
-        '0001_initial_schema.sql',
-        '0002_runtime_schema_repairs.sql',
-        '0003_pairing_requests.sql',
-        '0004_couple_lifecycle.sql',
-        '0005_map_pin_archival.sql',
-      ]);
+      assert.deepEqual(firstResult.applied, canonicalMigrations);
 
       const connection = await mysql.createConnection(environment.databaseUrl);
       const [tables] = await connection.query("SHOW TABLES LIKE 'Users'");
@@ -61,13 +61,7 @@ test(
       const status = runMigrationCli(environment, 'status');
       assert.equal(status.status, 0, status.stderr);
       assert.deepEqual(JSON.parse(status.stdout), {
-        applied: [
-          '0001_initial_schema.sql',
-          '0002_runtime_schema_repairs.sql',
-          '0003_pairing_requests.sql',
-          '0004_couple_lifecycle.sql',
-          '0005_map_pin_archival.sql',
-        ],
+        applied: canonicalMigrations,
         pending: [],
       });
 
