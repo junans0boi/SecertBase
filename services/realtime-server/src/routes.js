@@ -21,6 +21,7 @@ import {
   collectMediaPaths,
 } from './account-deletion.js';
 import { normalizeMomentClip } from './moment-clip.js';
+import { businessDate } from './business-date.js';
 import {
   disabledFeature,
   mvpRestFeatureGate,
@@ -1644,7 +1645,14 @@ router.patch('/setlog/:id', async (req, res) => {
     const takenAt = typeof req.body.taken_at === 'string' ? req.body.taken_at : null;
     const tags = req.body.tags === undefined ? null : JSON.stringify(parseJsonArray(req.body.tags));
     const hasMapPinId = Object.prototype.hasOwnProperty.call(req.body, 'map_pin_id');
-    const mapPinId = hasMapPinId ? (req.body.map_pin_id ? Number(req.body.map_pin_id) : null) : null;
+    let mapPinId = hasMapPinId ? (req.body.map_pin_id ? Number(req.body.map_pin_id) : null) : null;
+    if (hasMapPinId && mapPinId !== null) {
+      const resolvedMapPin = await resolveSetlogMapPinId(mapPinId, req.auth.userId, coupleId);
+      if (resolvedMapPin?.error) {
+        return res.status(400).json({ ok: false, reason: resolvedMapPin.error });
+      }
+      mapPinId = resolvedMapPin.id;
+    }
     if (caption === null && takenAt === null && tags === null && !hasMapPinId) {
       return res.status(400).json({ ok: false, reason: 'no_changes' });
     }
@@ -2103,16 +2111,14 @@ const BALANCE_POOL = [
   ['편한 사랑', '설레는 사랑'],
 ];
 
-const dateString = (value = new Date()) => value.toISOString().split('T')[0];
-
 const previousDateString = (date) => {
   const value = new Date(`${date}T00:00:00.000Z`);
   value.setUTCDate(value.getUTCDate() - 1);
-  return dateString(value);
+  return businessDate(value);
 };
 
 const getOrCreateTodayQuestion = async () => {
-  const today = dateString();
+  const today = businessDate();
   let result = await query('SELECT * FROM daily_questions WHERE scheduled_date = ?', [today]);
 
   if (result.rows.length === 0) {
@@ -2226,7 +2232,7 @@ const addTimelineEvent = async ({
   title,
   body = null,
   payload = null,
-  eventDate = dateString(),
+  eventDate = businessDate(),
 }) => {
   if (!coupleId || !eventType || !title) return;
   await query(
@@ -2369,7 +2375,7 @@ router.get('/today', async (req, res) => {
       return res.status(400).json({ ok: false, reason: 'missing_user_id' });
     }
 
-    const today = dateString();
+    const today = businessDate();
     const couple = await getCoupleMemberIds(userId);
     const coupleId = couple?.CoupleId ?? await getCoupleIdForUser(userId);
     const partnerId = couple
@@ -2645,7 +2651,7 @@ router.post('/qa/answer', async (req, res) => {
     const userId = Number(user_id);
     const coupleId = await getCoupleIdForUser(userId);
     if (coupleId) {
-      const today = dateString();
+      const today = businessDate();
       await query(
         `INSERT INTO daily_engagement_actions
          (couple_id, user_id, date, action_type, target_id, payload_json)
@@ -2838,7 +2844,7 @@ router.post('/wish-tickets', async (req, res) => {
       title: '소원권 생성',
       body: title,
       payload: { ticketId: result.rows.insertId },
-      eventDate: dateString(),
+      eventDate: businessDate(),
     });
     await addNotificationEvent({
       userId: ownerUserId,
@@ -2883,7 +2889,7 @@ router.patch('/wish-tickets/:id/use', async (req, res) => {
       title: '소원권 사용',
       body: ticket.title,
       payload: { ticketId: id },
-      eventDate: dateString(),
+      eventDate: businessDate(),
     });
     res.json({ ok: true });
   } catch (err) {
@@ -2923,7 +2929,7 @@ router.get('/reports/monthly', async (req, res) => {
   try {
     await ensureRetentionTables();
     const userId = Number(req.query.user_id);
-    const month = String(req.query.month || dateString().slice(0, 7));
+    const month = String(req.query.month || businessDate().slice(0, 7));
     if (!userId || !/^\d{4}-\d{2}$/.test(month)) {
       return res.status(400).json({ ok: false, reason: 'invalid_request' });
     }
@@ -2931,7 +2937,7 @@ router.get('/reports/monthly', async (req, res) => {
     if (!coupleId) return res.json({ ok: true, report: null });
 
     const startDate = `${month}-01`;
-    const endDate = dateString(new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 1)));
+    const endDate = businessDate(new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 1)));
     const actions = await query(
       `SELECT action_type, COUNT(*) AS count
        FROM daily_engagement_actions
@@ -2977,7 +2983,7 @@ router.get('/balance/today', async (req, res) => {
     if (!userId) {
       return res.status(400).json({ ok: false, reason: 'missing_user_id' });
     }
-    const today = dateString();
+    const today = businessDate();
     const couple = await getCoupleMemberIds(userId);
     if (!couple) {
       return res.status(404).json({ ok: false, reason: 'couple_not_found' });
@@ -3036,7 +3042,7 @@ router.post('/balance/answer', async (req, res) => {
     if (!couple) {
       return res.status(404).json({ ok: false, reason: 'couple_not_found' });
     }
-    const today = dateString();
+    const today = businessDate();
     await query(
       `INSERT INTO couple_balance_answers
        (couple_id, user_id, question_id, date, choice)

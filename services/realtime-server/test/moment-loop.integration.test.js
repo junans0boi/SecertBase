@@ -75,6 +75,22 @@ test(
       const otherFeed = await server.request('/setlog?user_id=1', { token: carol.token });
       assert.deepEqual((await otherFeed.json()).posts, []);
 
+      const otherCouplePinResponse = await server.request('/map', {
+        token: carol.token,
+        method: 'POST',
+        body: { place_name: 'private to other couple' },
+      });
+      const otherCouplePin = await otherCouplePinResponse.json();
+      assert.equal(otherCouplePinResponse.status, 200);
+
+      const crossCoupleLink = await server.request(`/setlog/${created.post.id}`, {
+        token: alice.token,
+        method: 'PATCH',
+        body: { map_pin_id: otherCouplePin.id },
+      });
+      assert.equal(crossCoupleLink.status, 400);
+      assert.equal((await crossCoupleLink.json()).reason, 'map_pin_forbidden');
+
       const partnerEdit = await server.request(`/setlog/${created.post.id}`, {
         token: bob.token,
         method: 'PATCH',
