@@ -23,7 +23,7 @@ Secret Base is a private two-person realtime web/app service. It combines:
 The production web app is served at:
 
 ```text
-https://secertbase.kro.kr
+https://secretbase.cloud
 ```
 
 ## Repository Layout
@@ -49,7 +49,7 @@ Flutter Web/App
   -> REST API over HTTPS: /api/*
   -> Socket.IO over HTTPS/WSS: /socket.io/
 
-Nginx
+Caddy
   -> serves Flutter build from /var/www/secretbase
   -> proxies /api, /uploads, /health, /socket.io to Node on localhost:4100
 
@@ -62,16 +62,17 @@ Node realtime-server
 
 ## Production Infrastructure
 
-- Domain: `secertbase.kro.kr`
-- Web server: nginx
+- Primary domain: `secretbase.cloud`
+- Legacy production alias: `secertbase.kro.kr`
+- Web server: Caddy
 - HTTPS: Let's Encrypt certificate
 - Static root: `/var/www/secretbase`
-- Backend path: `/home/junzzang/SecertBase/services/realtime-server`
+- Backend path: `/home/ubuntu/SecertBase/services/realtime-server`
 - Backend port: `4100`
 - Backend process manager: PM2 service named `secretbase-realtime`
 - MariaDB: local server, accessed by backend through `DATABASE_URL`
 - Redis: local server, accessed by backend through `REDIS_URL`
-- SSH from outside: prefer Tailscale, server IP `100.82.126.57`
+- SSH from outside: prefer Tailscale, server IP `100.97.58.29`
 
 ## Frontend App Flow
 
