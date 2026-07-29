@@ -4,7 +4,7 @@ set -euo pipefail
 REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 BRANCH="${BRANCH:-main}"
 WEB_ROOT="${WEB_ROOT:-/var/www/secretbase}"
-SOCKET_URL="${SOCKET_URL:-https://secertbase.kro.kr}"
+SOCKET_URL="${SOCKET_URL:-https://secretbase.cloud}"
 GOOGLE_CLIENT_ID="${GOOGLE_CLIENT_ID:-}"
 KAKAO_REVIEW_AUTO_LOGIN="${KAKAO_REVIEW_AUTO_LOGIN:-false}"
 PM2_NAME="${PM2_NAME:-secretbase-realtime}"
