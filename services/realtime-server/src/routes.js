@@ -22,7 +22,12 @@ import {
 } from './account-deletion.js';
 import { normalizeMomentClip } from './moment-clip.js';
 import { businessDate } from './business-date.js';
-import { canReplaceTodayMoment, todayMomentStatus } from './today-moment-policy.js';
+import {
+  canReplaceTodayMoment,
+  canViewTodayMoment,
+  maskLockedTodayMoment,
+  todayMomentStatus,
+} from './today-moment-policy.js';
 import {
   disabledFeature,
   mvpRestFeatureGate,
@@ -583,6 +588,31 @@ const selectTodayMoment = async (connection, { coupleId, userId, postId, date })
       [coupleId, date],
     );
   }
+};
+
+const serializeTodayMomentRow = (row) => {
+  if (!row) return null;
+  if (row.deleted_at || !row.id) {
+    return {
+      user_id: row.user_id,
+      UserName: row.UserName,
+      deleted: true,
+    };
+  }
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    UserName: row.UserName,
+    media_type: row.media_type,
+    media_url: row.media_url,
+    caption: row.caption,
+    tags: parseJsonArray(row.tags),
+    taken_at: dateOnly(row.taken_at),
+    captured_at: row.captured_at,
+    map_pin_id: row.map_pin_id,
+    linked_place_name: row.linked_place_name,
+    deleted: false,
+  };
 };
 
 // ============================================
@@ -1463,6 +1493,9 @@ router.get('/setlog', async (req, res) => {
     let sql = `SELECT p.*, u.Nickname, COALESCE(u.Nickname, u.UserName) AS UserName,
                       mp.place_name AS linked_place_name, mp.category AS linked_place_category,
                       mp.archived_at AS linked_place_archived_at,
+                      tm.business_date AS today_business_date,
+                      tm.revealed_at AS today_revealed_at,
+                      viewer_tm.id AS viewer_today_moment_id,
                       (SELECT JSON_ARRAYAGG(JSON_OBJECT('user_id', r.user_id, 'emoji', r.emoji))
                        FROM setlog_reactions r
                        WHERE p.session_id IS NOT NULL AND r.session_id = p.session_id AND r.couple_id = p.couple_id
@@ -1470,8 +1503,13 @@ router.get('/setlog', async (req, res) => {
                FROM setlog_posts p
                LEFT JOIN Users u ON p.user_id = u.UserId
                LEFT JOIN map_pins mp ON mp.id = p.map_pin_id
+               LEFT JOIN today_moments tm ON tm.setlog_post_id = p.id
+               LEFT JOIN today_moments viewer_tm
+                 ON viewer_tm.couple_id = tm.couple_id
+                AND viewer_tm.business_date = tm.business_date
+                AND viewer_tm.user_id = ?
                WHERE p.couple_id = ?`;
-    const params = [coupleId];
+    const params = [req.auth.userId, coupleId];
 
     if (month) {
       sql += ` AND DATE_FORMAT(p.taken_at, '%Y-%m') = ?`;
@@ -1481,7 +1519,13 @@ router.get('/setlog', async (req, res) => {
     sql += ` ORDER BY p.captured_at DESC, p.id DESC`;
 
     const result = await query(sql, params);
-    res.json({ ok: true, posts: result.rows });
+    res.json({
+      ok: true,
+      posts: result.rows.map((post) => maskLockedTodayMoment({
+        post,
+        viewerUserId: req.auth.userId,
+      })),
+    });
   } catch (err) {
     console.error('[API] /setlog GET error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
@@ -1832,25 +1876,20 @@ router.get('/retention/today', async (req, res) => {
     const partner = result.rows.find((row) => Number(row.user_id) !== userId) ?? null;
     const hasMine = Boolean(mine);
     const hasPartner = Boolean(partner);
+    const revealedAt = mine?.revealed_at ?? partner?.revealed_at ?? null;
+    const canViewPartner = hasPartner && canViewTodayMoment({
+      isAuthor: false,
+      revealed: Boolean(revealedAt),
+      viewerHasMoment: hasMine,
+    });
     res.json({
       ok: true,
       date,
       status: todayMomentStatus({ hasMine, hasPartner }),
       hasPartnerMoment: hasPartner,
-      myMoment: mine ? {
-        id: mine.id,
-        user_id: mine.user_id,
-        UserName: mine.UserName,
-        media_type: mine.media_type,
-        media_url: mine.media_url,
-        caption: mine.caption,
-        tags: parseJsonArray(mine.tags),
-        taken_at: dateOnly(mine.taken_at),
-        captured_at: mine.captured_at,
-        map_pin_id: mine.map_pin_id,
-        linked_place_name: mine.linked_place_name,
-        deleted: Boolean(mine.deleted_at),
-      } : null,
+      revealedAt: revealedAt,
+      myMoment: serializeTodayMomentRow(mine),
+      partnerMoment: canViewPartner ? serializeTodayMomentRow(partner) : null,
     });
   } catch (err) {
     console.error('[API] /retention/today GET error:', err);

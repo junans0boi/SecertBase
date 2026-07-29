@@ -535,6 +535,8 @@ Response:
 }
 ```
 
+When a partner-authored post is a locked Today Moment, the list keeps only its id, author, and Business Date so the UI can show that a contribution exists. `caption`, `media_type`, `media_url`, `tags`, `captured_at`, `map_pin_id`, linked place fields, session id, and reactions are `null`, and `today_locked` is `true`. After both users contribute, the normal fields return and `today_locked` is `false`.
+
 ### POST `/setlog`
 
 Content type:
@@ -586,15 +588,19 @@ Returns the authenticated user's Today state. Before the partner contributes, th
   "date": "2026-07-29",
   "status": "self_waiting",
   "hasPartnerMoment": false,
+  "revealedAt": null,
   "myMoment": {
     "id": 47,
     "media_type": "text",
     "caption": "오늘의 한 장면",
     "map_pin_id": null,
     "linked_place_name": null
-  }
+  },
+  "partnerMoment": null
 }
 ```
+
+`partnerMoment` remains `null` until both users contribute. After reveal it contains the partner's MomentLoop projection. If an author deletes a revealed source MomentLoop, that side is returned as `{ "user_id": 1, "UserName": "...", "deleted": true }` without former content.
 
 Statuses: `empty`, `partner_waiting`, `self_waiting`, `complete`, `viewed`.
 

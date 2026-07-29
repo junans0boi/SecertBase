@@ -30,7 +30,7 @@ const pair = async (server, sender, recipient) => {
   assert.equal(accepted.status, 200);
 };
 
-const createMoment = async (server, user, caption, todayMoment = false) => {
+const createMoment = async (server, user, caption, todayMoment = false, fields = {}) => {
   const response = await server.request('/setlog', {
     token: user.token,
     method: 'POST',
@@ -39,6 +39,7 @@ const createMoment = async (server, user, caption, todayMoment = false) => {
       media_type: 'text',
       taken_at: businessDate(),
       ...(todayMoment ? { today_moment: true } : {}),
+      ...fields,
     },
   });
   return { response, body: await response.json() };
@@ -83,10 +84,42 @@ test('an author selects one Today Moment and cannot replace it after reveal', { 
     const emptyState = await server.request('/retention/today', { token: alice.token });
     assert.equal((await emptyState.json()).status, 'empty');
 
-    const third = await createMoment(server, alice, 'third');
+    const placeResponse = await server.request('/map', {
+      token: alice.token,
+      method: 'POST',
+      body: { place_name: 'locked place' },
+    });
+    const place = await placeResponse.json();
+    const third = await createMoment(server, alice, 'third', false, {
+      map_pin_id: place.id,
+    });
     await server.request('/retention/today/moment', {
       token: alice.token, method: 'PUT', body: { post_id: third.body.post.id },
     });
+
+    const waitingFeed = await server.request('/setlog', { token: bob.token });
+    const lockedPost = (await waitingFeed.json()).posts.find(
+      (post) => post.id === third.body.post.id,
+    );
+    assert.equal(lockedPost.today_locked, true);
+    assert.equal(lockedPost.caption, null);
+    assert.equal(lockedPost.media_url, null);
+    assert.equal(lockedPost.map_pin_id, null);
+    assert.equal(lockedPost.linked_place_name, null);
+    assert.equal(lockedPost.captured_at, null);
+
+    const waitingState = await server.request('/retention/today', { token: bob.token });
+    const waitingToday = await waitingState.json();
+    assert.equal(waitingToday.status, 'partner_waiting');
+    assert.equal(waitingToday.hasPartnerMoment, true);
+    assert.equal(waitingToday.partnerMoment, null);
+
+    const isolatedToday = await server.request('/retention/today', { token: carol.token });
+    assert.equal((await isolatedToday.json()).status, 'empty');
+    const isolatedFeed = await server.request('/setlog', { token: carol.token });
+    assert.deepEqual((await isolatedFeed.json()).posts, []);
+    const isolatedMap = await server.request('/map', { token: carol.token });
+    assert.deepEqual((await isolatedMap.json()).pins, []);
 
     const crossCouple = await server.request('/retention/today/moment', {
       token: carol.token, method: 'PUT', body: { post_id: third.body.post.id },
@@ -96,11 +129,53 @@ test('an author selects one Today Moment and cannot replace it after reveal', { 
     const partnerToday = await createMoment(server, bob, 'partner', true);
     assert.equal(partnerToday.response.status, 201);
 
+    const revealedFeed = await server.request('/setlog', { token: bob.token });
+    const revealedPost = (await revealedFeed.json()).posts.find(
+      (post) => post.id === third.body.post.id,
+    );
+    assert.equal(revealedPost.today_locked, false);
+    assert.equal(revealedPost.caption, 'third');
+
+    const completeState = await server.request('/retention/today', { token: alice.token });
+    const completeToday = await completeState.json();
+    assert.equal(completeToday.status, 'complete');
+    assert.equal(completeToday.partnerMoment.caption, 'partner');
+
     const locked = await server.request('/retention/today/moment', {
       token: alice.token, method: 'PUT', body: { post_id: first.body.post.id },
     });
     assert.equal(locked.status, 409);
     assert.equal((await locked.json()).reason, 'today_loop_locked');
+
+    const deletedRevealedPost = await server.request(`/setlog/${third.body.post.id}`, {
+      token: alice.token, method: 'DELETE',
+    });
+    assert.equal(deletedRevealedPost.status, 200);
+    const tombstoneState = await server.request('/retention/today', { token: bob.token });
+    const tombstoneToday = await tombstoneState.json();
+    assert.equal(tombstoneToday.status, 'complete');
+    assert.equal(tombstoneToday.partnerMoment.deleted, true);
+    assert.equal(tombstoneToday.partnerMoment.caption, undefined);
+
+    const [carolCreated, daveCreated] = await Promise.all([
+      createMoment(server, carol, 'carol simultaneous', true),
+      createMoment(server, dave, 'dave simultaneous', true),
+    ]);
+    assert.equal(carolCreated.response.status, 201);
+    assert.equal(daveCreated.response.status, 201);
+
+    const [carolState, daveState] = await Promise.all([
+      server.request('/retention/today', { token: carol.token }),
+      server.request('/retention/today', { token: dave.token }),
+    ]);
+    const [carolToday, daveToday] = await Promise.all([
+      carolState.json(),
+      daveState.json(),
+    ]);
+    assert.equal(carolToday.status, 'complete');
+    assert.equal(carolToday.partnerMoment.caption, 'dave simultaneous');
+    assert.equal(daveToday.status, 'complete');
+    assert.equal(daveToday.partnerMoment.caption, 'carol simultaneous');
   } finally {
     await server.close();
   }
