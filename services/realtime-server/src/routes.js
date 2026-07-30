@@ -219,6 +219,21 @@ const ensureTables = async () => {
   await query(`ALTER TABLE map_pins ADD COLUMN IF NOT EXISTS emotion_tags JSON NULL`);
   await query(`ALTER TABLE map_pins ADD COLUMN IF NOT EXISTS media_url TEXT NULL`);
 
+  // 비밀장소 리뷰 테이블 (0013)
+  await query(`CREATE TABLE IF NOT EXISTS map_pin_reviews (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    map_pin_id INT         NOT NULL,
+    user_id    INT         NOT NULL,
+    couple_id  INT         NOT NULL,
+    user_code  VARCHAR(50) NULL,
+    content    TEXT        NULL,
+    media_url  TEXT        NULL,
+    created_at DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_reviews_pin    (map_pin_id),
+    INDEX idx_reviews_couple (couple_id)
+  )`);
+
   _tablesReady = true;
 };
 
@@ -2924,6 +2939,94 @@ router.delete('/map/:id', async (req, res) => {
     res.json({ ok: true, archived: linked });
   } catch (err) {
     console.error('[API] /map DELETE error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+// ── 비밀장소 리뷰 ──────────────────────────────────────────────────────────
+
+router.get('/map/:id/reviews', async (req, res) => {
+  try {
+    await ensureTables();
+    const pinId = Number(req.params.id);
+    const coupleId = await getCoupleIdForUser(req.auth.userId);
+    if (!coupleId) return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+
+    const pinCheck = await query(
+      'SELECT id FROM map_pins WHERE id = ? AND couple_id = ? AND archived_at IS NULL',
+      [pinId, coupleId],
+    );
+    if (!pinCheck.rows.length) return res.status(404).json({ ok: false, reason: 'not_found' });
+
+    const result = await query(
+      `SELECT r.id, r.user_id, r.user_code, r.content, r.media_url, r.created_at
+       FROM map_pin_reviews r
+       WHERE r.map_pin_id = ? AND r.couple_id = ?
+       ORDER BY r.created_at ASC`,
+      [pinId, coupleId],
+    );
+    res.json({ ok: true, reviews: result.rows });
+  } catch (err) {
+    console.error('[API] /map/:id/reviews GET error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.post('/map/:id/reviews', upload.single('media'), async (req, res) => {
+  try {
+    await ensureTables();
+    const pinId = Number(req.params.id);
+    const uid = req.auth.userId;
+    const coupleId = await getCoupleIdForUser(uid);
+    if (!coupleId) return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+
+    const pinCheck = await query(
+      'SELECT id FROM map_pins WHERE id = ? AND couple_id = ? AND archived_at IS NULL',
+      [pinId, coupleId],
+    );
+    if (!pinCheck.rows.length) return res.status(404).json({ ok: false, reason: 'not_found' });
+
+    const content = (req.body.content ?? '').trim() || null;
+    const mediaUrl = req.file ? `/uploads/${req.file.filename}` : null;
+    if (!content && !mediaUrl) {
+      return res.status(400).json({ ok: false, reason: 'content_or_media_required' });
+    }
+
+    const userResult = await query('SELECT UserCode FROM Users WHERE UserId = ? LIMIT 1', [uid]);
+    const userCode = userResult.rows[0]?.UserCode ?? null;
+
+    const result = await query(
+      `INSERT INTO map_pin_reviews (map_pin_id, user_id, couple_id, user_code, content, media_url)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [pinId, uid, coupleId, userCode, content, mediaUrl],
+    );
+    res.json({ ok: true, id: result.rows.insertId, media_url: mediaUrl });
+  } catch (err) {
+    console.error('[API] /map/:id/reviews POST error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.delete('/map/:id/reviews/:reviewId', async (req, res) => {
+  try {
+    await ensureTables();
+    const pinId = Number(req.params.id);
+    const reviewId = Number(req.params.reviewId);
+    const uid = req.auth.userId;
+    const coupleId = await getCoupleIdForUser(uid);
+    if (!coupleId) return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+
+    const reviewCheck = await query(
+      'SELECT user_id FROM map_pin_reviews WHERE id = ? AND map_pin_id = ? AND couple_id = ?',
+      [reviewId, pinId, coupleId],
+    );
+    if (!reviewCheck.rows.length) return res.status(404).json({ ok: false, reason: 'not_found' });
+    if (reviewCheck.rows[0].user_id !== uid) return res.status(403).json({ ok: false, reason: 'forbidden' });
+
+    await query('DELETE FROM map_pin_reviews WHERE id = ?', [reviewId]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[API] /map/:id/reviews DELETE error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
   }
 });
