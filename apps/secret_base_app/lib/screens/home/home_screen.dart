@@ -6,8 +6,10 @@ import 'package:http/http.dart' as http;
 import '../../core/auth_service.dart';
 import '../../core/main_design.dart';
 import '../../core/today_api.dart';
+import 'memory_list_screen.dart';
 import 'today_card.dart';
 import 'today_loop_viewer.dart';
+import '../secret_base/secret_base_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final ValueChanged<int> onNavigate;
@@ -25,6 +27,8 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Map<String, dynamic>> _todayPins = [];
   List<Map<String, dynamic>> _todayMoments = [];
   TodayState? _todayState;
+  Map<String, dynamic>? _memoryCard;
+  int _memoryCardTotal = 0;
   bool _loading = true;
 
   Map<String, String> get _authHeaders => {
@@ -54,6 +58,10 @@ class _HomeScreenState extends State<HomeScreen> {
           headers: _authHeaders,
         ),
         http.get(Uri.parse('${_auth.baseUrl}/api/map'), headers: _authHeaders),
+        http.get(
+          Uri.parse('${_auth.baseUrl}/api/retention/memory-card'),
+          headers: _authHeaders,
+        ),
       ]);
       if (!mounted) return;
       final couple = jsonDecode(responses[0].body) as Map<String, dynamic>;
@@ -87,6 +95,16 @@ class _HomeScreenState extends State<HomeScreen> {
             final dateStr = '${pin['visit_date'] ?? pin['created_at'] ?? ''}';
             return dateStr.startsWith(nowStr) || dateStr.contains(nowStr);
           }).toList();
+        }
+        if (responses[3].statusCode == 200) {
+          final mc = jsonDecode(responses[3].body) as Map<String, dynamic>;
+          if (mc['ok'] == true && mc['card'] != null) {
+            _memoryCard = mc['card'] as Map<String, dynamic>;
+            _memoryCardTotal = mc['total_count'] as int? ?? 0;
+          } else {
+            _memoryCard = null;
+            _memoryCardTotal = 0;
+          }
         }
       });
     } catch (_) {
@@ -173,6 +191,15 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             if (_loading || _todayState != null) const SizedBox(height: 18),
             _coupleCard(),
+            if (_memoryCard != null) ...[
+              const SizedBox(height: 18),
+              _MemoryCardWidget(
+                card: _memoryCard!,
+                totalCount: _memoryCardTotal,
+                baseUrl: _auth.baseUrl,
+                authHeaders: _authHeaders,
+              ),
+            ],
             const SizedBox(height: 18),
             _sectionTitle('오늘의 소식 & MomentLoop', () => widget.onNavigate(1)),
             const SizedBox(height: 8),
@@ -202,6 +229,21 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 10),
+            _Shortcut(
+              icon: Icons.cottage_outlined,
+              title: '우리의 비밀기지',
+              subtitle: '마일스톤과 월별 엽서',
+              color: kMainLilac,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => SecretBaseScreen(
+                    baseUrl: _auth.baseUrl,
+                    authHeaders: _authHeaders,
+                  ),
+                ),
+              ),
             ),
           ],
         ),
@@ -419,6 +461,120 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ],
+    );
+  }
+}
+
+class _MemoryCardWidget extends StatelessWidget {
+  final Map<String, dynamic> card;
+  final int totalCount;
+  final String baseUrl;
+  final Map<String, String> authHeaders;
+
+  const _MemoryCardWidget({
+    required this.card,
+    required this.totalCount,
+    required this.baseUrl,
+    required this.authHeaders,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final yearsAgo = card['years_ago'] as int? ?? 0;
+    final placeName = card['place_name'] as String?;
+    final caption = card['caption'] as String?;
+    final mediaUrl = card['media_url'] as String?;
+    final fullMediaUrl = mediaUrl != null ? '$baseUrl$mediaUrl' : null;
+
+    return MainCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.history_rounded, size: 14, color: kMainMuted),
+              const SizedBox(width: 4),
+              Text('$yearsAgo년 전 오늘', style: mainBody(size: 12, color: kMainMuted)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (fullMediaUrl != null)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.network(
+                    fullMediaUrl,
+                    width: 72,
+                    height: 72,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      width: 72,
+                      height: 72,
+                      color: kMainPaperSoft,
+                      child: const Icon(Icons.image_outlined, color: kMainMuted),
+                    ),
+                  ),
+                )
+              else
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: kMainPaperSoft,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.photo_album_outlined, color: kMainMuted, size: 28),
+                ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (placeName != null)
+                      Text(placeName, style: mainBody(size: 13, weight: FontWeight.w700, color: kMainInk)),
+                    if (caption != null)
+                      Text(
+                        caption,
+                        style: mainBody(size: 13, color: kMainSub),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (totalCount > 0) ...[
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  totalCount > 1 ? '이 날 $totalCount개의 기억이 있어요' : '이 날의 기억',
+                  style: mainBody(size: 12, color: kMainMuted),
+                ),
+                GestureDetector(
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => MemoryListScreen(
+                        baseUrl: baseUrl,
+                        authHeaders: authHeaders,
+                      ),
+                    ),
+                  ),
+                  child: Text(
+                    '보러가기 →',
+                    style: mainBody(size: 12, color: kMainRose, weight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

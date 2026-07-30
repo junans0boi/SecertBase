@@ -2176,126 +2176,91 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
           children: [
-            // ── Media grid ────────────────────────────────────────────────
-            AspectRatio(
-              aspectRatio: 1,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: kMainPaperSoft,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: kMainLine),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: totalMedia == 0
-                    // Empty: full-area + button
-                    ? GestureDetector(
-                        onTap: canAddMore ? _showMediaPicker : null,
-                        child: Column(
+            // ── Media horizontal scroll ───────────────────────────────────
+            SizedBox(
+              height: 80,
+              child: totalMedia == 0
+                  ? GestureDetector(
+                      onTap: canAddMore ? _showMediaPicker : null,
+                      child: Container(
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: kMainPaperSoft,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: kMainLine),
+                        ),
+                        child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Container(
-                              width: 64,
-                              height: 64,
-                              decoration: BoxDecoration(
-                                color: kMainPaper,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: kMainLine),
-                              ),
-                              child: const Icon(
-                                Icons.add_rounded,
-                                size: 32,
-                                color: kMainSub,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              '사진 또는 영상 추가',
-                              style: mainBody(color: kMainSub, size: 14),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '사진·영상 합산 최대 10개',
-                              style: mainBody(color: kMainMuted, size: 12),
-                            ),
+                            const Icon(Icons.add_photo_alternate_outlined, size: 20, color: kMainSub),
+                            const SizedBox(width: 8),
+                            Text('사진·영상 추가 (최대 10개)', style: mainBody(color: kMainSub, size: 13)),
                           ],
                         ),
-                      )
-                    // Has items: 3-col grid + optional + tile
-                    : GridView.builder(
-                        physics: const NeverScrollableScrollPhysics(),
-                        padding: const EdgeInsets.all(4),
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 3,
-                              crossAxisSpacing: 4,
-                              mainAxisSpacing: 4,
-                            ),
-                        itemCount: totalMedia + (canAddMore ? 1 : 0),
-                        itemBuilder: (context, i) {
-                          if (i == totalMedia) {
-                            return GestureDetector(
-                              onTap: _showMediaPicker,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: kMainPaper,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: kMainLine),
-                                ),
-                                child: const Icon(
-                                  Icons.add_rounded,
-                                  color: kMainSub,
-                                ),
-                              ),
-                            );
-                          }
-                          final media = _pickedMedia[i];
-                          return Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: media.isVideo
-                                    ? Container(
-                                        color: const Color(0xFF1A1A2E),
-                                        child: const Center(
-                                          child: Icon(
-                                            Icons.videocam_rounded,
-                                            color: Colors.white54,
-                                            size: 28,
-                                          ),
-                                        ),
-                                      )
-                                    : Image.memory(
-                                        media.bytes,
-                                        fit: BoxFit.cover,
-                                      ),
-                              ),
-                              Positioned(
-                                top: 4,
-                                right: 4,
-                                child: GestureDetector(
-                                  onTap: () =>
-                                      setState(() => _pickedMedia.removeAt(i)),
-                                  child: Container(
-                                    width: 22,
-                                    height: 22,
-                                    decoration: BoxDecoration(
-                                      color: Colors.black54,
-                                      borderRadius: BorderRadius.circular(11),
-                                    ),
-                                    child: const Icon(
-                                      Icons.close_rounded,
-                                      size: 14,
-                                      color: Colors.white,
+                      ),
+                    )
+                  : SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          ...List.generate(totalMedia, (i) {
+                            final media = _pickedMedia[i];
+                            return Padding(
+                              padding: EdgeInsets.only(right: 8, left: i == 0 ? 0 : 0),
+                              child: Stack(
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: SizedBox(
+                                      width: 72,
+                                      height: 72,
+                                      child: media.isVideo
+                                          ? Container(
+                                              color: const Color(0xFF1A1A2E),
+                                              child: const Center(
+                                                child: Icon(Icons.videocam_rounded, color: Colors.white54, size: 22),
+                                              ),
+                                            )
+                                          : Image.memory(media.bytes, fit: BoxFit.cover),
                                     ),
                                   ),
-                                ),
+                                  Positioned(
+                                    top: 3,
+                                    right: 3,
+                                    child: GestureDetector(
+                                      onTap: () => setState(() => _pickedMedia.removeAt(i)),
+                                      child: Container(
+                                        width: 18,
+                                        height: 18,
+                                        decoration: BoxDecoration(
+                                          color: Colors.black54,
+                                          borderRadius: BorderRadius.circular(9),
+                                        ),
+                                        child: const Icon(Icons.close_rounded, size: 12, color: Colors.white),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
-                          );
-                        },
+                            );
+                          }),
+                          if (canAddMore)
+                            GestureDetector(
+                              onTap: _showMediaPicker,
+                              child: Container(
+                                width: 72,
+                                height: 72,
+                                decoration: BoxDecoration(
+                                  color: kMainPaperSoft,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: kMainLine),
+                                ),
+                                child: const Icon(Icons.add_rounded, color: kMainSub, size: 22),
+                              ),
+                            ),
+                        ],
                       ),
-              ),
+                    ),
             ),
 
             const SizedBox(height: 16),

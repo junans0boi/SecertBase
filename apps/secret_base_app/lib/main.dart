@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'core/app_theme.dart';
 import 'core/main_design.dart';
 import 'core/socket_service.dart';
@@ -10,6 +11,11 @@ import 'screens/home_shell.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await GoogleFonts.pendingFonts([
+    GoogleFonts.gaegu(),
+    GoogleFonts.notoSans(),
+  ]);
 
   // Initialize AuthService
   final auth = AuthService();

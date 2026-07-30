@@ -1480,7 +1480,7 @@ export const registerSocketHandlers = (io) => {
       ack({ ok: true, event });
 
       if (gameState.winner) {
-        const yutLoserId = gameState.players.find(p => p !== gameState.winner);
+        const yutLoserId = gameState.playersOrder.find(p => p !== gameState.winner);
         io.to(roomCode).emit("game:yut:ended", { winner: gameState.winner });
         await redis.del(yutGameKey(roomCode));
         await Promise.all([

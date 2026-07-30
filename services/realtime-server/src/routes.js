@@ -489,6 +489,7 @@ const normalizeAuthUser = (user) => ({
   userCode: user.UserCode,
   UserCode: user.UserCode,
   PartnerCode: user.PartnerCode ?? null,
+  PartnerName: user.PartnerName ?? null,
   UserIcon: user.UserIcon ?? null,
   RoomCode: user.RoomCode ?? null,
   RoomSecret: user.RoomSecret ?? null,
@@ -505,6 +506,7 @@ const getProfileRowByUserId = async (userId) => {
     `SELECT u.UserId, u.Email, u.UserName, u.FullName, u.Nickname, u.BirthDate, u.UserCode,
             u.AuthProvider, u.GoogleSubject, u.GooglePictureUrl,
             p.UserIcon, p.PartnerCode,
+            COALESCE(pu.Nickname, pu.UserName) AS PartnerName,
             c.RoomCode, c.RoomSecret, c.Status AS CoupleStatus,
             CASE
               WHEN c.ReunionCount > 0 AND c.User1Id = u.UserId AND c.ReunionNoticeUser1SeenAt IS NULL THEN 1
@@ -514,6 +516,7 @@ const getProfileRowByUserId = async (userId) => {
      FROM Users u
      JOIN User_Preference p ON u.UserId = p.UserId
      LEFT JOIN Couples c ON (u.UserId = c.User1Id OR u.UserId = c.User2Id) AND c.Status = 'active'
+     LEFT JOIN Users pu ON pu.UserCode = p.PartnerCode
      WHERE u.UserId = ?`,
     [userId]
   );
@@ -2354,6 +2357,293 @@ router.get('/retention/afterglow/beta/summary', async (req, res) => {
     });
   } catch (err) {
     console.error('[API] /retention/afterglow/beta/summary GET error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+// ── MVP3: Memory Card ────────────────────────────────────────────────────────
+
+router.get('/retention/memory-card', async (req, res) => {
+  try {
+    const userId = req.auth.userId;
+    const coupleId = await getCoupleIdForUser(userId);
+    if (!coupleId) {
+      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+    }
+    const today = businessDate();
+    const monthDay = today.slice(5); // 'MM-DD'
+    const currentYear = new Date().getFullYear();
+
+    const cardResult = await query(
+      `SELECT p.id, p.caption, p.media_url, p.captured_at, mp.place_name
+       FROM setlog_posts p
+       LEFT JOIN map_pins mp ON mp.id = p.map_pin_id
+       WHERE p.couple_id = ?
+         AND DATE_FORMAT(p.captured_at, '%m-%d') = ?
+         AND YEAR(p.captured_at) < YEAR(CURDATE())
+       ORDER BY RAND()
+       LIMIT 1`,
+      [coupleId, monthDay],
+    );
+
+    const countResult = await query(
+      `SELECT COUNT(*) AS total
+       FROM setlog_posts
+       WHERE couple_id = ?
+         AND DATE_FORMAT(captured_at, '%m-%d') = ?
+         AND YEAR(captured_at) < YEAR(CURDATE())`,
+      [coupleId, monthDay],
+    );
+
+    const raw = cardResult.rows[0] ?? null;
+    const card = raw
+      ? {
+          id: raw.id,
+          caption: raw.caption,
+          media_url: raw.media_url,
+          captured_at: raw.captured_at,
+          place_name: raw.place_name ?? null,
+          years_ago: currentYear - new Date(raw.captured_at).getFullYear(),
+        }
+      : null;
+
+    res.json({
+      ok: true,
+      card,
+      total_count: Number(countResult.rows[0]?.total ?? 0),
+      business_date: today,
+    });
+  } catch (err) {
+    console.error('[API] /retention/memory-card GET error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.get('/retention/memory-card/list', async (req, res) => {
+  try {
+    const userId = req.auth.userId;
+    const coupleId = await getCoupleIdForUser(userId);
+    if (!coupleId) {
+      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+    }
+    const today = businessDate();
+    const monthDay = today.slice(5); // 'MM-DD'
+    const currentYear = new Date().getFullYear();
+
+    const result = await query(
+      `SELECT p.id, p.caption, p.media_url, p.captured_at, mp.place_name
+       FROM setlog_posts p
+       LEFT JOIN map_pins mp ON mp.id = p.map_pin_id
+       WHERE p.couple_id = ?
+         AND DATE_FORMAT(p.captured_at, '%m-%d') = ?
+         AND YEAR(p.captured_at) < YEAR(CURDATE())
+       ORDER BY p.captured_at DESC`,
+      [coupleId, monthDay],
+    );
+
+    const posts = result.rows.map((row) => ({
+      id: row.id,
+      caption: row.caption,
+      media_url: row.media_url,
+      captured_at: row.captured_at,
+      place_name: row.place_name ?? null,
+      years_ago: currentYear - new Date(row.captured_at).getFullYear(),
+    }));
+
+    res.json({ ok: true, posts, business_date: today });
+  } catch (err) {
+    console.error('[API] /retention/memory-card/list GET error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+// ── MVP4: Secret Base Milestones ─────────────────────────────────────────────
+
+router.get('/retention/secret-base/milestones', async (req, res) => {
+  try {
+    const userId = req.auth.userId;
+    const coupleId = await getCoupleIdForUser(userId);
+    if (!coupleId) {
+      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+    }
+
+    // Fetch couple start date
+    const coupleResult = await query(
+      `SELECT StartDate FROM Couples WHERE CoupleId = ? LIMIT 1`,
+      [coupleId],
+    );
+    const startDate = coupleResult.rows[0]?.StartDate ?? null;
+
+    // Fetch ranked setlog_posts for nth-moment milestones
+    const postsResult = await query(
+      `SELECT id, captured_at,
+              ROW_NUMBER() OVER (ORDER BY captured_at ASC) AS rn
+       FROM setlog_posts
+       WHERE couple_id = ?`,
+      [coupleId],
+    );
+    const postRows = postsResult.rows;
+    const postByRank = (n) => postRows.find((r) => Number(r.rn) === n) ?? null;
+
+    // Fetch first map_pin
+    const firstPinResult = await query(
+      `SELECT MIN(created_at) AS first_pin_at FROM map_pins WHERE couple_id = ?`,
+      [coupleId],
+    );
+    const firstPinAt = firstPinResult.rows[0]?.first_pin_at ?? null;
+
+    // Fetch ranked afterglow_visits for visit milestones
+    const visitsResult = await query(
+      `SELECT id, visit_date,
+              ROW_NUMBER() OVER (ORDER BY visit_date ASC) AS rn
+       FROM afterglow_visits
+       WHERE couple_id = ?`,
+      [coupleId],
+    );
+    const visitRows = visitsResult.rows;
+    const visitByRank = (n) => visitRows.find((r) => Number(r.rn) === n) ?? null;
+
+    // Memory card first discovery: earliest captured_at that has another post in a different year on the same month-day
+    const memoryCardResult = await query(
+      `SELECT MIN(a.captured_at) AS first_discovery
+       FROM setlog_posts a
+       JOIN setlog_posts b
+         ON b.couple_id = a.couple_id
+            AND DATE_FORMAT(b.captured_at, '%m-%d') = DATE_FORMAT(a.captured_at, '%m-%d')
+            AND YEAR(b.captured_at) <> YEAR(a.captured_at)
+       WHERE a.couple_id = ?`,
+      [coupleId],
+    );
+    const firstMemoryCardAt = memoryCardResult.rows[0]?.first_discovery ?? null;
+
+    const toDate = (v) => {
+      if (!v) return null;
+      if (typeof v === 'string') return v.slice(0, 10);
+      if (v instanceof Date) return v.toISOString().slice(0, 10);
+      return String(v).slice(0, 10);
+    };
+
+    const milestone = (type, label, achievedAt, value = null) => ({
+      type,
+      label,
+      achieved: achievedAt !== null,
+      achieved_at: toDate(achievedAt),
+      value: value !== null ? value : undefined,
+    });
+
+    const p1 = postByRank(1);
+    const p10 = postByRank(10);
+    const p50 = postByRank(50);
+    const p100 = postByRank(100);
+    const v1 = visitByRank(1);
+    const v5 = visitByRank(5);
+
+    const d = (n) => (startDate ? shiftDate(toDate(startDate), n - 1) : null);
+
+    const milestones = [
+      milestone('first_moment', '첫 번째 순간', p1?.captured_at ?? null),
+      milestone('moments_10', '10번째 순간', p10?.captured_at ?? null),
+      milestone('moments_50', '50번째 순간', p50?.captured_at ?? null),
+      milestone('moments_100', '100번째 순간', p100?.captured_at ?? null),
+      milestone('first_pin', '첫 번째 장소', firstPinAt),
+      milestone('first_visit', '첫 번째 방문', v1?.visit_date ?? null),
+      milestone('visited_5', '5번째 방문', v5?.visit_date ?? null),
+      milestone('first_memory_card', '첫 메모리 카드 발견', firstMemoryCardAt),
+      milestone('d100', '100일', d(100)),
+      milestone('d200', '200일', d(200)),
+      milestone('d365', '365일', d(365)),
+    ];
+
+    res.json({ ok: true, milestones });
+  } catch (err) {
+    console.error('[API] /retention/secret-base/milestones GET error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+// ── MVP4: Base Postcard ───────────────────────────────────────────────────────
+
+router.get('/retention/secret-base/postcard/:year/:month', async (req, res) => {
+  try {
+    const userId = req.auth.userId;
+    const coupleId = await getCoupleIdForUser(userId);
+    if (!coupleId) {
+      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+    }
+
+    const year = Math.trunc(Number(req.params.year));
+    const month = Math.trunc(Number(req.params.month));
+    if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12 || year < 2000 || year > 2100) {
+      return res.status(400).json({ ok: false, reason: 'invalid_year_month' });
+    }
+
+    const monthStr = String(month).padStart(2, '0');
+    const rangeStart = `${year}-${monthStr}-01`;
+    const rangeEnd = `${year}-${monthStr}-31`; // MySQL handles last-day clamping in BETWEEN
+
+    // moments count
+    const momentsResult = await query(
+      `SELECT COUNT(*) AS cnt FROM setlog_posts
+       WHERE couple_id = ? AND captured_at >= ? AND captured_at < DATE_ADD(?, INTERVAL 1 MONTH)`,
+      [coupleId, rangeStart, rangeStart],
+    );
+    const moments_count = Number(momentsResult.rows[0]?.cnt ?? 0);
+
+    // visited count
+    const visitedResult = await query(
+      `SELECT COUNT(*) AS cnt FROM afterglow_visits
+       WHERE couple_id = ? AND visit_date >= ? AND visit_date < DATE_ADD(?, INTERVAL 1 MONTH)`,
+      [coupleId, rangeStart, rangeStart],
+    );
+    const visited_count = Number(visitedResult.rows[0]?.cnt ?? 0);
+
+    // highlight post (prefer media, then most recent)
+    const highlightResult = await query(
+      `SELECT id, caption, media_url, captured_at
+       FROM setlog_posts
+       WHERE couple_id = ? AND captured_at >= ? AND captured_at < DATE_ADD(?, INTERVAL 1 MONTH)
+       ORDER BY (media_url IS NOT NULL) DESC, captured_at DESC
+       LIMIT 1`,
+      [coupleId, rangeStart, rangeStart],
+    );
+    const highlightRaw = highlightResult.rows[0] ?? null;
+    const highlight_post = highlightRaw
+      ? {
+          id: highlightRaw.id,
+          caption: highlightRaw.caption,
+          media_url: highlightRaw.media_url,
+          captured_at: highlightRaw.captured_at,
+        }
+      : null;
+
+    // visited places
+    const placesResult = await query(
+      `SELECT mp.id AS pin_id, mp.place_name, av.visit_date
+       FROM afterglow_visits av
+       JOIN map_pins mp ON mp.id = av.map_pin_id
+       WHERE av.couple_id = ? AND av.visit_date >= ? AND av.visit_date < DATE_ADD(?, INTERVAL 1 MONTH)
+       ORDER BY av.visit_date ASC`,
+      [coupleId, rangeStart, rangeStart],
+    );
+    const visited_places = placesResult.rows.map((r) => ({
+      pin_id: r.pin_id,
+      place_name: r.place_name,
+      visit_date: r.visit_date instanceof Date ? r.visit_date.toISOString().slice(0, 10) : String(r.visit_date).slice(0, 10),
+    }));
+
+    res.json({
+      ok: true,
+      postcard: {
+        year,
+        month,
+        moments_count,
+        visited_count,
+        highlight_post,
+        visited_places,
+      },
+    });
+  } catch (err) {
+    console.error('[API] /retention/secret-base/postcard GET error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
   }
 });
