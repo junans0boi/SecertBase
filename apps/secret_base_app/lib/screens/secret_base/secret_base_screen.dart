@@ -105,13 +105,27 @@ class _SecretBaseScreenState extends State<SecretBaseScreen> {
         backgroundColor: kMainPaper,
         elevation: 0,
         scrolledUnderElevation: 0,
-        title: Text('우리의 비밀기지', style: mainBody(size: 17, weight: FontWeight.w900)),
+        title: Text(
+          '우리의 비밀기지',
+          style: mainBody(size: 17, weight: FontWeight.w900),
+        ),
         leading: const BackButton(color: kMainInk),
         actions: [
           TextButton.icon(
             onPressed: _openPostcard,
-            icon: const Icon(Icons.mail_outline_rounded, size: 18, color: kMainRose),
-            label: Text('기지 엽서', style: mainBody(size: 13, color: kMainRose, weight: FontWeight.w700)),
+            icon: const Icon(
+              Icons.mail_outline_rounded,
+              size: 18,
+              color: kMainRose,
+            ),
+            label: Text(
+              '기지 엽서',
+              style: mainBody(
+                size: 13,
+                color: kMainRose,
+                weight: FontWeight.w700,
+              ),
+            ),
           ),
         ],
       ),
@@ -142,10 +156,7 @@ class _SecretBaseScreenState extends State<SecretBaseScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '비밀기지 달성도',
-            style: mainBody(size: 13, color: Colors.white70),
-          ),
+          Text('비밀기지 달성도', style: mainBody(size: 13, color: Colors.white70)),
           const SizedBox(height: 6),
           Text(
             '$achieved / $total',
@@ -198,14 +209,12 @@ class _SecretBaseScreenState extends State<SecretBaseScreen> {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: achieved ? color.withValues(alpha: 0.12) : kMainPaperSoft,
+                color: achieved
+                    ? color.withValues(alpha: 0.12)
+                    : kMainPaperSoft,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(
-                icon,
-                color: achieved ? color : kMainMuted,
-                size: 22,
-              ),
+              child: Icon(icon, color: achieved ? color : kMainMuted, size: 22),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -221,16 +230,26 @@ class _SecretBaseScreenState extends State<SecretBaseScreen> {
                     ),
                   ),
                   if (achieved && dateLabel != null)
-                    Text(dateLabel, style: mainBody(size: 11, color: kMainMuted)),
+                    Text(
+                      dateLabel,
+                      style: mainBody(size: 11, color: kMainMuted),
+                    ),
                   if (achieved && value != null)
-                    Text('$value', style: mainBody(size: 11, color: kMainMuted)),
+                    Text(
+                      '$value',
+                      style: mainBody(size: 11, color: kMainMuted),
+                    ),
                 ],
               ),
             ),
             if (achieved)
               const Icon(Icons.check_circle_rounded, color: kMainSage, size: 22)
             else
-              const Icon(Icons.radio_button_unchecked_rounded, color: kMainLine, size: 22),
+              const Icon(
+                Icons.radio_button_unchecked_rounded,
+                color: kMainLine,
+                size: 22,
+              ),
           ],
         ),
       ),

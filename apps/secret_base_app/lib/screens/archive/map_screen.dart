@@ -1245,419 +1245,418 @@ class _MapScreenState extends State<MapScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) {
-        if (!reviewsLoaded && !reviewsLoading) loadReviews(setSheet);
-        final category = pin['category'] ?? '기타';
-        final emoji = _categoryEmojis[category] ?? '📍';
-        final status = _pinStatus(pin);
-        final isVisited = status == 'visited';
-        final rating = placeIntForMap(pin['rating']) ?? 0;
-        final tags = _extractTags(pin);
-        final memo = _cleanMemo(pin['memo']);
-        final date = _formattedDate(pin['visit_date']);
-        final author = '${pin['created_by'] ?? '우리'}';
-        final myCode =
-            '${_auth.user?['UserCode'] ?? _auth.user?['userCode'] ?? ''}';
-        final isCreator = myCode.isNotEmpty && author == myCode;
-        final linkedPosts = linkedSetlogPostsForMap(pin, _setlogPosts);
-        final rawMediaUrl = '${pin['media_url'] ?? ''}'.trim();
-        final pinMediaUrl = rawMediaUrl.isEmpty
-            ? ''
-            : (rawMediaUrl.startsWith('http')
-                  ? rawMediaUrl
-                  : '${_auth.baseUrl}$rawMediaUrl');
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) {
+          if (!reviewsLoaded && !reviewsLoading) loadReviews(setSheet);
+          final category = pin['category'] ?? '기타';
+          final emoji = _categoryEmojis[category] ?? '📍';
+          final status = _pinStatus(pin);
+          final isVisited = status == 'visited';
+          final rating = placeIntForMap(pin['rating']) ?? 0;
+          final tags = _extractTags(pin);
+          final memo = _cleanMemo(pin['memo']);
+          final date = _formattedDate(pin['visit_date']);
+          final author = '${pin['created_by'] ?? '우리'}';
+          final myCode =
+              '${_auth.user?['UserCode'] ?? _auth.user?['userCode'] ?? ''}';
+          final isCreator = myCode.isNotEmpty && author == myCode;
+          final linkedPosts = linkedSetlogPostsForMap(pin, _setlogPosts);
+          final rawMediaUrl = '${pin['media_url'] ?? ''}'.trim();
+          final pinMediaUrl = rawMediaUrl.isEmpty
+              ? ''
+              : (rawMediaUrl.startsWith('http')
+                    ? rawMediaUrl
+                    : '${_auth.baseUrl}$rawMediaUrl');
 
-        return _SheetFrame(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              20,
-              14,
-              20,
-              MediaQuery.of(ctx).viewInsets.bottom + 22,
-            ),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 42,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: kMainLine,
-                        borderRadius: BorderRadius.circular(99),
+          return _SheetFrame(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                20,
+                14,
+                20,
+                MediaQuery.of(ctx).viewInsets.bottom + 22,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 42,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: kMainLine,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 18),
-                  if (pinMediaUrl.isNotEmpty) ...[
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: Image.network(
-                        pinMediaUrl,
-                        height: 180,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    const SizedBox(height: 18),
+                    if (pinMediaUrl.isNotEmpty) ...[
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.network(
+                          pinMediaUrl,
+                          height: 180,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _PinBubble(
-                        emoji: emoji,
-                        status: status,
-                        active: true,
-                        size: 58,
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              pin['place_name'] ?? '',
-                              style: mainTitle(size: 26),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 6),
-                            Wrap(
-                              spacing: 7,
-                              runSpacing: 7,
-                              children: [
-                                _MiniPill(
-                                  label: isVisited ? '다녀온 곳' : '가고 싶은 곳',
-                                  color: isVisited ? kMainRose : kMainLilac,
-                                  backgroundColor: isVisited
-                                      ? kMainRoseSoft
-                                      : kMainLilacSoft,
-                                ),
-                                _MiniPill(
-                                  label: category,
-                                  color: kMainPeach,
-                                  backgroundColor: kMainPeachSoft,
-                                ),
-                                if (date != null)
+                      const SizedBox(height: 16),
+                    ],
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _PinBubble(
+                          emoji: emoji,
+                          status: status,
+                          active: true,
+                          size: 58,
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                pin['place_name'] ?? '',
+                                style: mainTitle(size: 26),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 7,
+                                runSpacing: 7,
+                                children: [
                                   _MiniPill(
-                                    label: date,
-                                    color: kMainSage,
-                                    backgroundColor: kMainSageSoft,
+                                    label: isVisited ? '다녀온 곳' : '가고 싶은 곳',
+                                    color: isVisited ? kMainRose : kMainLilac,
+                                    backgroundColor: isVisited
+                                        ? kMainRoseSoft
+                                        : kMainLilacSoft,
                                   ),
-                              ],
+                                  _MiniPill(
+                                    label: category,
+                                    color: kMainPeach,
+                                    backgroundColor: kMainPeachSoft,
+                                  ),
+                                  if (date != null)
+                                    _MiniPill(
+                                      label: date,
+                                      color: kMainSage,
+                                      backgroundColor: kMainSageSoft,
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    if (isVisited && rating > 0) ...[
+                      _DetailBlock(
+                        icon: Icons.favorite_rounded,
+                        title: '우리 온도',
+                        child: Row(
+                          children: [
+                            ...List.generate(
+                              5,
+                              (i) => Icon(
+                                Icons.star_rounded,
+                                size: 22,
+                                color: i < rating ? kMainHoney : kMainLine,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '$rating.0',
+                              style: mainBody(
+                                size: 13,
+                                color: kMainInk,
+                                weight: FontWeight.w900,
+                              ),
                             ),
                           ],
                         ),
                       ),
+                      const SizedBox(height: 12),
                     ],
-                  ),
-                  const SizedBox(height: 18),
-                  if (isVisited && rating > 0) ...[
+                    if (tags.isNotEmpty) ...[
+                      _DetailBlock(
+                        icon: Icons.auto_awesome_rounded,
+                        title: '감정 태그',
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: tags
+                              .map(
+                                (tag) => _MiniPill(
+                                  label: tag,
+                                  color: kMainRose,
+                                  backgroundColor: kMainRoseSoft,
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     _DetailBlock(
-                      icon: Icons.favorite_rounded,
-                      title: '우리 온도',
-                      child: Row(
-                        children: [
-                          ...List.generate(
-                            5,
-                            (i) => Icon(
-                              Icons.star_rounded,
-                              size: 22,
-                              color: i < rating ? kMainHoney : kMainLine,
+                      icon: Icons.edit_note_rounded,
+                      title: isVisited ? '우리 메모' : '가보고 싶은 이유',
+                      child: Text(
+                        memo.isEmpty
+                            ? (isVisited ? '아직 메모가 없어요' : '언젠가 같이 가볼 장소예요')
+                            : memo,
+                        style: mainBody(
+                          size: 13.5,
+                          color: kMainInk,
+                          height: 1.55,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    FutureBuilder<AfterglowState?>(
+                      future: afterglowFuture,
+                      builder: (context, snapshot) {
+                        final state = snapshot.data;
+                        if (state?.visit == null)
+                          return const SizedBox.shrink();
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: _DetailBlock(
+                            icon: Icons.auto_awesome_rounded,
+                            title: 'Date Afterglow',
+                            child: AfterglowSection(
+                              state: state!,
+                              baseUrl: _auth.baseUrl,
+                              onContribute: () {
+                                Navigator.pop(ctx);
+                                _showAfterglowContributionSheet(
+                                  pin,
+                                  state.visit!,
+                                );
+                              },
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '$rating.0',
-                            style: mainBody(
-                              size: 13,
-                              color: kMainInk,
-                              weight: FontWeight.w900,
+                        );
+                      },
+                    ),
+                    _DetailBlock(
+                      icon: Icons.photo_library_outlined,
+                      title: '연결된 추억',
+                      child: _LinkedMemorySummary(
+                        posts: linkedPosts,
+                        isVisited: isVisited,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    // ── 리뷰 섹션 ──
+                    _DetailBlock(
+                      icon: Icons.rate_review_outlined,
+                      title: '리뷰',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (!reviewsLoaded)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 8),
+                              child: SizedBox(
+                                height: 18,
+                                width: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            )
+                          else if (reviews.isEmpty)
+                            Text(
+                              '아직 리뷰가 없어요. 첫 리뷰를 남겨봐요!',
+                              style: mainBody(size: 13, color: kMainMuted),
+                            )
+                          else
+                            ...reviews.map((r) {
+                              final content = '${r['content'] ?? ''}'.trim();
+                              final mediaRaw = '${r['media_url'] ?? ''}'.trim();
+                              final mediaUrl = mediaRaw.isEmpty
+                                  ? ''
+                                  : (mediaRaw.startsWith('http')
+                                        ? mediaRaw
+                                        : '${_auth.baseUrl}$mediaRaw');
+                              final author = '${r['user_code'] ?? '?'}';
+                              final myCode =
+                                  '${_auth.user?['UserCode'] ?? _auth.user?['userCode'] ?? ''}';
+                              final isMyReview =
+                                  myCode.isNotEmpty && author == myCode;
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: kMainPaperSoft,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  padding: const EdgeInsets.all(12),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Text(
+                                            author,
+                                            style: mainBody(
+                                              size: 12,
+                                              color: kMainRose,
+                                              weight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          const Spacer(),
+                                          if (isMyReview)
+                                            GestureDetector(
+                                              onTap: () async {
+                                                final ok = await showDialog<bool>(
+                                                  context: context,
+                                                  builder: (c) => AlertDialog(
+                                                    title: const Text('리뷰 삭제'),
+                                                    content: const Text(
+                                                      '이 리뷰를 삭제할까요?',
+                                                    ),
+                                                    actions: [
+                                                      TextButton(
+                                                        onPressed: () =>
+                                                            Navigator.pop(
+                                                              c,
+                                                              false,
+                                                            ),
+                                                        child: const Text('취소'),
+                                                      ),
+                                                      TextButton(
+                                                        onPressed: () =>
+                                                            Navigator.pop(
+                                                              c,
+                                                              true,
+                                                            ),
+                                                        child: const Text('삭제'),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                );
+                                                if (ok != true) return;
+                                                try {
+                                                  await http.delete(
+                                                    Uri.parse(
+                                                      '${_auth.baseUrl}/api/map/${pin['id']}/reviews/${r['id']}',
+                                                    ),
+                                                    headers: _jsonHeaders(
+                                                      includeAuth: true,
+                                                    ),
+                                                  );
+                                                } catch (_) {}
+                                                reviewsLoaded = false;
+                                                await loadReviews(setSheet);
+                                              },
+                                              child: const Icon(
+                                                Icons.delete_outline,
+                                                size: 16,
+                                                color: kMainMuted,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                      if (content.isNotEmpty) ...[
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          content,
+                                          style: mainBody(
+                                            size: 13,
+                                            color: kMainInk,
+                                            height: 1.5,
+                                          ),
+                                        ),
+                                      ],
+                                      if (mediaUrl.isNotEmpty) ...[
+                                        const SizedBox(height: 8),
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          child: Image.network(
+                                            mediaUrl,
+                                            height: 140,
+                                            width: double.infinity,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) =>
+                                                const SizedBox.shrink(),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }),
+                          const SizedBox(height: 6),
+                          GestureDetector(
+                            onTap: () async {
+                              Navigator.pop(ctx);
+                              await _showWriteReviewSheet(pin, () {
+                                // Reopen detail to see updated reviews
+                                _showPinDetail(pin);
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 10,
+                                horizontal: 14,
+                              ),
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: kMainRose.withValues(alpha: 0.5),
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.edit_outlined,
+                                    size: 15,
+                                    color: kMainRose,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '리뷰 쓰기',
+                                    style: mainBody(
+                                      size: 13,
+                                      color: kMainRose,
+                                      weight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 12),
-                  ],
-                  if (tags.isNotEmpty) ...[
-                    _DetailBlock(
-                      icon: Icons.auto_awesome_rounded,
-                      title: '감정 태그',
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: tags
-                            .map(
-                              (tag) => _MiniPill(
-                                label: tag,
-                                color: kMainRose,
-                                backgroundColor: kMainRoseSoft,
-                              ),
-                            )
-                            .toList(),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  _DetailBlock(
-                    icon: Icons.edit_note_rounded,
-                    title: isVisited ? '우리 메모' : '가보고 싶은 이유',
-                    child: Text(
-                      memo.isEmpty
-                          ? (isVisited ? '아직 메모가 없어요' : '언젠가 같이 가볼 장소예요')
-                          : memo,
-                      style: mainBody(
-                        size: 13.5,
-                        color: kMainInk,
-                        height: 1.55,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  FutureBuilder<AfterglowState?>(
-                    future: afterglowFuture,
-                    builder: (context, snapshot) {
-                      final state = snapshot.data;
-                      if (state?.visit == null) return const SizedBox.shrink();
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _DetailBlock(
-                          icon: Icons.auto_awesome_rounded,
-                          title: 'Date Afterglow',
-                          child: AfterglowSection(
-                            state: state!,
-                            baseUrl: _auth.baseUrl,
-                            onContribute: () {
-                              Navigator.pop(ctx);
-                              _showAfterglowContributionSheet(
-                                pin,
-                                state.visit!,
-                              );
-                            },
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                  _DetailBlock(
-                    icon: Icons.photo_library_outlined,
-                    title: '연결된 추억',
-                    child: _LinkedMemorySummary(
-                      posts: linkedPosts,
-                      isVisited: isVisited,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  // ── 리뷰 섹션 ──
-                  _DetailBlock(
-                    icon: Icons.rate_review_outlined,
-                    title: '리뷰',
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (!reviewsLoaded)
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 8),
-                            child: SizedBox(
-                              height: 18,
-                              width: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          )
-                        else if (reviews.isEmpty)
-                          Text(
-                            '아직 리뷰가 없어요. 첫 리뷰를 남겨봐요!',
-                            style: mainBody(size: 13, color: kMainMuted),
-                          )
-                        else
-                          ...reviews.map((r) {
-                            final content = '${r['content'] ?? ''}'.trim();
-                            final mediaRaw = '${r['media_url'] ?? ''}'.trim();
-                            final mediaUrl = mediaRaw.isEmpty
-                                ? ''
-                                : (mediaRaw.startsWith('http')
-                                    ? mediaRaw
-                                    : '${_auth.baseUrl}$mediaRaw');
-                            final author = '${r['user_code'] ?? '?'}';
-                            final myCode = '${_auth.user?['UserCode'] ?? _auth.user?['userCode'] ?? ''}';
-                            final isMyReview = myCode.isNotEmpty && author == myCode;
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 10),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: kMainPaperSoft,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                padding: const EdgeInsets.all(12),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Text(
-                                          author,
-                                          style: mainBody(
-                                            size: 12,
-                                            color: kMainRose,
-                                            weight: FontWeight.w700,
-                                          ),
-                                        ),
-                                        const Spacer(),
-                                        if (isMyReview)
-                                          GestureDetector(
-                                            onTap: () async {
-                                              final ok = await showDialog<bool>(
-                                                context: context,
-                                                builder: (c) => AlertDialog(
-                                                  title: const Text('리뷰 삭제'),
-                                                  content: const Text('이 리뷰를 삭제할까요?'),
-                                                  actions: [
-                                                    TextButton(
-                                                      onPressed: () => Navigator.pop(c, false),
-                                                      child: const Text('취소'),
-                                                    ),
-                                                    TextButton(
-                                                      onPressed: () => Navigator.pop(c, true),
-                                                      child: const Text('삭제'),
-                                                    ),
-                                                  ],
-                                                ),
-                                              );
-                                              if (ok != true) return;
-                                              try {
-                                                await http.delete(
-                                                  Uri.parse('${_auth.baseUrl}/api/map/${pin['id']}/reviews/${r['id']}'),
-                                                  headers: _jsonHeaders(includeAuth: true),
-                                                );
-                                              } catch (_) {}
-                                              reviewsLoaded = false;
-                                              await loadReviews(setSheet);
-                                            },
-                                            child: const Icon(Icons.delete_outline, size: 16, color: kMainMuted),
-                                          ),
-                                      ],
-                                    ),
-                                    if (content.isNotEmpty) ...[
-                                      const SizedBox(height: 6),
-                                      Text(content, style: mainBody(size: 13, color: kMainInk, height: 1.5)),
-                                    ],
-                                    if (mediaUrl.isNotEmpty) ...[
-                                      const SizedBox(height: 8),
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: Image.network(
-                                          mediaUrl,
-                                          height: 140,
-                                          width: double.infinity,
-                                          fit: BoxFit.cover,
-                                          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            );
-                          }),
-                        const SizedBox(height: 6),
-                        GestureDetector(
-                          onTap: () async {
-                            Navigator.pop(ctx);
-                            await _showWriteReviewSheet(pin, () {
-                              // Reopen detail to see updated reviews
-                              _showPinDetail(pin);
-                            });
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
-                            decoration: BoxDecoration(
-                              border: Border.all(color: kMainRose.withValues(alpha: 0.5)),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.edit_outlined, size: 15, color: kMainRose),
-                                const SizedBox(width: 6),
-                                Text('리뷰 쓰기', style: mainBody(size: 13, color: kMainRose, weight: FontWeight.w700)),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: () => _showDirectionsSheet(pin),
-                      icon: const Icon(Icons.near_me_rounded, size: 18),
-                      label: Text(
-                        '길찾기',
-                        style: mainBody(
-                          color: Colors.white,
-                          weight: FontWeight.w900,
-                        ),
-                      ),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: kMainInk,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 13),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _ActionButton(
-                          icon: Icons.favorite_border_rounded,
-                          label: '하트',
-                          onTap: () => _toast('하트를 남겼어요'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _ActionButton(
-                          icon: Icons.chat_bubble_outline_rounded,
-                          label: '댓글',
-                          onTap: () => _toast('댓글은 다음 연결에서 붙일게요'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _ActionButton(
-                          icon: Icons.ios_share_rounded,
-                          label: '공유',
-                          onTap: () => _sharePin(pin),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (!isVisited) ...[
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton.icon(
-                        onPressed: () => _startAfterglow(pin, ctx),
-                        icon: const Icon(Icons.check_circle_rounded, size: 18),
+                        onPressed: () => _showDirectionsSheet(pin),
+                        icon: const Icon(Icons.near_me_rounded, size: 18),
                         label: Text(
-                          '오늘 다녀왔어요',
+                          '길찾기',
                           style: mainBody(
                             color: Colors.white,
                             weight: FontWeight.w900,
                           ),
                         ),
                         style: FilledButton.styleFrom(
-                          backgroundColor: kMainRose,
+                          backgroundColor: kMainInk,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 13),
                           shape: RoundedRectangleBorder(
@@ -1666,40 +1665,96 @@ class _MapScreenState extends State<MapScreen> {
                         ),
                       ),
                     ),
-                  ],
-                  const SizedBox(height: 8),
-                  TextButton.icon(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      _editPin(pin);
-                    },
-                    icon: const Icon(Icons.edit_outlined),
-                    label: const Text('장소 수정'),
-                    style: TextButton.styleFrom(foregroundColor: kMainSky),
-                  ),
-                  if (isCreator) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _ActionButton(
+                            icon: Icons.favorite_border_rounded,
+                            label: '하트',
+                            onTap: () => _toast('하트를 남겼어요'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _ActionButton(
+                            icon: Icons.chat_bubble_outline_rounded,
+                            label: '댓글',
+                            onTap: () => _toast('댓글은 다음 연결에서 붙일게요'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _ActionButton(
+                            icon: Icons.ios_share_rounded,
+                            label: '공유',
+                            onTap: () => _sharePin(pin),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (!isVisited) ...[
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: () => _startAfterglow(pin, ctx),
+                          icon: const Icon(
+                            Icons.check_circle_rounded,
+                            size: 18,
+                          ),
+                          label: Text(
+                            '오늘 다녀왔어요',
+                            style: mainBody(
+                              color: Colors.white,
+                              weight: FontWeight.w900,
+                            ),
+                          ),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: kMainRose,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 13),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
                     TextButton.icon(
                       onPressed: () {
                         Navigator.pop(ctx);
-                        _deletePin(pin);
+                        _editPin(pin);
                       },
-                      icon: const Icon(Icons.delete_outline),
-                      label: const Text('장소 삭제'),
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('장소 수정'),
+                      style: TextButton.styleFrom(foregroundColor: kMainSky),
+                    ),
+                    if (isCreator) ...[
+                      TextButton.icon(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          _deletePin(pin);
+                        },
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text('장소 삭제'),
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+                    Center(
+                      child: Text(
+                        '등록: $author',
+                        style: mainBody(size: 11, color: kMainMuted),
+                      ),
                     ),
                   ],
-                  const SizedBox(height: 10),
-                  Center(
-                    child: Text(
-                      '등록: $author',
-                      style: mainBody(size: 11, color: kMainMuted),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
-        );
-      }),
+          );
+        },
+      ),
     );
   }
 
@@ -1715,186 +1770,189 @@ class _MapScreenState extends State<MapScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) {
-        return _SheetFrame(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              20,
-              16,
-              20,
-              MediaQuery.of(ctx).viewInsets.bottom + 24,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 42,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: kMainLine,
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 18),
-                Text(
-                  '리뷰 쓰기',
-                  style: mainTitle(size: 18),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  pin['place_name'] ?? '',
-                  style: mainBody(size: 13, color: kMainMuted),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: contentCtrl,
-                  maxLines: 4,
-                  decoration: InputDecoration(
-                    hintText: '이 장소에서의 기억을 남겨봐요',
-                    filled: true,
-                    fillColor: kMainPaperSoft,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.all(14),
-                  ),
-                  style: mainBody(size: 14, color: kMainInk),
-                ),
-                const SizedBox(height: 12),
-                if (pickedImage != null) ...[
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.file(
-                      File(pickedImage!.path),
-                      height: 130,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton.icon(
-                    onPressed: () => setSheet(() => pickedImage = null),
-                    icon: const Icon(Icons.close, size: 16),
-                    label: const Text('사진 제거'),
-                    style: TextButton.styleFrom(foregroundColor: kMainMuted),
-                  ),
-                ] else
-                  GestureDetector(
-                    onTap: () async {
-                      final picker = ImagePicker();
-                      final img = await picker.pickImage(
-                        source: ImageSource.gallery,
-                        imageQuality: 85,
-                      );
-                      if (img != null) setSheet(() => pickedImage = img);
-                    },
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) {
+          return _SheetFrame(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                20,
+                16,
+                20,
+                MediaQuery.of(ctx).viewInsets.bottom + 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
                     child: Container(
-                      height: 56,
+                      width: 42,
+                      height: 4,
                       decoration: BoxDecoration(
-                        color: kMainPaperSoft,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: kMainLine),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.add_photo_alternate_outlined,
-                              size: 20, color: kMainMuted),
-                          const SizedBox(width: 8),
-                          Text(
-                            '사진 추가 (선택)',
-                            style: mainBody(size: 14, color: kMainMuted),
-                          ),
-                        ],
+                        color: kMainLine,
+                        borderRadius: BorderRadius.circular(99),
                       ),
                     ),
                   ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: submitting
-                        ? null
-                        : () async {
-                            final content = contentCtrl.text.trim();
-                            if (content.isEmpty && pickedImage == null) {
-                              _toast('리뷰 내용 또는 사진을 추가해주세요');
-                              return;
-                            }
-                            setSheet(() => submitting = true);
-                            try {
-                              final req = http.MultipartRequest(
-                                'POST',
-                                Uri.parse(
-                                  '${_auth.baseUrl}/api/map/${pin['id']}/reviews',
-                                ),
-                              );
-                              if (_auth.token != null)
-                                req.headers['Authorization'] =
-                                    'Bearer ${_auth.token}';
-                              if (content.isNotEmpty)
-                                req.fields['content'] = content;
-                              if (pickedImage != null) {
-                                final bytes =
-                                    await pickedImage!.readAsBytes();
-                                req.files.add(
-                                  http.MultipartFile.fromBytes(
-                                    'media',
-                                    bytes,
-                                    filename: pickedImage!.name,
-                                    contentType: MediaType('image', 'jpeg'),
+                  const SizedBox(height: 18),
+                  Text('리뷰 쓰기', style: mainTitle(size: 18)),
+                  const SizedBox(height: 4),
+                  Text(
+                    pin['place_name'] ?? '',
+                    style: mainBody(size: 13, color: kMainMuted),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: contentCtrl,
+                    maxLines: 4,
+                    decoration: InputDecoration(
+                      hintText: '이 장소에서의 기억을 남겨봐요',
+                      filled: true,
+                      fillColor: kMainPaperSoft,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.all(14),
+                    ),
+                    style: mainBody(size: 14, color: kMainInk),
+                  ),
+                  const SizedBox(height: 12),
+                  if (pickedImage != null) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.file(
+                        File(pickedImage!.path),
+                        height: 130,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: () => setSheet(() => pickedImage = null),
+                      icon: const Icon(Icons.close, size: 16),
+                      label: const Text('사진 제거'),
+                      style: TextButton.styleFrom(foregroundColor: kMainMuted),
+                    ),
+                  ] else
+                    GestureDetector(
+                      onTap: () async {
+                        final picker = ImagePicker();
+                        final img = await picker.pickImage(
+                          source: ImageSource.gallery,
+                          imageQuality: 85,
+                        );
+                        if (img != null) setSheet(() => pickedImage = img);
+                      },
+                      child: Container(
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: kMainPaperSoft,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: kMainLine),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.add_photo_alternate_outlined,
+                              size: 20,
+                              color: kMainMuted,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '사진 추가 (선택)',
+                              style: mainBody(size: 14, color: kMainMuted),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: submitting
+                          ? null
+                          : () async {
+                              final content = contentCtrl.text.trim();
+                              if (content.isEmpty && pickedImage == null) {
+                                _toast('리뷰 내용 또는 사진을 추가해주세요');
+                                return;
+                              }
+                              setSheet(() => submitting = true);
+                              try {
+                                final req = http.MultipartRequest(
+                                  'POST',
+                                  Uri.parse(
+                                    '${_auth.baseUrl}/api/map/${pin['id']}/reviews',
                                   ),
                                 );
+                                if (_auth.token != null)
+                                  req.headers['Authorization'] =
+                                      'Bearer ${_auth.token}';
+                                if (content.isNotEmpty)
+                                  req.fields['content'] = content;
+                                if (pickedImage != null) {
+                                  final bytes = await pickedImage!
+                                      .readAsBytes();
+                                  req.files.add(
+                                    http.MultipartFile.fromBytes(
+                                      'media',
+                                      bytes,
+                                      filename: pickedImage!.name,
+                                      contentType: MediaType('image', 'jpeg'),
+                                    ),
+                                  );
+                                }
+                                final streamed = await req.send();
+                                final res = await http.Response.fromStream(
+                                  streamed,
+                                );
+                                if (res.statusCode == 200) {
+                                  if (ctx.mounted) Navigator.pop(ctx);
+                                  onSaved();
+                                } else {
+                                  _toast('저장하지 못했어요');
+                                }
+                              } catch (_) {
+                                _toast('오류가 발생했어요');
+                              } finally {
+                                setSheet(() => submitting = false);
                               }
-                              final streamed = await req.send();
-                              final res =
-                                  await http.Response.fromStream(streamed);
-                              if (res.statusCode == 200) {
-                                if (ctx.mounted) Navigator.pop(ctx);
-                                onSaved();
-                              } else {
-                                _toast('저장하지 못했어요');
-                              }
-                            } catch (_) {
-                              _toast('오류가 발생했어요');
-                            } finally {
-                              setSheet(() => submitting = false);
-                            }
-                          },
-                    style: FilledButton.styleFrom(
-                      backgroundColor: kMainRose,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
+                            },
+                      style: FilledButton.styleFrom(
+                        backgroundColor: kMainRose,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(18),
+                        ),
                       ),
+                      child: submitting
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Text(
+                              '리뷰 등록',
+                              style: mainBody(
+                                color: Colors.white,
+                                weight: FontWeight.w900,
+                              ),
+                            ),
                     ),
-                    child: submitting
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : Text(
-                            '리뷰 등록',
-                            style: mainBody(
-                              color: Colors.white,
-                              weight: FontWeight.w900,
-                            ),
-                          ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        );
-      }),
+          );
+        },
+      ),
     );
     contentCtrl.dispose();
   }

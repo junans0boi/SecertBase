@@ -53,7 +53,11 @@ class _YutScreenState extends State<YutScreen> {
         if (yut != null) {
           yutSkin = _nameToYutSkin(yut['name'] as String? ?? '');
         }
-        if (mounted) setState(() { _pieceSkin = pieceSkin; _yutSkin = yutSkin; });
+        if (mounted)
+          setState(() {
+            _pieceSkin = pieceSkin;
+            _yutSkin = yutSkin;
+          });
       }
     } catch (_) {}
   }

@@ -12,10 +12,7 @@ import 'screens/home_shell.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await GoogleFonts.pendingFonts([
-    GoogleFonts.gaegu(),
-    GoogleFonts.notoSans(),
-  ]);
+  await GoogleFonts.pendingFonts([GoogleFonts.gaegu(), GoogleFonts.notoSans()]);
 
   // Initialize AuthService
   final auth = AuthService();

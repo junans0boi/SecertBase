@@ -863,8 +863,7 @@ class SocketService extends ChangeNotifier {
     });
 
     socket.on('game:gostop:nageori', (data) {
-      gostopNageoriMultiplier =
-          (_m(data)['baseMultiplier'] as num?)?.toInt();
+      gostopNageoriMultiplier = (_m(data)['baseMultiplier'] as num?)?.toInt();
       _log('고스톱 나가리! 배수 이월 ×$gostopNageoriMultiplier');
       notifyListeners();
     });
@@ -1244,7 +1243,10 @@ class SocketService extends ChangeNotifier {
   void setLobbyStake(String gameType, int stake) {
     lobbyStake = stake;
     notifyListeners();
-    _socket?.emit('game:lobby:set_stake', {'gameType': gameType, 'stake': stake});
+    _socket?.emit('game:lobby:set_stake', {
+      'gameType': gameType,
+      'stake': stake,
+    });
   }
 
   void clearLobbyStart() {
@@ -1400,23 +1402,31 @@ class SocketService extends ChangeNotifier {
   }
 
   void fireTank() {
-    _socket?.emitWithAck('game:tank:fire', null, ack: (r) {
-      final map = _m(r);
-      if (map['ok'] != true) {
-        _log('탱크 발사 실패: ${map['reason'] ?? map['error']}');
-      }
-    });
+    _socket?.emitWithAck(
+      'game:tank:fire',
+      null,
+      ack: (r) {
+        final map = _m(r);
+        if (map['ok'] != true) {
+          _log('탱크 발사 실패: ${map['reason'] ?? map['error']}');
+        }
+      },
+    );
   }
 
   // ── 고스톱 (2인 맞고) ─────────────────────────────────────────────────────
 
   void _gostopEmit(String event, Map<String, dynamic>? payload) {
-    _socket?.emitWithAck(event, payload, ack: (r) {
-      final map = _m(r);
-      if (map['ok'] != true) {
-        _log('$event 실패: ${map['reason'] ?? map['error']}');
-      }
-    });
+    _socket?.emitWithAck(
+      event,
+      payload,
+      ack: (r) {
+        final map = _m(r);
+        if (map['ok'] != true) {
+          _log('$event 실패: ${map['reason'] ?? map['error']}');
+        }
+      },
+    );
   }
 
   void startGostop({int perPointBet = 100}) =>
@@ -1541,6 +1551,7 @@ class SocketService extends ChangeNotifier {
       if (finalStake > 0) 'stake': finalStake,
     });
   }
+
   void playUnoCard(String cardId, {String? color}) {
     final payload = {'cardId': cardId};
     if (color != null) {

@@ -1565,10 +1565,7 @@ class _CharacterTokenPainter extends CustomPainter {
       ),
       textDirection: TextDirection.ltr,
     )..layout();
-    tp.paint(
-      canvas,
-      center - Offset(tp.width / 2, tp.height / 2),
-    );
+    tp.paint(canvas, center - Offset(tp.width / 2, tp.height / 2));
   }
 
   void _drawFace(Canvas canvas, Offset faceCenter, double faceR, Color skin) {
@@ -2104,25 +2101,25 @@ class _YutSticksPainter extends CustomPainter {
 
     final (flatColor, roundColor, grainColor) = switch (yutSkin) {
       'bamboo' => (
-          const Color(0xFF8BC34A),
-          const Color(0xFF33691E),
-          const Color(0xFF558B2F),
-        ),
+        const Color(0xFF8BC34A),
+        const Color(0xFF33691E),
+        const Color(0xFF558B2F),
+      ),
       'gold' => (
-          const Color(0xFFFFD700),
-          const Color(0xFFB8860B),
-          const Color(0xFFDAA520),
-        ),
+        const Color(0xFFFFD700),
+        const Color(0xFFB8860B),
+        const Color(0xFFDAA520),
+      ),
       'crystal' => (
-          const Color(0xFF88C0D0),
-          const Color(0xFF2E4A6E),
-          const Color(0xFF5E81AC),
-        ),
+        const Color(0xFF88C0D0),
+        const Color(0xFF2E4A6E),
+        const Color(0xFF5E81AC),
+      ),
       _ => (
-          const Color(0xFFDEB887),
-          const Color(0xFF5C3A21),
-          const Color(0xFFC49A6C),
-        ),
+        const Color(0xFFDEB887),
+        const Color(0xFF5C3A21),
+        const Color(0xFFC49A6C),
+      ),
     };
 
     final fill = Paint()..color = showFlat ? flatColor : roundColor;

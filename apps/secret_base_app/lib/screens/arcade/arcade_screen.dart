@@ -78,7 +78,8 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
         final lastBonus = data['last_bonus_date'] as String?;
         setState(() {
           _balance = data['balance'] as int;
-          _bonusClaimed = lastBonus != null && lastBonus.substring(0, 10) == today;
+          _bonusClaimed =
+              lastBonus != null && lastBonus.substring(0, 10) == today;
         });
       }
     } catch (_) {}
@@ -127,9 +128,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                 const Text('🪙', style: TextStyle(fontSize: 14)),
                 const SizedBox(width: 4),
                 Text(
-                  balance != null
-                      ? '${_formatCoins(balance)}코인'
-                      : '...',
+                  balance != null ? '${_formatCoins(balance)}코인' : '...',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -145,7 +144,10 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
               onTap: _bonusLoading ? null : _claimBonus,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 150),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: kMainSky,
                   borderRadius: BorderRadius.circular(20),
@@ -155,15 +157,27 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                   children: [
                     if (_bonusLoading)
                       const SizedBox(
-                        width: 12, height: 12,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
                       )
                     else
-                      const Icon(Icons.card_giftcard_rounded, size: 14, color: Colors.white),
+                      const Icon(
+                        Icons.card_giftcard_rounded,
+                        size: 14,
+                        color: Colors.white,
+                      ),
                     const SizedBox(width: 4),
                     const Text(
                       '출석 +500',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
                     ),
                   ],
                 ),
@@ -173,9 +187,9 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
             Text('오늘 보너스 수령 완료', style: mainBody(size: 12, color: kMainMuted)),
           const Spacer(),
           GestureDetector(
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const ShopScreen()),
-            ),
+            onTap: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const ShopScreen())),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
@@ -188,7 +202,14 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                 children: [
                   Icon(Icons.storefront_rounded, size: 14, color: kMainLilac),
                   const SizedBox(width: 4),
-                  Text('상점', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: kMainLilac)),
+                  Text(
+                    '상점',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: kMainLilac,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -243,9 +264,17 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
             Center(
               child: Column(
                 children: [
-                  Icon(Icons.bar_chart_rounded, size: 32, color: kMainMuted.withValues(alpha: 0.35)),
+                  Icon(
+                    Icons.bar_chart_rounded,
+                    size: 32,
+                    color: kMainMuted.withValues(alpha: 0.35),
+                  ),
                   const SizedBox(height: 6),
-                  Text('아직 플레이 기록이 없어요', style: mainBody(size: 11, color: kMainMuted), textAlign: TextAlign.center),
+                  Text(
+                    '아직 플레이 기록이 없어요',
+                    style: mainBody(size: 11, color: kMainMuted),
+                    textAlign: TextAlign.center,
+                  ),
                 ],
               ),
             )
@@ -257,7 +286,11 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                   children: [
                     _RecordStat('승', '$wins', kMainSky),
                     _RecordStat('패', '$losses', kMainRose),
-                    _RecordStat('승률', total > 0 ? '${(wins * 100 ~/ total)}%' : '-', kMainSage),
+                    _RecordStat(
+                      '승률',
+                      total > 0 ? '${(wins * 100 ~/ total)}%' : '-',
+                      kMainSage,
+                    ),
                   ],
                 ),
               ],
@@ -713,7 +746,14 @@ class _RecordStat extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: color)),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: color,
+          ),
+        ),
         const SizedBox(height: 2),
         Text(label, style: mainBody(size: 11, color: kMainSub)),
       ],

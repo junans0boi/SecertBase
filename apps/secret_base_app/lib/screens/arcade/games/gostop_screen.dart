@@ -92,8 +92,9 @@ class _GostopScreenState extends State<GostopScreen> {
     return players[idx] == _me;
   }
 
-  List<Map<String, dynamic>> _cards(dynamic raw) =>
-      ((raw as List?) ?? const []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  List<Map<String, dynamic>> _cards(dynamic raw) => ((raw as List?) ?? const [])
+      .map((e) => Map<String, dynamic>.from(e as Map))
+      .toList();
 
   @override
   Widget build(BuildContext context) {
@@ -137,9 +138,14 @@ class _GostopScreenState extends State<GostopScreen> {
         children: [
           Row(
             children: [
-              Text('$nickname  ',
-                  style: const TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
+              Text(
+                '$nickname  ',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+              ),
               _ScoreChip(score: oppScore, go: oppGo, active: !_isMyTurn),
               const Spacer(),
               // 상대 손패 (뒷면)
@@ -164,8 +170,7 @@ class _GostopScreenState extends State<GostopScreen> {
     );
   }
 
-  String presence(String code) =>
-      _socket.presenceNicknames[code] ?? code;
+  String presence(String code) => _socket.presenceNicknames[code] ?? code;
 
   // ── 바닥/덱 영역 ───────────────────────────────────────────────────────────
 
@@ -196,27 +201,40 @@ class _GostopScreenState extends State<GostopScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('점당 $perPoint · 배수 ×$totalMul',
-                  style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.75), fontSize: 11)),
-              Row(children: [
-                const HwatuCard(card: null, width: 26),
-                const SizedBox(width: 4),
-                Text('$deckCount장',
+              Text(
+                '점당 $perPoint · 배수 ×$totalMul',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.75),
+                  fontSize: 11,
+                ),
+              ),
+              Row(
+                children: [
+                  const HwatuCard(card: null, width: 26),
+                  const SizedBox(width: 4),
+                  Text(
+                    '$deckCount장',
                     style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.75), fontSize: 11)),
-              ]),
+                      color: Colors.white.withValues(alpha: 0.75),
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
           const SizedBox(height: 8),
           if (isDeckChoice)
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
-              child: Text('따닥! 가져올 카드를 선택하세요',
-                  style: TextStyle(
-                      color: kHwatuGold,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 14)),
+              child: Text(
+                '따닥! 가져올 카드를 선택하세요',
+                style: TextStyle(
+                  color: kHwatuGold,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                ),
+              ),
             ),
           Wrap(
             spacing: 6,
@@ -231,8 +249,8 @@ class _GostopScreenState extends State<GostopScreen> {
                   highlighted: isDeckChoice
                       ? choiceIds.contains(c['id'])
                       : _isMyTurn &&
-                          phase == 'playing' &&
-                          myMonths.contains(c['month']),
+                            phase == 'playing' &&
+                            myMonths.contains(c['month']),
                   onTap: isDeckChoice && choiceIds.contains(c['id'])
                       ? () => _socket.pickGostopField(c['id'] as String)
                       : null,
@@ -247,8 +265,10 @@ class _GostopScreenState extends State<GostopScreen> {
           if (phase == 'go_stop_choice' && !_isMyTurn)
             Padding(
               padding: const EdgeInsets.only(top: 14),
-              child: Text('상대가 고/스톱 선택 중...',
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.7))),
+              child: Text(
+                '상대가 고/스톱 선택 중...',
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
+              ),
             ),
         ],
       ),
@@ -259,31 +279,50 @@ class _GostopScreenState extends State<GostopScreen> {
     final myScore = (st['scores']?[_me]?['total'] as num?)?.toInt() ?? 0;
     return Column(
       children: [
-        Text('$myScore점! 계속할까요?',
-            style: const TextStyle(
-                color: kHwatuGold, fontWeight: FontWeight.w800, fontSize: 16)),
+        Text(
+          '$myScore점! 계속할까요?',
+          style: const TextStyle(
+            color: kHwatuGold,
+            fontWeight: FontWeight.w800,
+            fontSize: 16,
+          ),
+        ),
         const SizedBox(height: 8),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                  backgroundColor: kHwatuRed, foregroundColor: Colors.white),
+                backgroundColor: kHwatuRed,
+                foregroundColor: Colors.white,
+              ),
               onPressed: () => _socket.declareGostop('go'),
-              child: const Text('고!', style: TextStyle(fontWeight: FontWeight.w800)),
+              child: const Text(
+                '고!',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
             ),
             const SizedBox(width: 14),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                  backgroundColor: kHwatuBlue, foregroundColor: Colors.white),
+                backgroundColor: kHwatuBlue,
+                foregroundColor: Colors.white,
+              ),
               onPressed: () => _socket.declareGostop('stop'),
-              child: const Text('스톱', style: TextStyle(fontWeight: FontWeight.w800)),
+              child: const Text(
+                '스톱',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
             ),
           ],
         ),
-        Text('고: 점수를 더 쌓지만 역전당할 수 있어요 (×2씩)',
-            style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.6), fontSize: 10)),
+        Text(
+          '고: 점수를 더 쌓지만 역전당할 수 있어요 (×2씩)',
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.6),
+            fontSize: 10,
+          ),
+        ),
       ],
     );
   }
@@ -315,16 +354,21 @@ class _GostopScreenState extends State<GostopScreen> {
                 canPlay
                     ? '낼 카드를 선택하세요 (빛나는 카드 = 먹을 수 있음)'
                     : phase == 'deck_choice' && _isMyTurn
-                        ? '바닥에서 가져올 카드를 고르세요'
-                        : '상대 턴',
+                    ? '바닥에서 가져올 카드를 고르세요'
+                    : '상대 턴',
                 style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.75), fontSize: 11),
+                  color: Colors.white.withValues(alpha: 0.75),
+                  fontSize: 11,
+                ),
               ),
               const Spacer(),
               IconButton(
                 visualDensity: VisualDensity.compact,
-                icon: Icon(Icons.help_outline,
-                    color: Colors.white.withValues(alpha: 0.8), size: 20),
+                icon: Icon(
+                  Icons.help_outline,
+                  color: Colors.white.withValues(alpha: 0.8),
+                  size: 20,
+                ),
                 onPressed: _showHelpSheet,
               ),
             ],
@@ -388,10 +432,13 @@ class _GostopScreenState extends State<GostopScreen> {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(isWin ? '승리! 🎉' : '패배...',
-            style: TextStyle(
-                color: isWin ? kHwatuGold : kHwatuBlue,
-                fontWeight: FontWeight.w900)),
+        title: Text(
+          isWin ? '승리! 🎉' : '패배...',
+          style: TextStyle(
+            color: isWin ? kHwatuGold : kHwatuBlue,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -402,8 +449,10 @@ class _GostopScreenState extends State<GostopScreen> {
                 child: Text(l, style: const TextStyle(fontSize: 13)),
               ),
             const Divider(),
-            Text('$points점 × $perPoint × ×$mul = $amount코인',
-                style: const TextStyle(fontWeight: FontWeight.w800)),
+            Text(
+              '$points점 × $perPoint × ×$mul = $amount코인',
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
           ],
         ),
         actions: [
@@ -429,8 +478,10 @@ class _GostopScreenState extends State<GostopScreen> {
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
         child: ListView(
           children: const [
-            Text('고스톱 기본 규칙',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+            Text(
+              '고스톱 기본 규칙',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+            ),
             SizedBox(height: 10),
             Text('''
 1. 내 턴에 손패 1장을 냅니다. 바닥에 같은 월(月) 카드가 있으면 함께 가져와요.
@@ -459,7 +510,11 @@ class _ScoreChip extends StatelessWidget {
   final int score;
   final int go;
   final bool active;
-  const _ScoreChip({required this.score, required this.go, required this.active});
+  const _ScoreChip({
+    required this.score,
+    required this.go,
+    required this.active,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -521,10 +576,13 @@ class _CaptureShelf extends StatelessWidget {
               ),
           if (captures.isEmpty)
             Center(
-              child: Text('획득한 카드 없음',
-                  style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.4),
-                      fontSize: compact ? 10 : 11)),
+              child: Text(
+                '획득한 카드 없음',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.4),
+                  fontSize: compact ? 10 : 11,
+                ),
+              ),
             ),
         ],
       ),

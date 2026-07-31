@@ -1469,7 +1469,9 @@ class _PostDetailPageState extends State<_PostDetailPage> {
       final message = error.reason == 'today_loop_locked'
           ? '오늘의 루프가 열린 뒤에는 해제할 수 없어요'
           : '오늘의 순간 선택을 해제하지 못했어요';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } finally {
       if (mounted) setState(() => _designatingToday = false);
     }
@@ -2192,9 +2194,16 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.add_photo_alternate_outlined, size: 20, color: kMainSub),
+                            const Icon(
+                              Icons.add_photo_alternate_outlined,
+                              size: 20,
+                              color: kMainSub,
+                            ),
                             const SizedBox(width: 8),
-                            Text('사진·영상 추가 (최대 10개)', style: mainBody(color: kMainSub, size: 13)),
+                            Text(
+                              '사진·영상 추가 (최대 10개)',
+                              style: mainBody(color: kMainSub, size: 13),
+                            ),
                           ],
                         ),
                       ),
@@ -2206,7 +2215,10 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
                           ...List.generate(totalMedia, (i) {
                             final media = _pickedMedia[i];
                             return Padding(
-                              padding: EdgeInsets.only(right: 8, left: i == 0 ? 0 : 0),
+                              padding: EdgeInsets.only(
+                                right: 8,
+                                left: i == 0 ? 0 : 0,
+                              ),
                               child: Stack(
                                 children: [
                                   ClipRRect(
@@ -2218,25 +2230,40 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
                                           ? Container(
                                               color: const Color(0xFF1A1A2E),
                                               child: const Center(
-                                                child: Icon(Icons.videocam_rounded, color: Colors.white54, size: 22),
+                                                child: Icon(
+                                                  Icons.videocam_rounded,
+                                                  color: Colors.white54,
+                                                  size: 22,
+                                                ),
                                               ),
                                             )
-                                          : Image.memory(media.bytes, fit: BoxFit.cover),
+                                          : Image.memory(
+                                              media.bytes,
+                                              fit: BoxFit.cover,
+                                            ),
                                     ),
                                   ),
                                   Positioned(
                                     top: 3,
                                     right: 3,
                                     child: GestureDetector(
-                                      onTap: () => setState(() => _pickedMedia.removeAt(i)),
+                                      onTap: () => setState(
+                                        () => _pickedMedia.removeAt(i),
+                                      ),
                                       child: Container(
                                         width: 18,
                                         height: 18,
                                         decoration: BoxDecoration(
                                           color: Colors.black54,
-                                          borderRadius: BorderRadius.circular(9),
+                                          borderRadius: BorderRadius.circular(
+                                            9,
+                                          ),
                                         ),
-                                        child: const Icon(Icons.close_rounded, size: 12, color: Colors.white),
+                                        child: const Icon(
+                                          Icons.close_rounded,
+                                          size: 12,
+                                          color: Colors.white,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -2255,7 +2282,11 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
                                   borderRadius: BorderRadius.circular(10),
                                   border: Border.all(color: kMainLine),
                                 ),
-                                child: const Icon(Icons.add_rounded, color: kMainSub, size: 22),
+                                child: const Icon(
+                                  Icons.add_rounded,
+                                  color: kMainSub,
+                                  size: 22,
+                                ),
                               ),
                             ),
                         ],

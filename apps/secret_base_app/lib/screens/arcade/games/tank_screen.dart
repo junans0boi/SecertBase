@@ -71,8 +71,9 @@ class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
       final len = (paths != null && paths.isNotEmpty)
           ? (paths.first as List).length
           : 0;
-      _flightCtrl.duration =
-          Duration(milliseconds: (len * 14).clamp(600, 2400));
+      _flightCtrl.duration = Duration(
+        milliseconds: (len * 14).clamp(600, 2400),
+      );
       _explosionCtrl.reset();
       _flightCtrl.reset();
       _flightCtrl.forward().whenComplete(() {
@@ -202,10 +203,14 @@ class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('바람 $windDir ${wind.abs().toStringAsFixed(1)}',
-                    style: TextStyle(fontSize: 11, color: kMainSub)),
-                Text('$turnNum턴',
-                    style: TextStyle(fontSize: 10, color: kMainMuted)),
+                Text(
+                  '바람 $windDir ${wind.abs().toStringAsFixed(1)}',
+                  style: TextStyle(fontSize: 11, color: kMainSub),
+                ),
+                Text(
+                  '$turnNum턴',
+                  style: TextStyle(fontSize: 10, color: kMainMuted),
+                ),
               ],
             ),
           ),
@@ -244,8 +249,9 @@ class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
               flying: flying,
               flightProgress: _flightCtrl.value,
               myUserId: _socket.userId ?? '',
-              previewPath:
-                  (winner == null && _isMyTurn) ? _previewPath(state) : const [],
+              previewPath: (winner == null && _isMyTurn)
+                  ? _previewPath(state)
+                  : const [],
             ),
           ),
         ),
@@ -303,11 +309,13 @@ class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
             child: Row(
               children: _weaponNames.entries.map((e) {
                 final rawCount = ammo?[e.key];
-                final isInf = rawCount == null ||
+                final isInf =
+                    rawCount == null ||
                     rawCount == double.infinity ||
                     (rawCount is num && rawCount > 900);
                 final count = isInf ? '∞' : '$rawCount';
-                final hasAmmo = isInf || (rawCount != null && (rawCount as num) > 0);
+                final hasAmmo =
+                    isInf || (rawCount != null && (rawCount as num) > 0);
                 return Padding(
                   padding: const EdgeInsets.only(right: 6),
                   child: _WeaponChip(
@@ -315,7 +323,9 @@ class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
                     count: count,
                     selected: _selectedWeapon == e.key,
                     enabled: myTurn && hasAmmo,
-                    onTap: (myTurn && hasAmmo) ? () => _selectWeapon(e.key) : null,
+                    onTap: (myTurn && hasAmmo)
+                        ? () => _selectWeapon(e.key)
+                        : null,
                   ),
                 );
               }).toList(),
@@ -325,7 +335,13 @@ class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
           // Angle slider
           Row(
             children: [
-              SizedBox(width: 34, child: Text('각도', style: TextStyle(fontSize: 11, color: kMainMuted))),
+              SizedBox(
+                width: 34,
+                child: Text(
+                  '각도',
+                  style: TextStyle(fontSize: 11, color: kMainMuted),
+                ),
+              ),
               Expanded(
                 child: Slider(
                   value: _localAngle,
@@ -333,21 +349,32 @@ class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
                   max: 180,
                   divisions: 180,
                   onChanged: myTurn
-                      ? (v) { setState(() => _localAngle = v); _sendAim(); }
+                      ? (v) {
+                          setState(() => _localAngle = v);
+                          _sendAim();
+                        }
                       : null,
                 ),
               ),
               SizedBox(
                 width: 36,
-                child: Text('${_localAngle.round()}°',
-                    style: const TextStyle(fontSize: 11)),
+                child: Text(
+                  '${_localAngle.round()}°',
+                  style: const TextStyle(fontSize: 11),
+                ),
               ),
             ],
           ),
           // Power slider
           Row(
             children: [
-              SizedBox(width: 34, child: Text('파워', style: TextStyle(fontSize: 11, color: kMainMuted))),
+              SizedBox(
+                width: 34,
+                child: Text(
+                  '파워',
+                  style: TextStyle(fontSize: 11, color: kMainMuted),
+                ),
+              ),
               Expanded(
                 child: Slider(
                   value: _localPower,
@@ -355,14 +382,19 @@ class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
                   max: 100,
                   divisions: 99,
                   onChanged: myTurn
-                      ? (v) { setState(() => _localPower = v); _sendAim(); }
+                      ? (v) {
+                          setState(() => _localPower = v);
+                          _sendAim();
+                        }
                       : null,
                 ),
               ),
               SizedBox(
                 width: 36,
-                child: Text('${_localPower.round()}',
-                    style: const TextStyle(fontSize: 11)),
+                child: Text(
+                  '${_localPower.round()}',
+                  style: const TextStyle(fontSize: 11),
+                ),
               ),
             ],
           ),
@@ -377,8 +409,10 @@ class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Text('연료 $fuel',
-                    style: TextStyle(fontSize: 11, color: kMainMuted)),
+                child: Text(
+                  '연료 $fuel',
+                  style: TextStyle(fontSize: 11, color: kMainMuted),
+                ),
               ),
               IconButton(
                 icon: const Icon(Icons.arrow_forward_ios_rounded),
@@ -398,8 +432,10 @@ class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
             ],
           ),
           if (!myTurn)
-            Text('상대방 턴 대기 중...',
-                style: TextStyle(fontSize: 11, color: kMainMuted)),
+            Text(
+              '상대방 턴 대기 중...',
+              style: TextStyle(fontSize: 11, color: kMainMuted),
+            ),
         ],
       ),
     );
@@ -450,7 +486,10 @@ class _BattlefieldPainter extends CustomPainter {
     final rand = math.Random(42);
     for (int i = 0; i < 40; i++) {
       canvas.drawCircle(
-        Offset(rand.nextDouble() * size.width, rand.nextDouble() * size.height * 0.6),
+        Offset(
+          rand.nextDouble() * size.width,
+          rand.nextDouble() * size.height * 0.6,
+        ),
         0.8,
         starPaint,
       );
@@ -495,8 +534,10 @@ class _BattlefieldPainter extends CustomPainter {
         for (final pts in paths) {
           final ptList = (pts as List);
           if (ptList.length < 2) continue;
-          final headIdx =
-              (flightProgress * (ptList.length - 1)).round().clamp(0, ptList.length - 1);
+          final headIdx = (flightProgress * (ptList.length - 1)).round().clamp(
+            0,
+            ptList.length - 1,
+          );
 
           // Trail: last ~14 points behind the head, fading out
           const trailLen = 14;
@@ -504,10 +545,13 @@ class _BattlefieldPainter extends CustomPainter {
             final pt = ptList[i] as Map;
             final fade = 1.0 - (headIdx - i) / trailLen;
             canvas.drawCircle(
-              Offset((pt['x'] as num).toDouble() * cellW,
-                  (pt['y'] as num).toDouble() * cellH),
+              Offset(
+                (pt['x'] as num).toDouble() * cellW,
+                (pt['y'] as num).toDouble() * cellH,
+              ),
               1.2 + fade * 1.3,
-              Paint()..color = Colors.orangeAccent.withValues(alpha: 0.5 * fade),
+              Paint()
+                ..color = Colors.orangeAccent.withValues(alpha: 0.5 * fade),
             );
           }
 
@@ -515,10 +559,16 @@ class _BattlefieldPainter extends CustomPainter {
           final head = ptList[headIdx] as Map;
           final hx = (head['x'] as num).toDouble() * cellW;
           final hy = (head['y'] as num).toDouble() * cellH;
-          canvas.drawCircle(Offset(hx, hy), 6,
-              Paint()..color = Colors.orange.withValues(alpha: 0.35));
           canvas.drawCircle(
-              Offset(hx, hy), 3.2, Paint()..color = Colors.yellowAccent);
+            Offset(hx, hy),
+            6,
+            Paint()..color = Colors.orange.withValues(alpha: 0.35),
+          );
+          canvas.drawCircle(
+            Offset(hx, hy),
+            3.2,
+            Paint()..color = Colors.yellowAccent,
+          );
           canvas.drawCircle(Offset(hx, hy), 1.6, Paint()..color = Colors.white);
         }
       }
@@ -561,12 +611,29 @@ class _BattlefieldPainter extends CustomPainter {
       final isMe = p['id'] == myUserId;
       final hp = (p['hp'] as num).toInt();
       final angle = (p['angle'] as num?)?.toDouble() ?? 45.0;
-      _drawTank(canvas, col * cellW, row * cellH, cellW, cellH, isMe, hp, angle);
+      _drawTank(
+        canvas,
+        col * cellW,
+        row * cellH,
+        cellW,
+        cellH,
+        isMe,
+        hp,
+        angle,
+      );
     }
   }
 
-  void _drawTank(Canvas canvas, double px, double py, double cw, double ch,
-      bool isMe, int hp, double angle) {
+  void _drawTank(
+    Canvas canvas,
+    double px,
+    double py,
+    double cw,
+    double ch,
+    bool isMe,
+    int hp,
+    double angle,
+  ) {
     final color = isMe ? const Color(0xFF4CAF50) : const Color(0xFFE53935);
     final bodyPaint = Paint()..color = color;
     final trackPaint = Paint()..color = color.withValues(alpha: 0.65);
@@ -575,7 +642,10 @@ class _BattlefieldPainter extends CustomPainter {
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         Rect.fromCenter(
-            center: Offset(px, py + ch * 0.7), width: cw * 4.2, height: ch * 0.55),
+          center: Offset(px, py + ch * 0.7),
+          width: cw * 4.2,
+          height: ch * 0.55,
+        ),
         const Radius.circular(2),
       ),
       trackPaint,
@@ -583,7 +653,11 @@ class _BattlefieldPainter extends CustomPainter {
     // Body
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromCenter(center: Offset(px, py), width: cw * 3.2, height: ch * 1.1),
+        Rect.fromCenter(
+          center: Offset(px, py),
+          width: cw * 3.2,
+          height: ch * 1.1,
+        ),
         const Radius.circular(3),
       ),
       bodyPaint,
@@ -654,8 +728,8 @@ class _HpBar extends StatelessWidget {
     final barColor = hp > 50
         ? const Color(0xFF4CAF50)
         : hp > 25
-            ? Colors.orange
-            : Colors.red;
+        ? Colors.orange
+        : Colors.red;
     final labelStyle = TextStyle(
       fontSize: 10,
       fontWeight: active ? FontWeight.w900 : FontWeight.w400,
@@ -683,8 +757,9 @@ class _HpBar extends StatelessWidget {
     ];
 
     return Column(
-      crossAxisAlignment:
-          reverse ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      crossAxisAlignment: reverse
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: items,
     );
@@ -717,9 +792,7 @@ class _WeaponChip extends StatelessWidget {
           color: selected ? kMainHoney : kSurface,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: selected
-                ? kMainHoney
-                : kMainMuted.withValues(alpha: 0.3),
+            color: selected ? kMainHoney : kMainMuted.withValues(alpha: 0.3),
           ),
         ),
         child: Column(
@@ -733,8 +806,8 @@ class _WeaponChip extends StatelessWidget {
                 color: selected
                     ? Colors.white
                     : enabled
-                        ? const Color(0xFF222233)
-                        : kMainMuted,
+                    ? const Color(0xFF222233)
+                    : kMainMuted,
               ),
             ),
             Text(

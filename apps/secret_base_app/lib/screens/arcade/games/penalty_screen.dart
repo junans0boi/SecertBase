@@ -741,8 +741,9 @@ class _PitchPainter extends CustomPainter {
 
   void _paintTargetGrid(Canvas canvas, _PitchGeometry geo) {
     final g = geo.goal;
-    final accent =
-        isKickerView ? const Color(0xFFFF5252) : const Color(0xFF40E0FF);
+    final accent = isKickerView
+        ? const Color(0xFFFF5252)
+        : const Color(0xFF40E0FF);
 
     // 9개의 탭 가능한 타겟존을 명확히 표시
     final cellW = g.width / 3;

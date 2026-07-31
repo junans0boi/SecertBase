@@ -137,7 +137,9 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
             _socket.startTank(stake: _socket.lobbyStartedStake);
             break;
           case 'gostop':
-            _socket.startGostop(perPointBet: _socket.lobbyStake > 0 ? _socket.lobbyStake : 100);
+            _socket.startGostop(
+              perPointBet: _socket.lobbyStake > 0 ? _socket.lobbyStake : 100,
+            );
             break;
         }
       });
@@ -667,7 +669,12 @@ class _StakeSelector extends StatelessWidget {
             const SizedBox(width: 5),
             Text(
               '판돈',
-              style: mainBody(size: 13, color: kMainInk, weight: FontWeight.w900, height: 1),
+              style: mainBody(
+                size: 13,
+                color: kMainInk,
+                weight: FontWeight.w900,
+                height: 1,
+              ),
             ),
             const SizedBox(width: 8),
             Text(
@@ -694,7 +701,9 @@ class _StakeSelector extends StatelessWidget {
                     duration: const Duration(milliseconds: 140),
                     padding: const EdgeInsets.symmetric(vertical: 9),
                     decoration: BoxDecoration(
-                      color: selected ? color.withValues(alpha: 0.12) : kMainPaperSoft,
+                      color: selected
+                          ? color.withValues(alpha: 0.12)
+                          : kMainPaperSoft,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: selected ? color : kMainLine,
@@ -706,7 +715,9 @@ class _StakeSelector extends StatelessWidget {
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 12,
-                        fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                        fontWeight: selected
+                            ? FontWeight.w800
+                            : FontWeight.w500,
                         color: selected ? color : kMainSub,
                       ),
                     ),

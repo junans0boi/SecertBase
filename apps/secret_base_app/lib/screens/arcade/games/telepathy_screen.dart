@@ -58,7 +58,14 @@ const List<TelepathyQuestion> kTelepathyQuestions = [
   TelepathyQuestion(
     category: '데이트 💖',
     question: '현재 시점 가고 싶은 데이트 장소는?',
-    options: ['보드게임 카페 🎲', '영화관 🍿', '코인 노래방 🎤', '대형 쇼핑몰 🛍️', '맛집 탐방 🍱', 'Atmosphere 분위기 술집 🍸'],
+    options: [
+      '보드게임 카페 🎲',
+      '영화관 🍿',
+      '코인 노래방 🎤',
+      '대형 쇼핑몰 🛍️',
+      '맛집 탐방 🍱',
+      'Atmosphere 분위기 술집 🍸',
+    ],
   ),
   TelepathyQuestion(
     category: '데이트 🌳',
@@ -102,7 +109,14 @@ const List<TelepathyQuestion> kTelepathyQuestions = [
   TelepathyQuestion(
     category: '문화 🎬',
     question: '주말에 집에서 정주행하고 싶은 장르는?',
-    options: ['로맨스/코미디 💖', '스릴러/공포 😱', 'SF/액션 🍿', '예능/토크쇼 😆', '다큐멘터리/지식 🧠', '애니메이션 🎨'],
+    options: [
+      '로맨스/코미디 💖',
+      '스릴러/공포 😱',
+      'SF/액션 🍿',
+      '예능/토크쇼 😆',
+      '다큐멘터리/지식 🧠',
+      '애니메이션 🎨',
+    ],
   ),
   TelepathyQuestion(
     category: '취미 🎧',
@@ -144,7 +158,12 @@ const List<TelepathyQuestion> kTelepathyQuestions = [
   TelepathyQuestion(
     category: '선물 🎁',
     question: '생일 선물로 받고 싶은 것은?',
-    options: ['실용적인 전자기기 📱', '마음 담긴 정성 선물 💌', '취향저격 패션/뷰티 👗', '맛있는 고급 식사권 🍽️'],
+    options: [
+      '실용적인 전자기기 📱',
+      '마음 담긴 정성 선물 💌',
+      '취향저격 패션/뷰티 👗',
+      '맛있는 고급 식사권 🍽️',
+    ],
   ),
   TelepathyQuestion(
     category: '취향 🚗',
@@ -176,7 +195,12 @@ const List<TelepathyQuestion> kTelepathyQuestions = [
   TelepathyQuestion(
     category: '데이트 🎟️',
     question: '놀이동산에 갔을 때 메인 목표는?',
-    options: ['무서운 놀이기구 전부 탑승 🎢', '머리띠 쓰고 인생샷 찍기 📸', '맛있는 군것질 탐방 츄러스 🍿', '퍼레이드 감상 🎠'],
+    options: [
+      '무서운 놀이기구 전부 탑승 🎢',
+      '머리띠 쓰고 인생샷 찍기 📸',
+      '맛있는 군것질 탐방 츄러스 🍿',
+      '퍼레이드 감상 🎠',
+    ],
   ),
   TelepathyQuestion(
     category: '일상 🛋️',
@@ -206,7 +230,10 @@ class _TelepathyScreenState extends State<TelepathyScreen> {
   void initState() {
     super.initState();
     _socket.addListener(_rebuild);
-    _roundQuestions = _pickRoundQuestions(_socket.roomCode ?? 'default', _round);
+    _roundQuestions = _pickRoundQuestions(
+      _socket.roomCode ?? 'default',
+      _round,
+    );
   }
 
   @override
@@ -264,7 +291,10 @@ class _TelepathyScreenState extends State<TelepathyScreen> {
   void _startNewRound() {
     setState(() {
       _round++;
-      _roundQuestions = _pickRoundQuestions(_socket.roomCode ?? 'default', _round);
+      _roundQuestions = _pickRoundQuestions(
+        _socket.roomCode ?? 'default',
+        _round,
+      );
       _questionIndex = 0;
       _roundSuccessCount = 0;
       _roundComplete = false;
@@ -290,7 +320,10 @@ class _TelepathyScreenState extends State<TelepathyScreen> {
             // 주제 카테고리 태그 + 문제 질문
             if (!_roundComplete) ...[
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: kPrimary.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
@@ -341,11 +374,15 @@ class _TelepathyScreenState extends State<TelepathyScreen> {
                         if (_myChoice != null)
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 10),
+                              horizontal: 16,
+                              vertical: 10,
+                            ),
                             decoration: BoxDecoration(
                               color: kCard,
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: kPrimary.withValues(alpha: 0.5)),
+                              border: Border.all(
+                                color: kPrimary.withValues(alpha: 0.5),
+                              ),
                             ),
                             child: Text(
                               '내 선택: $_myChoice',
@@ -359,7 +396,10 @@ class _TelepathyScreenState extends State<TelepathyScreen> {
                       ] else ...[
                         Text(
                           '상대방과 통할 것 같은 하나를 골라보세요!',
-                          style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 13),
+                          style: GoogleFonts.notoSans(
+                            color: kTextMuted,
+                            fontSize: 13,
+                          ),
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 24),
@@ -379,7 +419,9 @@ class _TelepathyScreenState extends State<TelepathyScreen> {
   Widget _buildOptionsLayout(List<String> options) {
     if (options.length == 2) {
       return Column(
-        children: options.map((opt) => _buildOptionButton(opt, height: 60, fontSize: 17)).toList(),
+        children: options
+            .map((opt) => _buildOptionButton(opt, height: 60, fontSize: 17))
+            .toList(),
       );
     } else if (options.length <= 4) {
       return GridView.count(
@@ -389,7 +431,9 @@ class _TelepathyScreenState extends State<TelepathyScreen> {
         mainAxisSpacing: 10,
         childAspectRatio: 2.1,
         physics: const NeverScrollableScrollPhysics(),
-        children: options.map((opt) => _buildOptionCard(opt, fontSize: 15)).toList(),
+        children: options
+            .map((opt) => _buildOptionCard(opt, fontSize: 15))
+            .toList(),
       );
     } else {
       return GridView.count(
@@ -399,12 +443,18 @@ class _TelepathyScreenState extends State<TelepathyScreen> {
         mainAxisSpacing: 10,
         childAspectRatio: 2.2,
         physics: const NeverScrollableScrollPhysics(),
-        children: options.map((opt) => _buildOptionCard(opt, fontSize: 14)).toList(),
+        children: options
+            .map((opt) => _buildOptionCard(opt, fontSize: 14))
+            .toList(),
       );
     }
   }
 
-  Widget _buildOptionButton(String opt, {required double height, required double fontSize}) {
+  Widget _buildOptionButton(
+    String opt, {
+    required double height,
+    required double fontSize,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: InkWell(
@@ -518,26 +568,34 @@ class _TelepathyScreenState extends State<TelepathyScreen> {
               border: Border.all(color: kBorder),
             ),
             child: Column(
-              children: choices.entries.map(
-                (e) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '${_socket.presenceNicknames[e.key] ?? e.key}: ',
-                        style: GoogleFonts.notoSans(
-                            color: kTextMuted, fontSize: 14, fontWeight: FontWeight.w600),
+              children: choices.entries
+                  .map(
+                    (e) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '${_socket.presenceNicknames[e.key] ?? e.key}: ',
+                            style: GoogleFonts.notoSans(
+                              color: kTextMuted,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            e.value,
+                            style: GoogleFonts.notoSans(
+                              color: kText,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                       ),
-                      Text(
-                        e.value,
-                        style: GoogleFonts.notoSans(
-                            color: kText, fontSize: 14, fontWeight: FontWeight.w700),
-                      ),
-                    ],
-                  ),
-                ),
-              ).toList(),
+                    ),
+                  )
+                  .toList(),
             ),
           ),
         ],
@@ -622,4 +680,3 @@ class _ResetBtn extends StatelessWidget {
     );
   }
 }
-

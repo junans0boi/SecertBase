@@ -38,16 +38,24 @@ class _BasePostcardScreenState extends State<BasePostcardScreen> {
   }
 
   Future<void> _load() async {
-    if (mounted) setState(() { _loading = true; _postcard = null; });
+    if (mounted)
+      setState(() {
+        _loading = true;
+        _postcard = null;
+      });
     try {
       final res = await http.get(
-        Uri.parse('${widget.baseUrl}/api/retention/secret-base/postcard/$_year/$_month'),
+        Uri.parse(
+          '${widget.baseUrl}/api/retention/secret-base/postcard/$_year/$_month',
+        ),
         headers: widget.authHeaders,
       );
       if (!mounted) return;
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       if (data['ok'] == true && data['postcard'] != null) {
-        setState(() => _postcard = Map<String, dynamic>.from(data['postcard'] as Map));
+        setState(
+          () => _postcard = Map<String, dynamic>.from(data['postcard'] as Map),
+        );
       }
     } catch (_) {
     } finally {
@@ -94,7 +102,10 @@ class _BasePostcardScreenState extends State<BasePostcardScreen> {
         backgroundColor: kMainPaper,
         elevation: 0,
         scrolledUnderElevation: 0,
-        title: Text('기지 엽서', style: mainBody(size: 17, weight: FontWeight.w900)),
+        title: Text(
+          '기지 엽서',
+          style: mainBody(size: 17, weight: FontWeight.w900),
+        ),
         leading: const BackButton(color: kMainInk),
       ),
       body: Column(
@@ -102,10 +113,12 @@ class _BasePostcardScreenState extends State<BasePostcardScreen> {
           _monthNavigator(),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator(color: kMainRose))
+                ? const Center(
+                    child: CircularProgressIndicator(color: kMainRose),
+                  )
                 : _postcard == null
-                    ? _emptyState()
-                    : _postcardContent(),
+                ? _emptyState()
+                : _postcardContent(),
           ),
         ],
       ),
@@ -148,7 +161,10 @@ class _BasePostcardScreenState extends State<BasePostcardScreen> {
           const SizedBox(height: 12),
           Text('이달의 기록이 없어요', style: mainBody(color: kMainMuted, size: 15)),
           const SizedBox(height: 4),
-          Text('순간을 남기면 엽서가 만들어져요', style: mainBody(color: kMainMuted, size: 13)),
+          Text(
+            '순간을 남기면 엽서가 만들어져요',
+            style: mainBody(color: kMainMuted, size: 13),
+          ),
         ],
       ),
     );
@@ -164,7 +180,9 @@ class _BasePostcardScreenState extends State<BasePostcardScreen> {
         .toList();
 
     final highlightUrl = highlight?['media_url'] as String?;
-    final fullHighlightUrl = highlightUrl != null ? '${widget.baseUrl}$highlightUrl' : null;
+    final fullHighlightUrl = highlightUrl != null
+        ? '${widget.baseUrl}$highlightUrl'
+        : null;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 20, 18, 40),
@@ -182,9 +200,17 @@ class _BasePostcardScreenState extends State<BasePostcardScreen> {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  _statChip(Icons.photo_library_outlined, '$momentsCount 순간', Colors.white),
+                  _statChip(
+                    Icons.photo_library_outlined,
+                    '$momentsCount 순간',
+                    Colors.white,
+                  ),
                   const SizedBox(width: 10),
-                  _statChip(Icons.place_outlined, '$visitedCount 장소', Colors.white),
+                  _statChip(
+                    Icons.place_outlined,
+                    '$visitedCount 장소',
+                    Colors.white,
+                  ),
                 ],
               ),
             ],
@@ -220,7 +246,11 @@ class _BasePostcardScreenState extends State<BasePostcardScreen> {
                       if (highlight?['place_name'] != null)
                         Text(
                           highlight!['place_name'] as String,
-                          style: mainBody(size: 13, weight: FontWeight.w700, color: kMainInk),
+                          style: mainBody(
+                            size: 13,
+                            weight: FontWeight.w700,
+                            color: kMainInk,
+                          ),
                         ),
                       if (highlight?['caption'] != null)
                         Text(
@@ -246,14 +276,21 @@ class _BasePostcardScreenState extends State<BasePostcardScreen> {
             children: visitedPlaces.map((place) {
               final name = place['place_name'] as String? ?? '알 수 없음';
               return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
                   color: kMainSageSoft,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   '📍 $name',
-                  style: mainBody(size: 12, color: kMainInk, weight: FontWeight.w600),
+                  style: mainBody(
+                    size: 12,
+                    color: kMainInk,
+                    weight: FontWeight.w600,
+                  ),
                 ),
               );
             }).toList(),
@@ -269,7 +306,10 @@ class _BasePostcardScreenState extends State<BasePostcardScreen> {
       children: [
         Icon(icon, color: color.withValues(alpha: 0.85), size: 16),
         const SizedBox(width: 4),
-        Text(label, style: mainBody(size: 13, color: color, weight: FontWeight.w700)),
+        Text(
+          label,
+          style: mainBody(size: 13, color: color, weight: FontWeight.w700),
+        ),
       ],
     );
   }

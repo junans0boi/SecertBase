@@ -474,7 +474,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Icons.favorite_outline,
           kMainRose,
           '연결된 애인',
-          _auth.user?['PartnerName']?.toString() ?? _auth.user?['PartnerCode']?.toString() ?? '없음',
+          _auth.user?['PartnerName']?.toString() ??
+              _auth.user?['PartnerCode']?.toString() ??
+              '없음',
           _auth.user?['PartnerCode'] != null ? kMainRose : kMainMuted,
         ),
         const SizedBox(height: 12),

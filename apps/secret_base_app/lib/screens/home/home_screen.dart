@@ -495,7 +495,10 @@ class _MemoryCardWidget extends StatelessWidget {
             children: [
               const Icon(Icons.history_rounded, size: 14, color: kMainMuted),
               const SizedBox(width: 4),
-              Text('$yearsAgo년 전 오늘', style: mainBody(size: 12, color: kMainMuted)),
+              Text(
+                '$yearsAgo년 전 오늘',
+                style: mainBody(size: 12, color: kMainMuted),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -514,7 +517,10 @@ class _MemoryCardWidget extends StatelessWidget {
                       width: 72,
                       height: 72,
                       color: kMainPaperSoft,
-                      child: const Icon(Icons.image_outlined, color: kMainMuted),
+                      child: const Icon(
+                        Icons.image_outlined,
+                        color: kMainMuted,
+                      ),
                     ),
                   ),
                 )
@@ -526,7 +532,11 @@ class _MemoryCardWidget extends StatelessWidget {
                     color: kMainPaperSoft,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.photo_album_outlined, color: kMainMuted, size: 28),
+                  child: const Icon(
+                    Icons.photo_album_outlined,
+                    color: kMainMuted,
+                    size: 28,
+                  ),
                 ),
               const SizedBox(width: 12),
               Expanded(
@@ -534,7 +544,14 @@ class _MemoryCardWidget extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (placeName != null)
-                      Text(placeName, style: mainBody(size: 13, weight: FontWeight.w700, color: kMainInk)),
+                      Text(
+                        placeName,
+                        style: mainBody(
+                          size: 13,
+                          weight: FontWeight.w700,
+                          color: kMainInk,
+                        ),
+                      ),
                     if (caption != null)
                       Text(
                         caption,
@@ -567,7 +584,11 @@ class _MemoryCardWidget extends StatelessWidget {
                   ),
                   child: Text(
                     '보러가기 →',
-                    style: mainBody(size: 12, color: kMainRose, weight: FontWeight.w700),
+                    style: mainBody(
+                      size: 12,
+                      color: kMainRose,
+                      weight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ],

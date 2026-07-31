@@ -538,7 +538,8 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
                                               child: UnoCardBack(
                                                 width: pileCardWidth,
                                                 height: pileCardHeight,
-                                                cardBackSkin: widget.cardBackSkin,
+                                                cardBackSkin:
+                                                    widget.cardBackSkin,
                                               ),
                                             ),
                                             Positioned(
@@ -547,7 +548,8 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
                                               child: UnoCardBack(
                                                 width: pileCardWidth,
                                                 height: pileCardHeight,
-                                                cardBackSkin: widget.cardBackSkin,
+                                                cardBackSkin:
+                                                    widget.cardBackSkin,
                                               ),
                                             ),
                                             if (isMyTurn)
@@ -1212,7 +1214,7 @@ class UnoCardBack extends StatelessWidget {
                     color: const Color(0xFFFF6F9F),
                     size: width * 0.42,
                     shadows: const [
-                      Shadow(color: Colors.black38, blurRadius: 3)
+                      Shadow(color: Colors.black38, blurRadius: 3),
                     ],
                   ),
             SizedBox(height: height * 0.04),
