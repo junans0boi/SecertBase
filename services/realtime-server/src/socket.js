@@ -4,6 +4,7 @@ import { installSocketAuthentication, installSocketFeatureGate } from "./backend
 import { query } from "./db.js";
 import { redis } from "./redis.js";
 import { transferGameReward, getBalance, getEquippedStats } from "./wallet-engine.js";
+import { grantXp, updateMissionProgress } from "./level-engine.js";
 import {
   throwYut,
   movePiece,
@@ -215,6 +216,25 @@ async function saveGameResult(roomCode, winnerCode, loserCode, gameType, stake) 
     );
   } catch (err) {
     console.error('[game_results] insert error:', err.message);
+  }
+}
+
+// 게임 종료 후 XP + 미션 진행 부여 (fire-and-forget)
+async function grantGameXpAndMissions(winnerCode, loserCode, game) {
+  try {
+    const { rows } = await query(
+      'SELECT UserId, UserCode FROM Users WHERE UserCode IN (?,?)',
+      [winnerCode, loserCode],
+    );
+    for (const row of rows) {
+      const uid = row.UserId;
+      const isWinner = row.UserCode === winnerCode;
+      await grantXp(uid, isWinner ? 50 : 20);
+      await updateMissionProgress(uid, 'game_play', game);
+      if (isWinner) await updateMissionProgress(uid, 'game_win', game);
+    }
+  } catch (err) {
+    console.error('[xp] grantGameXpAndMissions error:', err.message);
   }
 }
 
@@ -1161,6 +1181,7 @@ export const registerSocketHandlers = (io) => {
         const pirateWinner = gameState.players.find(p => p !== userId);
         if (pirateWinner) {
           await saveGameResult(roomCode, pirateWinner, userId, 'pirate', 0).catch(() => {});
+          grantGameXpAndMissions(pirateWinner, userId, 'pirate').catch(() => {});
         }
         ack({ ok: true, exploded: true });
       } else {
@@ -1491,6 +1512,7 @@ export const registerSocketHandlers = (io) => {
         await Promise.all([
           settleAndEmitWallet(io, roomCode, gameState.winner, yutLoserId, gameState.stake ?? 0, `yut:${roomCode}:${Date.now()}`),
           saveGameResult(roomCode, gameState.winner, yutLoserId, 'yut', gameState.stake ?? 0),
+          grantGameXpAndMissions(gameState.winner, yutLoserId, 'yut'),
         ]);
       }
     });
@@ -1539,6 +1561,7 @@ export const registerSocketHandlers = (io) => {
       if (gameState.status === 'finished' && gameState.result?.winner && gameState.result.winner !== 'draw') {
         const loser = Object.keys(gameState.players).find(p => p !== gameState.result.winner);
         await saveGameResult(roomCode, gameState.result.winner, loser, 'blackjack', 0).catch(() => {});
+        grantGameXpAndMissions(gameState.result.winner, loser, 'blackjack').catch(() => {});
       }
       ack({ ok: true });
     });
@@ -1563,6 +1586,7 @@ export const registerSocketHandlers = (io) => {
       if (gameState.status === 'finished' && gameState.result?.winner && gameState.result.winner !== 'draw') {
         const loser = Object.keys(gameState.players).find(p => p !== gameState.result.winner);
         await saveGameResult(roomCode, gameState.result.winner, loser, 'blackjack', 0).catch(() => {});
+        grantGameXpAndMissions(gameState.result.winner, loser, 'blackjack').catch(() => {});
       }
       ack({ ok: true });
     });
@@ -1615,6 +1639,7 @@ export const registerSocketHandlers = (io) => {
       io.to(roomCode).emit("game:oldmaid:updated", gameState);
       if (gameState.status === 'finished' && gameState.result?.winner) {
         await saveGameResult(roomCode, gameState.result.winner, gameState.result.loser, 'oldmaid', 0).catch(() => {});
+        grantGameXpAndMissions(gameState.result.winner, gameState.result.loser, 'oldmaid').catch(() => {});
       }
       ack({ ok: true });
     });
@@ -1940,6 +1965,7 @@ export const registerSocketHandlers = (io) => {
         await Promise.all([
           settleAndEmitWallet(io, roomCode, gameState.winner, unoLoserId, gameState.stake ?? 0, `uno:${roomCode}:${Date.now()}`),
           saveGameResult(roomCode, gameState.winner, unoLoserId, 'uno', gameState.stake ?? 0),
+          grantGameXpAndMissions(gameState.winner, unoLoserId, 'onecard'),
         ]);
       }
     });
@@ -2756,6 +2782,7 @@ export const registerSocketHandlers = (io) => {
           await Promise.all([
             settleAndEmitWallet(io, roomCode, winnerId, loserId, stake, `tank:${roomCode}:${Date.now()}`),
             saveGameResult(roomCode, winnerId, loserId, 'tank', stake),
+            grantGameXpAndMissions(winnerId, loserId, 'tank'),
           ]);
         }
       } else {
@@ -2791,6 +2818,7 @@ export const registerSocketHandlers = (io) => {
         await Promise.all([
           settleAndEmitWallet(io, roomCode, st.winnerId, st.loserId, st.amount, `gostop:${roomCode}:${Date.now()}`),
           saveGameResult(roomCode, st.winnerId, st.loserId, 'gostop', st.amount),
+          grantGameXpAndMissions(st.winnerId, st.loserId, 'gostop'),
         ]);
       }
     };

@@ -5130,6 +5130,9 @@ router.post('/shop/buy', async (req, res) => {
       throw e;
     }
 
+    // fire-and-forget mission progress
+    updateMissionProgress(req.auth.userId, 'item_buy').catch(() => {});
+
     res.json({ ok: true, new_balance: newBalance });
   } catch (err) {
     console.error('[API] /shop/buy POST error:', err);
@@ -5245,4 +5248,62 @@ router.post('/shop/coupons/issue', async (req, res) => {
   }
 });
 
+// ── 레벨/미션/가챠 ──────────────────────────────────────────────────────────
+import {
+  getUserLevel,
+  getMissions,
+  claimMission,
+  pullGacha,
+  updateMissionProgress,
+} from './level-engine.js';
+
+// GET /api/user/level — { level, xp, xpNeeded, tickets }
+router.get('/user/level', async (req, res) => {
+  try {
+    const data = await getUserLevel(req.auth.userId);
+    res.json({ ok: true, ...data });
+  } catch (err) {
+    console.error('[API] /user/level GET error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+// GET /api/missions — 전체 미션 + 진행 상태
+router.get('/missions', async (req, res) => {
+  try {
+    const missions = await getMissions(req.auth.userId);
+    res.json({ ok: true, missions });
+  } catch (err) {
+    console.error('[API] /missions GET error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+// POST /api/missions/:id/claim — 완료된 미션 보상 수령
+router.post('/missions/:id/claim', async (req, res) => {
+  const templateId = parseInt(req.params.id, 10);
+  if (!templateId) return res.status(400).json({ ok: false, reason: 'invalid_id' });
+  try {
+    const rewards = await claimMission(req.auth.userId, templateId);
+    res.json({ ok: true, ...rewards });
+  } catch (err) {
+    const status = err.status ?? 500;
+    console.error('[API] /missions/:id/claim POST error:', err);
+    res.status(status).json({ ok: false, reason: err.message });
+  }
+});
+
+// POST /api/shop/gacha — 티켓 1장 소모, 랜덤 S/SS/SSS 아이템 지급
+router.post('/shop/gacha', async (req, res) => {
+  try {
+    const result = await pullGacha(req.auth.userId);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    const status = err.status ?? 500;
+    console.error('[API] /shop/gacha POST error:', err);
+    res.status(status).json({ ok: false, reason: err.message });
+  }
+});
+
 export default router;
+

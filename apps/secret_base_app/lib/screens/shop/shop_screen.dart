@@ -58,9 +58,14 @@ class _ShopScreenState extends State<ShopScreen>
 
   List<Map<String, dynamic>> _items = [];
   List<Map<String, dynamic>> _coupons = [];
+  List<Map<String, dynamic>> _missions = [];
   Set<int> _ownedItemIds = {};
   Set<int> _equippedItemIds = {};
   int _balance = 0;
+  int _tickets = 0;
+  int _userLevel = 1;
+  int _userXp = 0;
+  int _xpNeeded = 100;
   bool _loading = true;
   String? _error;
 
@@ -70,6 +75,7 @@ class _ShopScreenState extends State<ShopScreen>
     ('전체', null),
     ('원카드', 'onecard'),
     ('윷놀이', 'yut'),
+    ('미션', 'mission'),
     ('데이트쿠폰', 'coupon'),
   ];
 
@@ -77,6 +83,7 @@ class _ShopScreenState extends State<ShopScreen>
   void initState() {
     super.initState();
     _tabCtrl = TabController(length: _gameTabs.length, vsync: this);
+
     _socket.addListener(_onWallet);
     _load();
   }
@@ -112,6 +119,8 @@ class _ShopScreenState extends State<ShopScreen>
         http.get(Uri.parse('$base/api/shop/coupons'), headers: headers),
         http.get(Uri.parse('$base/api/shop/owned'), headers: headers),
         http.get(Uri.parse('$base/api/shop/equipped'), headers: headers),
+        http.get(Uri.parse('$base/api/user/level'), headers: headers),
+        http.get(Uri.parse('$base/api/missions'), headers: headers),
       ]);
 
       final itemsRes = jsonDecode(results[0].body) as Map;
@@ -119,6 +128,8 @@ class _ShopScreenState extends State<ShopScreen>
       final couponsRes = jsonDecode(results[2].body) as Map;
       final ownedRes = jsonDecode(results[3].body) as Map;
       final equippedRes = jsonDecode(results[4].body) as Map;
+      final levelRes = jsonDecode(results[5].body) as Map;
+      final missionsRes = jsonDecode(results[6].body) as Map;
 
       final ownedList = (ownedRes['owned'] as List? ?? [])
           .cast<Map<String, dynamic>>();
@@ -136,6 +147,14 @@ class _ShopScreenState extends State<ShopScreen>
         _equippedItemIds = equippedSlots
             .map((s) => (s['item_id'] as num).toInt())
             .toSet();
+        if (levelRes['ok'] == true) {
+          _userLevel = (levelRes['level'] as num?)?.toInt() ?? 1;
+          _userXp = (levelRes['xp'] as num?)?.toInt() ?? 0;
+          _xpNeeded = (levelRes['xpNeeded'] as num?)?.toInt() ?? 100;
+          _tickets = (levelRes['tickets'] as num?)?.toInt() ?? 0;
+        }
+        _missions = (missionsRes['missions'] as List? ?? [])
+            .cast<Map<String, dynamic>>();
         _loading = false;
       });
     } catch (e) {
@@ -170,6 +189,7 @@ class _ShopScreenState extends State<ShopScreen>
         gradeGradient: _gradeGradient(grade),
         onBuy: isGachaOnly || owned ? null : () { Navigator.pop(ctx); _buy(item); },
         onEquip: owned && !equipped ? () { Navigator.pop(ctx); _equip(item); } : null,
+        onGacha: isGachaOnly && !owned ? () { Navigator.pop(ctx); _startGacha(); } : null,
         formatCoins: _formatCoins,
       ),
     );
@@ -377,6 +397,19 @@ class _ShopScreenState extends State<ShopScreen>
             padding: const EdgeInsets.only(right: 14),
             child: Row(
               children: [
+                if (_tickets > 0) ...[
+                  Text('🎫', style: TextStyle(fontSize: 15)),
+                  const SizedBox(width: 2),
+                  Text(
+                    'x$_tickets',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: kMainLilac,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                ],
                 const Text('🪙', style: TextStyle(fontSize: 16)),
                 const SizedBox(width: 4),
                 Text(
@@ -391,21 +424,72 @@ class _ShopScreenState extends State<ShopScreen>
             ),
           ),
         ],
-        bottom: TabBar(
-          controller: _tabCtrl,
-          isScrollable: true,
-          tabAlignment: TabAlignment.start,
-          tabs: _gameTabs
-              .map((t) => Tab(
-                    child: Text(t.$1,
-                        style: const TextStyle(
-                            fontSize: 13, fontWeight: FontWeight.w600)),
-                  ))
-              .toList(),
-          labelColor: kMainHoney,
-          unselectedLabelColor: kMainMuted,
-          indicatorColor: kMainHoney,
-          indicatorWeight: 3,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(72),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 4, 14, 6),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: kMainSky.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'Lv.$_userLevel',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: kMainSky,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: _xpNeeded > 0 ? _userXp / _xpNeeded : 0,
+                          minHeight: 6,
+                          backgroundColor: kMainMuted.withValues(alpha: 0.2),
+                          valueColor: AlwaysStoppedAnimation<Color>(kMainSky),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '$_userXp / $_xpNeeded XP',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: kMainMuted,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              TabBar(
+                controller: _tabCtrl,
+                isScrollable: true,
+                tabAlignment: TabAlignment.start,
+                tabs: _gameTabs
+                    .map((t) => Tab(
+                          child: Text(t.$1,
+                              style: const TextStyle(
+                                  fontSize: 13, fontWeight: FontWeight.w600)),
+                        ))
+                    .toList(),
+                labelColor: kMainHoney,
+                unselectedLabelColor: kMainMuted,
+                indicatorColor: kMainHoney,
+                indicatorWeight: 3,
+              ),
+            ],
+          ),
         ),
       ),
       body: _loading
@@ -415,9 +499,11 @@ class _ShopScreenState extends State<ShopScreen>
               : TabBarView(
                   controller: _tabCtrl,
                   children: _gameTabs
-                      .map((t) => t.$2 == 'coupon'
-                          ? _buildCouponsTab()
-                          : _buildItemsTab(t.$2))
+                      .map((t) {
+                        if (t.$2 == 'coupon') return _buildCouponsTab();
+                        if (t.$2 == 'mission') return _buildMissionsTab();
+                        return _buildItemsTab(t.$2);
+                      })
                       .toList(),
                 ),
     );
@@ -487,6 +573,145 @@ class _ShopScreenState extends State<ShopScreen>
     );
   }
 
+  Future<void> _startGacha() async {
+    if (_tickets <= 0) {
+      _showSnack('가챠 티켓이 없어요 🎫  미션을 완료해서 획득해보세요!');
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: kSurface,
+        title: const Text('가챠 뽑기', style: TextStyle(color: Colors.white)),
+        content: Text(
+          '티켓 1장을 사용해 S/SS/SSS 등급 아이템을 뽑습니다.\n남은 티켓: $_tickets장',
+          style: TextStyle(color: kMainMuted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: kMainLilac),
+            child: const Text('뽑기!', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      final token = _auth.token;
+      final base = _socket.serverUrl ?? '';
+      final res = await http.post(
+        Uri.parse('$base/api/shop/gacha'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+      final body = jsonDecode(res.body) as Map;
+      if (body['ok'] == true && mounted) {
+        final item = body['item'] as Map<String, dynamic>;
+        await Navigator.of(context).push(
+          PageRouteBuilder(
+            opaque: false,
+            pageBuilder: (_, _a, _b) => _GachaOverlay(item: item),
+          ),
+        );
+        _load();
+      } else {
+        _showSnack(body['reason'] == 'No gacha tickets'
+            ? '티켓이 없어요'
+            : '오류: ${body['reason']}');
+      }
+    } catch (e) {
+      _showSnack('오류: $e');
+    }
+  }
+
+  Future<void> _claimMission(int missionId) async {
+    try {
+      final token = _auth.token;
+      final base = _socket.serverUrl ?? '';
+      final res = await http.post(
+        Uri.parse('$base/api/missions/$missionId/claim'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+      final body = jsonDecode(res.body) as Map;
+      if (body['ok'] == true) {
+        final coins = (body['coins'] as num?)?.toInt() ?? 0;
+        final tickets = (body['tickets'] as num?)?.toInt() ?? 0;
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+              '수령 완료! 🪙 +$coins${tickets > 0 ? '  🎫 +$tickets' : ''}',
+            ),
+            backgroundColor: kMainSage,
+          ));
+        }
+        _load();
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('오류: ${body['reason'] ?? '알 수 없음'}')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('오류: $e')),
+        );
+      }
+    }
+  }
+
+  Widget _buildMissionsTab() {
+    final weekly = _missions.where((m) => m['type'] == 'weekly').toList();
+    final achievements =
+        _missions.where((m) => m['type'] == 'achievement').toList();
+
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          if (weekly.isNotEmpty) ...[
+            _MissionSectionHeader(title: '주간 미션', icon: '📅'),
+            const SizedBox(height: 8),
+            ...weekly.map((m) => _MissionCard(
+                  mission: m,
+                  onClaim: () => _claimMission(m['id'] as int),
+                )),
+            const SizedBox(height: 20),
+          ],
+          if (achievements.isNotEmpty) ...[
+            _MissionSectionHeader(title: '달성 미션', icon: '🏆'),
+            const SizedBox(height: 8),
+            ...achievements.map((m) => _MissionCard(
+                  mission: m,
+                  onClaim: () => _claimMission(m['id'] as int),
+                )),
+          ],
+          if (_missions.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 60),
+                child: Text('미션을 불러오는 중...',
+                    style: TextStyle(color: kMainMuted)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCouponsTab() {
     return RefreshIndicator(
       onRefresh: _load,
@@ -521,6 +746,198 @@ class _ShopScreenState extends State<ShopScreen>
               const SizedBox(height: 10),
             ],
         ],
+      ),
+    );
+  }
+}
+
+// ── Mission Widgets ───────────────────────────────────────────────────────────
+
+class _MissionSectionHeader extends StatelessWidget {
+  final String title;
+  final String icon;
+  const _MissionSectionHeader({required this.title, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(icon, style: const TextStyle(fontSize: 16)),
+        const SizedBox(width: 6),
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+            color: kMainHoney,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MissionCard extends StatelessWidget {
+  final Map<String, dynamic> mission;
+  final VoidCallback onClaim;
+  const _MissionCard({required this.mission, required this.onClaim});
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = (mission['progress'] as num?)?.toInt() ?? 0;
+    final target = (mission['targetCount'] as num?)?.toInt() ?? 1;
+    final completed = mission['completed'] == true;
+    final claimed = mission['claimed'] == true;
+    final coins = (mission['rewardCoins'] as num?)?.toInt() ?? 0;
+    final tickets = (mission['rewardTickets'] as num?)?.toInt() ?? 0;
+    final xp = (mission['rewardXp'] as num?)?.toInt() ?? 0;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: kSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: claimed
+              ? kMainMuted.withValues(alpha: 0.2)
+              : completed
+                  ? kMainSage.withValues(alpha: 0.6)
+                  : Colors.white12,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  mission['title'] as String? ?? '',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: claimed ? kMainMuted : Colors.white,
+                  ),
+                ),
+              ),
+              if (!claimed)
+                _MissionClaimButton(
+                  completed: completed,
+                  onClaim: onClaim,
+                ),
+              if (claimed)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: kMainMuted.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text('수령 완료',
+                      style: TextStyle(fontSize: 11, color: kMainMuted)),
+                ),
+            ],
+          ),
+          if (mission['description'] != null &&
+              (mission['description'] as String).isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              mission['description'] as String,
+              style: TextStyle(fontSize: 11, color: kMainMuted),
+            ),
+          ],
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: target > 0 ? (progress / target).clamp(0.0, 1.0) : 0,
+              minHeight: 5,
+              backgroundColor: Colors.white10,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                completed ? kMainSage : kMainSky,
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Text(
+                '$progress / $target',
+                style: TextStyle(
+                    fontSize: 11,
+                    color: kMainMuted,
+                    fontWeight: FontWeight.w600),
+              ),
+              const Spacer(),
+              if (coins > 0)
+                _RewardTag(label: '🪙 +$coins'),
+              if (tickets > 0) ...[
+                const SizedBox(width: 4),
+                _RewardTag(label: '🎫 +$tickets', color: kMainLilac),
+              ],
+              if (xp > 0) ...[
+                const SizedBox(width: 4),
+                _RewardTag(label: '⭐ +$xp XP', color: kMainSky),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MissionClaimButton extends StatelessWidget {
+  final bool completed;
+  final VoidCallback onClaim;
+  const _MissionClaimButton({required this.completed, required this.onClaim});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: completed ? onClaim : null,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        decoration: BoxDecoration(
+          color: completed
+              ? kMainSage.withValues(alpha: 0.9)
+              : kMainMuted.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          '수령',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: completed ? Colors.black87 : kMainMuted,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RewardTag extends StatelessWidget {
+  final String label;
+  final Color? color;
+  const _RewardTag({required this.label, this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: (color ?? kMainHoney).withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: color ?? kMainHoney,
+        ),
       ),
     );
   }
@@ -774,6 +1191,7 @@ class _ItemPreviewSheet extends StatelessWidget {
   final LinearGradient gradeGradient;
   final VoidCallback? onBuy;
   final VoidCallback? onEquip;
+  final VoidCallback? onGacha;
   final String Function(int) formatCoins;
 
   const _ItemPreviewSheet({
@@ -788,6 +1206,7 @@ class _ItemPreviewSheet extends StatelessWidget {
     required this.onBuy,
     required this.onEquip,
     required this.formatCoins,
+    this.onGacha,
   });
 
   @override
@@ -932,17 +1351,15 @@ class _ItemPreviewSheet extends StatelessWidget {
       );
     }
     if (isGachaOnly) {
-      return OutlinedButton(
-        style: OutlinedButton.styleFrom(
-          side: BorderSide(color: gradeColor),
+      return ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: gradeColor,
+          foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(vertical: 14),
         ),
-        onPressed: null,
-        child: Text('🎰 뽑기로만 획득 가능',
-            style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: gradeColor)),
+        onPressed: onGacha,
+        child: const Text('🎰 가챠 뽑기!',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
       );
     }
     return ElevatedButton(
@@ -1085,4 +1502,257 @@ class _CouponCard extends StatelessWidget {
       ),
     );
   }
+}
+
+// ── Gacha Overlay ─────────────────────────────────────────────────────────────
+
+class _GachaOverlay extends StatefulWidget {
+  final Map<String, dynamic> item;
+  const _GachaOverlay({required this.item});
+
+  @override
+  State<_GachaOverlay> createState() => _GachaOverlayState();
+}
+
+class _GachaOverlayState extends State<_GachaOverlay>
+    with TickerProviderStateMixin {
+  late final AnimationController _flipCtrl;
+  late final AnimationController _burstCtrl;
+  late final AnimationController _scaleCtrl;
+  late final Animation<double> _flipAnim;
+  late final Animation<double> _scaleAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _flipCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1200));
+    _burstCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 900));
+    _scaleCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 500));
+
+    _flipAnim = CurvedAnimation(parent: _flipCtrl, curve: Curves.easeInOut);
+    _scaleAnim = CurvedAnimation(parent: _scaleCtrl, curve: Curves.elasticOut);
+
+    _flipCtrl.forward().then((_) {
+      _burstCtrl.forward();
+      _scaleCtrl.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _flipCtrl.dispose();
+    _burstCtrl.dispose();
+    _scaleCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final grade = widget.item['grade'] as String? ?? 'S';
+    final gradeColor = _gradeColor(grade);
+    final icon = widget.item['icon'] as String? ?? '✨';
+    final name = widget.item['name'] as String? ?? '';
+
+    return Scaffold(
+      backgroundColor: Colors.black87,
+      body: AnimatedBuilder(
+        animation: Listenable.merge([_flipAnim, _burstCtrl, _scaleAnim]),
+        builder: (ctx, _) {
+          final flip = _flipAnim.value;
+          final burst = _burstCtrl.value;
+          final isRevealed = flip > 0.5;
+
+          return Stack(
+            children: [
+              // Burst particles
+              if (isRevealed)
+                CustomPaint(
+                  painter: _BurstPainter(t: burst, color: gradeColor),
+                  child: const SizedBox.expand(),
+                ),
+
+              Center(
+                child: GestureDetector(
+                  onTap: () => Navigator.of(context).pop(),
+                  child: Transform(
+                    alignment: Alignment.center,
+                    transform: Matrix4.identity()
+                      ..setEntry(3, 2, 0.001)
+                      ..rotateY(flip * 3.14159),
+                    child: isRevealed
+                        ? Transform(
+                            alignment: Alignment.center,
+                            transform: Matrix4.identity()..rotateY(3.14159),
+                            child: ScaleTransition(
+                              scale: _scaleAnim,
+                              child: _buildRevealCard(
+                                  grade, gradeColor, icon, name),
+                            ),
+                          )
+                        : _buildHiddenCard(gradeColor),
+                  ),
+                ),
+              ),
+
+              // Tap hint
+              if (isRevealed && burst > 0.8)
+                Positioned(
+                  bottom: 60,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Text(
+                      '탭하여 닫기',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.6),
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildHiddenCard(Color gradeColor) {
+    return Container(
+      width: 220,
+      height: 300,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [const Color(0xFF1A1A2E), const Color(0xFF16213E)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: gradeColor.withValues(alpha: 0.5), width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: gradeColor.withValues(alpha: 0.3),
+            blurRadius: 20,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: const Center(
+        child: Text('?', style: TextStyle(fontSize: 80, color: Colors.white38)),
+      ),
+    );
+  }
+
+  Widget _buildRevealCard(
+      String grade, Color gradeColor, String icon, String name) {
+    return Container(
+      width: 220,
+      height: 300,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            gradeColor.withValues(alpha: 0.9),
+            gradeColor.withValues(alpha: 0.5),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.4), width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: gradeColor.withValues(alpha: 0.6),
+            blurRadius: 30,
+            spreadRadius: 5,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(icon, style: const TextStyle(fontSize: 64)),
+          const SizedBox(height: 16),
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              grade,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              name,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BurstPainter extends CustomPainter {
+  final double t;
+  final Color color;
+  static const _particleCount = 24;
+
+  const _BurstPainter({required this.t, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (t <= 0) return;
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+    final paint = Paint()..style = PaintingStyle.fill;
+    final angle = 3.14159 * 2 / _particleCount;
+
+    for (int i = 0; i < _particleCount; i++) {
+      final a = angle * i;
+      final speed = 200 + (i % 3) * 60.0;
+      final dx = cx + speed * t * (1 - t * 0.3) * (1 + (i % 2) * 0.4) *
+          (0.8 + (i % 5) * 0.1) * (a > 3.14159 ? -1 : 1) *
+          (i.isEven ? 1 : -1) * 0 +
+          speed * t * _cos(a);
+      final dy = cy + speed * t * _sin(a);
+      final radius = (6 - t * 4).clamp(1.0, 6.0);
+      final alpha = (1 - t).clamp(0.0, 1.0);
+      paint.color = color.withValues(alpha: alpha);
+      canvas.drawCircle(Offset(dx, dy), radius, paint);
+    }
+  }
+
+  double _cos(double a) {
+    // Simple cos approximation via Dart's built-in
+    return (a < 1.5708
+        ? 1 - a * a / 2 + a * a * a * a / 24
+        : a < 3.14159
+            ? -(1 - (a - 3.14159) * (a - 3.14159) / 2)
+            : a < 4.71239
+                ? -1 + (a - 3.14159) * (a - 3.14159) / 2
+                : 1 - (a - 6.28318) * (a - 6.28318) / 2);
+  }
+
+  double _sin(double a) => _cos(a - 1.5708);
+
+  @override
+  bool shouldRepaint(_BurstPainter old) => old.t != t || old.color != color;
 }
