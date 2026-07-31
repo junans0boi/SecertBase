@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS user_levels (
   level        INT  NOT NULL DEFAULT 1,
   xp           INT  NOT NULL DEFAULT 0,
   updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES Users(id) ON DELETE CASCADE
+  FOREIGN KEY (user_id) REFERENCES Users(UserId) ON DELETE CASCADE
 );
 
 -- 3. 미션 템플릿 (서버 정의, 주간/달성)
@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS user_missions (
   claimed_at  DATETIME    NULL,
   created_at  DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uniq_user_mission_period (user_id, template_id, period_key),
-  FOREIGN KEY (user_id)     REFERENCES Users(id)             ON DELETE CASCADE,
+  FOREIGN KEY (user_id)     REFERENCES Users(UserId)             ON DELETE CASCADE,
   FOREIGN KEY (template_id) REFERENCES mission_templates(id) ON DELETE CASCADE
 );
 
