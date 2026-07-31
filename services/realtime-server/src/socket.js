@@ -3,7 +3,7 @@ import { config } from "./config.js";
 import { installSocketAuthentication, installSocketFeatureGate } from "./backend-access.js";
 import { query } from "./db.js";
 import { redis } from "./redis.js";
-import { transferGameReward, getBalance } from "./wallet-engine.js";
+import { transferGameReward, getBalance, getEquippedStats } from "./wallet-engine.js";
 import {
   throwYut,
   movePiece,
@@ -1330,7 +1330,12 @@ export const registerSocketHandlers = (io) => {
         gameState.hasBonusThrow = false;
       }
 
-      const throwResult = throwYut();
+      const { rows: numericRows } = await query(
+        'SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [userId]
+      );
+      const numericUserId = numericRows[0]?.UserId;
+      const stats = numericUserId ? await getEquippedStats(numericUserId) : {};
+      const throwResult = throwYut({ yutControlPct: stats.yut_control_pct ?? 0 });
       gameState.lastThrow = throwResult;
 
       const isNak = throwResult.result === -1 &&

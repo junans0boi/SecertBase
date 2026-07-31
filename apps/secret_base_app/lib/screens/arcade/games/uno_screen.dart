@@ -1,7 +1,10 @@
+import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
 import '../../../core/app_theme.dart';
+import '../../../core/auth_service.dart';
 import '../../../core/socket_service.dart';
 import '../../../core/uno_audio.dart';
 import '../../../ui/uno_board.dart';
@@ -16,15 +19,44 @@ class UnoScreen extends StatefulWidget {
 
 class _UnoScreenState extends State<UnoScreen> {
   final _socket = SocketService();
+  final _auth = AuthService();
   String? _lastWinner;
   bool _resultShown = false;
+  String _cardBackSkin = 'base';
 
   @override
   void initState() {
     super.initState();
     _socket.addListener(_rebuild);
-    // Unlock audio when UNO screen opens (web autoplay policy)
     UnoAudio.instance.unlock();
+    _loadSkin();
+  }
+
+  Future<void> _loadSkin() async {
+    try {
+      final base = _socket.serverUrl ?? '';
+      final res = await http.get(
+        Uri.parse('$base/api/shop/equipped?game=onecard'),
+        headers: {'Authorization': 'Bearer ${_auth.token}'},
+      );
+      final body = jsonDecode(res.body) as Map;
+      if (body['ok'] == true) {
+        final slots = body['slots'] as Map? ?? {};
+        final cardback = slots['onecard_cardback'];
+        if (cardback != null && mounted) {
+          final skinName = (cardback['name'] as String? ?? '').toLowerCase();
+          final skin = _nameToSkin(skinName);
+          setState(() => _cardBackSkin = skin);
+        }
+      }
+    } catch (_) {}
+  }
+
+  String _nameToSkin(String name) {
+    if (name.contains('벚꽃') || name.contains('cherry')) return 'cherry_blossom';
+    if (name.contains('우주') || name.contains('space')) return 'space';
+    if (name.contains('하트') || name.contains('heart')) return 'heart';
+    return 'base';
   }
 
   @override
@@ -125,6 +157,7 @@ class _UnoScreenState extends State<UnoScreen> {
                       lastSpecialAt: sock.unoLastSpecialAt,
                       topInset: topInset,
                       opponentName: opponentName,
+                      cardBackSkin: _cardBackSkin,
                     ),
                   ),
                   if (sock.unoActive)

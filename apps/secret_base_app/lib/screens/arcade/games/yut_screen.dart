@@ -1,6 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
 import '../../../core/app_theme.dart';
+import '../../../core/auth_service.dart';
 import '../../../core/socket_service.dart';
 import '../../../core/yut_audio.dart';
 import '../../../ui/yut_board.dart';
@@ -16,14 +19,57 @@ class YutScreen extends StatefulWidget {
 
 class _YutScreenState extends State<YutScreen> {
   final _socket = SocketService();
+  final _auth = AuthService();
   int? _lastThrowSoundAt;
   int? _lastMoveSoundAt;
   String? _lastShownWinner;
+  String _pieceSkin = 'base';
+  String _yutSkin = 'base';
 
   @override
   void initState() {
     super.initState();
     _socket.addListener(_rebuild);
+    _loadSkin();
+  }
+
+  Future<void> _loadSkin() async {
+    try {
+      final base = _socket.serverUrl ?? '';
+      final res = await http.get(
+        Uri.parse('$base/api/shop/equipped?game=yut'),
+        headers: {'Authorization': 'Bearer ${_auth.token}'},
+      );
+      final body = jsonDecode(res.body) as Map;
+      if (body['ok'] == true) {
+        final slots = body['slots'] as Map? ?? {};
+        String pieceSkin = 'base';
+        String yutSkin = 'base';
+        final piece = slots['yut_piece'];
+        if (piece != null) {
+          pieceSkin = _nameToPieceSkin(piece['name'] as String? ?? '');
+        }
+        final yut = slots['yut_yut'];
+        if (yut != null) {
+          yutSkin = _nameToYutSkin(yut['name'] as String? ?? '');
+        }
+        if (mounted) setState(() { _pieceSkin = pieceSkin; _yutSkin = yutSkin; });
+      }
+    } catch (_) {}
+  }
+
+  String _nameToPieceSkin(String name) {
+    if (name.contains('동물') || name.contains('animal')) return 'animal';
+    if (name.contains('음식') || name.contains('food')) return 'food';
+    if (name.contains('별') || name.contains('star')) return 'star';
+    return 'base';
+  }
+
+  String _nameToYutSkin(String name) {
+    if (name.contains('대나무') || name.contains('bamboo')) return 'bamboo';
+    if (name.contains('황금') || name.contains('gold')) return 'gold';
+    if (name.contains('크리스탈') || name.contains('crystal')) return 'crystal';
+    return 'base';
   }
 
   @override
@@ -166,6 +212,8 @@ class _YutScreenState extends State<YutScreen> {
                   p1UserId: p1,
                   p2UserId: p2,
                   displayName: sock.nameOf,
+                  pieceSkin: _pieceSkin,
+                  yutSkin: _yutSkin,
                 ),
               ),
             ),

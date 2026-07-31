@@ -41,10 +41,20 @@ export const GOAL_POSITION = 20;
  * - 2 flat (2 round) -> 개 (2)
  * - 3 flat (1 round) -> 걸 (3)
  * - 4 flat (0 round) -> 윷 (4)
+ *
+ * yutControlPct: bonus % from equipped yut skin (max 15). After a normal throw,
+ * if the result is 3-flat (close to 윷) or 1-flat (close to 모), the pct is used
+ * as a threshold to upgrade the result to 윷 or 모 respectively.
  */
-export function throwYut() {
+export function throwYut({ yutControlPct = 0 } = {}) {
   const sticks = Array.from({ length: 4 }, () => Math.random() < 0.5 ? 0 : 1);
-  const flatCount = sticks.filter((s) => s === 0).length;
+  let flatCount = sticks.filter((s) => s === 0).length;
+
+  if (yutControlPct > 0) {
+    const threshold = Math.min(yutControlPct, 15) / 100;
+    if (flatCount === 3 && Math.random() < threshold) flatCount = 4; // 걸 → 윷
+    else if (flatCount === 1 && Math.random() < threshold) flatCount = 0; // 도 → 모
+  }
 
   let result;
   if (flatCount === 0) result = YUT_RESULTS.MO;

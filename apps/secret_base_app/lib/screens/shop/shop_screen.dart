@@ -8,6 +8,43 @@ import '../../core/auth_service.dart';
 import '../../core/main_design.dart';
 import '../../core/socket_service.dart';
 
+// ── Grade helpers ─────────────────────────────────────────────────────────────
+
+const _gradeOrder = ['B', 'A', 'S', 'SS', 'SSS'];
+
+Color _gradeColor(String grade) => switch (grade) {
+      'B' => kMainMuted,
+      'A' => kMainSage,
+      'S' => kMainSky,
+      'SS' => kMainLilac,
+      'SSS' => kMainHoney,
+      _ => kMainMuted,
+    };
+
+LinearGradient _gradeGradient(String grade) {
+  final c = _gradeColor(grade);
+  return LinearGradient(
+    colors: [c.withValues(alpha: 0.15), c.withValues(alpha: 0.05)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+}
+
+const _statLabels = {
+  'coin_bonus_pct': '🪙 승리 코인 +%',
+  'shop_discount_pct': '🏷️ 상점 할인 %',
+  'daily_bonus_add': '📅 데일리 추가 코인',
+  'lose_refund_pct': '🔁 패배 환급 %',
+  'yut_control_pct': '🎯 윷/모 확률 +%',
+  'yut_catch_bonus': '⚡ 말 잡기 보너스',
+  'gacha_rate_up': '🎰 뽑기 S등급 확률 +%',
+  'daily_bonus_cooldown': '⏱️ 데일리 쿨타임 감소',
+  'win_streak_bonus': '🔥 연승 추가 코인',
+  'onecard_draw_reduce': '🃏 +카드 1장 감소',
+};
+
+// ── Screen ────────────────────────────────────────────────────────────────────
+
 class ShopScreen extends StatefulWidget {
   const ShopScreen({super.key});
   @override
@@ -21,17 +58,25 @@ class _ShopScreenState extends State<ShopScreen>
 
   List<Map<String, dynamic>> _items = [];
   List<Map<String, dynamic>> _coupons = [];
+  Set<int> _ownedItemIds = {};
+  Set<int> _equippedItemIds = {};
   int _balance = 0;
   bool _loading = true;
   String? _error;
 
   late final TabController _tabCtrl;
-  final _tabs = const ['아이템', '내 쿠폰'];
+
+  static const _gameTabs = [
+    ('전체', null),
+    ('원카드', 'onecard'),
+    ('윷놀이', 'yut'),
+    ('데이트쿠폰', 'coupon'),
+  ];
 
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: _tabs.length, vsync: this);
+    _tabCtrl = TabController(length: _gameTabs.length, vsync: this);
     _socket.addListener(_onWallet);
     _load();
   }
@@ -49,7 +94,10 @@ class _ShopScreenState extends State<ShopScreen>
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final token = _auth.token;
       final base = _socket.serverUrl ?? '';
@@ -62,40 +110,72 @@ class _ShopScreenState extends State<ShopScreen>
         http.get(Uri.parse('$base/api/shop/items'), headers: headers),
         http.get(Uri.parse('$base/api/wallet/balance'), headers: headers),
         http.get(Uri.parse('$base/api/shop/coupons'), headers: headers),
+        http.get(Uri.parse('$base/api/shop/owned'), headers: headers),
+        http.get(Uri.parse('$base/api/shop/equipped'), headers: headers),
       ]);
 
       final itemsRes = jsonDecode(results[0].body) as Map;
       final walletRes = jsonDecode(results[1].body) as Map;
       final couponsRes = jsonDecode(results[2].body) as Map;
+      final ownedRes = jsonDecode(results[3].body) as Map;
+      final equippedRes = jsonDecode(results[4].body) as Map;
+
+      final ownedList = (ownedRes['owned'] as List? ?? [])
+          .cast<Map<String, dynamic>>();
+      final equippedSlots = (equippedRes['slots'] as Map? ?? {})
+          .values
+          .toList();
 
       setState(() {
         _items = (itemsRes['items'] as List? ?? []).cast<Map<String, dynamic>>();
         _balance = (walletRes['balance'] as num?)?.toInt() ?? _balance;
-        _coupons = (couponsRes['coupons'] as List? ?? []).cast<Map<String, dynamic>>();
+        _coupons =
+            (couponsRes['coupons'] as List? ?? []).cast<Map<String, dynamic>>();
+        _ownedItemIds =
+            ownedList.map((o) => (o['item_id'] as num).toInt()).toSet();
+        _equippedItemIds = equippedSlots
+            .map((s) => (s['item_id'] as num).toInt())
+            .toSet();
         _loading = false;
       });
     } catch (e) {
-      setState(() { _error = e.toString(); _loading = false; });
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
     }
   }
 
-  Future<void> _buy(Map<String, dynamic> item) async {
-    final confirm = await showDialog<bool>(
+  // ── Actions ─────────────────────────────────────────────────────────────────
+
+  Future<void> _preview(Map<String, dynamic> item) async {
+    final owned = _ownedItemIds.contains((item['id'] as num).toInt());
+    final equipped = _equippedItemIds.contains((item['id'] as num).toInt());
+    final grade = item['grade'] as String? ?? 'B';
+    final isGachaOnly = ['S', 'SS', 'SSS'].contains(grade);
+    final stats = (item['stats'] as List? ?? []).cast<Map<String, dynamic>>();
+
+    await showModalBottomSheet(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('${item['name']} 구매'),
-        content: Text('${_formatCoins(item['price'] as int)}코인을 사용합니다.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('구매'),
-          ),
-        ],
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => _ItemPreviewSheet(
+        item: item,
+        stats: stats,
+        owned: owned,
+        equipped: equipped,
+        isGachaOnly: isGachaOnly,
+        balance: _balance,
+        gradeColor: _gradeColor(grade),
+        gradeGradient: _gradeGradient(grade),
+        onBuy: isGachaOnly || owned ? null : () { Navigator.pop(ctx); _buy(item); },
+        onEquip: owned && !equipped ? () { Navigator.pop(ctx); _equip(item); } : null,
+        formatCoins: _formatCoins,
       ),
     );
-    if (confirm != true || !mounted) return;
+  }
 
+  Future<void> _buy(Map<String, dynamic> item) async {
     try {
       final token = _auth.token;
       final base = _socket.serverUrl ?? '';
@@ -110,13 +190,34 @@ class _ShopScreenState extends State<ShopScreen>
       final body = jsonDecode(res.body) as Map;
       if (body['ok'] == true) {
         setState(() => _balance = (body['new_balance'] as num).toInt());
-        _showSnack('구매 완료! ${item['name']} 획득 🎉');
-        if (item['category'] == 'coupon') {
-          _tabCtrl.animateTo(1);
-          await _load();
-        }
+        _showSnack('${item['name']} 획득! 🎉');
+        await _load();
       } else {
         _showSnack(_buyErrorMsg(body['reason'] as String?));
+      }
+    } catch (e) {
+      _showSnack('오류: $e');
+    }
+  }
+
+  Future<void> _equip(Map<String, dynamic> item) async {
+    try {
+      final token = _auth.token;
+      final base = _socket.serverUrl ?? '';
+      final res = await http.post(
+        Uri.parse('$base/api/shop/equip'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({'item_id': item['id']}),
+      );
+      final body = jsonDecode(res.body) as Map;
+      if (body['ok'] == true) {
+        _showSnack('${item['name']} 장착 완료 ✅');
+        await _load();
+      } else {
+        _showSnack('장착 실패');
       }
     } catch (e) {
       _showSnack('오류: $e');
@@ -148,11 +249,12 @@ class _ShopScreenState extends State<ShopScreen>
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('취소')),
           ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('보내기'),
-          ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('보내기')),
         ],
       ),
     );
@@ -198,11 +300,15 @@ class _ShopScreenState extends State<ShopScreen>
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('취소')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: kMainHoney),
+            style:
+                ElevatedButton.styleFrom(backgroundColor: kMainHoney),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('사용하기', style: TextStyle(color: Colors.white)),
+            child: const Text('사용하기',
+                style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -232,10 +338,12 @@ class _ShopScreenState extends State<ShopScreen>
     }
   }
 
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+
   String _buyErrorMsg(String? reason) => switch (reason) {
         'insufficient_coins' => '코인이 부족해요',
         'item_not_found' => '아이템을 찾을 수 없어요',
-        'no_couple' => '커플 연결이 필요해요',
+        'gacha_only' => 'S등급 이상은 뽑기로만 획득 가능해요',
         _ => '구매 실패',
       };
 
@@ -247,7 +355,11 @@ class _ShopScreenState extends State<ShopScreen>
   }
 
   String _formatCoins(int n) =>
-      n >= 1000 ? '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}K' : '$n';
+      n >= 1000
+          ? '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}K'
+          : '$n';
+
+  // ── Build ────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -258,7 +370,8 @@ class _ShopScreenState extends State<ShopScreen>
         elevation: 0,
         shadowColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
-        title: const Text('상점', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
+        title: const Text('상점',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 14),
@@ -280,10 +393,19 @@ class _ShopScreenState extends State<ShopScreen>
         ],
         bottom: TabBar(
           controller: _tabCtrl,
-          tabs: _tabs.map((t) => Tab(text: t)).toList(),
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          tabs: _gameTabs
+              .map((t) => Tab(
+                    child: Text(t.$1,
+                        style: const TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w600)),
+                  ))
+              .toList(),
           labelColor: kMainHoney,
           unselectedLabelColor: kMainMuted,
           indicatorColor: kMainHoney,
+          indicatorWeight: 3,
         ),
       ),
       body: _loading
@@ -292,48 +414,73 @@ class _ShopScreenState extends State<ShopScreen>
               ? Center(child: Text('오류: $_error'))
               : TabBarView(
                   controller: _tabCtrl,
-                  children: [
-                    _buildItemsTab(),
-                    _buildCouponsTab(),
-                  ],
+                  children: _gameTabs
+                      .map((t) => t.$2 == 'coupon'
+                          ? _buildCouponsTab()
+                          : _buildItemsTab(t.$2))
+                      .toList(),
                 ),
     );
   }
 
-  Widget _buildItemsTab() {
-    final categories = ['coupon', 'booster', 'skin', 'gacha'];
-    final categoryLabels = {
-      'coupon': '🎟️ 데이트 쿠폰',
-      'booster': '⚡ 부스터',
-      'skin': '✨ 스킨',
-      'gacha': '🎰 뽑기',
-    };
+  Widget _buildItemsTab(String? gameFilter) {
+    final filtered = gameFilter == null
+        ? _items.where((i) => i['category'] != 'coupon').toList()
+        : _items.where((i) => i['game'] == gameFilter).toList();
+
+    if (filtered.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('🛒', style: TextStyle(fontSize: 40)),
+            const SizedBox(height: 8),
+            Text('준비 중이에요', style: TextStyle(color: kMainMuted)),
+          ],
+        ),
+      );
+    }
+
+    // Group by grade order
+    final grouped = <String, List<Map<String, dynamic>>>{};
+    for (final grade in _gradeOrder) {
+      final gradeItems =
+          filtered.where((i) => i['grade'] == grade).toList();
+      if (gradeItems.isNotEmpty) grouped[grade] = gradeItems;
+    }
 
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          for (final cat in categories) ...[
-            if (_items.any((i) => i['category'] == cat)) ...[
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8, top: 4),
-                child: Text(
-                  categoryLabels[cat] ?? cat,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: kMainSub,
-                  ),
-                ),
+          for (final entry in grouped.entries) ...[
+            _GradeHeader(grade: entry.key),
+            const SizedBox(height: 8),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+                childAspectRatio: 0.78,
               ),
-              for (final item in _items.where((i) => i['category'] == cat))
-                _ShopItemCard(
+              itemCount: entry.value.length,
+              itemBuilder: (_, idx) {
+                final item = entry.value[idx];
+                final id = (item['id'] as num).toInt();
+                return _ShopItemCard(
                   item: item,
+                  owned: _ownedItemIds.contains(id),
+                  equipped: _equippedItemIds.contains(id),
                   balance: _balance,
-                  onBuy: cat == 'coupon' ? _issueCoupon : () => _buy(item),
-                ),
-            ],
+                  formatCoins: _formatCoins,
+                  onTap: () => _preview(item),
+                );
+              },
+            ),
+            const SizedBox(height: 20),
           ],
         ],
       ),
@@ -341,102 +488,520 @@ class _ShopScreenState extends State<ShopScreen>
   }
 
   Widget _buildCouponsTab() {
-    if (_coupons.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('🎟️', style: TextStyle(fontSize: 40)),
-            const SizedBox(height: 8),
-            Text('받은 쿠폰이 없어요', style: TextStyle(color: kMainMuted)),
-            const SizedBox(height: 4),
-            Text('상대방에게 데이트 쿠폰을 받아봐요!',
-                style: TextStyle(fontSize: 11, color: kMainMuted)),
-          ],
-        ),
-      );
-    }
-
     return RefreshIndicator(
       onRefresh: _load,
-      child: ListView.separated(
+      child: ListView(
         padding: const EdgeInsets.all(16),
-        itemCount: _coupons.length,
-        separatorBuilder: (_, idx) => const SizedBox(height: 10),
-        itemBuilder: (_, i) => _CouponCard(
-          coupon: _coupons[i],
-          onRedeem: () => _redeemCoupon(_coupons[i]),
+        children: [
+          // Issue button
+          _IssueCouponButton(onTap: _issueCoupon),
+          const SizedBox(height: 16),
+          if (_coupons.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('🎟️', style: TextStyle(fontSize: 40)),
+                    const SizedBox(height: 8),
+                    Text('받은 쿠폰이 없어요',
+                        style: TextStyle(color: kMainMuted)),
+                    const SizedBox(height: 4),
+                    Text('상대방에게 데이트 쿠폰을 받아봐요!',
+                        style: TextStyle(fontSize: 11, color: kMainMuted)),
+                  ],
+                ),
+              ),
+            )
+          else
+            for (final c in _coupons) ...[
+              _CouponCard(
+                  coupon: c, onRedeem: () => _redeemCoupon(c)),
+              const SizedBox(height: 10),
+            ],
+        ],
+      ),
+    );
+  }
+}
+
+// ── Grade Header ─────────────────────────────────────────────────────────────
+
+class _GradeHeader extends StatelessWidget {
+  final String grade;
+  const _GradeHeader({required this.grade});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _gradeColor(grade);
+    final label = switch (grade) {
+      'B' => 'B등급 · 코인 구매',
+      'A' => 'A등급 · 코인 구매',
+      'S' => 'S등급 · 뽑기 전용',
+      'SS' => 'SS등급 · 뽑기 전용',
+      'SSS' => 'SSS등급 · 뽑기 전용',
+      _ => grade,
+    };
+
+    return Row(
+      children: [
+        Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: color.withValues(alpha: 0.4)),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(child: Divider(color: color.withValues(alpha: 0.2))),
+      ],
+    );
+  }
+}
+
+// ── Shop Item Card (Grid) ─────────────────────────────────────────────────────
+
+class _ShopItemCard extends StatelessWidget {
+  final Map<String, dynamic> item;
+  final bool owned;
+  final bool equipped;
+  final int balance;
+  final String Function(int) formatCoins;
+  final VoidCallback onTap;
+
+  const _ShopItemCard({
+    required this.item,
+    required this.owned,
+    required this.equipped,
+    required this.balance,
+    required this.formatCoins,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final grade = item['grade'] as String? ?? 'B';
+    final color = _gradeColor(grade);
+    final price = (item['price'] as num?)?.toInt() ?? 0;
+    final isGachaOnly = ['S', 'SS', 'SSS'].contains(grade);
+    final canAfford = balance >= price;
+    final stats = (item['stats'] as List? ?? []).cast<Map<String, dynamic>>();
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: _gradeGradient(grade),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: equipped
+                ? color
+                : color.withValues(alpha: 0.3),
+            width: equipped ? 2.5 : 1,
+          ),
+        ),
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Grade badge + owned badge
+            Row(
+              children: [
+                _GradeBadge(grade: grade),
+                const Spacer(),
+                if (equipped)
+                  _StatusBadge(label: '장착 중', color: color)
+                else if (owned)
+                  _StatusBadge(label: '보유', color: kMainSage),
+              ],
+            ),
+            const SizedBox(height: 10),
+            // Icon
+            Center(
+              child: Text(item['icon'] as String? ?? '📦',
+                  style: const TextStyle(fontSize: 36)),
+            ),
+            const SizedBox(height: 8),
+            // Name
+            Text(
+              item['name'] as String,
+              style: const TextStyle(
+                  fontWeight: FontWeight.w700, fontSize: 13),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            // Stats preview (first one)
+            if (stats.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                _statLabels[stats[0]['key']] ?? stats[0]['key'],
+                style: TextStyle(fontSize: 10, color: kMainSub),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+            const Spacer(),
+            // Price / status
+            if (owned)
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(
+                        color: equipped ? color : kMainSage),
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed: onTap,
+                  child: Text(
+                    equipped ? '장착 중' : '장착하기',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: equipped ? color : kMainSage,
+                    ),
+                  ),
+                ),
+              )
+            else if (isGachaOnly)
+              Center(
+                child: Text('🎰 뽑기 전용',
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: color)),
+              )
+            else
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor:
+                        canAfford ? color : kMainMuted.withValues(alpha: 0.3),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    elevation: canAfford ? 2 : 0,
+                  ),
+                  onPressed: canAfford ? onTap : null,
+                  child: Text(
+                    '🪙 ${formatCoins(price)}',
+                    style: const TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
   }
 }
 
-// ── Item Card ────────────────────────────────────────────────────────────────
+// ── Grade Badge ───────────────────────────────────────────────────────────────
 
-class _ShopItemCard extends StatelessWidget {
-  final Map<String, dynamic> item;
-  final int balance;
-  final VoidCallback onBuy;
-
-  const _ShopItemCard({
-    required this.item,
-    required this.balance,
-    required this.onBuy,
-  });
-
-  String _fmt(int n) =>
-      n >= 1000 ? '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}K' : '$n';
+class _GradeBadge extends StatelessWidget {
+  final String grade;
+  const _GradeBadge({required this.grade});
 
   @override
   Widget build(BuildContext context) {
-    final price = (item['price'] as num).toInt();
+    final color = _gradeColor(grade);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        grade,
+        style: const TextStyle(
+            color: Colors.white,
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.5),
+      ),
+    );
+  }
+}
+
+class _StatusBadge extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _StatusBadge({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Text(label,
+          style: TextStyle(
+              color: color,
+              fontSize: 9,
+              fontWeight: FontWeight.w700)),
+    );
+  }
+}
+
+// ── Item Preview Sheet ────────────────────────────────────────────────────────
+
+class _ItemPreviewSheet extends StatelessWidget {
+  final Map<String, dynamic> item;
+  final List<Map<String, dynamic>> stats;
+  final bool owned;
+  final bool equipped;
+  final bool isGachaOnly;
+  final int balance;
+  final Color gradeColor;
+  final LinearGradient gradeGradient;
+  final VoidCallback? onBuy;
+  final VoidCallback? onEquip;
+  final String Function(int) formatCoins;
+
+  const _ItemPreviewSheet({
+    required this.item,
+    required this.stats,
+    required this.owned,
+    required this.equipped,
+    required this.isGachaOnly,
+    required this.balance,
+    required this.gradeColor,
+    required this.gradeGradient,
+    required this.onBuy,
+    required this.onEquip,
+    required this.formatCoins,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final grade = item['grade'] as String? ?? 'B';
+    final price = (item['price'] as num?)?.toInt() ?? 0;
     final canAfford = balance >= price;
 
-    return MainCard(
-      child: Row(
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFFFFFBFD),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(item['icon'] as String? ?? '📦',
-              style: const TextStyle(fontSize: 28)),
-          const SizedBox(width: 14),
-          Expanded(
+          // Handle bar
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: kMainMuted.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 20),
+          // Preview card
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              gradient: gradeGradient,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                  color: gradeColor.withValues(alpha: 0.4), width: 1.5),
+            ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(item['name'] as String,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w700, fontSize: 14)),
+                _GradeBadge(grade: grade),
+                const SizedBox(height: 16),
+                Text(item['icon'] as String? ?? '📦',
+                    style: const TextStyle(fontSize: 64)),
+                const SizedBox(height: 12),
+                Text(
+                  item['name'] as String,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w800, fontSize: 18),
+                  textAlign: TextAlign.center,
+                ),
                 if (item['description'] != null) ...[
-                  const SizedBox(height: 2),
-                  Text(item['description'] as String,
-                      style: TextStyle(fontSize: 11, color: kMainMuted)),
+                  const SizedBox(height: 6),
+                  Text(
+                    item['description'] as String,
+                    style: TextStyle(fontSize: 12, color: kMainSub),
+                    textAlign: TextAlign.center,
+                  ),
                 ],
               ],
             ),
           ),
-          const SizedBox(width: 10),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor:
-                  canAfford ? kMainHoney : kMainMuted.withValues(alpha: 0.4),
-              foregroundColor: Colors.white,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          const SizedBox(height: 20),
+          // Stats list
+          if (stats.isNotEmpty) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text('능력치',
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: kMainSub)),
             ),
-            onPressed: canAfford ? onBuy : null,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('🪙', style: TextStyle(fontSize: 12)),
-                Text(_fmt(price),
-                    style: const TextStyle(
-                        fontSize: 12, fontWeight: FontWeight.w700)),
-              ],
-            ),
+            const SizedBox(height: 8),
+            for (final s in stats)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _statLabels[s['key'] as String] ??
+                            s['key'] as String,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: gradeColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '+${s['value']}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: gradeColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 12),
+          ],
+          // Action button
+          SizedBox(
+            width: double.infinity,
+            child: _actionButton(grade, price, canAfford),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _actionButton(String grade, int price, bool canAfford) {
+    if (equipped) {
+      return OutlinedButton(
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(color: gradeColor),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+        ),
+        onPressed: null,
+        child: Text('장착 중',
+            style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: gradeColor)),
+      );
+    }
+    if (owned) {
+      return ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: kMainSage,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+        ),
+        onPressed: onEquip,
+        child: const Text('장착하기',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+      );
+    }
+    if (isGachaOnly) {
+      return OutlinedButton(
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(color: gradeColor),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+        ),
+        onPressed: null,
+        child: Text('🎰 뽑기로만 획득 가능',
+            style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: gradeColor)),
+      );
+    }
+    return ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: canAfford ? gradeColor : kMainMuted,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+      ),
+      onPressed: canAfford ? onBuy : null,
+      child: Text(
+        canAfford ? '🪙 ${formatCoins(price)} 구매' : '코인 부족',
+        style:
+            const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
+// ── Issue Coupon Button ───────────────────────────────────────────────────────
+
+class _IssueCouponButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _IssueCouponButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [kMainHoneySoft, kMainRoseSoft],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: kMainHoney.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          children: [
+            const Text('🎟️', style: TextStyle(fontSize: 28)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('데이트 쿠폰 보내기',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700, fontSize: 15)),
+                  Text('파트너에게 특별한 약속을 보내요 · 500코인',
+                      style: TextStyle(fontSize: 11, color: kMainSub)),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: kMainHoney),
+          ],
+        ),
       ),
     );
   }
@@ -464,9 +1029,8 @@ class _CouponCard extends StatelessWidget {
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: kMainHoney.withValues(alpha: 0.35),
-        ),
+        border:
+            Border.all(color: kMainHoney.withValues(alpha: 0.35)),
       ),
       padding: const EdgeInsets.all(16),
       child: Row(
@@ -478,27 +1042,25 @@ class _CouponCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  coupon['title'] as String,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w700, fontSize: 15),
-                ),
+                Text(coupon['title'] as String,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 15)),
                 if (coupon['description'] != null &&
                     (coupon['description'] as String).isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(coupon['description'] as String,
-                      style: TextStyle(fontSize: 12, color: kMainSub)),
+                      style:
+                          TextStyle(fontSize: 12, color: kMainSub)),
                 ],
                 if (daysLeft != null) ...[
                   const SizedBox(height: 6),
                   Text(
-                    daysLeft > 0
-                        ? '$daysLeft일 후 만료'
-                        : '오늘 만료',
+                    daysLeft > 0 ? '$daysLeft일 후 만료' : '오늘 만료',
                     style: TextStyle(
-                      fontSize: 10,
-                      color: daysLeft <= 3 ? kMainRose : kMainMuted,
-                    ),
+                        fontSize: 10,
+                        color: daysLeft <= 3
+                            ? kMainRose
+                            : kMainMuted),
                   ),
                 ],
               ],
@@ -516,7 +1078,8 @@ class _CouponCard extends StatelessWidget {
             ),
             onPressed: onRedeem,
             child: const Text('사용',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                style: TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w700)),
           ),
         ],
       ),

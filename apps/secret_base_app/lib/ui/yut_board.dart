@@ -30,6 +30,8 @@ class YutBoard extends StatefulWidget {
   final String p1UserId;
   final String p2UserId;
   final String Function(String) displayName;
+  final String pieceSkin;
+  final String yutSkin;
 
   const YutBoard({
     super.key,
@@ -57,6 +59,8 @@ class YutBoard extends StatefulWidget {
     this.p1UserId = '',
     this.p2UserId = '',
     this.displayName = _defaultDisplayName,
+    this.pieceSkin = 'base',
+    this.yutSkin = 'base',
   });
 
   @override
@@ -641,6 +645,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     int count, {
     Offset offset = Offset.zero,
     bool selected = false,
+    String pieceSkin = 'base',
   }) {
     final inner = (_cPieceSize - 4).clamp(28.0, 44.0);
     return Transform.translate(
@@ -660,6 +665,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                 color: color,
                 selected: selected,
                 count: i == count - 1 && count > 1 ? count : null,
+                pieceSkin: pieceSkin,
               ),
             ),
           );
@@ -678,6 +684,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     required bool selected,
     required VoidCallback? onTap,
     required Offset stackOffset,
+    String pieceSkin = 'base',
   }) {
     final point = _toCanvasPoint(boardSize, pos);
 
@@ -698,6 +705,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
           count,
           offset: stackOffset,
           selected: selected,
+          pieceSkin: pieceSkin,
         ),
       ),
     );
@@ -1027,6 +1035,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                 widget.turn == opponent,
                                 false,
                                 null,
+                                pieceSkin: widget.pieceSkin,
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -1039,6 +1048,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                 isMyTurn,
                                 true,
                                 _selectPiece,
+                                pieceSkin: widget.pieceSkin,
                               ),
                             ),
                           ],
@@ -1093,6 +1103,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                               ? () => _selectPiece(e.key)
                                               : null,
                                           stackOffset: const Offset(-10, -10),
+                                          pieceSkin: widget.pieceSkin,
                                         );
                                       }),
                                     if (widget.p2Pieces != null)
@@ -1121,6 +1132,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                               ? () => _selectPiece(e.key)
                                               : null,
                                           stackOffset: const Offset(10, 10),
+                                          pieceSkin: widget.pieceSkin,
                                         );
                                       }),
                                     ...guideOptions.map(
@@ -1229,6 +1241,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                       child: _YutThrowOverlay(
                         animation: _stickThrowCtrl,
                         resultName: _animResult,
+                        yutSkin: widget.yutSkin,
                       ),
                     ),
                 ],
@@ -1244,8 +1257,9 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     List<dynamic>? pieces,
     bool isActiveTurn,
     bool selectable,
-    void Function(int)? onPieceTap,
-  ) {
+    void Function(int)? onPieceTap, {
+    String pieceSkin = 'base',
+  }) {
     final safePieces = pieces ?? List.generate(4, (_) => 0);
     final holdingPieces = safePieces.asMap().entries.where((entry) {
       final pos = _getPos(entry.value);
@@ -1284,6 +1298,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                   character: character,
                   color: color,
                   selected: isActiveTurn,
+                  pieceSkin: pieceSkin,
                 ),
               ),
               SizedBox(width: _compact ? 5 : 7),
@@ -1354,6 +1369,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                           ? const Color(0xFF555555)
                                           : color,
                                       selected: selected || canTap,
+                                      pieceSkin: pieceSkin,
                                     ),
                                   ),
                                 ),
@@ -1435,12 +1451,14 @@ class _CharacterToken extends StatelessWidget {
   final Color color;
   final bool selected;
   final int? count;
+  final String pieceSkin;
 
   const _CharacterToken({
     required this.character,
     required this.color,
     this.selected = false,
     this.count,
+    this.pieceSkin = 'base',
   });
 
   @override
@@ -1450,6 +1468,7 @@ class _CharacterToken extends StatelessWidget {
         character: character,
         color: color,
         selected: selected,
+        pieceSkin: pieceSkin,
       ),
       child: count == null
           ? const SizedBox.expand()
@@ -1483,11 +1502,13 @@ class _CharacterTokenPainter extends CustomPainter {
   final String character;
   final Color color;
   final bool selected;
+  final String pieceSkin;
 
   const _CharacterTokenPainter({
     required this.character,
     required this.color,
     required this.selected,
+    this.pieceSkin = 'base',
   });
 
   @override
@@ -1516,14 +1537,38 @@ class _CharacterTokenPainter extends CustomPainter {
     final faceCenter = center.translate(0, -radius * 0.18);
     final bodyCenter = center.translate(0, radius * 0.32);
 
-    switch (character) {
-      case 'nolbu':
-        _drawNolbu(canvas, radius, faceCenter, faceR, bodyCenter);
-      case 'miho':
-        _drawMiho(canvas, radius, faceCenter, faceR, bodyCenter);
-      default:
-        _drawHong(canvas, radius, faceCenter, faceR, bodyCenter);
+    if (pieceSkin != 'base') {
+      _drawSkinEmoji(canvas, center, radius);
+    } else {
+      switch (character) {
+        case 'nolbu':
+          _drawNolbu(canvas, radius, faceCenter, faceR, bodyCenter);
+        case 'miho':
+          _drawMiho(canvas, radius, faceCenter, faceR, bodyCenter);
+        default:
+          _drawHong(canvas, radius, faceCenter, faceR, bodyCenter);
+      }
     }
+  }
+
+  void _drawSkinEmoji(Canvas canvas, Offset center, double radius) {
+    final emoji = switch (pieceSkin) {
+      'animal' => '🐾',
+      'food' => '🍡',
+      'star' => '⭐',
+      _ => '✨',
+    };
+    final tp = TextPainter(
+      text: TextSpan(
+        text: emoji,
+        style: TextStyle(fontSize: radius * 0.95),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(
+      canvas,
+      center - Offset(tp.width / 2, tp.height / 2),
+    );
   }
 
   void _drawFace(Canvas canvas, Offset faceCenter, double faceR, Color skin) {
@@ -1715,7 +1760,8 @@ class _CharacterTokenPainter extends CustomPainter {
   bool shouldRepaint(covariant _CharacterTokenPainter oldDelegate) {
     return oldDelegate.character != character ||
         oldDelegate.color != color ||
-        oldDelegate.selected != selected;
+        oldDelegate.selected != selected ||
+        oldDelegate.pieceSkin != pieceSkin;
   }
 }
 
@@ -1910,8 +1956,13 @@ class HangameYutPainter extends CustomPainter {
 class _YutThrowOverlay extends StatelessWidget {
   final Animation<double> animation;
   final String? resultName;
+  final String yutSkin;
 
-  const _YutThrowOverlay({required this.animation, this.resultName});
+  const _YutThrowOverlay({
+    required this.animation,
+    this.resultName,
+    this.yutSkin = 'base',
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1924,7 +1975,11 @@ class _YutThrowOverlay extends StatelessWidget {
           child: Stack(
             children: [
               CustomPaint(
-                painter: _YutSticksPainter(t: t, resultName: resultName),
+                painter: _YutSticksPainter(
+                  t: t,
+                  resultName: resultName,
+                  yutSkin: yutSkin,
+                ),
                 child: const SizedBox.expand(),
               ),
               if (t > 0.96 && resultName != null)
@@ -1960,8 +2015,9 @@ class _YutThrowOverlay extends StatelessWidget {
 class _YutSticksPainter extends CustomPainter {
   final double t;
   final String? resultName;
+  final String yutSkin;
 
-  _YutSticksPainter({required this.t, this.resultName});
+  _YutSticksPainter({required this.t, this.resultName, this.yutSkin = 'base'});
 
   int get _flatCount {
     switch (resultName) {
@@ -2046,17 +2102,39 @@ class _YutSticksPainter extends CustomPainter {
       const Radius.circular(10),
     );
 
-    final fill = Paint()
-      ..color = showFlat ? const Color(0xFFDEB887) : const Color(0xFF5C3A21);
+    final (flatColor, roundColor, grainColor) = switch (yutSkin) {
+      'bamboo' => (
+          const Color(0xFF8BC34A),
+          const Color(0xFF33691E),
+          const Color(0xFF558B2F),
+        ),
+      'gold' => (
+          const Color(0xFFFFD700),
+          const Color(0xFFB8860B),
+          const Color(0xFFDAA520),
+        ),
+      'crystal' => (
+          const Color(0xFF88C0D0),
+          const Color(0xFF2E4A6E),
+          const Color(0xFF5E81AC),
+        ),
+      _ => (
+          const Color(0xFFDEB887),
+          const Color(0xFF5C3A21),
+          const Color(0xFFC49A6C),
+        ),
+    };
+
+    final fill = Paint()..color = showFlat ? flatColor : roundColor;
     canvas.drawRRect(rrect, fill);
 
     // grain lines
-    final line = Paint()
-      ..color = showFlat ? const Color(0xFFC49A6C) : const Color(0xFF3D2010)
+    final grainLine = Paint()
+      ..color = grainColor
       ..strokeWidth = 1.2
       ..style = PaintingStyle.stroke;
     for (final dx in [-20.0, 0.0, 20.0]) {
-      canvas.drawLine(Offset(dx, -6), Offset(dx, 6), line);
+      canvas.drawLine(Offset(dx, -6), Offset(dx, 6), grainLine);
     }
 
     // border
@@ -2071,5 +2149,5 @@ class _YutSticksPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_YutSticksPainter old) =>
-      old.t != t || old.resultName != resultName;
+      old.t != t || old.resultName != resultName || old.yutSkin != yutSkin;
 }

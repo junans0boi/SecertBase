@@ -57,7 +57,8 @@ export async function claimDailyBonus(userId) {
 
 // 게임 결과 정산: 올인 캡 적용 원자적 이체
 // winnerCode/loserCode는 UserCode(소켓 userId) — 내부에서 numeric UserId로 변환
-export async function transferGameReward(winnerCode, loserCode, amount, gameRef) {
+// winnerBonusPct: coin_bonus_pct from equipped items (0–20)
+export async function transferGameReward(winnerCode, loserCode, amount, gameRef, { winnerBonusPct = 0 } = {}) {
   const [winnerId, loserId] = await Promise.all([
     _resolveUserId(winnerCode),
     _resolveUserId(loserCode),
@@ -74,18 +75,37 @@ export async function transferGameReward(winnerCode, loserCode, amount, gameRef)
       [winnerId]
     );
     const actual = Math.min(amount, loser.balance); // 올인 캡
+    const bonusMultiplier = 1 + Math.min(winnerBonusPct, 20) / 100;
+    const winnerGain = Math.floor(actual * bonusMultiplier);
     const loserAfter = loser.balance - actual;
-    const winnerAfter = winner.balance + actual;
+    const winnerAfter = winner.balance + winnerGain;
     await conn.execute('UPDATE wallets SET balance = ? WHERE user_id = ?', [loserAfter, loserId]);
     await conn.execute('UPDATE wallets SET balance = ? WHERE user_id = ?', [winnerAfter, winnerId]);
     await conn.execute(
       'INSERT INTO wallet_transactions (user_id, delta, balance_after, reason, ref_id) VALUES (?, ?, ?, ?, ?)',
-      [winnerId, actual, winnerAfter, 'game_win', gameRef]
+      [winnerId, winnerGain, winnerAfter, 'game_win', gameRef]
     );
     await conn.execute(
       'INSERT INTO wallet_transactions (user_id, delta, balance_after, reason, ref_id) VALUES (?, ?, ?, ?, ?)',
       [loserId, -actual, loserAfter, 'game_loss', gameRef]
     );
-    return { actual, winnerBalance: winnerAfter, loserBalance: loserAfter };
+    return { actual, winnerGain, winnerBalance: winnerAfter, loserBalance: loserAfter };
   });
+}
+
+// 유저의 장착 아이템 스탯 집계 (게임 시작 시 호출)
+export async function getEquippedStats(userId) {
+  const { rows } = await query(
+    `SELECT ist.stat_key, SUM(ist.stat_value) AS total
+     FROM equipped_items ei
+     JOIN item_stats ist ON ist.item_id = ei.item_id
+     WHERE ei.user_id = ?
+     GROUP BY ist.stat_key`,
+    [userId]
+  );
+  const stats = {};
+  for (const row of rows) {
+    stats[row.stat_key] = Number(row.total);
+  }
+  return stats;
 }

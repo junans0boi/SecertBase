@@ -4963,34 +4963,41 @@ router.post('/wallet/daily-bonus', async (req, res) => {
 // ── 상점(Shop) ───────────────────────────────────────────────────────────────
 import { transferGameReward } from './wallet-engine.js';
 
-// GET /api/shop/items — full catalog
+// GET /api/shop/items — full catalog with grade, slot, game, and stats
 router.get('/shop/items', async (req, res) => {
   try {
-    const { rows: items } = await query('SELECT id, category, name, description, price, icon FROM shop_items WHERE active = 1 ORDER BY category, id');
-    res.json({ ok: true, items });
+    const { rows: items } = await query(
+      `SELECT id, category, game, slot, grade, name, description, price, icon
+       FROM shop_items WHERE active = 1 ORDER BY game, slot, grade, id`
+    );
+    const { rows: statRows } = await query(
+      `SELECT item_id, stat_key, stat_value FROM item_stats
+       WHERE item_id IN (${items.map(() => '?').join(',') || '0'})`,
+      items.map((i) => i.id)
+    );
+    const statsMap = {};
+    for (const s of statRows) {
+      (statsMap[s.item_id] ??= []).push({ key: s.stat_key, value: Number(s.stat_value) });
+    }
+    const result = items.map((i) => ({ ...i, stats: statsMap[i.id] ?? [] }));
+    res.json({ ok: true, items: result });
   } catch (err) {
     console.error('[API] /shop/items GET error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
   }
 });
 
-// GET /api/shop/owned — items owned by couple
+// GET /api/shop/owned — items owned by this user (personal, not couple)
 router.get('/shop/owned', async (req, res) => {
   try {
-    const { rows: coupleRows } = await query(
-      `SELECT c.CoupleId FROM Couples c
-       JOIN Users u ON u.UserId = c.User1Id OR u.UserId = c.User2Id
-       WHERE u.UserCode = ? LIMIT 1`,
-      [req.auth.userCode]
-    );
-    const coupleRow = coupleRows[0];
-    if (!coupleRow) return res.json({ ok: true, owned: [] });
-
     const { rows: owned } = await query(
-      `SELECT oi.item_id, oi.quantity, si.name, si.category, si.icon
-       FROM owned_items oi JOIN shop_items si ON si.id = oi.item_id
-       WHERE oi.couple_id = ?`,
-      [coupleRow.CoupleId]
+      `SELECT oi.item_id, oi.quantity, si.name, si.category, si.game, si.slot, si.grade, si.icon,
+              ei.slot IS NOT NULL AS is_equipped
+       FROM owned_items oi
+       JOIN shop_items si ON si.id = oi.item_id
+       LEFT JOIN equipped_items ei ON ei.item_id = oi.item_id AND ei.user_id = ?
+       WHERE oi.user_id = ?`,
+      [req.auth.userId, req.auth.userId]
     );
     res.json({ ok: true, owned });
   } catch (err) {
@@ -4999,29 +5006,93 @@ router.get('/shop/owned', async (req, res) => {
   }
 });
 
-// POST /api/shop/buy — purchase item with coins
+// GET /api/shop/equipped?game=onecard — equipped items + aggregated stats for a game
+router.get('/shop/equipped', async (req, res) => {
+  try {
+    const { game } = req.query;
+    const gameFilter = game ? 'AND si.game = ?' : '';
+    const params = game
+      ? [req.auth.userId, game]
+      : [req.auth.userId];
+    const { rows: equipped } = await query(
+      `SELECT ei.slot, si.id AS item_id, si.name, si.icon, si.grade,
+              ist.stat_key, ist.stat_value
+       FROM equipped_items ei
+       JOIN shop_items si ON si.id = ei.item_id
+       LEFT JOIN item_stats ist ON ist.item_id = ei.item_id
+       WHERE ei.user_id = ? ${gameFilter}`,
+      params
+    );
+    // Aggregate: slot → item info + flatten stats
+    const slotsMap = {};
+    const aggregatedStats = {};
+    for (const row of equipped) {
+      if (!slotsMap[row.slot]) {
+        slotsMap[row.slot] = { item_id: row.item_id, name: row.name, icon: row.icon, grade: row.grade };
+      }
+      if (row.stat_key) {
+        const val = Number(row.stat_value);
+        aggregatedStats[row.stat_key] = (aggregatedStats[row.stat_key] ?? 0) + val;
+      }
+    }
+    res.json({ ok: true, slots: slotsMap, stats: aggregatedStats });
+  } catch (err) {
+    console.error('[API] /shop/equipped GET error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+// POST /api/shop/equip — equip an owned item to its slot
+router.post('/shop/equip', async (req, res) => {
+  try {
+    const { item_id } = req.body ?? {};
+    if (!item_id) return res.status(400).json({ ok: false, reason: 'missing_item_id' });
+
+    // Verify ownership
+    const { rows: ownedRows } = await query(
+      'SELECT item_id FROM owned_items WHERE user_id = ? AND item_id = ?',
+      [req.auth.userId, item_id]
+    );
+    if (!ownedRows[0]) return res.status(403).json({ ok: false, reason: 'not_owned' });
+
+    const { rows: itemRows } = await query(
+      'SELECT slot FROM shop_items WHERE id = ? AND active = 1',
+      [item_id]
+    );
+    if (!itemRows[0]?.slot) return res.status(404).json({ ok: false, reason: 'item_not_found' });
+    const { slot } = itemRows[0];
+
+    await query(
+      `INSERT INTO equipped_items (user_id, slot, item_id)
+       VALUES (?, ?, ?)
+       ON DUPLICATE KEY UPDATE item_id = VALUES(item_id), equipped_at = NOW()`,
+      [req.auth.userId, slot, item_id]
+    );
+    res.json({ ok: true, slot, item_id });
+  } catch (err) {
+    console.error('[API] /shop/equip POST error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+// POST /api/shop/buy — purchase item with coins (B/A grade only; S+ are gacha-only)
 router.post('/shop/buy', async (req, res) => {
   try {
     const { item_id } = req.body ?? {};
     if (!item_id) return res.status(400).json({ ok: false, reason: 'missing_item_id' });
 
     const { rows: itemRows } = await query(
-      'SELECT id, category, name, price FROM shop_items WHERE id = ? AND active = 1',
+      `SELECT id, category, game, slot, grade, name, price
+       FROM shop_items WHERE id = ? AND active = 1`,
       [item_id]
     );
     const item = itemRows[0];
     if (!item) return res.status(404).json({ ok: false, reason: 'item_not_found' });
+    if (['S', 'SS', 'SSS'].includes(item.grade)) {
+      return res.status(400).json({ ok: false, reason: 'gacha_only' });
+    }
 
-    const { rows: coupleRows } = await query(
-      `SELECT c.CoupleId FROM Couples c
-       JOIN Users u ON u.UserId = c.User1Id OR u.UserId = c.User2Id
-       WHERE u.UserCode = ? LIMIT 1`,
-      [req.auth.userCode]
-    );
-    const coupleRow = coupleRows[0];
-    if (!coupleRow) return res.status(400).json({ ok: false, reason: 'no_couple' });
-
-    // Spend coins atomically (debit from buyer, no credit — shop coins are consumed)
+    // Spend coins atomically (debit from buyer; skin ownership is per-user)
     let newBalance;
     try {
       newBalance = await transaction(async (conn) => {
@@ -5045,10 +5116,10 @@ router.post('/shop/buy', async (req, res) => {
           [req.auth.userId, -item.price, after, `shop:${item.id}`]
         );
         await conn.execute(
-          `INSERT INTO owned_items (couple_id, item_id, quantity)
-           VALUES (?, ?, 1)
+          `INSERT INTO owned_items (user_id, couple_id, item_id, quantity)
+           VALUES (?, NULL, ?, 1)
            ON DUPLICATE KEY UPDATE quantity = quantity + 1`,
-          [coupleRow.CoupleId, item.id]
+          [req.auth.userId, item.id]
         );
         return after;
       });

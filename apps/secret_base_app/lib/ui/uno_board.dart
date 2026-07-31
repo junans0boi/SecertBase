@@ -27,6 +27,7 @@ class UnoBoard extends StatefulWidget {
   final int? lastSpecialAt;
   final double topInset;
   final String? opponentName;
+  final String cardBackSkin;
 
   const UnoBoard({
     super.key,
@@ -53,6 +54,7 @@ class UnoBoard extends StatefulWidget {
     this.lastSpecialAt,
     this.topInset = 0,
     this.opponentName,
+    this.cardBackSkin = 'base',
   });
 
   @override
@@ -427,6 +429,7 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
                                       (i) => UnoCardBack(
                                         width: (38 * scale).clamp(31.0, 46.0),
                                         height: (57 * scale).clamp(46.5, 69.0),
+                                        cardBackSkin: widget.cardBackSkin,
                                       ),
                                     ),
                                   ),
@@ -527,6 +530,7 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
                                             UnoCardBack(
                                               width: pileCardWidth,
                                               height: pileCardHeight,
+                                              cardBackSkin: widget.cardBackSkin,
                                             ),
                                             Positioned(
                                               left: -2,
@@ -534,6 +538,7 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
                                               child: UnoCardBack(
                                                 width: pileCardWidth,
                                                 height: pileCardHeight,
+                                                cardBackSkin: widget.cardBackSkin,
                                               ),
                                             ),
                                             Positioned(
@@ -542,6 +547,7 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
                                               child: UnoCardBack(
                                                 width: pileCardWidth,
                                                 height: pileCardHeight,
+                                                cardBackSkin: widget.cardBackSkin,
                                               ),
                                             ),
                                             if (isMyTurn)
@@ -1137,14 +1143,43 @@ class _UnoCallButtonState extends State<_UnoCallButton>
 
 // ── Card Widgets ──────────────────────────────────────────────────────────────
 
+// cardBackSkin values: 'base' | 'cherry_blossom' | 'space' | 'heart'
 class UnoCardBack extends StatelessWidget {
   final double width;
   final double height;
+  final String cardBackSkin;
 
-  const UnoCardBack({super.key, required this.width, required this.height});
+  const UnoCardBack({
+    super.key,
+    required this.width,
+    required this.height,
+    this.cardBackSkin = 'base',
+  });
+
+  static const _skins = {
+    'cherry_blossom': (
+      gradient: [Color(0xFFFFB7D5), Color(0xFFFF6F9F)],
+      icon: '🌸',
+      label: 'ONE CARD',
+      textColor: Colors.white,
+    ),
+    'space': (
+      gradient: [Color(0xFF1A1A3E), Color(0xFF0D0D24)],
+      icon: '🌌',
+      label: 'ONE CARD',
+      textColor: Colors.white,
+    ),
+    'heart': (
+      gradient: [Color(0xFFFF4444), Color(0xFFCC0000)],
+      icon: '❤️',
+      label: 'ONE CARD',
+      textColor: Colors.white,
+    ),
+  };
 
   @override
   Widget build(BuildContext context) {
+    final skin = _skins[cardBackSkin];
     return Container(
       width: width,
       height: height,
@@ -1156,25 +1191,30 @@ class UnoCardBack extends StatelessWidget {
         ],
       ),
       padding: EdgeInsets.all(width * 0.06),
-      // Secret Base 자체 뒷면: 딥 플럼 + 로즈 하트 + ONE CARD 워드마크 (ADR 0001)
       child: Container(
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
+          gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF463560), Color(0xFF2E2342)],
+            colors: skin != null
+                ? skin.gradient
+                : const [Color(0xFF463560), Color(0xFF2E2342)],
           ),
           borderRadius: BorderRadius.circular(width * 0.08),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.favorite_rounded,
-              color: const Color(0xFFFF6F9F),
-              size: width * 0.42,
-              shadows: const [Shadow(color: Colors.black38, blurRadius: 3)],
-            ),
+            skin != null
+                ? Text(skin.icon, style: TextStyle(fontSize: width * 0.38))
+                : Icon(
+                    Icons.favorite_rounded,
+                    color: const Color(0xFFFF6F9F),
+                    size: width * 0.42,
+                    shadows: const [
+                      Shadow(color: Colors.black38, blurRadius: 3)
+                    ],
+                  ),
             SizedBox(height: height * 0.04),
             Text(
               'ONE CARD',
