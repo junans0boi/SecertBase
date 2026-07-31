@@ -260,8 +260,8 @@ export async function pullGacha(userId) {
 
     // Add to owned_items
     await conn.execute(
-      'INSERT IGNORE INTO owned_items (couple_id, item_id, user_id) VALUES (0, ?, ?)',
-      [item.id, userId],
+      'INSERT INTO owned_items (user_id, item_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE item_id = item_id',
+      [userId, item.id],
     );
 
     // Track mission progress
