@@ -2474,6 +2474,118 @@ router.get('/retention/memory-card/list', async (req, res) => {
 
 // ── MVP4: Secret Base Milestones ─────────────────────────────────────────────
 
+const MILESTONE_REWARDS = {
+  first_moment:      { item_id: 30, icon: '🐾', name: '동물 말',         grade: 'B'   },
+  moments_10:        { item_id: 10, icon: '🌸', name: '벚꽃 카드뒷면',   grade: 'B'   },
+  moments_50:        { item_id: 20, icon: '🎋', name: '대나무 윷',        grade: 'B'   },
+  moments_100:       { item_id: 31, icon: '🍡', name: '음식 말',          grade: 'A'   },
+  moments_200:       { item_id: 22, icon: '💎', name: '크리스탈 윷',      grade: 'S'   },
+  moments_500:       { item_id: 23, icon: '🔥', name: '불꽃 윷',          grade: 'SS'  },
+  moments_1000:      { item_id: 15, icon: '💑', name: '커플 카드뒷면',    grade: 'SSS' },
+  first_pin:         { item_id: 11, icon: '🌌', name: '우주 카드뒷면',    grade: 'A'   },
+  pins_5:            { item_id: 12, icon: '❤️', name: '하트 카드뒷면',    grade: 'A'   },
+  first_visit:       { item_id: 21, icon: '🏆', name: '황금 윷',          grade: 'A'   },
+  visited_5:         { item_id: 13, icon: '✨', name: '황금 카드뒷면',    grade: 'S'   },
+  visited_10:        { item_id: 33, icon: '👑', name: '왕관 말',          grade: 'SS'  },
+  visited_20:        { item_id: 34, icon: '💏', name: '커플 말',          grade: 'SSS' },
+  first_memory_card: { item_id: 32, icon: '⭐', name: '별 말',            grade: 'S'   },
+  d100:              { item_id: 14, icon: '🌈', name: '무지개 카드뒷면',  grade: 'SS'  },
+  d200:              { item_id: 33, icon: '👑', name: '왕관 말',          grade: 'SS'  },
+  d365:              { item_id: 24, icon: '🎆', name: '전설의 윷',        grade: 'SSS' },
+  d500:              { item_id: 34, icon: '💏', name: '커플 말',          grade: 'SSS' },
+  d730:              { item_id: 15, icon: '💑', name: '커플 카드뒷면',    grade: 'SSS' },
+  d1000:             { item_id: 24, icon: '🎆', name: '전설의 윷',        grade: 'SSS' },
+  d1461:             { item_id: 34, icon: '💏', name: '커플 말',          grade: 'SSS' },
+};
+
+async function computeMilestones(coupleId) {
+  const coupleResult = await query(
+    `SELECT COALESCE(StartDate, DATE(ActivatedAt)) AS startDate
+     FROM Couples WHERE CoupleId = ? LIMIT 1`,
+    [coupleId],
+  );
+  const startDate = coupleResult.rows[0]?.startDate ?? null;
+
+  const postsResult = await query(
+    `SELECT id, captured_at,
+            ROW_NUMBER() OVER (ORDER BY captured_at ASC) AS rn
+     FROM setlog_posts WHERE couple_id = ?`,
+    [coupleId],
+  );
+  const postRows = postsResult.rows;
+  const postByRank = (n) => postRows.find((r) => Number(r.rn) === n) ?? null;
+
+  const firstPinResult = await query(
+    `SELECT MIN(created_at) AS first_pin_at, COUNT(*) AS cnt
+     FROM map_pins WHERE couple_id = ?`,
+    [coupleId],
+  );
+  const firstPinAt = firstPinResult.rows[0]?.first_pin_at ?? null;
+  const pinsCount = Number(firstPinResult.rows[0]?.cnt ?? 0);
+
+  const visitsResult = await query(
+    `SELECT id, visit_date,
+            ROW_NUMBER() OVER (ORDER BY visit_date ASC) AS rn
+     FROM afterglow_visits WHERE couple_id = ?`,
+    [coupleId],
+  );
+  const visitRows = visitsResult.rows;
+  const visitByRank = (n) => visitRows.find((r) => Number(r.rn) === n) ?? null;
+
+  const memoryCardResult = await query(
+    `SELECT MIN(a.captured_at) AS first_discovery
+     FROM setlog_posts a
+     JOIN setlog_posts b
+       ON b.couple_id = a.couple_id
+          AND DATE_FORMAT(b.captured_at, '%m-%d') = DATE_FORMAT(a.captured_at, '%m-%d')
+          AND YEAR(b.captured_at) <> YEAR(a.captured_at)
+     WHERE a.couple_id = ?`,
+    [coupleId],
+  );
+  const firstMemoryCardAt = memoryCardResult.rows[0]?.first_discovery ?? null;
+
+  const toDate = (v) => {
+    if (!v) return null;
+    if (typeof v === 'string') return v.slice(0, 10);
+    if (v instanceof Date) return v.toISOString().slice(0, 10);
+    return String(v).slice(0, 10);
+  };
+
+  const ms = (type, label, achievedAt, value = null) => ({
+    type,
+    label,
+    achieved: achievedAt !== null,
+    achieved_at: toDate(achievedAt),
+    value: value !== null ? value : undefined,
+  });
+
+  const d = (n) => (startDate ? shiftDate(toDate(startDate), n - 1) : null);
+
+  return [
+    ms('first_moment',      '첫 번째 순간',       postByRank(1)?.captured_at    ?? null),
+    ms('moments_10',        '10번째 순간',         postByRank(10)?.captured_at   ?? null),
+    ms('moments_50',        '50번째 순간',         postByRank(50)?.captured_at   ?? null),
+    ms('moments_100',       '100번째 순간',        postByRank(100)?.captured_at  ?? null),
+    ms('moments_200',       '200번째 순간',        postByRank(200)?.captured_at  ?? null),
+    ms('moments_500',       '500번째 순간',        postByRank(500)?.captured_at  ?? null),
+    ms('moments_1000',      '1000번째 순간',       postByRank(1000)?.captured_at ?? null),
+    ms('first_pin',         '첫 번째 장소',        firstPinAt),
+    ms('pins_5',            '5번째 장소',          pinsCount >= 5 ? firstPinAt : null),
+    ms('first_visit',       '첫 번째 방문',        visitByRank(1)?.visit_date    ?? null),
+    ms('visited_5',         '5번째 방문',          visitByRank(5)?.visit_date    ?? null),
+    ms('visited_10',        '10번째 방문',         visitByRank(10)?.visit_date   ?? null),
+    ms('visited_20',        '20번째 방문',         visitByRank(20)?.visit_date   ?? null),
+    ms('first_memory_card', '첫 메모리 카드 발견', firstMemoryCardAt),
+    ms('d100',   '100일',  d(100)),
+    ms('d200',   '200일',  d(200)),
+    ms('d365',   '1주년',  d(365)),
+    ms('d500',   '500일',  d(500)),
+    ms('d730',   '2주년',  d(730)),
+    ms('d1000',  '1000일', d(1000)),
+    ms('d1461',  '4주년',  d(1461)),
+  ];
+}
+
 router.get('/retention/secret-base/milestones', async (req, res) => {
   try {
     const userId = req.auth.userId;
@@ -2482,96 +2594,68 @@ router.get('/retention/secret-base/milestones', async (req, res) => {
       return res.status(409).json({ ok: false, reason: 'active_couple_required' });
     }
 
-    // Fetch couple start date
-    const coupleResult = await query(
-      `SELECT StartDate FROM Couples WHERE CoupleId = ? LIMIT 1`,
-      [coupleId],
-    );
-    const startDate = coupleResult.rows[0]?.StartDate ?? null;
+    const [milestones, claimedSet] = await Promise.all([
+      computeMilestones(coupleId),
+      query('SELECT milestone_type FROM milestone_claims WHERE couple_id = ?', [coupleId])
+        .then((r) => new Set(r.rows.map((x) => x.milestone_type))),
+    ]);
 
-    // Fetch ranked setlog_posts for nth-moment milestones
-    const postsResult = await query(
-      `SELECT id, captured_at,
-              ROW_NUMBER() OVER (ORDER BY captured_at ASC) AS rn
-       FROM setlog_posts
-       WHERE couple_id = ?`,
-      [coupleId],
-    );
-    const postRows = postsResult.rows;
-    const postByRank = (n) => postRows.find((r) => Number(r.rn) === n) ?? null;
+    const result = milestones.map((m) => ({
+      ...m,
+      reward: MILESTONE_REWARDS[m.type] ?? null,
+      claimed: claimedSet.has(m.type),
+    }));
 
-    // Fetch first map_pin
-    const firstPinResult = await query(
-      `SELECT MIN(created_at) AS first_pin_at FROM map_pins WHERE couple_id = ?`,
-      [coupleId],
-    );
-    const firstPinAt = firstPinResult.rows[0]?.first_pin_at ?? null;
-
-    // Fetch ranked afterglow_visits for visit milestones
-    const visitsResult = await query(
-      `SELECT id, visit_date,
-              ROW_NUMBER() OVER (ORDER BY visit_date ASC) AS rn
-       FROM afterglow_visits
-       WHERE couple_id = ?`,
-      [coupleId],
-    );
-    const visitRows = visitsResult.rows;
-    const visitByRank = (n) => visitRows.find((r) => Number(r.rn) === n) ?? null;
-
-    // Memory card first discovery: earliest captured_at that has another post in a different year on the same month-day
-    const memoryCardResult = await query(
-      `SELECT MIN(a.captured_at) AS first_discovery
-       FROM setlog_posts a
-       JOIN setlog_posts b
-         ON b.couple_id = a.couple_id
-            AND DATE_FORMAT(b.captured_at, '%m-%d') = DATE_FORMAT(a.captured_at, '%m-%d')
-            AND YEAR(b.captured_at) <> YEAR(a.captured_at)
-       WHERE a.couple_id = ?`,
-      [coupleId],
-    );
-    const firstMemoryCardAt = memoryCardResult.rows[0]?.first_discovery ?? null;
-
-    const toDate = (v) => {
-      if (!v) return null;
-      if (typeof v === 'string') return v.slice(0, 10);
-      if (v instanceof Date) return v.toISOString().slice(0, 10);
-      return String(v).slice(0, 10);
-    };
-
-    const milestone = (type, label, achievedAt, value = null) => ({
-      type,
-      label,
-      achieved: achievedAt !== null,
-      achieved_at: toDate(achievedAt),
-      value: value !== null ? value : undefined,
-    });
-
-    const p1 = postByRank(1);
-    const p10 = postByRank(10);
-    const p50 = postByRank(50);
-    const p100 = postByRank(100);
-    const v1 = visitByRank(1);
-    const v5 = visitByRank(5);
-
-    const d = (n) => (startDate ? shiftDate(toDate(startDate), n - 1) : null);
-
-    const milestones = [
-      milestone('first_moment', '첫 번째 순간', p1?.captured_at ?? null),
-      milestone('moments_10', '10번째 순간', p10?.captured_at ?? null),
-      milestone('moments_50', '50번째 순간', p50?.captured_at ?? null),
-      milestone('moments_100', '100번째 순간', p100?.captured_at ?? null),
-      milestone('first_pin', '첫 번째 장소', firstPinAt),
-      milestone('first_visit', '첫 번째 방문', v1?.visit_date ?? null),
-      milestone('visited_5', '5번째 방문', v5?.visit_date ?? null),
-      milestone('first_memory_card', '첫 메모리 카드 발견', firstMemoryCardAt),
-      milestone('d100', '100일', d(100)),
-      milestone('d200', '200일', d(200)),
-      milestone('d365', '365일', d(365)),
-    ];
-
-    res.json({ ok: true, milestones });
+    res.json({ ok: true, milestones: result });
   } catch (err) {
     console.error('[API] /retention/secret-base/milestones GET error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+// POST /api/retention/secret-base/milestones/:type/claim
+router.post('/retention/secret-base/milestones/:type/claim', async (req, res) => {
+  try {
+    const userId = req.auth.userId;
+    const coupleId = await getCoupleIdForUser(userId);
+    if (!coupleId) {
+      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+    }
+
+    const { type } = req.params;
+    const reward = MILESTONE_REWARDS[type];
+    if (!reward) return res.status(404).json({ ok: false, reason: 'unknown_milestone' });
+
+    const milestones = await computeMilestones(coupleId);
+    const milestone = milestones.find((m) => m.type === type);
+    if (!milestone?.achieved) {
+      return res.status(400).json({ ok: false, reason: 'not_achieved' });
+    }
+
+    const { rows: existing } = await query(
+      'SELECT id FROM milestone_claims WHERE couple_id = ? AND milestone_type = ?',
+      [coupleId, type],
+    );
+    if (existing.length > 0) {
+      return res.status(409).json({ ok: false, reason: 'already_claimed' });
+    }
+
+    await transaction(async (conn) => {
+      await conn.execute(
+        `INSERT INTO owned_items (user_id, item_id)
+         VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE item_id = item_id`,
+        [userId, reward.item_id],
+      );
+      await conn.execute(
+        'INSERT INTO milestone_claims (couple_id, milestone_type, item_id) VALUES (?, ?, ?)',
+        [coupleId, type, reward.item_id],
+      );
+    });
+
+    res.json({ ok: true, item_id: reward.item_id, item_name: reward.name, item_icon: reward.icon });
+  } catch (err) {
+    console.error('[API] /retention/secret-base/milestones/:type/claim POST error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
   }
 });
@@ -5116,9 +5200,9 @@ router.post('/shop/buy', async (req, res) => {
           [req.auth.userId, -item.price, after, `shop:${item.id}`]
         );
         await conn.execute(
-          `INSERT INTO owned_items (user_id, couple_id, item_id, quantity)
-           VALUES (?, NULL, ?, 1)
-           ON DUPLICATE KEY UPDATE quantity = quantity + 1`,
+          `INSERT INTO owned_items (user_id, item_id)
+           VALUES (?, ?)
+           ON DUPLICATE KEY UPDATE item_id = item_id`,
           [req.auth.userId, item.id]
         );
         return after;
