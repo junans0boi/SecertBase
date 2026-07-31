@@ -38,11 +38,12 @@ class _BasePostcardScreenState extends State<BasePostcardScreen> {
   }
 
   Future<void> _load() async {
-    if (mounted)
+    if (mounted) {
       setState(() {
         _loading = true;
         _postcard = null;
       });
+    }
     try {
       final res = await http.get(
         Uri.parse(
@@ -233,7 +234,7 @@ class _BasePostcardScreenState extends State<BasePostcardScreen> {
                       width: 80,
                       height: 80,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _placeholderBox(),
+                      errorBuilder: (_, a, b) => _placeholderBox(),
                     ),
                   )
                 else

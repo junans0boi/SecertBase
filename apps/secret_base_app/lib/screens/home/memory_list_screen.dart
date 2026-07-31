@@ -80,7 +80,7 @@ class _MemoryListScreenState extends State<MemoryListScreen> {
           : ListView.separated(
               padding: const EdgeInsets.all(18),
               itemCount: _posts.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              separatorBuilder: (_, a) => const SizedBox(height: 12),
               itemBuilder: (context, i) {
                 final post = _posts[i];
                 final yearsAgo = post['years_ago'] as int? ?? 0;
@@ -104,7 +104,7 @@ class _MemoryListScreenState extends State<MemoryListScreen> {
                             width: 80,
                             height: 80,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
+                            errorBuilder: (_, a, b) => Container(
                               width: 80,
                               height: 80,
                               color: kMainPaperSoft,

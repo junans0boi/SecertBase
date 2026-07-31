@@ -34,7 +34,6 @@ class AuthService extends ChangeNotifier {
   Future<void>? _googleInitFuture;
   StreamSubscription<GoogleSignInAuthenticationEvent>? _googleSub;
   bool _googleLoading = false;
-  bool _googleCompleting = false;
   String? _googleError;
   bool _reviewAutoLoginLoading = false;
   String? _reviewAutoLoginError;
@@ -211,14 +210,11 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<bool> _doCompleteGoogleLogin(GoogleSignInAccount account) async {
-    _googleCompleting = true;
-
     try {
-      final auth = await account.authentication;
+      final auth = account.authentication;
       final idToken = auth.idToken;
 
       if (idToken == null || idToken.isEmpty) {
-        _googleCompleting = false;
         _googleLoading = false;
         _googleError = 'Google 인증 토큰을 받지 못했습니다.';
         notifyListeners();
@@ -234,19 +230,16 @@ class AuthService extends ChangeNotifier {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         await _storeAuthData(data);
-        _googleCompleting = false;
         _googleLoading = false;
         _googleError = null;
         return true;
       }
 
-      _googleCompleting = false;
       _googleLoading = false;
       _googleError = 'Google 로그인에 실패했습니다.';
       notifyListeners();
       return false;
     } catch (e) {
-      _googleCompleting = false;
       _googleLoading = false;
       _googleError = 'Google 로그인 중 오류가 발생했습니다.';
       debugPrint('[Auth] Google login error: $e');

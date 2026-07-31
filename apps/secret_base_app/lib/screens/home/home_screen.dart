@@ -23,7 +23,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _auth = AuthService();
   Map<String, dynamic>? _coupleInfo;
-  List<Map<String, dynamic>> _recentMoments = [];
   List<Map<String, dynamic>> _todayPins = [];
   List<Map<String, dynamic>> _todayMoments = [];
   TodayState? _todayState;
@@ -81,7 +80,6 @@ class _HomeScreenState extends State<HomeScreen> {
           final allPosts = (moments['posts'] as List? ?? const [])
               .map((post) => Map<String, dynamic>.from(post as Map))
               .toList();
-          _recentMoments = allPosts.take(3).toList();
           _todayMoments = allPosts.where((post) {
             final dateStr = '${post['taken_at'] ?? post['captured_at'] ?? ''}';
             return dateStr.startsWith(nowStr) || dateStr.contains(nowStr);
@@ -413,7 +411,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     itemCount: _todayMoments.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 10),
+                    separatorBuilder: (_, a) => const SizedBox(width: 10),
                     itemBuilder: (ctx, i) {
                       final m = _todayMoments[i];
                       final mediaUrl = '${m['media_url'] ?? ''}'.trim();
@@ -434,13 +432,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ? Image.network(
                                       fullUrl,
                                       fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) =>
-                                          const Center(
-                                            child: Icon(
-                                              Icons.broken_image_outlined,
-                                              color: kMainMuted,
-                                            ),
-                                          ),
+                                      errorBuilder: (_, a, b) => const Center(
+                                        child: Icon(
+                                          Icons.broken_image_outlined,
+                                          color: kMainMuted,
+                                        ),
+                                      ),
                                     )
                                   : const Center(
                                       child: Icon(
@@ -513,7 +510,7 @@ class _MemoryCardWidget extends StatelessWidget {
                     width: 72,
                     height: 72,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
+                    errorBuilder: (_, a, b) => Container(
                       width: 72,
                       height: 72,
                       color: kMainPaperSoft,

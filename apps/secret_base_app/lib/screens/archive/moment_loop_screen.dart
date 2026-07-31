@@ -98,18 +98,20 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
   Future<void> _loadPosts() async {
     final userId = _userId;
     if (userId == null) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _loading = false;
           _error = '로그인 정보가 없어요';
         });
+      }
       return;
     }
-    if (mounted)
+    if (mounted) {
       setState(() {
         _loading = true;
         _error = null;
       });
+    }
 
     try {
       final uri = Uri.parse(
@@ -235,7 +237,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
       PageRouteBuilder(
         opaque: false,
         barrierColor: Colors.black87,
-        pageBuilder: (_, __, ___) => _StoryViewer(
+        pageBuilder: (_, a, b) => _StoryViewer(
           groups: groups,
           startGroupIndex: startGroupIndex,
           auth: _auth,
@@ -732,10 +734,11 @@ class _StoryViewerState extends State<_StoryViewer>
                   if (groupIdx != _groupIdx) return;
                   final x = details.globalPosition.dx;
                   final w = MediaQuery.of(context).size.width;
-                  if (x < w / 3)
+                  if (x < w / 3) {
                     _retreatMedia();
-                  else
+                  } else {
                     _advanceMedia();
+                  }
                 },
                 onVerticalDragEnd: (details) {
                   if ((details.primaryVelocity ?? 0) > 200) {
@@ -824,7 +827,7 @@ class _StoryViewerState extends State<_StoryViewer>
                             : i == _mediaIdx
                             ? AnimatedBuilder(
                                 animation: _progress,
-                                builder: (_, __) => LinearProgressIndicator(
+                                builder: (_, a) => LinearProgressIndicator(
                                   value: _progress.value,
                                   backgroundColor: Colors.white30,
                                   valueColor: const AlwaysStoppedAnimation(
@@ -2715,8 +2718,9 @@ String _dayNameFull(DateTime d) {
 }
 
 String _mediaUrl(String baseUrl, String mediaUrl) {
-  if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://'))
+  if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) {
     return mediaUrl;
+  }
   return '$baseUrl$mediaUrl';
 }
 

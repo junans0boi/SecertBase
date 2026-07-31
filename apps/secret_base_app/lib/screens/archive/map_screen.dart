@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -650,8 +649,9 @@ class _MapScreenState extends State<MapScreen> {
                               final file = await picker.pickImage(
                                 source: ImageSource.gallery,
                               );
-                              if (file != null)
+                              if (file != null) {
                                 setSheet(() => pickedNewImage = file);
+                              }
                             },
                             icon: const Icon(
                               Icons.photo_library_outlined,
@@ -685,7 +685,7 @@ class _MapScreenState extends State<MapScreen> {
                           height: 160,
                           width: double.infinity,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                          errorBuilder: (_, a, b) => const SizedBox.shrink(),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -697,8 +697,9 @@ class _MapScreenState extends State<MapScreen> {
                               final file = await picker.pickImage(
                                 source: ImageSource.gallery,
                               );
-                              if (file != null)
+                              if (file != null) {
                                 setSheet(() => pickedNewImage = file);
+                              }
                             },
                             icon: const Icon(
                               Icons.photo_library_outlined,
@@ -752,8 +753,9 @@ class _MapScreenState extends State<MapScreen> {
                         label: '방문 날짜',
                         onPick: () async {
                           final picked = await _pickDate(ctx, selectedDate);
-                          if (picked != null)
+                          if (picked != null) {
                             setSheet(() => selectedDate = picked);
+                          }
                         },
                       ),
                       const SizedBox(height: 16),
@@ -914,8 +916,9 @@ class _MapScreenState extends State<MapScreen> {
           'PATCH',
           Uri.parse('${_auth.baseUrl}/api/map/$id'),
         );
-        if (_auth.token != null)
+        if (_auth.token != null) {
           req.headers['Authorization'] = 'Bearer ${_auth.token}';
+        }
         req.fields['memo'] = updatedMemo;
         req.fields['emotion_tags'] = jsonEncode(selectedTags.toList());
         if (isVisited) {
@@ -1300,7 +1303,7 @@ class _MapScreenState extends State<MapScreen> {
                           height: 180,
                           width: double.infinity,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                          errorBuilder: (_, a, b) => const SizedBox.shrink(),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -1423,8 +1426,9 @@ class _MapScreenState extends State<MapScreen> {
                       future: afterglowFuture,
                       builder: (context, snapshot) {
                         final state = snapshot.data;
-                        if (state?.visit == null)
+                        if (state?.visit == null) {
                           return const SizedBox.shrink();
+                        }
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: _DetailBlock(
@@ -1588,7 +1592,7 @@ class _MapScreenState extends State<MapScreen> {
                                             height: 140,
                                             width: double.infinity,
                                             fit: BoxFit.cover,
-                                            errorBuilder: (_, __, ___) =>
+                                            errorBuilder: (_, a, b) =>
                                                 const SizedBox.shrink(),
                                           ),
                                         ),
@@ -1889,11 +1893,13 @@ class _MapScreenState extends State<MapScreen> {
                                     '${_auth.baseUrl}/api/map/${pin['id']}/reviews',
                                   ),
                                 );
-                                if (_auth.token != null)
+                                if (_auth.token != null) {
                                   req.headers['Authorization'] =
                                       'Bearer ${_auth.token}';
-                                if (content.isNotEmpty)
+                                }
+                                if (content.isNotEmpty) {
                                   req.fields['content'] = content;
+                                }
                                 if (pickedImage != null) {
                                   final bytes = await pickedImage!
                                       .readAsBytes();

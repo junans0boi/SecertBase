@@ -644,7 +644,7 @@ class _ShopScreenState extends State<ShopScreen>
         await Navigator.of(context).push(
           PageRouteBuilder(
             opaque: false,
-            pageBuilder: (_, _a, _b) => _GachaOverlay(item: item),
+            pageBuilder: (_, a, b) => _GachaOverlay(item: item),
           ),
         );
         _load();
