@@ -67,6 +67,8 @@ class _YutScreenState extends State<YutScreen> {
     if (name.contains('동물') || name.contains('animal')) return 'animal';
     if (name.contains('음식') || name.contains('food')) return 'food';
     if (name.contains('별') || name.contains('star')) return 'star';
+    if (name.contains('왕관') || name.contains('crown')) return 'crown';
+    if (name.contains('커플') || name.contains('couple')) return 'couple';
     return 'base';
   }
 
@@ -74,6 +76,8 @@ class _YutScreenState extends State<YutScreen> {
     if (name.contains('대나무') || name.contains('bamboo')) return 'bamboo';
     if (name.contains('황금') || name.contains('gold')) return 'gold';
     if (name.contains('크리스탈') || name.contains('crystal')) return 'crystal';
+    if (name.contains('불꽃') || name.contains('fire')) return 'fire';
+    if (name.contains('전설') || name.contains('legend')) return 'legend';
     return 'base';
   }
 

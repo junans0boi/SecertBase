@@ -1556,6 +1556,8 @@ class _CharacterTokenPainter extends CustomPainter {
       'animal' => '🐾',
       'food' => '🍡',
       'star' => '⭐',
+      'crown' => '👑',
+      'couple' => '💑',
       _ => '✨',
     };
     final tp = TextPainter(
@@ -2114,6 +2116,16 @@ class _YutSticksPainter extends CustomPainter {
         const Color(0xFF88C0D0),
         const Color(0xFF2E4A6E),
         const Color(0xFF5E81AC),
+      ),
+      'fire' => (
+        const Color(0xFFFF6B00),
+        const Color(0xFFB71C1C),
+        const Color(0xFFFF8C00),
+      ),
+      'legend' => (
+        const Color(0xFFAB47BC),
+        const Color(0xFF4A148C),
+        const Color(0xFFCE93D8),
       ),
       _ => (
         const Color(0xFFDEB887),

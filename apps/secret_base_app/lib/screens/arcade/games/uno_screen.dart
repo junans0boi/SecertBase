@@ -56,6 +56,9 @@ class _UnoScreenState extends State<UnoScreen> {
     if (name.contains('벚꽃') || name.contains('cherry')) return 'cherry_blossom';
     if (name.contains('우주') || name.contains('space')) return 'space';
     if (name.contains('하트') || name.contains('heart')) return 'heart';
+    if (name.contains('황금') || name.contains('gold')) return 'gold';
+    if (name.contains('무지개') || name.contains('rainbow')) return 'rainbow';
+    if (name.contains('커플') || name.contains('couple')) return 'couple_card';
     return 'base';
   }
 

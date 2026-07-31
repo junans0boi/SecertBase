@@ -1145,7 +1145,7 @@ class _UnoCallButtonState extends State<_UnoCallButton>
 
 // ── Card Widgets ──────────────────────────────────────────────────────────────
 
-// cardBackSkin values: 'base' | 'cherry_blossom' | 'space' | 'heart'
+// cardBackSkin values: 'base' | 'cherry_blossom' | 'space' | 'heart' | 'gold' | 'rainbow' | 'couple_card'
 class UnoCardBack extends StatelessWidget {
   final double width;
   final double height;
@@ -1174,6 +1174,24 @@ class UnoCardBack extends StatelessWidget {
     'heart': (
       gradient: [Color(0xFFFF4444), Color(0xFFCC0000)],
       icon: '❤️',
+      label: 'ONE CARD',
+      textColor: Colors.white,
+    ),
+    'gold': (
+      gradient: [Color(0xFFFFD700), Color(0xFFB8860B)],
+      icon: '✨',
+      label: 'ONE CARD',
+      textColor: Colors.black87,
+    ),
+    'rainbow': (
+      gradient: [Color(0xFFFF6B6B), Color(0xFF6B6BFF)],
+      icon: '🌈',
+      label: 'ONE CARD',
+      textColor: Colors.white,
+    ),
+    'couple_card': (
+      gradient: [Color(0xFFFF8FAB), Color(0xFFB983FF)],
+      icon: '💑',
       label: 'ONE CARD',
       textColor: Colors.white,
     ),
