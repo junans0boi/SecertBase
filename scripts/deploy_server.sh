@@ -75,6 +75,10 @@ echo "==> Restoring flutter-modified files after build"
 cd "$REPO_DIR"
 git checkout -- apps/secret_base_app/analysis_options.yaml apps/secret_base_app/pubspec.lock 2>/dev/null || true
 
+echo "==> Running DB migrations"
+cd "$REPO_DIR/services/realtime-server"
+node scripts/migrate.js up
+
 echo "==> Restarting realtime server with PM2"
 cd "$REPO_DIR/services/realtime-server"
 if pm2 describe "$PM2_NAME" >/dev/null 2>&1; then
