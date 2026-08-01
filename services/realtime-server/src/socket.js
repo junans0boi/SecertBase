@@ -257,7 +257,8 @@ async function _getWinStreak(roomCode, winnerCode) {
   } catch { return 0; }
 }
 
-async function settleAndEmitWallet(io, roomCode, winnerId, loserId, stake, gameRef, winnerNumericId = null, catchBonus = 0, loserNumericId = null) {
+// preStreak: 이미 계산된 이전 연승 수 (saveGameResult와 race condition 방지를 위해 Promise.all 이전에 계산)
+async function settleAndEmitWallet(io, roomCode, winnerId, loserId, stake, gameRef, winnerNumericId = null, catchBonus = 0, loserNumericId = null, preStreak = 0) {
   if (!stake || stake <= 0) return;
   try {
     let winnerBonusPct = 0;
@@ -272,11 +273,10 @@ async function settleAndEmitWallet(io, roomCode, winnerId, loserId, stake, gameR
     winnerBonusPct = winnerStats.coin_bonus_pct ?? 0;
     loserRefundPct = loserStats.lose_refund_pct ?? 0;
 
-    // win_streak_bonus: 연속 승리 시 평추 보너스 (streak >= 2)
+    // win_streak_bonus: 이전 연승 >= 1이면 이번 게임도 합쳐 streak >= 2
     const winStreakBonus = Math.floor(winnerStats.win_streak_bonus ?? 0);
-    if (winStreakBonus > 0) {
-      const streak = await _getWinStreak(roomCode, winnerId);
-      if (streak >= 2) totalCatchBonus += winStreakBonus;
+    if (winStreakBonus > 0 && preStreak >= 1) {
+      totalCatchBonus += winStreakBonus;
     }
 
     const result = await transferGameReward(winnerId, loserId, stake, gameRef, { winnerBonusPct, catchBonus: totalCatchBonus, loserRefundPct });
@@ -1581,15 +1581,15 @@ export const registerSocketHandlers = (io) => {
         }
         recordCapture(gameState, capturedPieces.length);
 
-        // piece_catch_coin_bonus: 잡은 말 1개당 플랫 코인
-        const catchCoinPer = Math.floor(moverStats.piece_catch_coin_bonus ?? 0);
+        // piece_catch_coin_bonus: 잡은 말 1개당 플랫 코인 (최대 25)
+        const catchCoinPer = Math.min(Math.floor(moverStats.piece_catch_coin_bonus ?? 0), 25);
         if (catchCoinPer > 0 && capturedPieces.length > 0) {
           gameState.catchCoinBonus = gameState.catchCoinBonus ?? {};
           gameState.catchCoinBonus[userId] = (gameState.catchCoinBonus[userId] ?? 0) + catchCoinPer * capturedPieces.length;
         }
 
-        // yut_catch_bonus: 잡기 이벤트당 플랫 코인 (잡은 말 수 무관)
-        const catchFlatBonus = Math.floor(moverStats.yut_catch_bonus ?? 0);
+        // yut_catch_bonus: 잡기 이벤트당 플랫 코인, 잡은 말 수 무관 (최대 300)
+        const catchFlatBonus = Math.min(Math.floor(moverStats.yut_catch_bonus ?? 0), 300);
         if (catchFlatBonus > 0 && capturedPieces.length > 0) {
           gameState.catchCoinBonus = gameState.catchCoinBonus ?? {};
           gameState.catchCoinBonus[userId] = (gameState.catchCoinBonus[userId] ?? 0) + catchFlatBonus;
@@ -1642,16 +1642,15 @@ export const registerSocketHandlers = (io) => {
         const yutLoserId = gameState.playersOrder.find(p => p !== gameState.winner);
         io.to(roomCode).emit("game:yut:ended", { winner: gameState.winner });
         await redis.del(yutGameKey(roomCode));
-        const { rows: winnerRows } = await query(
-          'SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [gameState.winner]
-        );
-        const { rows: loserRows } = await query(
-          'SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [yutLoserId]
-        );
+        const [{ rows: winnerRows }, { rows: loserRows }] = await Promise.all([
+          query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [gameState.winner]),
+          query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [yutLoserId]),
+        ]);
         const winnerExtraBonus = (gameState.catchCoinBonus?.[gameState.winner] ?? 0)
           + (gameState.winCoinBonus?.[gameState.winner] ?? 0);
+        const yutPreStreak = await _getWinStreak(roomCode, gameState.winner);
         await Promise.all([
-          settleAndEmitWallet(io, roomCode, gameState.winner, yutLoserId, gameState.stake ?? 0, `yut:${roomCode}:${Date.now()}`, winnerRows[0]?.UserId, winnerExtraBonus, loserRows[0]?.UserId),
+          settleAndEmitWallet(io, roomCode, gameState.winner, yutLoserId, gameState.stake ?? 0, `yut:${roomCode}:${Date.now()}`, winnerRows[0]?.UserId, winnerExtraBonus, loserRows[0]?.UserId, yutPreStreak),
           saveGameResult(roomCode, gameState.winner, yutLoserId, 'yut', gameState.stake ?? 0),
           grantGameXpAndMissions(gameState.winner, yutLoserId, 'yut'),
         ]);
@@ -2066,13 +2065,16 @@ export const registerSocketHandlers = (io) => {
         applyCardEffect(gameState, playedCard, previousColor);
       }
 
-      // card_reverse_bonus: when playing reverse, draw 1 free card from deck (capped 20%)
+      // card_reverse_bonus: 리버스 카드 플레이 시 상대방이 1장 추가 드로우 (capped 20%)
       if (card.value === 'reverse') {
         const myPlayStats = gameState.playerStats?.[userId] ?? {};
         const reversePct = Math.min(myPlayStats.card_reverse_bonus ?? 0, 20);
         if (reversePct > 0 && Math.random() * 100 < reversePct) {
-          const bonusCards = drawCards(gameState, 1);
-          gameState.hands[userId].push(...bonusCards);
+          const opponentId = gameState.players.find((p) => p !== userId);
+          if (opponentId && gameState.hands[opponentId]) {
+            const bonusCards = drawCards(gameState, 1);
+            gameState.hands[opponentId].push(...bonusCards);
+          }
         }
       }
 
@@ -2115,22 +2117,35 @@ export const registerSocketHandlers = (io) => {
       };
 
       io.to(roomCode).emit("game:uno:played", event);
-      // Send updated hand privately to the player who played
       socket.emit("game:uno:hand_update", { hand: gameState.hands[userId] });
+
+      // card_reverse_bonus 발동 시 상대방 핸드도 업데이트
+      if (card.value === 'reverse') {
+        const opponentForHand = gameState.players.find((p) => p !== userId);
+        if (opponentForHand && gameState.hands[opponentForHand]) {
+          const roomSockets = await io.in(roomCode).fetchSockets();
+          for (const sock of roomSockets) {
+            if (sock.data.userId === opponentForHand) {
+              sock.emit("game:uno:hand_update", { hand: gameState.hands[opponentForHand] });
+              break;
+            }
+          }
+        }
+      }
+
       ack({ ok: true, event });
 
       if (gameState.winner) {
         const unoLoserId = gameState.players.find(p => p !== gameState.winner);
         io.to(roomCode).emit("game:uno:ended", { winner: gameState.winner });
         await redis.del(unoGameKey(roomCode));
-        const { rows: unoWinnerRows } = await query(
-          'SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [gameState.winner]
-        );
-        const { rows: unoLoserRows } = await query(
-          'SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [unoLoserId]
-        );
+        const [{ rows: unoWinnerRows }, { rows: unoLoserRows }] = await Promise.all([
+          query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [gameState.winner]),
+          query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [unoLoserId]),
+        ]);
+        const unoPreStreak = await _getWinStreak(roomCode, gameState.winner);
         await Promise.all([
-          settleAndEmitWallet(io, roomCode, gameState.winner, unoLoserId, gameState.stake ?? 0, `uno:${roomCode}:${Date.now()}`, unoWinnerRows[0]?.UserId, 0, unoLoserRows[0]?.UserId),
+          settleAndEmitWallet(io, roomCode, gameState.winner, unoLoserId, gameState.stake ?? 0, `uno:${roomCode}:${Date.now()}`, unoWinnerRows[0]?.UserId, 0, unoLoserRows[0]?.UserId, unoPreStreak),
           saveGameResult(roomCode, gameState.winner, unoLoserId, 'uno', gameState.stake ?? 0),
           grantGameXpAndMissions(gameState.winner, unoLoserId, 'onecard'),
         ]);
@@ -2567,6 +2582,22 @@ export const registerSocketHandlers = (io) => {
           characters: previous.characters ?? {},
           bgm: previous.bgm ?? null,
         });
+        gameState.stake = previous.stake ?? 0;
+        gameState.catchCoinBonus = {};
+        gameState.winCoinBonus = {};
+
+        // 아이템 스탯/표시 정보 재적재
+        const { rows: rp1 } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [p1]);
+        const { rows: rp2 } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [p2]);
+        const [p1Info, p2Info, p1Stats, p2Stats] = await Promise.all([
+          rp1[0]?.UserId ? getEquippedItemsInfo(rp1[0].UserId) : Promise.resolve({}),
+          rp2[0]?.UserId ? getEquippedItemsInfo(rp2[0].UserId) : Promise.resolve({}),
+          rp1[0]?.UserId ? getEquippedStats(rp1[0].UserId) : Promise.resolve({}),
+          rp2[0]?.UserId ? getEquippedStats(rp2[0].UserId) : Promise.resolve({}),
+        ]);
+        gameState.equippedItems = { [p1]: p1Info, [p2]: p2Info };
+        gameState.playerStats = { [p1]: p1Stats, [p2]: p2Stats };
+
         await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
         emitYutState(io, roomCode, "game:yut:started", gameState);
       } else if (gameType === "uno") {
@@ -2575,6 +2606,17 @@ export const registerSocketHandlers = (io) => {
         const gameState = createUnoGameState(orderedPlayers, 7, {
           mode: previous.mode ?? DEFAULT_UNO_MODE,
         });
+        gameState.stake = previous.stake ?? 0;
+
+        // 아이템 스탯 재적재
+        const unoRestartStats = {};
+        for (const code of orderedPlayers) {
+          const { rows } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [code]);
+          const numId = rows[0]?.UserId;
+          unoRestartStats[code] = numId ? await getEquippedStats(numId) : {};
+        }
+        gameState.playerStats = unoRestartStats;
+
         await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
         io.to(roomCode).emit("game:uno:started", {
           topCard: gameState.discardPile[gameState.discardPile.length - 1],
