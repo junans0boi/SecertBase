@@ -201,7 +201,7 @@ class _YutScreenState extends State<YutScreen> {
     const labels = {
       'yut_control_pct': '윷 컨트롤 +%',
       'yut_mo_rate_pct': '모 확률 +%',
-      'yut_backdo_shield_pct': '백도 방어 %',
+      'yut_backdo_bonus_pct': '백도 보너스 던지기 %',
       'yut_win_coin_pct': '윷/모 추가 코인 %',
       'yut_overturn_pct': '역전 확률 +%',
       'piece_catch_resist_pct': '잡힘 방어 %',

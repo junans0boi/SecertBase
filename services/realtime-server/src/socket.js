@@ -1473,6 +1473,7 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
+      const preMovePos = piece.position; // 백도 보너스 체크용 원래 위치 기록
       const moveResult = movePiece(piece, steps, { backdoDir });
 
       if (moveResult === null) {
@@ -1543,6 +1544,21 @@ export const registerSocketHandlers = (io) => {
         if (catchCoinPer > 0 && capturedPieces.length > 0) {
           gameState.catchCoinBonus = gameState.catchCoinBonus ?? {};
           gameState.catchCoinBonus[userId] = (gameState.catchCoinBonus[userId] ?? 0) + catchCoinPer * capturedPieces.length;
+        }
+      }
+
+      // yut_backdo_bonus_pct: 유리한 백도 위치에서 추가 던지기 확률
+      // - 날백도 (위치 1→골인): 스탯값 ×2 확률 (최대 50%)
+      // - 대각선 백도 (위치 23→22/25): 스탯값 % 확률 (최대 25%)
+      if (steps === -1) {
+        const backdoBonus = Math.min(moverStats.yut_backdo_bonus_pct ?? 0, 25);
+        if (backdoBonus > 0) {
+          let triggerPct = 0;
+          if (preMovePos === 1) triggerPct = Math.min(backdoBonus * 2, 50); // 날백도
+          else if (preMovePos === 23) triggerPct = backdoBonus;              // 대각선
+          if (triggerPct > 0 && Math.random() * 100 < triggerPct) {
+            gameState.hasBonusThrow = true;
+          }
         }
       }
 
