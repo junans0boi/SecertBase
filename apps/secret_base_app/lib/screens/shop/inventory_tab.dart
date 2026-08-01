@@ -104,11 +104,15 @@ class _InventoryTabState extends State<InventoryTab> {
       final equippedData = jsonDecode(results[1].body) as Map;
       final walletData = jsonDecode(results[2].body) as Map;
 
-      final slots = (equippedData['slots'] as Map? ?? {}).cast<String, dynamic>();
+      final slots = (equippedData['slots'] as Map? ?? {})
+          .cast<String, dynamic>();
 
       setState(() {
-        _owned = (ownedData['owned'] as List? ?? []).cast<Map<String, dynamic>>();
-        _equippedIds = slots.values.map((v) => ((v as Map)['item_id'] as num).toInt()).toSet();
+        _owned = (ownedData['owned'] as List? ?? [])
+            .cast<Map<String, dynamic>>();
+        _equippedIds = slots.values
+            .map((v) => ((v as Map)['item_id'] as num).toInt())
+            .toSet();
         _balance = (walletData['balance'] as num?)?.toInt() ?? _balance;
         _loading = false;
       });
@@ -122,7 +126,10 @@ class _InventoryTabState extends State<InventoryTab> {
       final base = _socket.serverUrl ?? '';
       final res = await http.post(
         Uri.parse('$base/api/shop/equip'),
-        headers: {'Authorization': 'Bearer ${_auth.token}', 'Content-Type': 'application/json'},
+        headers: {
+          'Authorization': 'Bearer ${_auth.token}',
+          'Content-Type': 'application/json',
+        },
         body: jsonEncode({'item_id': item['item_id']}),
       );
       final body = jsonDecode(res.body) as Map;
@@ -161,10 +168,19 @@ class _InventoryTabState extends State<InventoryTab> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: kSurface,
-        title: Text('$gameName $tierName', style: const TextStyle(color: Colors.white)),
-        content: Text('${_formatCoins(cost)}금을 소모해 $gameName 아이템을 뽑습니다.', style: TextStyle(color: kMainMuted)),
+        title: Text(
+          '$gameName $tierName',
+          style: const TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          '${_formatCoins(cost)}금을 소모해 $gameName 아이템을 뽑습니다.',
+          style: TextStyle(color: kMainMuted),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: _tierColor(tier)),
@@ -179,7 +195,10 @@ class _InventoryTabState extends State<InventoryTab> {
       final base = _socket.serverUrl ?? '';
       final res = await http.post(
         Uri.parse('$base/api/shop/gacha'),
-        headers: {'Authorization': 'Bearer ${_auth.token}', 'Content-Type': 'application/json'},
+        headers: {
+          'Authorization': 'Bearer ${_auth.token}',
+          'Content-Type': 'application/json',
+        },
         body: jsonEncode({'game': game, 'tier': tier}),
       );
       final body = jsonDecode(res.body) as Map;
@@ -200,7 +219,9 @@ class _InventoryTabState extends State<InventoryTab> {
         await _load();
       } else {
         final reason = body['reason'] as String? ?? '';
-        _showSnack(reason == 'insufficient_coins' ? '코인이 부족해요' : '뽑기 실패: $reason');
+        _showSnack(
+          reason == 'insufficient_coins' ? '코인이 부족해요' : '뽑기 실패: $reason',
+        );
       }
     } catch (_) {
       _showSnack('오류가 발생했어요');
@@ -212,11 +233,15 @@ class _InventoryTabState extends State<InventoryTab> {
     final grade = item['grade'] as String? ?? 'B';
     await showDialog(
       context: context,
-      builder: (ctx) => _GachaResultDialog(item: item, grade: grade, isNew: isNew),
+      builder: (ctx) =>
+          _GachaResultDialog(item: item, grade: grade, isNew: isNew),
     );
   }
 
-  Future<void> _showGachaAnimation(Map<String, dynamic> item, bool isNew) async {
+  Future<void> _showGachaAnimation(
+    Map<String, dynamic> item,
+    bool isNew,
+  ) async {
     if (!mounted) return;
     await Navigator.of(context).push(
       PageRouteBuilder(
@@ -237,7 +262,8 @@ class _InventoryTabState extends State<InventoryTab> {
       final body = jsonDecode(res.body) as Map;
       if (!mounted) return;
       if (body['ok'] == true) {
-        final items = (body['items'] as List? ?? []).cast<Map<String, dynamic>>();
+        final items = (body['items'] as List? ?? [])
+            .cast<Map<String, dynamic>>();
         await showModalBottomSheet(
           context: context,
           isScrollControlled: true,
@@ -252,10 +278,14 @@ class _InventoryTabState extends State<InventoryTab> {
 
   void _showSnack(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), duration: const Duration(seconds: 2)));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), duration: const Duration(seconds: 2)),
+    );
   }
 
-  String _formatCoins(int n) => n >= 1000 ? '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}K' : '$n';
+  String _formatCoins(int n) => n >= 1000
+      ? '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}K'
+      : '$n';
 
   Color _tierColor(String tier) => switch (tier) {
     'normal' => kMainSage,
@@ -270,7 +300,9 @@ class _InventoryTabState extends State<InventoryTab> {
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
 
-    final filtered = _filterGame == null ? _owned : _owned.where((i) => i['game'] == _filterGame).toList();
+    final filtered = _filterGame == null
+        ? _owned
+        : _owned.where((i) => i['game'] == _filterGame).toList();
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -281,7 +313,10 @@ class _InventoryTabState extends State<InventoryTab> {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: kMainHoney.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(20),
@@ -293,7 +328,11 @@ class _InventoryTabState extends State<InventoryTab> {
                     const SizedBox(width: 4),
                     Text(
                       _formatCoins(_balance),
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: kMainHoney),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: kMainHoney,
+                      ),
                     ),
                   ],
                 ),
@@ -314,7 +353,11 @@ class _InventoryTabState extends State<InventoryTab> {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                for (final (label, game) in [('전체', null), ('윷놀이', 'yut'), ('원카드', 'onecard')])
+                for (final (label, game) in [
+                  ('전체', null),
+                  ('윷놀이', 'yut'),
+                  ('원카드', 'onecard'),
+                ])
                   Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: ChoiceChip(
@@ -346,12 +389,18 @@ class _InventoryTabState extends State<InventoryTab> {
                   const SizedBox(height: 8),
                   Text('보유한 아이템이 없어요', style: TextStyle(color: kMainMuted)),
                   const SizedBox(height: 4),
-                  Text('상점에서 구매하거나 뽑기로 획득해보세요', style: TextStyle(fontSize: 12, color: kMainMuted)),
+                  Text(
+                    '상점에서 구매하거나 뽑기로 획득해보세요',
+                    style: TextStyle(fontSize: 12, color: kMainMuted),
+                  ),
                 ],
               ),
             )
           else ...[
-            Text('보유 아이템 (${filtered.length}개)', style: mainBody(size: 13, weight: FontWeight.w700)),
+            Text(
+              '보유 아이템 (${filtered.length}개)',
+              style: mainBody(size: 13, weight: FontWeight.w700),
+            ),
             const SizedBox(height: 10),
             GridView.builder(
               shrinkWrap: true,
@@ -390,7 +439,10 @@ class _InventoryTabState extends State<InventoryTab> {
               tierColor: _tierColor,
             ),
           ] else ...[
-            Text('카테고리를 선택하면 뽑기를 할 수 있어요', style: mainBody(size: 13, color: kMainMuted)),
+            Text(
+              '카테고리를 선택하면 뽑기를 할 수 있어요',
+              style: mainBody(size: 13, color: kMainMuted),
+            ),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -432,7 +484,12 @@ class _InventoryItemCard extends StatelessWidget {
   final int quantity;
   final VoidCallback? onEquip;
 
-  const _InventoryItemCard({required this.item, required this.equipped, required this.quantity, required this.onEquip});
+  const _InventoryItemCard({
+    required this.item,
+    required this.equipped,
+    required this.quantity,
+    required this.onEquip,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -449,28 +506,52 @@ class _InventoryItemCard extends StatelessWidget {
               Container(
                 width: 44,
                 height: 44,
-                decoration: BoxDecoration(color: gc.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
-                child: Center(child: Text(item['icon'] as String? ?? '🎁', style: const TextStyle(fontSize: 22))),
+                decoration: BoxDecoration(
+                  color: gc.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: Text(
+                    item['icon'] as String? ?? '🎁',
+                    style: const TextStyle(fontSize: 22),
+                  ),
+                ),
               ),
               const Spacer(),
               if (quantity > 1)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: kMainMuted.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Text('x$quantity', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700)),
+                  child: Text(
+                    'x$quantity',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
             ],
           ),
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-            decoration: BoxDecoration(color: gc.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
+            decoration: BoxDecoration(
+              color: gc.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(4),
+            ),
             child: Text(
               grade,
-              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: gc),
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                color: gc,
+              ),
             ),
           ),
           const SizedBox(height: 4),
@@ -492,7 +573,11 @@ class _InventoryItemCard extends StatelessWidget {
               child: Center(
                 child: Text(
                   '장착 중 ✓',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: kMainSage),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: kMainSage,
+                  ),
                 ),
               ),
             )
@@ -505,11 +590,17 @@ class _InventoryItemCard extends StatelessWidget {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: kMainHoney,
                   padding: EdgeInsets.zero,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
                 child: const Text(
                   '장착',
-                  style: TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w700),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ),
@@ -560,7 +651,10 @@ class _GachaSection extends StatelessWidget {
               ),
               child: Text(
                 '🪙 ${formatCoins(balance)}',
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ],
@@ -620,7 +714,9 @@ class _GachaTierButton extends StatelessWidget {
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withValues(alpha: canAfford ? 0.35 : 0.15)),
+          border: Border.all(
+            color: color.withValues(alpha: canAfford ? 0.35 : 0.15),
+          ),
         ),
         child: Row(
           children: [
@@ -630,10 +726,17 @@ class _GachaTierButton extends StatelessWidget {
                 children: [
                   Text(
                     label,
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: canAfford ? color : kMainMuted),
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: canAfford ? color : kMainMuted,
+                    ),
                   ),
                   const SizedBox(height: 2),
-                  Text(range, style: TextStyle(fontSize: 11, color: kMainMuted)),
+                  Text(
+                    range,
+                    style: TextStyle(fontSize: 11, color: kMainMuted),
+                  ),
                 ],
               ),
             ),
@@ -648,7 +751,14 @@ class _GachaTierButton extends StatelessWidget {
                     color: canAfford ? kMainHoney : kMainMuted,
                   ),
                 ),
-                if (!canAfford) Text('잔액 부족', style: TextStyle(fontSize: 10, color: Colors.red.withValues(alpha: 0.7))),
+                if (!canAfford)
+                  Text(
+                    '잔액 부족',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.red.withValues(alpha: 0.7),
+                    ),
+                  ),
               ],
             ),
           ],
@@ -664,7 +774,12 @@ class _CategoryGachaButton extends StatelessWidget {
   final Color color;
   final VoidCallback onTap;
 
-  const _CategoryGachaButton({required this.label, required this.icon, required this.color, required this.onTap});
+  const _CategoryGachaButton({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -684,7 +799,11 @@ class _CategoryGachaButton extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               label,
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
             ),
           ],
         ),
@@ -700,7 +819,11 @@ class _GachaResultDialog extends StatelessWidget {
   final String grade;
   final bool isNew;
 
-  const _GachaResultDialog({required this.item, required this.grade, required this.isNew});
+  const _GachaResultDialog({
+    required this.item,
+    required this.grade,
+    required this.isNew,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -713,21 +836,34 @@ class _GachaResultDialog extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(item['icon'] as String? ?? '🎁', style: const TextStyle(fontSize: 52)),
+            Text(
+              item['icon'] as String? ?? '🎁',
+              style: const TextStyle(fontSize: 52),
+            ),
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(color: gc.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(6)),
+              decoration: BoxDecoration(
+                color: gc.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(6),
+              ),
               child: Text(
                 grade,
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: gc),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: gc,
+                ),
               ),
             ),
             const SizedBox(height: 8),
             Text(item['name'] as String? ?? '', style: mainTitle(size: 18)),
             if (!isNew) ...[
               const SizedBox(height: 6),
-              Text('이미 보유 중 (x1 추가)', style: TextStyle(fontSize: 12, color: kMainMuted)),
+              Text(
+                '이미 보유 중 (x1 추가)',
+                style: TextStyle(fontSize: 12, color: kMainMuted),
+              ),
             ],
             const SizedBox(height: 20),
             SizedBox(
@@ -756,7 +892,8 @@ class _GachaAnimOverlay extends StatefulWidget {
   State<_GachaAnimOverlay> createState() => _GachaAnimOverlayState();
 }
 
-class _GachaAnimOverlayState extends State<_GachaAnimOverlay> with SingleTickerProviderStateMixin {
+class _GachaAnimOverlayState extends State<_GachaAnimOverlay>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
   late final Animation<double> _scale;
   late final Animation<double> _opacity;
@@ -773,7 +910,10 @@ class _GachaAnimOverlayState extends State<_GachaAnimOverlay> with SingleTickerP
     };
     _ctrl = AnimationController(vsync: this, duration: duration);
     _scale = CurvedAnimation(parent: _ctrl, curve: Curves.elasticOut);
-    _opacity = Tween<double>(begin: 0, end: 1).animate(CurvedAnimation(parent: _ctrl, curve: const Interval(0.5, 1.0)));
+    _opacity = Tween<double>(
+      begin: 0,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: const Interval(0.5, 1.0)));
     _ctrl.forward().then((_) {
       if (mounted) setState(() => _revealed = true);
     });
@@ -805,7 +945,11 @@ class _GachaAnimOverlayState extends State<_GachaAnimOverlay> with SingleTickerP
             AnimatedBuilder(
               animation: _ctrl,
               builder: (_, x) => CustomPaint(
-                painter: _GachaBurstPainter(progress: _ctrl.value, gradeColor: gc, grade: grade),
+                painter: _GachaBurstPainter(
+                  progress: _ctrl.value,
+                  gradeColor: gc,
+                  grade: grade,
+                ),
                 child: const SizedBox.expand(),
               ),
             ),
@@ -817,7 +961,13 @@ class _GachaAnimOverlayState extends State<_GachaAnimOverlay> with SingleTickerP
                   scale: 0.5 + _scale.value * 0.5,
                   child: Opacity(opacity: _opacity.value, child: child),
                 ),
-                child: _ResultCard(item: widget.item, grade: grade, gc: gc, isNew: widget.isNew, revealed: _revealed),
+                child: _ResultCard(
+                  item: widget.item,
+                  grade: grade,
+                  gc: gc,
+                  isNew: widget.isNew,
+                  revealed: _revealed,
+                ),
               ),
             ),
             if (_revealed)
@@ -826,7 +976,13 @@ class _GachaAnimOverlayState extends State<_GachaAnimOverlay> with SingleTickerP
                 left: 0,
                 right: 0,
                 child: Center(
-                  child: Text('탭하여 닫기', style: TextStyle(color: gc.withValues(alpha: 0.7), fontSize: 13)),
+                  child: Text(
+                    '탭하여 닫기',
+                    style: TextStyle(
+                      color: gc.withValues(alpha: 0.7),
+                      fontSize: 13,
+                    ),
+                  ),
                 ),
               ),
           ],
@@ -860,30 +1016,53 @@ class _ResultCard extends StatelessWidget {
         color: kSurface,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: gc, width: 2),
-        boxShadow: [BoxShadow(color: gc.withValues(alpha: 0.4), blurRadius: 30, spreadRadius: 4)],
+        boxShadow: [
+          BoxShadow(
+            color: gc.withValues(alpha: 0.4),
+            blurRadius: 30,
+            spreadRadius: 4,
+          ),
+        ],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(item['icon'] as String? ?? '🎁', style: const TextStyle(fontSize: 56)),
+          Text(
+            item['icon'] as String? ?? '🎁',
+            style: const TextStyle(fontSize: 56),
+          ),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(color: gc.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
+            decoration: BoxDecoration(
+              color: gc.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
             child: Text(
               grade,
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: gc),
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+                color: gc,
+              ),
             ),
           ),
           const SizedBox(height: 10),
           Text(
             item['name'] as String? ?? '',
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white),
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
             textAlign: TextAlign.center,
           ),
           if (!isNew) ...[
             const SizedBox(height: 6),
-            Text('이미 보유 중 (x1 추가)', style: TextStyle(fontSize: 11, color: kMainMuted)),
+            Text(
+              '이미 보유 중 (x1 추가)',
+              style: TextStyle(fontSize: 11, color: kMainMuted),
+            ),
           ],
         ],
       ),
@@ -896,7 +1075,11 @@ class _GachaBurstPainter extends CustomPainter {
   final Color gradeColor;
   final String grade;
 
-  _GachaBurstPainter({required this.progress, required this.gradeColor, required this.grade});
+  _GachaBurstPainter({
+    required this.progress,
+    required this.gradeColor,
+    required this.grade,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -918,7 +1101,11 @@ class _GachaBurstPainter extends CustomPainter {
       final dx = px * (angle.abs() % 1.0);
       final dy = py * ((angle + 1) % 1.0);
       paint.color = gradeColor.withValues(alpha: (1 - progress) * 0.7);
-      canvas.drawCircle(Offset(cx + dx - cx * 0.5, cy + dy - cy * 0.5), 4 + (i % 3) * 2.0, paint);
+      canvas.drawCircle(
+        Offset(cx + dx - cx * 0.5, cy + dy - cy * 0.5),
+        4 + (i % 3) * 2.0,
+        paint,
+      );
     }
 
     // 글로우 원
@@ -955,7 +1142,9 @@ class _CompendiumSheetState extends State<_CompendiumSheet> {
     }).toList();
 
     final total = widget.items.length;
-    final owned = widget.items.where((i) => (i['owned'] as bool? ?? false)).length;
+    final owned = widget.items
+        .where((i) => (i['owned'] as bool? ?? false))
+        .length;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.9,
@@ -976,14 +1165,20 @@ class _CompendiumSheetState extends State<_CompendiumSheet> {
                   Container(
                     width: 36,
                     height: 4,
-                    decoration: BoxDecoration(color: kMainLine, borderRadius: BorderRadius.circular(2)),
+                    decoration: BoxDecoration(
+                      color: kMainLine,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Row(
                     children: [
                       Text('도감', style: mainTitle(size: 18)),
                       const SizedBox(width: 8),
-                      Text('$owned / $total 수집', style: mainBody(size: 12, color: kMainMuted)),
+                      Text(
+                        '$owned / $total 수집',
+                        style: mainBody(size: 12, color: kMainMuted),
+                      ),
                       const Spacer(),
                       SizedBox(
                         width: 80,
@@ -993,7 +1188,9 @@ class _CompendiumSheetState extends State<_CompendiumSheet> {
                             value: total > 0 ? owned / total : 0,
                             minHeight: 6,
                             backgroundColor: kMainLine,
-                            valueColor: AlwaysStoppedAnimation<Color>(kMainHoney),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              kMainHoney,
+                            ),
                           ),
                         ),
                       ),
@@ -1005,15 +1202,25 @@ class _CompendiumSheetState extends State<_CompendiumSheet> {
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        for (final (g, label) in [(null, '전체'), ('yut', '윷놀이'), ('onecard', '원카드')])
+                        for (final (g, label) in [
+                          (null, '전체'),
+                          ('yut', '윷놀이'),
+                          ('onecard', '원카드'),
+                        ])
                           Padding(
                             padding: const EdgeInsets.only(right: 6),
                             child: ChoiceChip(
-                              label: Text(label, style: const TextStyle(fontSize: 11)),
+                              label: Text(
+                                label,
+                                style: const TextStyle(fontSize: 11),
+                              ),
                               selected: _filterGame == g,
-                              onSelected: (_) => setState(() => _filterGame = g),
+                              onSelected: (_) =>
+                                  setState(() => _filterGame = g),
                               selectedColor: kMainSky.withValues(alpha: 0.2),
-                              labelStyle: TextStyle(color: _filterGame == g ? kMainSky : kMainMuted),
+                              labelStyle: TextStyle(
+                                color: _filterGame == g ? kMainSky : kMainMuted,
+                              ),
                             ),
                           ),
                         const SizedBox(width: 8),
@@ -1021,11 +1228,27 @@ class _CompendiumSheetState extends State<_CompendiumSheet> {
                           Padding(
                             padding: const EdgeInsets.only(right: 6),
                             child: ChoiceChip(
-                              label: Text(grade, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                              label: Text(
+                                grade,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                               selected: _filterGrade == grade,
-                              onSelected: (_) => setState(() => _filterGrade = _filterGrade == grade ? null : grade),
-                              selectedColor: gradeColor(grade).withValues(alpha: 0.2),
-                              labelStyle: TextStyle(color: _filterGrade == grade ? gradeColor(grade) : kMainMuted),
+                              onSelected: (_) => setState(
+                                () => _filterGrade = _filterGrade == grade
+                                    ? null
+                                    : grade,
+                              ),
+                              selectedColor: gradeColor(
+                                grade,
+                              ).withValues(alpha: 0.2),
+                              labelStyle: TextStyle(
+                                color: _filterGrade == grade
+                                    ? gradeColor(grade)
+                                    : kMainMuted,
+                              ),
                             ),
                           ),
                       ],
@@ -1072,7 +1295,10 @@ class _CompendiumCard extends StatelessWidget {
     if (!active) {
       // 미공개: 실루엣
       return Container(
-        decoration: BoxDecoration(color: kMainLine.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(12)),
+        decoration: BoxDecoration(
+          color: kMainLine.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(12),
+        ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -1106,10 +1332,17 @@ class _CompendiumCard extends StatelessWidget {
             Container(
               margin: const EdgeInsets.only(top: 4),
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-              decoration: BoxDecoration(color: gc.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
+              decoration: BoxDecoration(
+                color: gc.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(4),
+              ),
               child: Text(
                 grade,
-                style: TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: gc.withValues(alpha: 0.5)),
+                style: TextStyle(
+                  fontSize: 8,
+                  fontWeight: FontWeight.w800,
+                  color: gc.withValues(alpha: 0.5),
+                ),
               ),
             ),
           ],
@@ -1121,9 +1354,13 @@ class _CompendiumCard extends StatelessWidget {
       onTap: () => _showItemDetail(context, item),
       child: Container(
         decoration: BoxDecoration(
-          color: owned ? gc.withValues(alpha: 0.08) : kMainLine.withValues(alpha: 0.15),
+          color: owned
+              ? gc.withValues(alpha: 0.08)
+              : kMainLine.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: owned ? gc.withValues(alpha: 0.3) : Colors.transparent),
+          border: Border.all(
+            color: owned ? gc.withValues(alpha: 0.3) : Colors.transparent,
+          ),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1133,15 +1370,28 @@ class _CompendiumCard extends StatelessWidget {
               children: [
                 Text(
                   item['icon'] as String? ?? '🎁',
-                  style: TextStyle(fontSize: 28, color: owned ? null : Colors.white.withValues(alpha: 0.3)),
+                  style: TextStyle(
+                    fontSize: 28,
+                    color: owned ? null : Colors.white.withValues(alpha: 0.3),
+                  ),
                 ),
                 if (owned && qty > 1)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-                    decoration: BoxDecoration(color: kMainHoney, borderRadius: BorderRadius.circular(6)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 3,
+                      vertical: 1,
+                    ),
+                    decoration: BoxDecoration(
+                      color: kMainHoney,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
                     child: Text(
                       'x$qty',
-                      style: const TextStyle(fontSize: 8, color: Colors.white, fontWeight: FontWeight.w700),
+                      style: const TextStyle(
+                        fontSize: 8,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
               ],
@@ -1149,7 +1399,11 @@ class _CompendiumCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               item['name'] as String? ?? '',
-              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: owned ? null : kMainMuted),
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: owned ? null : kMainMuted,
+              ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
@@ -1197,23 +1451,36 @@ class _CompendiumCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Text(item['icon'] as String? ?? '🎁', style: const TextStyle(fontSize: 40)),
+                Text(
+                  item['icon'] as String? ?? '🎁',
+                  style: const TextStyle(fontSize: 40),
+                ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(item['name'] as String? ?? '', style: mainTitle(size: 17)),
+                      Text(
+                        item['name'] as String? ?? '',
+                        style: mainTitle(size: 17),
+                      ),
                       const SizedBox(height: 4),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: gc.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(5),
                         ),
                         child: Text(
                           grade,
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: gc),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: gc,
+                          ),
                         ),
                       ),
                     ],
@@ -1221,21 +1488,31 @@ class _CompendiumCard extends StatelessWidget {
                 ),
                 if (owned)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: kMainSage.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       '보유 중',
-                      style: TextStyle(fontSize: 11, color: kMainSage, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: kMainSage,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
               ],
             ),
             if (item['description'] != null) ...[
               const SizedBox(height: 10),
-              Text(item['description'] as String, style: mainBody(size: 12, color: kMainMuted)),
+              Text(
+                item['description'] as String,
+                style: mainBody(size: 12, color: kMainMuted),
+              ),
             ],
             if (stats.isNotEmpty) ...[
               const SizedBox(height: 14),
@@ -1243,7 +1520,11 @@ class _CompendiumCard extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 '스탯',
-                style: mainBody(size: 12, weight: FontWeight.w700, color: kMainMuted),
+                style: mainBody(
+                  size: 12,
+                  weight: FontWeight.w700,
+                  color: kMainMuted,
+                ),
               ),
               const SizedBox(height: 6),
               for (final entry in stats.entries)
@@ -1251,18 +1532,28 @@ class _CompendiumCard extends StatelessWidget {
                   padding: const EdgeInsets.only(bottom: 4),
                   child: Row(
                     children: [
-                      Text(statLabels[entry.key] ?? entry.key, style: mainBody(size: 12)),
+                      Text(
+                        statLabels[entry.key] ?? entry.key,
+                        style: mainBody(size: 12),
+                      ),
                       const Spacer(),
                       Text(
                         '+${entry.value}',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: gc),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: gc,
+                        ),
                       ),
                     ],
                   ),
                 ),
             ] else if (owned == false) ...[
               const SizedBox(height: 12),
-              Text('보유 시 스탯이 공개됩니다', style: mainBody(size: 12, color: kMainMuted)),
+              Text(
+                '보유 시 스탯이 공개됩니다',
+                style: mainBody(size: 12, color: kMainMuted),
+              ),
             ],
             const SizedBox(height: 16),
           ],

@@ -41,7 +41,8 @@ class ShopScreen extends StatefulWidget {
   State<ShopScreen> createState() => _ShopScreenState();
 }
 
-class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateMixin {
+class _ShopScreenState extends State<ShopScreen>
+    with SingleTickerProviderStateMixin {
   final _auth = AuthService();
   final _socket = SocketService();
 
@@ -72,7 +73,11 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: _gameTabs.length, vsync: this, initialIndex: 0);
+    _tabCtrl = TabController(
+      length: _gameTabs.length,
+      vsync: this,
+      initialIndex: 0,
+    );
 
     _socket.addListener(_onWallet);
     _load();
@@ -98,7 +103,10 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
     try {
       final token = _auth.token;
       final base = _socket.serverUrl ?? '';
-      final headers = {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'};
+      final headers = {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      };
 
       final results = await Future.wait([
         http.get(Uri.parse('$base/api/shop/items'), headers: headers),
@@ -118,22 +126,31 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
       final levelRes = jsonDecode(results[5].body) as Map;
       final missionsRes = jsonDecode(results[6].body) as Map;
 
-      final ownedList = (ownedRes['owned'] as List? ?? []).cast<Map<String, dynamic>>();
-      final equippedSlots = (equippedRes['slots'] as Map? ?? {}).values.toList();
+      final ownedList = (ownedRes['owned'] as List? ?? [])
+          .cast<Map<String, dynamic>>();
+      final equippedSlots = (equippedRes['slots'] as Map? ?? {}).values
+          .toList();
 
       setState(() {
-        _items = (itemsRes['items'] as List? ?? []).cast<Map<String, dynamic>>();
+        _items = (itemsRes['items'] as List? ?? [])
+            .cast<Map<String, dynamic>>();
         _balance = (walletRes['balance'] as num?)?.toInt() ?? _balance;
-        _coupons = (couponsRes['coupons'] as List? ?? []).cast<Map<String, dynamic>>();
-        _ownedItemIds = ownedList.map((o) => (o['item_id'] as num).toInt()).toSet();
-        _equippedItemIds = equippedSlots.map((s) => (s['item_id'] as num).toInt()).toSet();
+        _coupons = (couponsRes['coupons'] as List? ?? [])
+            .cast<Map<String, dynamic>>();
+        _ownedItemIds = ownedList
+            .map((o) => (o['item_id'] as num).toInt())
+            .toSet();
+        _equippedItemIds = equippedSlots
+            .map((s) => (s['item_id'] as num).toInt())
+            .toSet();
         if (levelRes['ok'] == true) {
           _userLevel = (levelRes['level'] as num?)?.toInt() ?? 1;
           _userXp = (levelRes['xp'] as num?)?.toInt() ?? 0;
           _xpNeeded = (levelRes['xpNeeded'] as num?)?.toInt() ?? 100;
           _tickets = (levelRes['tickets'] as num?)?.toInt() ?? 0;
         }
-        _missions = (missionsRes['missions'] as List? ?? []).cast<Map<String, dynamic>>();
+        _missions = (missionsRes['missions'] as List? ?? [])
+            .cast<Map<String, dynamic>>();
         _loading = false;
       });
     } catch (e) {
@@ -185,7 +202,10 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
       final base = _socket.serverUrl ?? '';
       final res = await http.post(
         Uri.parse('$base/api/shop/buy'),
-        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
         body: jsonEncode({'item_id': item['id']}),
       );
       final body = jsonDecode(res.body) as Map;
@@ -226,8 +246,14 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('보내기')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('보내기'),
+          ),
         ],
       ),
     );
@@ -238,7 +264,10 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
       final base = _socket.serverUrl ?? '';
       final res = await http.post(
         Uri.parse('$base/api/shop/coupons/issue'),
-        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
         body: jsonEncode({'title': title.trim(), 'description': desc.trim()}),
       );
       final body = jsonDecode(res.body) as Map;
@@ -262,13 +291,20 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (coupon['description'] != null) Text(coupon['description'] as String),
+            if (coupon['description'] != null)
+              Text(coupon['description'] as String),
             const SizedBox(height: 8),
-            Text('사용하면 되돌릴 수 없어요.', style: TextStyle(fontSize: 11, color: kMainMuted)),
+            Text(
+              '사용하면 되돌릴 수 없어요.',
+              style: TextStyle(fontSize: 11, color: kMainMuted),
+            ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: kMainHoney),
             onPressed: () => Navigator.pop(ctx, true),
@@ -284,7 +320,10 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
       final base = _socket.serverUrl ?? '';
       final res = await http.post(
         Uri.parse('$base/api/shop/coupons/redeem'),
-        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
         body: jsonEncode({'coupon_id': coupon['id']}),
       );
       final body = jsonDecode(res.body) as Map;
@@ -310,10 +349,14 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
 
   void _showSnack(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), duration: const Duration(seconds: 2)));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), duration: const Duration(seconds: 2)),
+    );
   }
 
-  String _formatCoins(int n) => n >= 1000 ? '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}K' : '$n';
+  String _formatCoins(int n) => n >= 1000
+      ? '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}K'
+      : '$n';
 
   // ── Build ────────────────────────────────────────────────────────────────────
 
@@ -326,7 +369,10 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
         elevation: 0,
         shadowColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
-        title: const Text('상점', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
+        title: const Text(
+          '상점',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+        ),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 14),
@@ -337,7 +383,11 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
                   const SizedBox(width: 2),
                   Text(
                     'x$_tickets',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: kMainLilac),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: kMainLilac,
+                    ),
                   ),
                   const SizedBox(width: 10),
                 ],
@@ -345,7 +395,11 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
                 const SizedBox(width: 4),
                 Text(
                   _formatCoins(_balance),
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: kMainHoney),
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: kMainHoney,
+                  ),
                 ),
               ],
             ),
@@ -361,14 +415,21 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
                 child: Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
                       decoration: BoxDecoration(
                         color: kMainSky.withValues(alpha: 0.18),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         'Lv.$_userLevel',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: kMainSky),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: kMainSky,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -386,7 +447,11 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
                     const SizedBox(width: 8),
                     Text(
                       '$_userXp / $_xpNeeded XP',
-                      style: TextStyle(fontSize: 10, color: kMainMuted, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: kMainMuted,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ],
                 ),
@@ -398,7 +463,13 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
                 tabs: _gameTabs
                     .map(
                       (t) => Tab(
-                        child: Text(t.$1, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                        child: Text(
+                          t.$1,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                     )
                     .toList(),
@@ -420,7 +491,8 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
               children: _gameTabs.map((t) {
                 if (t.$2 == 'coupon') return _buildCouponsTab();
                 if (t.$2 == 'mission') return _buildMissionsTab();
-                if (t.$2 == 'inventory') return InventoryTab(onBalanceChanged: _load);
+                if (t.$2 == 'inventory')
+                  return InventoryTab(onBalanceChanged: _load);
                 return _buildItemsTab(t.$2);
               }).toList(),
             ),
@@ -496,7 +568,10 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
       final base = _socket.serverUrl ?? '';
       final res = await http.post(
         Uri.parse('$base/api/missions/$missionId/claim'),
-        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
       );
       final body = jsonDecode(res.body) as Map;
       if (body['ok'] == true) {
@@ -505,7 +580,9 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('수령 완료! 🪙 +$coins${tickets > 0 ? '  🎫 +$tickets' : ''}'),
+              content: Text(
+                '수령 완료! 🪙 +$coins${tickets > 0 ? '  🎫 +$tickets' : ''}',
+              ),
               backgroundColor: kMainSage,
             ),
           );
@@ -513,19 +590,25 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
         _load();
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('오류: ${body['reason'] ?? '알 수 없음'}')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('오류: ${body['reason'] ?? '알 수 없음'}')),
+          );
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('오류: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('오류: $e')));
       }
     }
   }
 
   Widget _buildMissionsTab() {
     final weekly = _missions.where((m) => m['type'] == 'weekly').toList();
-    final achievements = _missions.where((m) => m['type'] == 'achievement').toList();
+    final achievements = _missions
+        .where((m) => m['type'] == 'achievement')
+        .toList();
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -535,19 +618,32 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
           if (weekly.isNotEmpty) ...[
             _MissionSectionHeader(title: '주간 미션', icon: '📅'),
             const SizedBox(height: 8),
-            ...weekly.map((m) => _MissionCard(mission: m, onClaim: () => _claimMission(m['id'] as int))),
+            ...weekly.map(
+              (m) => _MissionCard(
+                mission: m,
+                onClaim: () => _claimMission(m['id'] as int),
+              ),
+            ),
             const SizedBox(height: 20),
           ],
           if (achievements.isNotEmpty) ...[
             _MissionSectionHeader(title: '달성 미션', icon: '🏆'),
             const SizedBox(height: 8),
-            ...achievements.map((m) => _MissionCard(mission: m, onClaim: () => _claimMission(m['id'] as int))),
+            ...achievements.map(
+              (m) => _MissionCard(
+                mission: m,
+                onClaim: () => _claimMission(m['id'] as int),
+              ),
+            ),
           ],
           if (_missions.isEmpty)
             Center(
               child: Padding(
                 padding: const EdgeInsets.only(top: 60),
-                child: Text('미션을 불러오는 중...', style: TextStyle(color: kMainMuted)),
+                child: Text(
+                  '미션을 불러오는 중...',
+                  style: TextStyle(color: kMainMuted),
+                ),
               ),
             ),
         ],
@@ -575,7 +671,10 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
                     const SizedBox(height: 8),
                     Text('받은 쿠폰이 없어요', style: TextStyle(color: kMainMuted)),
                     const SizedBox(height: 4),
-                    Text('상대방에게 데이트 쿠폰을 받아봐요!', style: TextStyle(fontSize: 11, color: kMainMuted)),
+                    Text(
+                      '상대방에게 데이트 쿠폰을 받아봐요!',
+                      style: TextStyle(fontSize: 11, color: kMainMuted),
+                    ),
                   ],
                 ),
               ),
@@ -606,7 +705,11 @@ class _MissionSectionHeader extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           title,
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: kMainHoney),
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+            color: kMainHoney,
+          ),
         ),
       ],
     );
@@ -657,21 +760,32 @@ class _MissionCard extends StatelessWidget {
                   ),
                 ),
               ),
-              if (!claimed) _MissionClaimButton(completed: completed, onClaim: onClaim),
+              if (!claimed)
+                _MissionClaimButton(completed: completed, onClaim: onClaim),
               if (claimed)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: kMainMuted.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Text('수령 완료', style: TextStyle(fontSize: 11, color: kMainMuted)),
+                  child: Text(
+                    '수령 완료',
+                    style: TextStyle(fontSize: 11, color: kMainMuted),
+                  ),
                 ),
             ],
           ),
-          if (mission['description'] != null && (mission['description'] as String).isNotEmpty) ...[
+          if (mission['description'] != null &&
+              (mission['description'] as String).isNotEmpty) ...[
             const SizedBox(height: 4),
-            Text(mission['description'] as String, style: TextStyle(fontSize: 11, color: kMainMuted)),
+            Text(
+              mission['description'] as String,
+              style: TextStyle(fontSize: 11, color: kMainMuted),
+            ),
           ],
           const SizedBox(height: 8),
           ClipRRect(
@@ -680,7 +794,9 @@ class _MissionCard extends StatelessWidget {
               value: target > 0 ? (progress / target).clamp(0.0, 1.0) : 0,
               minHeight: 5,
               backgroundColor: Colors.white10,
-              valueColor: AlwaysStoppedAnimation<Color>(completed ? kMainSage : kMainSky),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                completed ? kMainSage : kMainSky,
+              ),
             ),
           ),
           const SizedBox(height: 6),
@@ -688,12 +804,22 @@ class _MissionCard extends StatelessWidget {
             children: [
               Text(
                 '$progress / $target',
-                style: TextStyle(fontSize: 11, color: kMainMuted, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: kMainMuted,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const Spacer(),
               if (coins > 0) _RewardTag(label: '🪙 +$coins'),
-              if (tickets > 0) ...[const SizedBox(width: 4), _RewardTag(label: '🎫 +$tickets', color: kMainLilac)],
-              if (xp > 0) ...[const SizedBox(width: 4), _RewardTag(label: '⭐ +$xp XP', color: kMainSky)],
+              if (tickets > 0) ...[
+                const SizedBox(width: 4),
+                _RewardTag(label: '🎫 +$tickets', color: kMainLilac),
+              ],
+              if (xp > 0) ...[
+                const SizedBox(width: 4),
+                _RewardTag(label: '⭐ +$xp XP', color: kMainSky),
+              ],
             ],
           ),
         ],
@@ -714,12 +840,18 @@ class _MissionClaimButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
         decoration: BoxDecoration(
-          color: completed ? kMainSage.withValues(alpha: 0.9) : kMainMuted.withValues(alpha: 0.15),
+          color: completed
+              ? kMainSage.withValues(alpha: 0.9)
+              : kMainMuted.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
           '수령',
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: completed ? Colors.black87 : kMainMuted),
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: completed ? Colors.black87 : kMainMuted,
+          ),
         ),
       ),
     );
@@ -741,7 +873,11 @@ class _RewardTag extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color ?? kMainHoney),
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: color ?? kMainHoney,
+        ),
       ),
     );
   }
@@ -776,7 +912,11 @@ class _GradeHeader extends StatelessWidget {
           ),
           child: Text(
             label,
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
           ),
         ),
         const SizedBox(width: 8),
@@ -820,7 +960,10 @@ class _ShopItemCard extends StatelessWidget {
         decoration: BoxDecoration(
           gradient: _gradeGradient(grade),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: equipped ? color : color.withValues(alpha: 0.3), width: equipped ? 2.5 : 1),
+          border: Border.all(
+            color: equipped ? color : color.withValues(alpha: 0.3),
+            width: equipped ? 2.5 : 1,
+          ),
         ),
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -839,7 +982,12 @@ class _ShopItemCard extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             // Icon
-            Center(child: Text(item['icon'] as String? ?? '📦', style: const TextStyle(fontSize: 36))),
+            Center(
+              child: Text(
+                item['icon'] as String? ?? '📦',
+                style: const TextStyle(fontSize: 36),
+              ),
+            ),
             const SizedBox(height: 8),
             // Name
             Text(
@@ -873,7 +1021,11 @@ class _ShopItemCard extends StatelessWidget {
                   onPressed: onTap,
                   child: Text(
                     equipped ? '장착 중' : '장착하기',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: equipped ? color : kMainSage),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: equipped ? color : kMainSage,
+                    ),
                   ),
                 ),
               )
@@ -881,7 +1033,11 @@ class _ShopItemCard extends StatelessWidget {
               Center(
                 child: Text(
                   '🎰 뽑기 전용',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
                 ),
               )
             else
@@ -889,7 +1045,9 @@ class _ShopItemCard extends StatelessWidget {
                 width: double.infinity,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: canAfford ? color : kMainMuted.withValues(alpha: 0.3),
+                    backgroundColor: canAfford
+                        ? color
+                        : kMainMuted.withValues(alpha: 0.3),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 6),
                     minimumSize: Size.zero,
@@ -899,7 +1057,10 @@ class _ShopItemCard extends StatelessWidget {
                   onPressed: canAfford ? onTap : null,
                   child: Text(
                     '🪙 ${formatCoins(price)}',
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ),
@@ -921,10 +1082,18 @@ class _GradeBadge extends StatelessWidget {
     final color = _gradeColor(grade);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(6)),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(6),
+      ),
       child: Text(
         grade,
-        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.5,
+        ),
       ),
     );
   }
@@ -946,7 +1115,11 @@ class _StatusBadge extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w700),
+        style: TextStyle(
+          color: color,
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
@@ -1002,7 +1175,10 @@ class _ItemPreviewSheet extends StatelessWidget {
           Container(
             width: 40,
             height: 4,
-            decoration: BoxDecoration(color: kMainMuted.withValues(alpha: 0.4), borderRadius: BorderRadius.circular(2)),
+            decoration: BoxDecoration(
+              color: kMainMuted.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(2),
+            ),
           ),
           const SizedBox(height: 20),
           // Preview card
@@ -1012,17 +1188,26 @@ class _ItemPreviewSheet extends StatelessWidget {
             decoration: BoxDecoration(
               gradient: gradeGradient,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: gradeColor.withValues(alpha: 0.4), width: 1.5),
+              border: Border.all(
+                color: gradeColor.withValues(alpha: 0.4),
+                width: 1.5,
+              ),
             ),
             child: Column(
               children: [
                 _GradeBadge(grade: grade),
                 const SizedBox(height: 16),
-                Text(item['icon'] as String? ?? '📦', style: const TextStyle(fontSize: 64)),
+                Text(
+                  item['icon'] as String? ?? '📦',
+                  style: const TextStyle(fontSize: 64),
+                ),
                 const SizedBox(height: 12),
                 Text(
                   item['name'] as String,
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
+                  ),
                   textAlign: TextAlign.center,
                 ),
                 if (item['description'] != null) ...[
@@ -1043,7 +1228,11 @@ class _ItemPreviewSheet extends StatelessWidget {
               alignment: Alignment.centerLeft,
               child: Text(
                 '능력치',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: kMainSub),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: kMainSub,
+                ),
               ),
             ),
             const SizedBox(height: 8),
@@ -1059,14 +1248,21 @@ class _ItemPreviewSheet extends StatelessWidget {
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 3,
+                      ),
                       decoration: BoxDecoration(
                         color: gradeColor.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
                         '+${s['value']}',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: gradeColor),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: gradeColor,
+                        ),
                       ),
                     ),
                   ],
@@ -1075,7 +1271,10 @@ class _ItemPreviewSheet extends StatelessWidget {
             const SizedBox(height: 12),
           ],
           // Action button
-          SizedBox(width: double.infinity, child: _actionButton(grade, price, canAfford)),
+          SizedBox(
+            width: double.infinity,
+            child: _actionButton(grade, price, canAfford),
+          ),
         ],
       ),
     );
@@ -1091,7 +1290,11 @@ class _ItemPreviewSheet extends StatelessWidget {
         onPressed: null,
         child: Text(
           '장착 중',
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: gradeColor),
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            color: gradeColor,
+          ),
         ),
       );
     }
@@ -1103,7 +1306,10 @@ class _ItemPreviewSheet extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 14),
         ),
         onPressed: onEquip,
-        child: const Text('장착하기', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+        child: const Text(
+          '장착하기',
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+        ),
       );
     }
     if (isGachaOnly) {
@@ -1114,7 +1320,10 @@ class _ItemPreviewSheet extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 14),
         ),
         onPressed: onGacha,
-        child: const Text('🎰 가챠 뽑기!', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+        child: const Text(
+          '🎰 가챠 뽑기!',
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+        ),
       );
     }
     return ElevatedButton(
@@ -1162,8 +1371,14 @@ class _IssueCouponButton extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('데이트 쿠폰 보내기', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                  Text('파트너에게 특별한 약속을 보내요 · 500코인', style: TextStyle(fontSize: 11, color: kMainSub)),
+                  const Text(
+                    '데이트 쿠폰 보내기',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                  Text(
+                    '파트너에게 특별한 약속을 보내요 · 500코인',
+                    style: TextStyle(fontSize: 11, color: kMainSub),
+                  ),
                 ],
               ),
             ),
@@ -1209,16 +1424,29 @@ class _CouponCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(coupon['title'] as String, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                if (coupon['description'] != null && (coupon['description'] as String).isNotEmpty) ...[
+                Text(
+                  coupon['title'] as String,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                  ),
+                ),
+                if (coupon['description'] != null &&
+                    (coupon['description'] as String).isNotEmpty) ...[
                   const SizedBox(height: 4),
-                  Text(coupon['description'] as String, style: TextStyle(fontSize: 12, color: kMainSub)),
+                  Text(
+                    coupon['description'] as String,
+                    style: TextStyle(fontSize: 12, color: kMainSub),
+                  ),
                 ],
                 if (daysLeft != null) ...[
                   const SizedBox(height: 6),
                   Text(
                     daysLeft > 0 ? '$daysLeft일 후 만료' : '오늘 만료',
-                    style: TextStyle(fontSize: 10, color: daysLeft <= 3 ? kMainRose : kMainMuted),
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: daysLeft <= 3 ? kMainRose : kMainMuted,
+                    ),
                   ),
                 ],
               ],
@@ -1234,7 +1462,10 @@ class _CouponCard extends StatelessWidget {
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
             onPressed: onRedeem,
-            child: const Text('사용', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+            child: const Text(
+              '사용',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),
@@ -1252,7 +1483,8 @@ class _GachaOverlay extends StatefulWidget {
   State<_GachaOverlay> createState() => _GachaOverlayState();
 }
 
-class _GachaOverlayState extends State<_GachaOverlay> with TickerProviderStateMixin {
+class _GachaOverlayState extends State<_GachaOverlay>
+    with TickerProviderStateMixin {
   late final AnimationController _flipCtrl;
   late final AnimationController _burstCtrl;
   late final AnimationController _scaleCtrl;
@@ -1262,9 +1494,18 @@ class _GachaOverlayState extends State<_GachaOverlay> with TickerProviderStateMi
   @override
   void initState() {
     super.initState();
-    _flipCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200));
-    _burstCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
-    _scaleCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 500));
+    _flipCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+    _burstCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    _scaleCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
 
     _flipAnim = CurvedAnimation(parent: _flipCtrl, curve: Curves.easeInOut);
     _scaleAnim = CurvedAnimation(parent: _scaleCtrl, curve: Curves.elasticOut);
@@ -1322,7 +1563,12 @@ class _GachaOverlayState extends State<_GachaOverlay> with TickerProviderStateMi
                             transform: Matrix4.identity()..rotateY(3.14159),
                             child: ScaleTransition(
                               scale: _scaleAnim,
-                              child: _buildRevealCard(grade, gradeColor, icon, name),
+                              child: _buildRevealCard(
+                                grade,
+                                gradeColor,
+                                icon,
+                                name,
+                              ),
                             ),
                           )
                         : _buildHiddenCard(gradeColor),
@@ -1337,7 +1583,13 @@ class _GachaOverlayState extends State<_GachaOverlay> with TickerProviderStateMi
                   left: 0,
                   right: 0,
                   child: Center(
-                    child: Text('탭하여 닫기', style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 14)),
+                    child: Text(
+                      '탭하여 닫기',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.6),
+                        fontSize: 14,
+                      ),
+                    ),
                   ),
                 ),
             ],
@@ -1359,7 +1611,13 @@ class _GachaOverlayState extends State<_GachaOverlay> with TickerProviderStateMi
         ),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: gradeColor.withValues(alpha: 0.5), width: 2),
-        boxShadow: [BoxShadow(color: gradeColor.withValues(alpha: 0.3), blurRadius: 20, spreadRadius: 2)],
+        boxShadow: [
+          BoxShadow(
+            color: gradeColor.withValues(alpha: 0.3),
+            blurRadius: 20,
+            spreadRadius: 2,
+          ),
+        ],
       ),
       child: const Center(
         child: Text('?', style: TextStyle(fontSize: 80, color: Colors.white38)),
@@ -1367,19 +1625,36 @@ class _GachaOverlayState extends State<_GachaOverlay> with TickerProviderStateMi
     );
   }
 
-  Widget _buildRevealCard(String grade, Color gradeColor, String icon, String name) {
+  Widget _buildRevealCard(
+    String grade,
+    Color gradeColor,
+    String icon,
+    String name,
+  ) {
     return Container(
       width: 220,
       height: 300,
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [gradeColor.withValues(alpha: 0.9), gradeColor.withValues(alpha: 0.5)],
+          colors: [
+            gradeColor.withValues(alpha: 0.9),
+            gradeColor.withValues(alpha: 0.5),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.4), width: 2),
-        boxShadow: [BoxShadow(color: gradeColor.withValues(alpha: 0.6), blurRadius: 30, spreadRadius: 5)],
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.4),
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: gradeColor.withValues(alpha: 0.6),
+            blurRadius: 30,
+            spreadRadius: 5,
+          ),
+        ],
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -1394,7 +1669,11 @@ class _GachaOverlayState extends State<_GachaOverlay> with TickerProviderStateMi
             ),
             child: Text(
               grade,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Colors.white),
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+                color: Colors.white,
+              ),
             ),
           ),
           const SizedBox(height: 12),
@@ -1403,7 +1682,11 @@ class _GachaOverlayState extends State<_GachaOverlay> with TickerProviderStateMi
             child: Text(
               name,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white),
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
             ),
           ),
         ],

@@ -178,13 +178,18 @@ class _YutScreenState extends State<YutScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('$icon $name', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            Text(
+              '$icon $name',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 6),
             _GradeBadge(grade: grade),
             if (firstStat != null) ...[
               const SizedBox(height: 8),
-              Text('${_statLabel(firstStat.key)}: ${firstStat.value}',
-                  style: const TextStyle(fontSize: 13, color: Colors.grey)),
+              Text(
+                '${_statLabel(firstStat.key)}: ${firstStat.value}',
+                style: const TextStyle(fontSize: 13, color: Colors.grey),
+              ),
             ],
           ],
         ),
@@ -290,12 +295,17 @@ class _YutScreenState extends State<YutScreen> {
                     for (final slot in ['yut_yut', 'yut_piece'])
                       if (opponentItems[slot] != null)
                         GestureDetector(
-                          onTap: () => _showItemPopup(context, opponentItems[slot]!),
+                          onTap: () =>
+                              _showItemPopup(context, opponentItems[slot]!),
                           child: Padding(
                             padding: const EdgeInsets.only(left: 4),
                             child: _GradeBadge(
-                              grade: opponentItems[slot]!['grade'] as String? ?? 'B',
-                              icon: opponentItems[slot]!['icon'] as String? ?? '🎁',
+                              grade:
+                                  opponentItems[slot]!['grade'] as String? ??
+                                  'B',
+                              icon:
+                                  opponentItems[slot]!['icon'] as String? ??
+                                  '🎁',
                             ),
                           ),
                         ),
@@ -316,10 +326,10 @@ class _GradeBadge extends StatelessWidget {
 
   static Color _color(String g) => switch (g) {
     'SSS' => const Color(0xFFFF7043),
-    'SS'  => const Color(0xFFAB47BC),
-    'S'   => const Color(0xFF42A5F5),
-    'A'   => const Color(0xFF66BB6A),
-    _     => const Color(0xFF9E9E9E),
+    'SS' => const Color(0xFFAB47BC),
+    'S' => const Color(0xFF42A5F5),
+    'A' => const Color(0xFF66BB6A),
+    _ => const Color(0xFF9E9E9E),
   };
 
   @override
@@ -337,7 +347,14 @@ class _GradeBadge extends StatelessWidget {
         children: [
           if (icon != null) Text(icon!, style: const TextStyle(fontSize: 11)),
           const SizedBox(width: 2),
-          Text(grade, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: c)),
+          Text(
+            grade,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              color: c,
+            ),
+          ),
         ],
       ),
     );
