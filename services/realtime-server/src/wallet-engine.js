@@ -58,7 +58,7 @@ export async function claimDailyBonus(userId) {
 // 게임 결과 정산: 올인 캡 적용 원자적 이체
 // winnerCode/loserCode는 UserCode(소켓 userId) — 내부에서 numeric UserId로 변환
 // winnerBonusPct: coin_bonus_pct from equipped items (0–20)
-export async function transferGameReward(winnerCode, loserCode, amount, gameRef, { winnerBonusPct = 0 } = {}) {
+export async function transferGameReward(winnerCode, loserCode, amount, gameRef, { winnerBonusPct = 0, catchBonus = 0 } = {}) {
   const [winnerId, loserId] = await Promise.all([
     _resolveUserId(winnerCode),
     _resolveUserId(loserCode),
@@ -76,7 +76,7 @@ export async function transferGameReward(winnerCode, loserCode, amount, gameRef,
     );
     const actual = Math.min(amount, loser.balance); // 올인 캡
     const bonusMultiplier = 1 + Math.min(winnerBonusPct, 20) / 100;
-    const winnerGain = Math.floor(actual * bonusMultiplier);
+    const winnerGain = Math.floor(actual * bonusMultiplier) + Math.floor(catchBonus);
     const loserAfter = loser.balance - actual;
     const winnerAfter = winner.balance + winnerGain;
     await conn.execute('UPDATE wallets SET balance = ? WHERE user_id = ?', [loserAfter, loserId]);

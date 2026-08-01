@@ -240,7 +240,7 @@ async function grantGameXpAndMissions(winnerCode, loserCode, game) {
 
 // 게임 종료 후 지갑 정산 + wallet:updated 브로드캐스트
 // winnerNumericId: numeric UserId (for stat lookup); winnerId/loserId: UserCode
-async function settleAndEmitWallet(io, roomCode, winnerId, loserId, stake, gameRef, winnerNumericId = null) {
+async function settleAndEmitWallet(io, roomCode, winnerId, loserId, stake, gameRef, winnerNumericId = null, catchBonus = 0) {
   if (!stake || stake <= 0) return;
   try {
     let winnerBonusPct = 0;
@@ -248,7 +248,7 @@ async function settleAndEmitWallet(io, roomCode, winnerId, loserId, stake, gameR
       const stats = await getEquippedStats(winnerNumericId);
       winnerBonusPct = stats.coin_bonus_pct ?? 0;
     }
-    const result = await transferGameReward(winnerId, loserId, stake, gameRef, { winnerBonusPct });
+    const result = await transferGameReward(winnerId, loserId, stake, gameRef, { winnerBonusPct, catchBonus });
     io.to(roomCode).emit("wallet:updated", {
       [winnerId]: result.winnerBalance,
       [loserId]: result.loserBalance,
@@ -1253,11 +1253,15 @@ export const registerSocketHandlers = (io) => {
       // 양 플레이어의 장착 아이템 정보 포함 (상대방 표시용)
       const { rows: p1Rows } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [player1]);
       const { rows: p2Rows } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [player2]);
-      const [p1Info, p2Info] = await Promise.all([
-        p1Rows[0]?.UserId ? getEquippedItemsInfo(p1Rows[0].UserId) : {},
-        p2Rows[0]?.UserId ? getEquippedItemsInfo(p2Rows[0].UserId) : {},
+      const [p1Info, p2Info, p1Stats, p2Stats] = await Promise.all([
+        p1Rows[0]?.UserId ? getEquippedItemsInfo(p1Rows[0].UserId) : Promise.resolve({}),
+        p2Rows[0]?.UserId ? getEquippedItemsInfo(p2Rows[0].UserId) : Promise.resolve({}),
+        p1Rows[0]?.UserId ? getEquippedStats(p1Rows[0].UserId) : Promise.resolve({}),
+        p2Rows[0]?.UserId ? getEquippedStats(p2Rows[0].UserId) : Promise.resolve({}),
       ]);
       gameState.equippedItems = { [player1]: p1Info, [player2]: p2Info };
+      gameState.playerStats = { [player1]: p1Stats, [player2]: p2Stats };
+      gameState.catchCoinBonus = {};
 
       await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
 
@@ -1487,6 +1491,10 @@ export const registerSocketHandlers = (io) => {
           )
         : [];
       let capturedPieces = [];
+      const moverStats = gameState.playerStats?.[userId] ?? {};
+      const opponentId = getNextYutPlayer(gameState, userId);
+      const defenderStats = gameState.playerStats?.[opponentId] ?? {};
+
       if (moveResult.finished) {
         for (const carriedPiece of carriedPieces) {
           carriedPiece.lastPos = moveResult.lastPos;
@@ -1498,14 +1506,44 @@ export const registerSocketHandlers = (io) => {
           carriedPiece.lastPos = moveResult.lastPos;
           carriedPiece.position = moveResult.position;
         }
-        const opponentId = getNextYutPlayer(gameState, userId);
-        capturedPieces = checkCatch(piece.position, gameState.players[opponentId].pieces);
+
+        // piece_group_pct: chance to auto-pull one lonely friendly piece to current position
+        const groupPct = Math.min(moverStats.piece_group_pct ?? 0, 15);
+        if (groupPct > 0 && moveResult.position > 0 && moveResult.position !== 20) {
+          const loner = gameState.players[userId].pieces.find(
+            (p) => p.id !== pieceId && !p.finished && p.position > 0 && p.position !== moveResult.position,
+          );
+          if (loner && Math.random() * 100 < groupPct) {
+            loner.position = moveResult.position;
+            loner.lastPos = moveResult.lastPos;
+            stackedPieces.push(loner);
+          }
+        }
+
+        const rawCaptured = checkCatch(piece.position, gameState.players[opponentId].pieces);
+
+        // piece_catch_resist_pct + piece_safe_zone_pct (defender): each piece independently resists
+        const resistPct = Math.min((defenderStats.piece_catch_resist_pct ?? 0), 15);
+        const safePct = Math.min((defenderStats.piece_safe_zone_pct ?? 0), 15);
+        capturedPieces = rawCaptured.filter(() => {
+          const survivedResist = resistPct > 0 && Math.random() * 100 < resistPct;
+          const survivedSafe = safePct > 0 && Math.random() * 100 < safePct;
+          return !survivedResist && !survivedSafe;
+        });
+
         for (const capturedPiece of capturedPieces) {
           capturedPiece.position = 0;
           capturedPiece.lastPos = 0;
           capturedPiece.finished = false;
         }
         recordCapture(gameState, capturedPieces.length);
+
+        // piece_catch_coin_bonus: accumulate per catch
+        const catchCoinPer = Math.floor(moverStats.piece_catch_coin_bonus ?? 0);
+        if (catchCoinPer > 0 && capturedPieces.length > 0) {
+          gameState.catchCoinBonus = gameState.catchCoinBonus ?? {};
+          gameState.catchCoinBonus[userId] = (gameState.catchCoinBonus[userId] ?? 0) + catchCoinPer * capturedPieces.length;
+        }
       }
 
       const won = checkWin(gameState.players[userId]);
@@ -1542,8 +1580,9 @@ export const registerSocketHandlers = (io) => {
         const { rows: winnerRows } = await query(
           'SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [gameState.winner]
         );
+        const winnerCatchBonus = gameState.catchCoinBonus?.[gameState.winner] ?? 0;
         await Promise.all([
-          settleAndEmitWallet(io, roomCode, gameState.winner, yutLoserId, gameState.stake ?? 0, `yut:${roomCode}:${Date.now()}`, winnerRows[0]?.UserId),
+          settleAndEmitWallet(io, roomCode, gameState.winner, yutLoserId, gameState.stake ?? 0, `yut:${roomCode}:${Date.now()}`, winnerRows[0]?.UserId, winnerCatchBonus),
           saveGameResult(roomCode, gameState.winner, yutLoserId, 'yut', gameState.stake ?? 0),
           grantGameXpAndMissions(gameState.winner, yutLoserId, 'yut'),
         ]);
@@ -1845,6 +1884,16 @@ export const registerSocketHandlers = (io) => {
 
       const gameState = createUnoGameState(orderedPlayers, 7, { mode });
       gameState.stake = parsed.data.stake ?? 0;
+
+      // 양 플레이어 스탯 미리 로드
+      const unoPlayerStats = {};
+      for (const code of orderedPlayers) {
+        const { rows } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [code]);
+        const numId = rows[0]?.UserId;
+        unoPlayerStats[code] = numId ? await getEquippedStats(numId) : {};
+      }
+      gameState.playerStats = unoPlayerStats;
+
       await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
 
       // Broadcast common info to room
@@ -1948,6 +1997,16 @@ export const registerSocketHandlers = (io) => {
         applyCardEffect(gameState, playedCard, previousColor);
       }
 
+      // card_reverse_bonus: when playing reverse, draw 1 free card from deck (capped 20%)
+      if (card.value === 'reverse') {
+        const myPlayStats = gameState.playerStats?.[userId] ?? {};
+        const reversePct = Math.min(myPlayStats.card_reverse_bonus ?? 0, 20);
+        if (reversePct > 0 && Math.random() * 100 < reversePct) {
+          const bonusCards = drawCards(gameState, 1);
+          gameState.hands[userId].push(...bonusCards);
+        }
+      }
+
       // Check win
       const won = checkUnoWin(gameState, userId);
       if (won) {
@@ -1995,8 +2054,11 @@ export const registerSocketHandlers = (io) => {
         const unoLoserId = gameState.players.find(p => p !== gameState.winner);
         io.to(roomCode).emit("game:uno:ended", { winner: gameState.winner });
         await redis.del(unoGameKey(roomCode));
+        const { rows: unoWinnerRows } = await query(
+          'SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [gameState.winner]
+        );
         await Promise.all([
-          settleAndEmitWallet(io, roomCode, gameState.winner, unoLoserId, gameState.stake ?? 0, `uno:${roomCode}:${Date.now()}`),
+          settleAndEmitWallet(io, roomCode, gameState.winner, unoLoserId, gameState.stake ?? 0, `uno:${roomCode}:${Date.now()}`, unoWinnerRows[0]?.UserId),
           saveGameResult(roomCode, gameState.winner, unoLoserId, 'uno', gameState.stake ?? 0),
           grantGameXpAndMissions(gameState.winner, unoLoserId, 'onecard'),
         ]);
@@ -2038,6 +2100,23 @@ export const registerSocketHandlers = (io) => {
       const target = gameState.unoCallNeeded;
       if (!target || target === userId) {
         ack({ ok: false, reason: "no_target" });
+        return;
+      }
+
+      // card_uno_protect_pct: target has % chance to avoid penalty (capped 15%)
+      const targetUnoStats = gameState.playerStats?.[target] ?? {};
+      const protectPct = Math.min(targetUnoStats.card_uno_protect_pct ?? 0, 15);
+      if (protectPct > 0 && Math.random() * 100 < protectPct) {
+        gameState.unoCallNeeded = null;
+        await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
+        io.to(roomCode).emit("game:uno:penalty", {
+          target,
+          caughtBy: userId,
+          count: 0,
+          protected: true,
+          handCount: getUnoHandCount(gameState),
+        });
+        ack({ ok: true, protected: true });
         return;
       }
 
@@ -2203,7 +2282,25 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const drawCount = (gameState.drawStack || 0) > 0 ? gameState.drawStack : 1;
+      const myUnoStats = gameState.playerStats?.[userId] ?? {};
+      let drawCount = (gameState.drawStack || 0) > 0 ? gameState.drawStack : 1;
+
+      // card_shield_pct: chance to fully negate an attack draw stack (capped 15%)
+      if (gameState.drawStack > 0) {
+        const shieldPct = Math.min(myUnoStats.card_shield_pct ?? 0, 15);
+        if (shieldPct > 0 && Math.random() * 100 < shieldPct) {
+          drawCount = 0;
+        }
+      }
+
+      // card_lucky_draw_pct: chance to draw 1 less card (capped 20%)
+      if (drawCount > 1) {
+        const luckyPct = Math.min(myUnoStats.card_lucky_draw_pct ?? 0, 20);
+        if (luckyPct > 0 && Math.random() * 100 < luckyPct) {
+          drawCount = Math.max(1, drawCount - 1);
+        }
+      }
+
       const drawnCards = drawCards(gameState, drawCount);
       gameState.hands[userId].push(...drawnCards);
       clearDrawStack(gameState);
