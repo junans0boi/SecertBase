@@ -75,7 +75,41 @@ for i in $(seq 1 10); do
   fi
 done
 
-# ── 2. Node 서버 ─────────────────────────────────────────────────────────────
+# ── 2. 미적용 마이그레이션 자동 실행 ────────────────────────────────────────
+info "마이그레이션 확인 중..."
+DB_USER="junzzang"
+DB_PASS="0427"
+DB_NAME="secretbase"
+DB_PORT="3307"
+
+MIGRATIONS_DIR="$ROOT/services/realtime-server/migrations"
+APPLIED_FILE="/tmp/sb_applied_migrations.txt"
+
+# 적용된 마이그레이션 추적 테이블이 없으면 생성
+mysql -u"$DB_USER" -p"$DB_PASS" -P "$DB_PORT" -h 127.0.0.1 "$DB_NAME" \
+  -e "CREATE TABLE IF NOT EXISTS _migrations (name VARCHAR(120) PRIMARY KEY, applied_at DATETIME DEFAULT NOW());" 2>/dev/null || true
+
+for sql_file in $(ls "$MIGRATIONS_DIR"/*.sql | sort); do
+  migration_name="$(basename "$sql_file")"
+  already_applied=$(mysql -u"$DB_USER" -p"$DB_PASS" -P "$DB_PORT" -h 127.0.0.1 "$DB_NAME" \
+    -sNe "SELECT COUNT(*) FROM _migrations WHERE name='$migration_name';" 2>/dev/null || echo "0")
+
+  if [ "$already_applied" = "0" ]; then
+    info "  적용 중: $migration_name"
+    if mysql -u"$DB_USER" -p"$DB_PASS" -P "$DB_PORT" -h 127.0.0.1 "$DB_NAME" < "$sql_file" 2>/tmp/sb_migration_err.txt; then
+      mysql -u"$DB_USER" -p"$DB_PASS" -P "$DB_PORT" -h 127.0.0.1 "$DB_NAME" \
+        -e "INSERT IGNORE INTO _migrations (name) VALUES ('$migration_name');" 2>/dev/null || true
+      ok "  완료: $migration_name"
+    else
+      err "  실패: $migration_name"
+      cat /tmp/sb_migration_err.txt >&2
+      exit 1
+    fi
+  fi
+done
+ok "마이그레이션 최신 상태"
+
+# ── 3. Node 서버 ─────────────────────────────────────────────────────────────
 info "Node 서버 시작 중 (포트 4100)..."
 cd "$ROOT/services/realtime-server"
 NODE_LOG="/tmp/sb_node.log"
@@ -102,7 +136,7 @@ for i in $(seq 1 15); do
   fi
 done
 
-# ── 3. Flutter Web ───────────────────────────────────────────────────────────
+# ── 4. Flutter Web ───────────────────────────────────────────────────────────
 info "Flutter Web 실행 중 (포트 7357)..."
 echo ""
 echo "  앱 URL: http://localhost:7357"
