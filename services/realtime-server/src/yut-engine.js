@@ -49,7 +49,6 @@ export const GOAL_POSITION = 20;
 export function throwYut({
   yutControlPct = 0,
   yutMoRatePct = 0,
-  yutBackdoShieldPct = 0,
   yutOverturnPct = 0,
   isLosing = false,
 } = {}) {
@@ -75,13 +74,6 @@ export function throwYut({
   else if (flatCount === 2) result = YUT_RESULTS.GAE;
   else if (flatCount === 3) result = YUT_RESULTS.GEOL;
   else result = YUT_RESULTS.YUT;
-
-  // 3. yutBackdoShieldPct: 백도 → 도 변환 (최대 50%)
-  if (result === YUT_RESULTS.BACKDO && yutBackdoShieldPct > 0) {
-    if (Math.random() < Math.min(yutBackdoShieldPct, 50) / 100) {
-      result = YUT_RESULTS.DO;
-    }
-  }
 
   const bonusThrow = result === YUT_RESULTS.YUT || result === YUT_RESULTS.MO;
 

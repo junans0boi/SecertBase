@@ -1384,7 +1384,6 @@ export const registerSocketHandlers = (io) => {
       const throwResult = throwYut({
         yutControlPct: stats.yut_control_pct ?? 0,
         yutMoRatePct: stats.yut_mo_rate_pct ?? 0,
-        yutBackdoShieldPct: stats.yut_backdo_shield_pct ?? 0,
         yutOverturnPct: stats.yut_overturn_pct ?? 0,
         isLosing,
       });
