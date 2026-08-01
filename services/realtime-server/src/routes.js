@@ -5426,11 +5426,29 @@ router.post('/shop/gacha', async (req, res) => {
         [req.auth.userId, -cost, newBalance, `gacha:${game}:${tier}`]
       );
 
-      // 3. 가중치 기반 등급 결정
-      const totalWeight = tierRows.reduce((sum, r) => sum + r.weight, 0);
+      // 3. gacha_rate_up 스탯 확인 → 최고 등급 가중치 증폭 (최대 20%)
+      const [[rateUpRow]] = await conn.execute(
+        `SELECT COALESCE(SUM(ist.stat_value), 0) AS total
+         FROM equipped_items ei
+         JOIN item_stats ist ON ist.item_id = ei.item_id
+         WHERE ei.user_id = ? AND ist.stat_key = 'gacha_rate_up'`,
+        [req.auth.userId]
+      );
+      const rateUpPct = Math.min(Number(rateUpRow.total ?? 0), 20);
+
+      // 가중치 기반 등급 결정 (tierRows는 grade 오름차순: B→SSS)
+      const adjustedTiers = tierRows.map((r) => ({ ...r, weight: r.weight }));
+      if (rateUpPct > 0 && adjustedTiers.length > 1) {
+        const totalW = adjustedTiers.reduce((s, r) => s + r.weight, 0);
+        const shift = Math.floor(totalW * rateUpPct / 100);
+        adjustedTiers[0].weight = Math.max(0, adjustedTiers[0].weight - shift); // 최저 등급 감소
+        adjustedTiers[adjustedTiers.length - 1].weight += shift;                // 최고 등급 증가
+      }
+
+      const totalWeight = adjustedTiers.reduce((sum, r) => sum + r.weight, 0);
       let roll = Math.floor(Math.random() * totalWeight);
-      let selectedGrade = tierRows[tierRows.length - 1].grade;
-      for (const row of tierRows) {
+      let selectedGrade = adjustedTiers[adjustedTiers.length - 1].grade;
+      for (const row of adjustedTiers) {
         if (roll < row.weight) { selectedGrade = row.grade; break; }
         roll -= row.weight;
       }

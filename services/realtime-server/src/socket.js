@@ -240,15 +240,46 @@ async function grantGameXpAndMissions(winnerCode, loserCode, game) {
 
 // 게임 종료 후 지갑 정산 + wallet:updated 브로드캐스트
 // winnerNumericId: numeric UserId (for stat lookup); winnerId/loserId: UserCode
-async function settleAndEmitWallet(io, roomCode, winnerId, loserId, stake, gameRef, winnerNumericId = null, catchBonus = 0) {
+async function _getWinStreak(roomCode, winnerCode) {
+  try {
+    const { rows: coupleRows } = await query('SELECT CoupleId FROM Couples WHERE RoomCode = ? LIMIT 1', [roomCode]);
+    if (!coupleRows[0]) return 0;
+    const { rows } = await query(
+      'SELECT winner_user_code FROM game_results WHERE couple_id = ? ORDER BY id DESC LIMIT 10',
+      [coupleRows[0].CoupleId]
+    );
+    let streak = 0;
+    for (const row of rows) {
+      if (row.winner_user_code === winnerCode) streak++;
+      else break;
+    }
+    return streak;
+  } catch { return 0; }
+}
+
+async function settleAndEmitWallet(io, roomCode, winnerId, loserId, stake, gameRef, winnerNumericId = null, catchBonus = 0, loserNumericId = null) {
   if (!stake || stake <= 0) return;
   try {
     let winnerBonusPct = 0;
-    if (winnerNumericId) {
-      const stats = await getEquippedStats(winnerNumericId);
-      winnerBonusPct = stats.coin_bonus_pct ?? 0;
+    let totalCatchBonus = catchBonus;
+    let loserRefundPct = 0;
+
+    const [winnerStats, loserStats] = await Promise.all([
+      winnerNumericId ? getEquippedStats(winnerNumericId) : Promise.resolve({}),
+      loserNumericId ? getEquippedStats(loserNumericId) : Promise.resolve({}),
+    ]);
+
+    winnerBonusPct = winnerStats.coin_bonus_pct ?? 0;
+    loserRefundPct = loserStats.lose_refund_pct ?? 0;
+
+    // win_streak_bonus: 연속 승리 시 평추 보너스 (streak >= 2)
+    const winStreakBonus = Math.floor(winnerStats.win_streak_bonus ?? 0);
+    if (winStreakBonus > 0) {
+      const streak = await _getWinStreak(roomCode, winnerId);
+      if (streak >= 2) totalCatchBonus += winStreakBonus;
     }
-    const result = await transferGameReward(winnerId, loserId, stake, gameRef, { winnerBonusPct, catchBonus });
+
+    const result = await transferGameReward(winnerId, loserId, stake, gameRef, { winnerBonusPct, catchBonus: totalCatchBonus, loserRefundPct });
     io.to(roomCode).emit("wallet:updated", {
       [winnerId]: result.winnerBalance,
       [loserId]: result.loserBalance,
@@ -1262,6 +1293,7 @@ export const registerSocketHandlers = (io) => {
       gameState.equippedItems = { [player1]: p1Info, [player2]: p2Info };
       gameState.playerStats = { [player1]: p1Stats, [player2]: p2Stats };
       gameState.catchCoinBonus = {};
+      gameState.winCoinBonus = {};
 
       await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
 
@@ -1392,6 +1424,16 @@ export const registerSocketHandlers = (io) => {
         isLosing,
       });
       gameState.lastThrow = throwResult;
+
+      // yut_win_coin_pct: 윷(4)/모(5) 투척 시 스테이크 % 보너스 코인 누적
+      if (throwResult.result === 4 || throwResult.result === 5) {
+        const winCoinPct = Math.min(stats.yut_win_coin_pct ?? 0, 15);
+        if (winCoinPct > 0 && (gameState.stake ?? 0) > 0) {
+          const bonus = Math.floor(gameState.stake * winCoinPct / 100);
+          gameState.winCoinBonus = gameState.winCoinBonus ?? {};
+          gameState.winCoinBonus[userId] = (gameState.winCoinBonus[userId] ?? 0) + bonus;
+        }
+      }
 
       const isNak = throwResult.result === -1 &&
         !hasBackdoMove(gameState.players[userId].pieces);
@@ -1539,11 +1581,18 @@ export const registerSocketHandlers = (io) => {
         }
         recordCapture(gameState, capturedPieces.length);
 
-        // piece_catch_coin_bonus: accumulate per catch
+        // piece_catch_coin_bonus: 잡은 말 1개당 플랫 코인
         const catchCoinPer = Math.floor(moverStats.piece_catch_coin_bonus ?? 0);
         if (catchCoinPer > 0 && capturedPieces.length > 0) {
           gameState.catchCoinBonus = gameState.catchCoinBonus ?? {};
           gameState.catchCoinBonus[userId] = (gameState.catchCoinBonus[userId] ?? 0) + catchCoinPer * capturedPieces.length;
+        }
+
+        // yut_catch_bonus: 잡기 이벤트당 플랫 코인 (잡은 말 수 무관)
+        const catchFlatBonus = Math.floor(moverStats.yut_catch_bonus ?? 0);
+        if (catchFlatBonus > 0 && capturedPieces.length > 0) {
+          gameState.catchCoinBonus = gameState.catchCoinBonus ?? {};
+          gameState.catchCoinBonus[userId] = (gameState.catchCoinBonus[userId] ?? 0) + catchFlatBonus;
         }
       }
 
@@ -1596,9 +1645,13 @@ export const registerSocketHandlers = (io) => {
         const { rows: winnerRows } = await query(
           'SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [gameState.winner]
         );
-        const winnerCatchBonus = gameState.catchCoinBonus?.[gameState.winner] ?? 0;
+        const { rows: loserRows } = await query(
+          'SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [yutLoserId]
+        );
+        const winnerExtraBonus = (gameState.catchCoinBonus?.[gameState.winner] ?? 0)
+          + (gameState.winCoinBonus?.[gameState.winner] ?? 0);
         await Promise.all([
-          settleAndEmitWallet(io, roomCode, gameState.winner, yutLoserId, gameState.stake ?? 0, `yut:${roomCode}:${Date.now()}`, winnerRows[0]?.UserId, winnerCatchBonus),
+          settleAndEmitWallet(io, roomCode, gameState.winner, yutLoserId, gameState.stake ?? 0, `yut:${roomCode}:${Date.now()}`, winnerRows[0]?.UserId, winnerExtraBonus, loserRows[0]?.UserId),
           saveGameResult(roomCode, gameState.winner, yutLoserId, 'yut', gameState.stake ?? 0),
           grantGameXpAndMissions(gameState.winner, yutLoserId, 'yut'),
         ]);
@@ -2073,8 +2126,11 @@ export const registerSocketHandlers = (io) => {
         const { rows: unoWinnerRows } = await query(
           'SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [gameState.winner]
         );
+        const { rows: unoLoserRows } = await query(
+          'SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [unoLoserId]
+        );
         await Promise.all([
-          settleAndEmitWallet(io, roomCode, gameState.winner, unoLoserId, gameState.stake ?? 0, `uno:${roomCode}:${Date.now()}`, unoWinnerRows[0]?.UserId),
+          settleAndEmitWallet(io, roomCode, gameState.winner, unoLoserId, gameState.stake ?? 0, `uno:${roomCode}:${Date.now()}`, unoWinnerRows[0]?.UserId, 0, unoLoserRows[0]?.UserId),
           saveGameResult(roomCode, gameState.winner, unoLoserId, 'uno', gameState.stake ?? 0),
           grantGameXpAndMissions(gameState.winner, unoLoserId, 'onecard'),
         ]);
@@ -2315,6 +2371,12 @@ export const registerSocketHandlers = (io) => {
         if (luckyPct > 0 && Math.random() * 100 < luckyPct) {
           drawCount = Math.max(1, drawCount - 1);
         }
+      }
+
+      // onecard_draw_reduce: 보장된 드로우 감소 (최소 1장)
+      const drawReduce = Math.floor(myUnoStats.onecard_draw_reduce ?? 0);
+      if (drawReduce > 0 && drawCount > 1) {
+        drawCount = Math.max(1, drawCount - drawReduce);
       }
 
       const drawnCards = drawCards(gameState, drawCount);
