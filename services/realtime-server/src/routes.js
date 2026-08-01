@@ -5200,9 +5200,9 @@ router.post('/shop/buy', async (req, res) => {
           [req.auth.userId, -item.price, after, `shop:${item.id}`]
         );
         await conn.execute(
-          `INSERT INTO owned_items (user_id, item_id)
-           VALUES (?, ?)
-           ON DUPLICATE KEY UPDATE item_id = item_id`,
+          `INSERT INTO owned_items (user_id, item_id, quantity)
+           VALUES (?, ?, 1)
+           ON DUPLICATE KEY UPDATE quantity = quantity + 1`,
           [req.auth.userId, item.id]
         );
         return after;
@@ -5377,15 +5377,130 @@ router.post('/missions/:id/claim', async (req, res) => {
   }
 });
 
-// POST /api/shop/gacha — 티켓 1장 소모, 랜덤 S/SS/SSS 아이템 지급
+// POST /api/shop/gacha — v2: 카테고리별 3티어 가챠
+// Body: { game: 'yut'|'onecard', tier: 'normal'|'advanced'|'rare' }
 router.post('/shop/gacha', async (req, res) => {
   try {
-    const result = await pullGacha(req.auth.userId);
+    const { game, tier } = req.body ?? {};
+    if (!game || !['yut', 'onecard'].includes(game)) {
+      return res.status(400).json({ ok: false, reason: 'invalid_game' });
+    }
+    if (!tier || !['normal', 'advanced', 'rare'].includes(tier)) {
+      return res.status(400).json({ ok: false, reason: 'invalid_tier' });
+    }
+
+    const result = await transaction(async (conn) => {
+      // 1. 가챠 티어 설정 로드
+      const [tierRows] = await conn.execute(
+        'SELECT grade, weight, cost FROM gacha_tiers WHERE tier = ? AND game = ? ORDER BY grade',
+        [tier, game]
+      );
+      if (!tierRows.length) throw Object.assign(new Error('tier_not_found'), { status: 400 });
+
+      const cost = tierRows[0].cost;
+
+      // 2. 잔액 확인 및 차감
+      const [[wallet]] = await conn.execute(
+        'SELECT balance FROM wallets WHERE user_id = ? FOR UPDATE',
+        [req.auth.userId]
+      );
+      if (!wallet || wallet.balance < cost) {
+        throw Object.assign(new Error('insufficient_coins'), { status: 402 });
+      }
+      const newBalance = wallet.balance - cost;
+      await conn.execute('UPDATE wallets SET balance = ? WHERE user_id = ?', [newBalance, req.auth.userId]);
+      await conn.execute(
+        `INSERT INTO wallet_transactions (user_id, delta, balance_after, reason, ref_id)
+         VALUES (?, ?, ?, 'gacha_pull', ?)`,
+        [req.auth.userId, -cost, newBalance, `gacha:${game}:${tier}`]
+      );
+
+      // 3. 가중치 기반 등급 결정
+      const totalWeight = tierRows.reduce((sum, r) => sum + r.weight, 0);
+      let roll = Math.floor(Math.random() * totalWeight);
+      let selectedGrade = tierRows[tierRows.length - 1].grade;
+      for (const row of tierRows) {
+        if (roll < row.weight) { selectedGrade = row.grade; break; }
+        roll -= row.weight;
+      }
+
+      // 4. 해당 등급 + 게임 카테고리 active 아이템 중 랜덤 선택
+      const [itemRows] = await conn.execute(
+        `SELECT id, name, description, icon, slot, grade,
+                (SELECT JSON_OBJECTAGG(stat_key, stat_value) FROM item_stats WHERE item_id = shop_items.id) AS stats
+         FROM shop_items
+         WHERE game = ? AND grade = ? AND active = 1
+         ORDER BY RAND() LIMIT 1`,
+        [game, selectedGrade]
+      );
+      if (!itemRows.length) throw Object.assign(new Error('no_items_available'), { status: 500 });
+      const item = itemRows[0];
+
+      // 5. 보유 처리 (중복 시 quantity++)
+      const [[existing]] = await conn.execute(
+        'SELECT quantity FROM owned_items WHERE user_id = ? AND item_id = ?',
+        [req.auth.userId, item.id]
+      );
+      const isNew = !existing;
+      await conn.execute(
+        `INSERT INTO owned_items (user_id, item_id, quantity)
+         VALUES (?, ?, 1)
+         ON DUPLICATE KEY UPDATE quantity = quantity + 1`,
+        [req.auth.userId, item.id]
+      );
+
+      return {
+        item: { ...item, stats: item.stats ? JSON.parse(item.stats) : {} },
+        is_new: isNew,
+        new_balance: newBalance,
+        grade: selectedGrade,
+      };
+    });
+
     res.json({ ok: true, ...result });
   } catch (err) {
     const status = err.status ?? 500;
     console.error('[API] /shop/gacha POST error:', err);
     res.status(status).json({ ok: false, reason: err.message });
+  }
+});
+
+// GET /api/shop/catalog — 도감: 전체 아이템 (미공개 포함), 보유 여부 포함
+router.get('/shop/catalog', async (req, res) => {
+  try {
+    const { game } = req.query;
+    const whereGame = game && ['yut', 'onecard'].includes(game) ? 'AND si.game = ?' : '';
+    const params = game && ['yut', 'onecard'].includes(game) ? [req.auth.userId, game] : [req.auth.userId];
+
+    const { rows } = await query(
+      `SELECT si.id, si.game, si.slot, si.grade, si.name, si.description, si.icon, si.active,
+              oi.quantity,
+              (SELECT JSON_OBJECTAGG(stat_key, stat_value) FROM item_stats WHERE item_id = si.id) AS stats
+       FROM shop_items si
+       LEFT JOIN owned_items oi ON oi.item_id = si.id AND oi.user_id = ?
+       WHERE 1=1 ${whereGame}
+       ORDER BY si.game, si.slot, FIELD(si.grade,'B','A','S','SS','SSS'), si.id`,
+      params
+    );
+
+    const items = rows.map(r => ({
+      id: r.id,
+      game: r.game,
+      slot: r.slot,
+      grade: r.grade,
+      name: r.active ? r.name : '???',
+      description: r.active ? r.description : null,
+      icon: r.active ? r.icon : '❓',
+      active: !!r.active,
+      owned: (r.quantity ?? 0) > 0,
+      quantity: r.quantity ?? 0,
+      stats: r.active && r.stats ? JSON.parse(r.stats) : null,
+    }));
+
+    res.json({ ok: true, items });
+  } catch (err) {
+    console.error('[API] /shop/catalog GET error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
   }
 });
 
