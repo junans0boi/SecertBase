@@ -5176,6 +5176,17 @@ router.post('/shop/buy', async (req, res) => {
       return res.status(400).json({ ok: false, reason: 'gacha_only' });
     }
 
+    // 장착 아이템의 shop_discount_pct 적용 (최대 20%)
+    const { rows: statRows } = await query(
+      `SELECT SUM(ist.stat_value) AS discount
+       FROM equipped_items ei
+       JOIN item_stats ist ON ist.item_id = ei.item_id
+       WHERE ei.user_id = ? AND ist.stat_key = 'shop_discount_pct'`,
+      [req.auth.userId]
+    );
+    const discountPct = Math.min(statRows[0]?.discount ?? 0, 20);
+    const finalPrice = Math.floor(item.price * (1 - discountPct / 100));
+
     // Spend coins atomically (debit from buyer; skin ownership is per-user)
     let newBalance;
     try {
@@ -5184,12 +5195,12 @@ router.post('/shop/buy', async (req, res) => {
           'SELECT balance FROM wallets WHERE user_id = ? FOR UPDATE',
           [req.auth.userId]
         );
-        if (!wallet || wallet.balance < item.price) {
+        if (!wallet || wallet.balance < finalPrice) {
           const err = new Error('insufficient_coins');
           err.code = 'INSUFFICIENT_COINS';
           throw err;
         }
-        const after = wallet.balance - item.price;
+        const after = wallet.balance - finalPrice;
         await conn.execute(
           'UPDATE wallets SET balance = ? WHERE user_id = ?',
           [after, req.auth.userId]
@@ -5197,7 +5208,7 @@ router.post('/shop/buy', async (req, res) => {
         await conn.execute(
           `INSERT INTO wallet_transactions (user_id, delta, balance_after, reason, ref_id)
            VALUES (?, ?, ?, 'shop_purchase', ?)`,
-          [req.auth.userId, -item.price, after, `shop:${item.id}`]
+          [req.auth.userId, -finalPrice, after, `shop:${item.id}`]
         );
         await conn.execute(
           `INSERT INTO owned_items (user_id, item_id, quantity)
@@ -5217,7 +5228,7 @@ router.post('/shop/buy', async (req, res) => {
     // fire-and-forget mission progress
     updateMissionProgress(req.auth.userId, 'item_buy').catch(() => {});
 
-    res.json({ ok: true, new_balance: newBalance });
+    res.json({ ok: true, new_balance: newBalance, paid: finalPrice, discount_pct: discountPct });
   } catch (err) {
     console.error('[API] /shop/buy POST error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });

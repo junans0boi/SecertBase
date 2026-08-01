@@ -164,6 +164,51 @@ class _YutScreenState extends State<YutScreen> {
     });
   }
 
+  void _showItemPopup(BuildContext ctx, Map<String, dynamic> slotInfo) {
+    final name = slotInfo['name'] as String? ?? '?';
+    final icon = slotInfo['icon'] as String? ?? '🎁';
+    final grade = slotInfo['grade'] as String? ?? 'B';
+    final stats = (slotInfo['stats'] as Map?)?.cast<String, dynamic>() ?? {};
+    final firstStat = stats.entries.firstOrNull;
+
+    showModalBottomSheet<void>(
+      context: ctx,
+      builder: (_) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('$icon $name', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 6),
+            _GradeBadge(grade: grade),
+            if (firstStat != null) ...[
+              const SizedBox(height: 8),
+              Text('${_statLabel(firstStat.key)}: ${firstStat.value}',
+                  style: const TextStyle(fontSize: 13, color: Colors.grey)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _statLabel(String key) {
+    const labels = {
+      'yut_control_pct': '윷 컨트롤 +%',
+      'yut_mo_rate_pct': '모 확률 +%',
+      'yut_backdo_shield_pct': '백도 방어 %',
+      'yut_win_coin_pct': '윷/모 추가 코인 %',
+      'yut_overturn_pct': '역전 확률 +%',
+      'piece_catch_resist_pct': '잡힘 방어 %',
+      'piece_catch_coin_bonus': '잡기 추가 코인',
+      'piece_safe_zone_pct': '안전 착지 %',
+      'piece_group_pct': '그룹 유지 %',
+      'coin_bonus_pct': '코인 보너스 +%',
+      'shop_discount_pct': '상점 할인 %',
+    };
+    return labels[key] ?? key;
+  }
+
   @override
   Widget build(BuildContext context) {
     final sock = _socket;
@@ -172,6 +217,8 @@ class _YutScreenState extends State<YutScreen> {
     final p2 = sock.yutPlayers.length > 1 ? sock.yutPlayers[1] : '';
     final p1Pieces = sock.yutPieceDetails[p1] ?? sock.yutPieces[p1];
     final p2Pieces = sock.yutPieceDetails[p2] ?? sock.yutPieces[p2];
+    final opponentCode = (currentUser == p1) ? p2 : p1;
+    final opponentItems = sock.yutEquippedItems[opponentCode] ?? {};
 
     return GameScaffold(
       title: '🀄 윷놀이',
@@ -232,8 +279,66 @@ class _YutScreenState extends State<YutScreen> {
               top: 12,
               child: _StatusStrip(sock: sock),
             ),
+            // 상대방 장착 아이템 배지 (우상단)
+            if (opponentItems.isNotEmpty)
+              Positioned(
+                right: 14,
+                top: 52,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final slot in ['yut_yut', 'yut_piece'])
+                      if (opponentItems[slot] != null)
+                        GestureDetector(
+                          onTap: () => _showItemPopup(context, opponentItems[slot]!),
+                          child: Padding(
+                            padding: const EdgeInsets.only(left: 4),
+                            child: _GradeBadge(
+                              grade: opponentItems[slot]!['grade'] as String? ?? 'B',
+                              icon: opponentItems[slot]!['icon'] as String? ?? '🎁',
+                            ),
+                          ),
+                        ),
+                  ],
+                ),
+              ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _GradeBadge extends StatelessWidget {
+  final String grade;
+  final String? icon;
+  const _GradeBadge({required this.grade, this.icon});
+
+  static Color _color(String g) => switch (g) {
+    'SSS' => const Color(0xFFFF7043),
+    'SS'  => const Color(0xFFAB47BC),
+    'S'   => const Color(0xFF42A5F5),
+    'A'   => const Color(0xFF66BB6A),
+    _     => const Color(0xFF9E9E9E),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _color(grade);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.18),
+        border: Border.all(color: c, width: 1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) Text(icon!, style: const TextStyle(fontSize: 11)),
+          const SizedBox(width: 2),
+          Text(grade, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: c)),
+        ],
       ),
     );
   }

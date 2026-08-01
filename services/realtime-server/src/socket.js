@@ -3,7 +3,7 @@ import { config } from "./config.js";
 import { installSocketAuthentication, installSocketFeatureGate } from "./backend-access.js";
 import { query } from "./db.js";
 import { redis } from "./redis.js";
-import { transferGameReward, getBalance, getEquippedStats } from "./wallet-engine.js";
+import { transferGameReward, getBalance, getEquippedStats, getEquippedItemsInfo } from "./wallet-engine.js";
 import { grantXp, updateMissionProgress } from "./level-engine.js";
 import {
   throwYut,
@@ -239,10 +239,16 @@ async function grantGameXpAndMissions(winnerCode, loserCode, game) {
 }
 
 // 게임 종료 후 지갑 정산 + wallet:updated 브로드캐스트
-async function settleAndEmitWallet(io, roomCode, winnerId, loserId, stake, gameRef) {
+// winnerNumericId: numeric UserId (for stat lookup); winnerId/loserId: UserCode
+async function settleAndEmitWallet(io, roomCode, winnerId, loserId, stake, gameRef, winnerNumericId = null) {
   if (!stake || stake <= 0) return;
   try {
-    const result = await transferGameReward(winnerId, loserId, stake, gameRef);
+    let winnerBonusPct = 0;
+    if (winnerNumericId) {
+      const stats = await getEquippedStats(winnerNumericId);
+      winnerBonusPct = stats.coin_bonus_pct ?? 0;
+    }
+    const result = await transferGameReward(winnerId, loserId, stake, gameRef, { winnerBonusPct });
     io.to(roomCode).emit("wallet:updated", {
       [winnerId]: result.winnerBalance,
       [loserId]: result.loserBalance,
@@ -1243,6 +1249,16 @@ export const registerSocketHandlers = (io) => {
       gameState.characters = parsed.data.characters ?? {};
       gameState.bgm = parsed.data.bgm ?? null;
       gameState.stake = parsed.data.stake ?? 0;
+
+      // 양 플레이어의 장착 아이템 정보 포함 (상대방 표시용)
+      const { rows: p1Rows } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [player1]);
+      const { rows: p2Rows } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [player2]);
+      const [p1Info, p2Info] = await Promise.all([
+        p1Rows[0]?.UserId ? getEquippedItemsInfo(p1Rows[0].UserId) : {},
+        p2Rows[0]?.UserId ? getEquippedItemsInfo(p2Rows[0].UserId) : {},
+      ]);
+      gameState.equippedItems = { [player1]: p1Info, [player2]: p2Info };
+
       await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
 
       emitYutState(io, roomCode, "game:yut:started", gameState);
@@ -1356,7 +1372,22 @@ export const registerSocketHandlers = (io) => {
       );
       const numericUserId = numericRows[0]?.UserId;
       const stats = numericUserId ? await getEquippedStats(numericUserId) : {};
-      const throwResult = throwYut({ yutControlPct: stats.yut_control_pct ?? 0 });
+
+      // 지고 있는지 판단 (상대보다 골인 말이 적으면 losing)
+      const opponentCode = gameState.playersOrder.find((p) => p !== userId);
+      const myFinished = gameState.players[userId]?.pieces.filter((p) => p.finished).length ?? 0;
+      const oppFinished = opponentCode
+        ? (gameState.players[opponentCode]?.pieces.filter((p) => p.finished).length ?? 0)
+        : 0;
+      const isLosing = myFinished < oppFinished;
+
+      const throwResult = throwYut({
+        yutControlPct: stats.yut_control_pct ?? 0,
+        yutMoRatePct: stats.yut_mo_rate_pct ?? 0,
+        yutBackdoShieldPct: stats.yut_backdo_shield_pct ?? 0,
+        yutOverturnPct: stats.yut_overturn_pct ?? 0,
+        isLosing,
+      });
       gameState.lastThrow = throwResult;
 
       const isNak = throwResult.result === -1 &&
@@ -1509,8 +1540,11 @@ export const registerSocketHandlers = (io) => {
         const yutLoserId = gameState.playersOrder.find(p => p !== gameState.winner);
         io.to(roomCode).emit("game:yut:ended", { winner: gameState.winner });
         await redis.del(yutGameKey(roomCode));
+        const { rows: winnerRows } = await query(
+          'SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [gameState.winner]
+        );
         await Promise.all([
-          settleAndEmitWallet(io, roomCode, gameState.winner, yutLoserId, gameState.stake ?? 0, `yut:${roomCode}:${Date.now()}`),
+          settleAndEmitWallet(io, roomCode, gameState.winner, yutLoserId, gameState.stake ?? 0, `yut:${roomCode}:${Date.now()}`, winnerRows[0]?.UserId),
           saveGameResult(roomCode, gameState.winner, yutLoserId, 'yut', gameState.stake ?? 0),
           grantGameXpAndMissions(gameState.winner, yutLoserId, 'yut'),
         ]);

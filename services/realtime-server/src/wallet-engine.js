@@ -109,3 +109,26 @@ export async function getEquippedStats(userId) {
   }
   return stats;
 }
+
+// 유저의 장착 아이템 정보 (슬롯별 이름/아이콘/등급) — 상대방 표시용
+export async function getEquippedItemsInfo(userId) {
+  const { rows } = await query(
+    `SELECT ei.slot, si.name, si.icon, si.grade,
+            (SELECT JSON_OBJECTAGG(stat_key, stat_value)
+             FROM item_stats WHERE item_id = si.id) AS stats
+     FROM equipped_items ei
+     JOIN shop_items si ON si.id = ei.item_id
+     WHERE ei.user_id = ?`,
+    [userId]
+  );
+  const info = {};
+  for (const row of rows) {
+    info[row.slot] = {
+      name: row.name,
+      icon: row.icon,
+      grade: row.grade,
+      stats: row.stats ? JSON.parse(row.stats) : {},
+    };
+  }
+  return info;
+}

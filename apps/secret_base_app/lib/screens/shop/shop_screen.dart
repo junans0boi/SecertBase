@@ -201,27 +201,6 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
     }
   }
 
-  Future<void> _equip(Map<String, dynamic> item) async {
-    try {
-      final token = _auth.token;
-      final base = _socket.serverUrl ?? '';
-      final res = await http.post(
-        Uri.parse('$base/api/shop/equip'),
-        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
-        body: jsonEncode({'item_id': item['id']}),
-      );
-      final body = jsonDecode(res.body) as Map;
-      if (body['ok'] == true) {
-        _showSnack('${item['name']} 장착 완료 ✅');
-        await _load();
-      } else {
-        _showSnack('장착 실패');
-      }
-    } catch (e) {
-      _showSnack('오류: $e');
-    }
-  }
-
   Future<void> _issueCoupon() async {
     String title = '';
     String desc = '';
@@ -509,51 +488,6 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
         ],
       ),
     );
-  }
-
-  Future<void> _startGacha() async {
-    if (_tickets <= 0) {
-      _showSnack('가챠 티켓이 없어요 🎫  미션을 완료해서 획득해보세요!');
-      return;
-    }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: kSurface,
-        title: const Text('가챠 뽑기', style: TextStyle(color: Colors.white)),
-        content: Text('티켓 1장을 사용해 S/SS/SSS 등급 아이템을 뽑습니다.\n남은 티켓: $_tickets장', style: TextStyle(color: kMainMuted)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: kMainLilac),
-            child: const Text('뽑기!', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    try {
-      final token = _auth.token;
-      final base = _socket.serverUrl ?? '';
-      final res = await http.post(
-        Uri.parse('$base/api/shop/gacha'),
-        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
-      );
-      final body = jsonDecode(res.body) as Map;
-      if (body['ok'] == true && mounted) {
-        final item = body['item'] as Map<String, dynamic>;
-        await Navigator.of(
-          context,
-        ).push(PageRouteBuilder(opaque: false, pageBuilder: (_, a, b) => _GachaOverlay(item: item)));
-        _load();
-      } else {
-        _showSnack(body['reason'] == 'No gacha tickets' ? '티켓이 없어요' : '오류: ${body['reason']}');
-      }
-    } catch (e) {
-      _showSnack('오류: $e');
-    }
   }
 
   Future<void> _claimMission(int missionId) async {

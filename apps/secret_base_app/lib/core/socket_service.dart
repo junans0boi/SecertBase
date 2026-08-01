@@ -112,6 +112,8 @@ class SocketService extends ChangeNotifier {
   int yutLastCarriedCount = 0;
   int yutLastStackedCount = 0;
   int? yutOrderCountdownUntil;
+  // 플레이어별 장착 아이템 정보 {userCode: {slot: {name,icon,grade,stats}}}
+  Map<String, Map<String, dynamic>> yutEquippedItems = {};
   List<dynamic> yutPendingMoves = [];
   bool yutHasBonusThrow = false;
   Map<String, dynamic> yutStartRolls = {};
@@ -1641,6 +1643,12 @@ class SocketService extends ChangeNotifier {
     yutPhase = map['phase'] as String? ?? yutPhase ?? 'throwing';
     yutCurrentTurn = map['currentTurn'] as String?;
     yutCharacters = _stringMap(map['characters']);
+    final equippedRaw = map['equippedItems'];
+    if (equippedRaw is Map) {
+      yutEquippedItems = equippedRaw.map(
+        (k, v) => MapEntry('$k', v is Map ? Map<String, dynamic>.from(v) : {}),
+      );
+    }
     yutHasBonusThrow = map['hasBonusThrow'] == true;
     yutBgm = map['bgm'] as String? ?? yutBgm;
     yutOrderCountdownUntil = (map['orderCountdownUntil'] as num?)?.toInt();

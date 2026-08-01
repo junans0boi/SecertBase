@@ -46,14 +46,27 @@ export const GOAL_POSITION = 20;
  * if the result is 3-flat (close to 윷) or 1-flat (close to 모), the pct is used
  * as a threshold to upgrade the result to 윷 or 모 respectively.
  */
-export function throwYut({ yutControlPct = 0 } = {}) {
+export function throwYut({
+  yutControlPct = 0,
+  yutMoRatePct = 0,
+  yutBackdoShieldPct = 0,
+  yutOverturnPct = 0,
+  isLosing = false,
+} = {}) {
   const sticks = Array.from({ length: 4 }, () => Math.random() < 0.5 ? 0 : 1);
   let flatCount = sticks.filter((s) => s === 0).length;
 
-  if (yutControlPct > 0) {
-    const threshold = Math.min(yutControlPct, 15) / 100;
+  // 1. yutControlPct: 걸→윷 or 도→모 upgrade
+  const controlPct = yutControlPct + (isLosing ? Math.min(yutOverturnPct, 10) : 0);
+  if (controlPct > 0) {
+    const threshold = Math.min(controlPct, 20) / 100;
     if (flatCount === 3 && Math.random() < threshold) flatCount = 4; // 걸 → 윷
     else if (flatCount === 1 && Math.random() < threshold) flatCount = 0; // 도 → 모
+  }
+
+  // 2. yutMoRatePct: 윷→모 추가 업그레이드 (최대 8%)
+  if (yutMoRatePct > 0 && flatCount === 4) {
+    if (Math.random() < Math.min(yutMoRatePct, 8) / 100) flatCount = 0; // 윷 → 모
   }
 
   let result;
@@ -63,7 +76,13 @@ export function throwYut({ yutControlPct = 0 } = {}) {
   else if (flatCount === 3) result = YUT_RESULTS.GEOL;
   else result = YUT_RESULTS.YUT;
 
-  // 윷 or 모 gets bonus throw
+  // 3. yutBackdoShieldPct: 백도 → 도 변환 (최대 50%)
+  if (result === YUT_RESULTS.BACKDO && yutBackdoShieldPct > 0) {
+    if (Math.random() < Math.min(yutBackdoShieldPct, 50) / 100) {
+      result = YUT_RESULTS.DO;
+    }
+  }
+
   const bonusThrow = result === YUT_RESULTS.YUT || result === YUT_RESULTS.MO;
 
   return {
