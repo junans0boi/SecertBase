@@ -5076,7 +5076,9 @@ router.get('/shop/owned', async (req, res) => {
   try {
     const { rows: owned } = await query(
       `SELECT oi.item_id, oi.quantity, si.name, si.category, si.game, si.slot, si.grade, si.icon,
-              ei.slot IS NOT NULL AS is_equipped
+              ei.slot IS NOT NULL AS is_equipped,
+              (SELECT JSON_OBJECTAGG(ist2.stat_key, ist2.stat_value)
+               FROM item_stats ist2 WHERE ist2.item_id = si.id) AS stats
        FROM owned_items oi
        JOIN shop_items si ON si.id = oi.item_id
        LEFT JOIN equipped_items ei ON ei.item_id = oi.item_id AND ei.user_id = ?
@@ -5112,10 +5114,11 @@ router.get('/shop/equipped', async (req, res) => {
     const aggregatedStats = {};
     for (const row of equipped) {
       if (!slotsMap[row.slot]) {
-        slotsMap[row.slot] = { item_id: row.item_id, name: row.name, icon: row.icon, grade: row.grade };
+        slotsMap[row.slot] = { item_id: row.item_id, name: row.name, icon: row.icon, grade: row.grade, stats: {} };
       }
       if (row.stat_key) {
         const val = Number(row.stat_value);
+        slotsMap[row.slot].stats[row.stat_key] = (slotsMap[row.slot].stats[row.stat_key] ?? 0) + val;
         aggregatedStats[row.stat_key] = (aggregatedStats[row.stat_key] ?? 0) + val;
       }
     }
@@ -5155,6 +5158,22 @@ router.post('/shop/equip', async (req, res) => {
     res.json({ ok: true, slot, item_id });
   } catch (err) {
     console.error('[API] /shop/equip POST error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+// POST /api/shop/unequip — 슬롯 장착 해제 (기본 아이템으로 되돌리기)
+router.post('/shop/unequip', async (req, res) => {
+  try {
+    const { slot } = req.body ?? {};
+    if (!slot) return res.status(400).json({ ok: false, reason: 'missing_slot' });
+    await query(
+      'DELETE FROM equipped_items WHERE user_id = ? AND slot = ?',
+      [req.auth.userId, slot]
+    );
+    res.json({ ok: true, slot });
+  } catch (err) {
+    console.error('[API] /shop/unequip POST error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
   }
 });
@@ -5453,12 +5472,12 @@ router.post('/shop/gacha', async (req, res) => {
         roll -= row.weight;
       }
 
-      // 4. 해당 등급 + 게임 카테고리 active 아이템 중 랜덤 선택
+      // 4. 해당 등급 + 게임 카테고리 아이템 중 랜덤 선택 (active 무관 — 가챠 전용 아이템 포함)
       const [itemRows] = await conn.execute(
         `SELECT id, name, description, icon, slot, grade,
                 (SELECT JSON_OBJECTAGG(stat_key, stat_value) FROM item_stats WHERE item_id = shop_items.id) AS stats
          FROM shop_items
-         WHERE game = ? AND grade = ? AND active = 1
+         WHERE game = ? AND grade = ?
          ORDER BY RAND() LIMIT 1`,
         [game, selectedGrade]
       );

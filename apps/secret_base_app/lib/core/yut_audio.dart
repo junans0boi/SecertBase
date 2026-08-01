@@ -21,16 +21,9 @@ class YutAudio {
   Future<void> playCharacterSelect(String character) =>
       _play('${character}01.mp3');
 
-  Future<void> playGameStart({
-    required String? bgm,
-    required List<String> characters,
-  }) async {
+  Future<void> playGameStart({required String? bgm}) async {
     if (bgm != null) {
       await playBackground(bgm);
-    }
-    for (final character in characters) {
-      await _play('${character}01.mp3');
-      await Future<void>.delayed(const Duration(milliseconds: 380));
     }
   }
 

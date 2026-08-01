@@ -44,22 +44,53 @@ class _UnoScreenState extends State<UnoScreen> {
         final slots = body['slots'] as Map? ?? {};
         final cardback = slots['onecard_cardback'];
         if (cardback != null && mounted) {
-          final skinName = (cardback['name'] as String? ?? '').toLowerCase();
-          final skin = _nameToSkin(skinName);
-          setState(() => _cardBackSkin = skin);
+          final icon = cardback['icon'] as String? ?? '';
+          final grade = cardback['grade'] as String? ?? 'B';
+          setState(() => _cardBackSkin = _iconToCardBackSkin(icon, grade));
         }
       }
     } catch (_) {}
   }
 
-  String _nameToSkin(String name) {
-    if (name.contains('벚꽃') || name.contains('cherry')) return 'cherry_blossom';
-    if (name.contains('우주') || name.contains('space')) return 'space';
-    if (name.contains('하트') || name.contains('heart')) return 'heart';
-    if (name.contains('황금') || name.contains('gold')) return 'gold';
-    if (name.contains('무지개') || name.contains('rainbow')) return 'rainbow';
-    if (name.contains('커플') || name.contains('couple')) return 'couple_card';
-    return 'base';
+  String _iconToCardBackSkin(String icon, String grade) {
+    return switch (icon) {
+      '🌫️' => 'fog',
+      '🌅' || '🌇' => 'sunset',
+      '💧' || '💦' => 'water',
+      '🌙' => 'night',
+      '🍁' => 'autumn',
+      '🌌' => 'aurora',
+      '✨' => 'firefly',
+      '⭐' => 'stardust',
+      '🎆' => 'fireworks',
+      '♾️' => 'eternity',
+      '🎴' => 'fate',
+      '💑' => 'couple_card',
+      // 구 아이템 호환
+      '🌸' || '🌺' => 'cherry_blossom',
+      '❤️' || '💕' => 'heart',
+      '🌈' => 'rainbow',
+      _ => switch (grade) {
+        'SSS' => 'rainbow',
+        'SS' => 'eternity',
+        'S' => 'aurora',
+        'A' => 'stardust',
+        _ => 'base',
+      },
+    };
+  }
+
+  String _opponentCardBackSkin() {
+    final sock = _socket;
+    final myId = sock.userId;
+    final players = sock.unoPlayers;
+    final opponentId = players.firstWhere((p) => p != myId, orElse: () => '');
+    if (opponentId.isEmpty) return 'base';
+    final opItems = sock.unoEquippedItems[opponentId] ?? {};
+    final cb = opItems['onecard_cardback'] as Map? ?? {};
+    final icon = cb['icon'] as String? ?? '';
+    final grade = cb['grade'] as String? ?? 'B';
+    return _iconToCardBackSkin(icon, grade);
   }
 
   @override
@@ -161,6 +192,7 @@ class _UnoScreenState extends State<UnoScreen> {
                       topInset: topInset,
                       opponentName: opponentName,
                       cardBackSkin: _cardBackSkin,
+                      opponentCardBackSkin: _opponentCardBackSkin(),
                     ),
                   ),
                   if (sock.unoActive)

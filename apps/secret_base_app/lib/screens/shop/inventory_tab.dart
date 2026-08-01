@@ -35,7 +35,7 @@ const statLabels = {
   'onecard_draw_reduce': '🃏 +카드 1장 감소',
   // 윷 전용
   'yut_mo_rate_pct': '🎲 모(5칸) 확률 +%',
-  'yut_backdo_shield_pct': '🛡️ 뒤도 → 도 변환 확률 %',
+  'yut_backdo_bonus_pct': '🎲 유리한 백도 추가 던지기 %',
   'yut_win_coin_pct': '💰 윷/모 시 추가 코인',
   'yut_overturn_pct': '🔄 역전 시 윷/모 확률 +%',
   // 말 전용
@@ -66,6 +66,8 @@ class _InventoryTabState extends State<InventoryTab> {
 
   List<Map<String, dynamic>> _owned = [];
   Set<int> _equippedIds = {};
+  Map<String, dynamic> _equippedBySlot =
+      {}; // slot → {item_id, name, icon, grade, stats:{}}
   int _balance = 0;
   bool _loading = true;
   String? _filterGame; // 인벤토리 필터 (null=전체)
@@ -113,6 +115,7 @@ class _InventoryTabState extends State<InventoryTab> {
         _equippedIds = slots.values
             .map((v) => ((v as Map)['item_id'] as num).toInt())
             .toSet();
+        _equippedBySlot = Map<String, dynamic>.from(slots);
         _balance = (walletData['balance'] as num?)?.toInt() ?? _balance;
         _loading = false;
       });
@@ -144,110 +147,366 @@ class _InventoryTabState extends State<InventoryTab> {
     }
   }
 
-  Future<void> _gacha(String game, String tier) async {
-    final cost = switch (tier) {
-      'normal' => 3000,
-      'advanced' => 45000,
-      'rare' => 100000,
-      _ => 0,
-    };
-    final tierName = switch (tier) {
-      'normal' => '랜덤 뽑기',
-      'advanced' => '고급 뽑기',
-      'rare' => '레어 뽑기',
-      _ => '뽑기',
-    };
-    final gameName = game == 'yut' ? '윷놀이' : '원카드';
-
-    if (_balance < cost) {
-      _showSnack('코인이 부족해요 (필요: ${_formatCoins(cost)}금)');
-      return;
-    }
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: kSurface,
-        title: Text(
-          '$gameName $tierName',
-          style: const TextStyle(color: Colors.white),
-        ),
-        content: Text(
-          '${_formatCoins(cost)}금을 소모해 $gameName 아이템을 뽑습니다.',
-          style: TextStyle(color: kMainMuted),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('취소'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: _tierColor(tier)),
-            child: Text('뽑기!', style: const TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
+  Future<void> _unequip(String slot) async {
     try {
       final base = _socket.serverUrl ?? '';
       final res = await http.post(
-        Uri.parse('$base/api/shop/gacha'),
+        Uri.parse('$base/api/shop/unequip'),
         headers: {
           'Authorization': 'Bearer ${_auth.token}',
           'Content-Type': 'application/json',
         },
-        body: jsonEncode({'game': game, 'tier': tier}),
+        body: jsonEncode({'slot': slot}),
       );
       final body = jsonDecode(res.body) as Map;
-      if (!mounted) return;
-      if (body['ok'] == true) {
-        final item = body['item'] as Map<String, dynamic>;
-        final grade = item['grade'] as String? ?? 'B';
-        final isNew = body['is_new'] as bool? ?? true;
-        final newBalance = (body['new_balance'] as num?)?.toInt() ?? _balance;
-        setState(() => _balance = newBalance);
-        widget.onBalanceChanged();
-
-        if (['S', 'SS', 'SSS'].contains(grade)) {
-          await _showGachaAnimation(item, isNew);
-        } else {
-          await _showGachaResult(item, isNew);
-        }
+      if (body['ok'] == true && mounted) {
+        _showSnack('기본 아이템으로 변경됨');
         await _load();
-      } else {
-        final reason = body['reason'] as String? ?? '';
-        _showSnack(
-          reason == 'insufficient_coins' ? '코인이 부족해요' : '뽑기 실패: $reason',
-        );
       }
     } catch (_) {
       _showSnack('오류가 발생했어요');
     }
   }
 
-  Future<void> _showGachaResult(Map<String, dynamic> item, bool isNew) async {
-    if (!mounted) return;
+  static const _defaultItems = <Map<String, dynamic>>[
+    {
+      'item_id': 0,
+      'name': '기본 윷',
+      'slot': 'yut_yut',
+      'game': 'yut',
+      'grade': 'B',
+      'icon': '🎲',
+      'stats': <String, dynamic>{},
+    },
+    {
+      'item_id': 0,
+      'name': '기본 말',
+      'slot': 'yut_piece',
+      'game': 'yut',
+      'grade': 'B',
+      'icon': '⬛',
+      'stats': <String, dynamic>{},
+    },
+    {
+      'item_id': 0,
+      'name': '기본 카드',
+      'slot': 'onecard_cardback',
+      'game': 'onecard',
+      'grade': 'B',
+      'icon': '🃏',
+      'stats': <String, dynamic>{},
+    },
+  ];
+
+  static const _statMaxValues = {
+    'coin_bonus_pct': 20,
+    'shop_discount_pct': 20,
+    'daily_bonus_add': 500,
+    'lose_refund_pct': 20,
+    'yut_control_pct': 25,
+    'yut_catch_bonus': 300,
+    'gacha_rate_up': 20,
+    'win_streak_bonus': 400,
+    'yut_mo_rate_pct': 22,
+    'yut_backdo_bonus_pct': 25,
+    'yut_win_coin_pct': 18,
+    'yut_overturn_pct': 20,
+    'piece_catch_resist_pct': 25,
+    'piece_catch_coin_bonus': 25,
+    'piece_safe_zone_pct': 25,
+    'piece_group_pct': 22,
+    'card_shield_pct': 25,
+    'card_lucky_draw_pct': 25,
+    'card_uno_protect_pct': 22,
+    'card_reverse_bonus': 22,
+    'onecard_draw_reduce': 2,
+  };
+
+  void _showItemDetail(Map<String, dynamic> item) {
     final grade = item['grade'] as String? ?? 'B';
-    await showDialog(
+    final gc = gradeColor(grade);
+    final slot = item['slot'] as String? ?? '';
+    final id = (item['item_id'] as num).toInt();
+    final equipped = _equippedIds.contains(id);
+
+    // 이 아이템의 스탯
+    Map<String, dynamic> itemStats = {};
+    final rawStats = item['stats'];
+    if (rawStats is String && rawStats.isNotEmpty && rawStats != 'null') {
+      try {
+        itemStats = Map<String, dynamic>.from(jsonDecode(rawStats) as Map);
+      } catch (_) {}
+    } else if (rawStats is Map) {
+      itemStats = Map<String, dynamic>.from(rawStats);
+    }
+
+    // 같은 슬롯에 장착된 다른 아이템의 스탯
+    Map<String, dynamic> equippedStats = {};
+    final equippedInSlot = _equippedBySlot[slot] as Map?;
+    if (equippedInSlot != null &&
+        (equippedInSlot['item_id'] as num?)?.toInt() != id) {
+      final es = equippedInSlot['stats'] as Map?;
+      if (es != null) equippedStats = Map<String, dynamic>.from(es);
+    }
+
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) =>
-          _GachaResultDialog(item: item, grade: grade, isNew: isNew),
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        builder: (_, ctrl) => Container(
+          decoration: const BoxDecoration(
+            color: kSurface,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: ListView(
+            controller: ctrl,
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+            children: [
+              // 핸들바
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: kMainLine,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              // 헤더
+              Row(
+                children: [
+                  Text(
+                    item['icon'] as String? ?? '🎁',
+                    style: const TextStyle(fontSize: 44),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item['name'] as String? ?? '',
+                          style: mainTitle(size: 17),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: gc.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                              child: Text(
+                                grade,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  color: gc,
+                                ),
+                              ),
+                            ),
+                            if (equipped) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: kMainSage.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(5),
+                                ),
+                                child: Text(
+                                  '장착 중',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: kMainSage,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (!equipped)
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _equip(item);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: kMainHoney,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
+                      ),
+                      child: const Text(
+                        '장착',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              if (itemStats.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                if (equippedStats.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 10,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: gc,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '이 아이템',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: gc,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Container(
+                          width: 10,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: kMainMuted.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '장착 중',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: kMainMuted,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                for (final entry in itemStats.entries) ...[
+                  _buildStatBar(
+                    key: entry.key,
+                    value: (entry.value as num).toDouble(),
+                    compareValue: equippedStats[entry.key] != null
+                        ? (equippedStats[entry.key] as num).toDouble()
+                        : null,
+                    gc: gc,
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ] else ...[
+                const SizedBox(height: 12),
+                Text('스탯 정보 없음', style: mainBody(size: 12, color: kMainMuted)),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 
-  Future<void> _showGachaAnimation(
-    Map<String, dynamic> item,
-    bool isNew,
-  ) async {
-    if (!mounted) return;
-    await Navigator.of(context).push(
-      PageRouteBuilder(
-        opaque: false,
-        pageBuilder: (_, a, b) => _GachaAnimOverlay(item: item, isNew: isNew),
-      ),
+  Widget _buildStatBar({
+    required String key,
+    required double value,
+    double? compareValue,
+    required Color gc,
+  }) {
+    final maxV = (_statMaxValues[key] ?? value).toDouble();
+    final fraction = maxV > 0 ? (value / maxV).clamp(0.0, 1.0) : 0.0;
+    final cFraction = compareValue != null && maxV > 0
+        ? (compareValue / maxV).clamp(0.0, 1.0)
+        : null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                statLabels[key] ?? key,
+                style: const TextStyle(fontSize: 12, color: Colors.white70),
+              ),
+            ),
+            Text(
+              '+${value.toInt()}',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: gc,
+              ),
+            ),
+            if (compareValue != null) ...[
+              Text(
+                ' vs +${compareValue.toInt()}',
+                style: TextStyle(fontSize: 10, color: kMainMuted),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 4),
+        LayoutBuilder(
+          builder: (_, constraints) {
+            final w = constraints.maxWidth;
+            return Stack(
+              children: [
+                Container(
+                  height: 8,
+                  width: w,
+                  decoration: BoxDecoration(
+                    color: Colors.white10,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                if (cFraction != null)
+                  Container(
+                    height: 8,
+                    width: w * cFraction,
+                    decoration: BoxDecoration(
+                      color: kMainMuted.withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                Container(
+                  height: 8,
+                  width: w * fraction,
+                  decoration: BoxDecoration(
+                    color: gc,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ],
     );
   }
 
@@ -287,22 +546,36 @@ class _InventoryTabState extends State<InventoryTab> {
       ? '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}K'
       : '$n';
 
-  Color _tierColor(String tier) => switch (tier) {
-    'normal' => kMainSage,
-    'advanced' => kMainSky,
-    'rare' => kMainLilac,
-    _ => kMainMuted,
-  };
-
   // ── Build ────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
 
-    final filtered = _filterGame == null
+    final filteredOwned = _filterGame == null
         ? _owned
         : _owned.where((i) => i['game'] == _filterGame).toList();
+
+    // 기본 아이템: 필터 일치 + 맨 앞에 배치
+    final filteredDefaults = _defaultItems
+        .where((d) {
+          if (_filterGame == null) return true;
+          return d['game'] == _filterGame;
+        })
+        .map((d) {
+          final slot = d['slot'] as String;
+          final slotEquipped = _equippedBySlot[slot];
+          // 해당 슬롯에 다른 아이템이 장착돼 있지 않으면 기본이 장착 중
+          final isDefaultEquipped = slotEquipped == null;
+          return <String, dynamic>{
+            ...d,
+            '_isDefault': true,
+            '_defaultEquipped': isDefaultEquipped,
+          };
+        })
+        .toList();
+
+    final allItems = [...filteredDefaults, ...filteredOwned];
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -379,97 +652,48 @@ class _InventoryTabState extends State<InventoryTab> {
           ),
           const SizedBox(height: 16),
 
-          // 보유 아이템
-          if (filtered.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 32),
-              child: Column(
-                children: [
-                  const Text('🎒', style: TextStyle(fontSize: 40)),
-                  const SizedBox(height: 8),
-                  Text('보유한 아이템이 없어요', style: TextStyle(color: kMainMuted)),
-                  const SizedBox(height: 4),
-                  Text(
-                    '상점에서 구매하거나 뽑기로 획득해보세요',
-                    style: TextStyle(fontSize: 12, color: kMainMuted),
-                  ),
-                ],
-              ),
-            )
-          else ...[
-            Text(
-              '보유 아이템 (${filtered.length}개)',
-              style: mainBody(size: 13, weight: FontWeight.w700),
+          // 보유 아이템 (기본 포함)
+          Text(
+            '아이템 (${filteredOwned.length}개 보유)',
+            style: mainBody(size: 13, weight: FontWeight.w700),
+          ),
+          const SizedBox(height: 10),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+              childAspectRatio: 0.78,
             ),
-            const SizedBox(height: 10),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 10,
-                crossAxisSpacing: 10,
-                childAspectRatio: 0.82,
-              ),
-              itemCount: filtered.length,
-              itemBuilder: (_, i) {
-                final item = filtered[i];
-                final id = (item['item_id'] as num).toInt();
-                final equipped = _equippedIds.contains(id);
-                final qty = (item['quantity'] as num?)?.toInt() ?? 1;
+            itemCount: allItems.length,
+            itemBuilder: (_, i) {
+              final item = allItems[i];
+              final isDefault = item['_isDefault'] == true;
+              final id = (item['item_id'] as num).toInt();
+              if (isDefault) {
+                final defaultEquipped = item['_defaultEquipped'] == true;
+                final slot = item['slot'] as String;
                 return _InventoryItemCard(
                   item: item,
-                  equipped: equipped,
-                  quantity: qty,
-                  onEquip: equipped ? null : () => _equip(item),
+                  equipped: defaultEquipped,
+                  quantity: 1,
+                  onEquip: defaultEquipped ? null : () => _unequip(slot),
+                  onTap: null,
                 );
-              },
-            ),
-          ],
-
-          const SizedBox(height: 28),
-
-          // 가챠 섹션
-          if (_filterGame != null) ...[
-            _GachaSection(
-              game: _filterGame!,
-              balance: _balance,
-              onPull: _gacha,
-              formatCoins: _formatCoins,
-              tierColor: _tierColor,
-            ),
-          ] else ...[
-            Text(
-              '카테고리를 선택하면 뽑기를 할 수 있어요',
-              style: mainBody(size: 13, color: kMainMuted),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: _CategoryGachaButton(
-                    label: '윷놀이 뽑기',
-                    icon: '🎲',
-                    color: kMainSage,
-                    onTap: () => setState(() {
-                      _filterGame = 'yut';
-                    }),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _CategoryGachaButton(
-                    label: '원카드 뽑기',
-                    icon: '🃏',
-                    color: kMainSky,
-                    onTap: () => setState(() {
-                      _filterGame = 'onecard';
-                    }),
-                  ),
-                ),
-              ],
-            ),
-          ],
+              }
+              final equipped = _equippedIds.contains(id);
+              final qty = (item['quantity'] as num?)?.toInt() ?? 1;
+              return _InventoryItemCard(
+                item: item,
+                equipped: equipped,
+                quantity: qty,
+                onEquip: equipped ? null : () => _equip(item),
+                onTap: () => _showItemDetail(item),
+              );
+            },
+          ),
         ],
       ),
     );
@@ -483,12 +707,14 @@ class _InventoryItemCard extends StatelessWidget {
   final bool equipped;
   final int quantity;
   final VoidCallback? onEquip;
+  final VoidCallback? onTap;
 
   const _InventoryItemCard({
     required this.item,
     required this.equipped,
     required this.quantity,
     required this.onEquip,
+    this.onTap,
   });
 
   @override
@@ -496,491 +722,112 @@ class _InventoryItemCard extends StatelessWidget {
     final grade = item['grade'] as String? ?? 'B';
     final gc = gradeColor(grade);
 
-    return MainCard(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: gc.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Center(
-                  child: Text(
-                    item['icon'] as String? ?? '🎁',
-                    style: const TextStyle(fontSize: 22),
-                  ),
-                ),
-              ),
-              const Spacer(),
-              if (quantity > 1)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 5,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: kMainMuted.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    'x$quantity',
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-            decoration: BoxDecoration(
-              color: gc.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              grade,
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-                color: gc,
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            item['name'] as String? ?? '',
-            style: mainBody(size: 12, weight: FontWeight.w700),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const Spacer(),
-          if (equipped)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              decoration: BoxDecoration(
-                color: kMainSage.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Center(
-                child: Text(
-                  '장착 중 ✓',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: kMainSage,
-                  ),
-                ),
-              ),
-            )
-          else
-            SizedBox(
-              width: double.infinity,
-              height: 30,
-              child: ElevatedButton(
-                onPressed: onEquip,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: kMainHoney,
-                  padding: EdgeInsets.zero,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: const Text(
-                  '장착',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── _GachaSection ─────────────────────────────────────────────────────────────
-
-class _GachaSection extends StatelessWidget {
-  final String game;
-  final int balance;
-  final Future<void> Function(String, String) onPull;
-  final String Function(int) formatCoins;
-  final Color Function(String) tierColor;
-
-  const _GachaSection({
-    required this.game,
-    required this.balance,
-    required this.onPull,
-    required this.formatCoins,
-    required this.tierColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final gameName = game == 'yut' ? '윷놀이' : '원카드';
-    final tiers = [
-      ('normal', '랜덤 뽑기', 'B ~ S', 3000),
-      ('advanced', '고급 뽑기', 'S ~ SS', 45000),
-      ('rare', '레어 뽑기', 'SS ~ SSS', 100000),
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text('$gameName 뽑기', style: mainTitle(size: 16)),
-            const SizedBox(width: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-              decoration: BoxDecoration(
-                color: kMainHoney.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                '🪙 ${formatCoins(balance)}',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        for (final (tier, label, range, cost) in tiers)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _GachaTierButton(
-              label: label,
-              range: range,
-              cost: cost,
-              color: tierColor(tier),
-              canAfford: balance >= cost,
-              formatCoins: formatCoins,
-              onTap: () => onPull(game, tier),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _GachaTierButton extends StatelessWidget {
-  final String label;
-  final String range;
-  final int cost;
-  final Color color;
-  final bool canAfford;
-  final String Function(int) formatCoins;
-  final VoidCallback onTap;
-
-  const _GachaTierButton({
-    required this.label,
-    required this.range,
-    required this.cost,
-    required this.color,
-    required this.canAfford,
-    required this.formatCoins,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
+    return GestureDetector(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              color.withValues(alpha: canAfford ? 0.18 : 0.07),
-              color.withValues(alpha: canAfford ? 0.06 : 0.02),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: color.withValues(alpha: canAfford ? 0.35 : 0.15),
-          ),
-        ),
-        child: Row(
+      child: MainCard(
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: canAfford ? color : kMainMuted,
+            Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: gc.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                    child: Text(
+                      item['icon'] as String? ?? '🎁',
+                      style: const TextStyle(fontSize: 22),
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    range,
-                    style: TextStyle(fontSize: 11, color: kMainMuted),
-                  ),
-                ],
-              ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  '🪙 ${formatCoins(cost)}',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: canAfford ? kMainHoney : kMainMuted,
-                  ),
                 ),
-                if (!canAfford)
-                  Text(
-                    '잔액 부족',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.red.withValues(alpha: 0.7),
+                const Spacer(),
+                if (quantity > 1)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: kMainMuted.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'x$quantity',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
               ],
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CategoryGachaButton extends StatelessWidget {
-  final String label;
-  final String icon;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _CategoryGachaButton({
-    required this.label,
-    required this.icon,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 18),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withValues(alpha: 0.3)),
-        ),
-        child: Column(
-          children: [
-            Text(icon, style: const TextStyle(fontSize: 28)),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: color,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── _GachaResultDialog (B/A grade) ────────────────────────────────────────────
-
-class _GachaResultDialog extends StatelessWidget {
-  final Map<String, dynamic> item;
-  final String grade;
-  final bool isNew;
-
-  const _GachaResultDialog({
-    required this.item,
-    required this.grade,
-    required this.isNew,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final gc = gradeColor(grade);
-    return Dialog(
-      backgroundColor: kSurface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              item['icon'] as String? ?? '🎁',
-              style: const TextStyle(fontSize: 52),
-            ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
               decoration: BoxDecoration(
-                color: gc.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(6),
+                color: gc.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
                 grade,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 9,
                   fontWeight: FontWeight.w800,
                   color: gc,
                 ),
               ),
             ),
-            const SizedBox(height: 8),
-            Text(item['name'] as String? ?? '', style: mainTitle(size: 18)),
-            if (!isNew) ...[
-              const SizedBox(height: 6),
-              Text(
-                '이미 보유 중 (x1 추가)',
-                style: TextStyle(fontSize: 12, color: kMainMuted),
-              ),
-            ],
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(backgroundColor: gc),
-                child: const Text('확인', style: TextStyle(color: Colors.white)),
-              ),
+            const SizedBox(height: 4),
+            Text(
+              item['name'] as String? ?? '',
+              style: mainBody(size: 12, weight: FontWeight.w700),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── _GachaAnimOverlay (S/SS/SSS grade) ───────────────────────────────────────
-
-class _GachaAnimOverlay extends StatefulWidget {
-  final Map<String, dynamic> item;
-  final bool isNew;
-  const _GachaAnimOverlay({required this.item, required this.isNew});
-
-  @override
-  State<_GachaAnimOverlay> createState() => _GachaAnimOverlayState();
-}
-
-class _GachaAnimOverlayState extends State<_GachaAnimOverlay>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-  late final Animation<double> _scale;
-  late final Animation<double> _opacity;
-  bool _revealed = false;
-
-  @override
-  void initState() {
-    super.initState();
-    final grade = widget.item['grade'] as String? ?? 'S';
-    final duration = switch (grade) {
-      'SSS' => const Duration(milliseconds: 3500),
-      'SS' => const Duration(milliseconds: 2500),
-      _ => const Duration(milliseconds: 1500),
-    };
-    _ctrl = AnimationController(vsync: this, duration: duration);
-    _scale = CurvedAnimation(parent: _ctrl, curve: Curves.elasticOut);
-    _opacity = Tween<double>(
-      begin: 0,
-      end: 1,
-    ).animate(CurvedAnimation(parent: _ctrl, curve: const Interval(0.5, 1.0)));
-    _ctrl.forward().then((_) {
-      if (mounted) setState(() => _revealed = true);
-    });
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final grade = widget.item['grade'] as String? ?? 'S';
-    final gc = gradeColor(grade);
-    final bgColor = switch (grade) {
-      'SSS' => const Color(0xFF1A0A00),
-      'SS' => const Color(0xFF0D0020),
-      _ => const Color(0xFF000A1A),
-    };
-
-    return Scaffold(
-      backgroundColor: bgColor.withValues(alpha: 0.95),
-      body: GestureDetector(
-        onTap: _revealed ? () => Navigator.pop(context) : null,
-        child: Stack(
-          children: [
-            // 파티클 배경
-            AnimatedBuilder(
-              animation: _ctrl,
-              builder: (_, x) => CustomPaint(
-                painter: _GachaBurstPainter(
-                  progress: _ctrl.value,
-                  gradeColor: gc,
-                  grade: grade,
+            const Spacer(),
+            if (equipped)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                decoration: BoxDecoration(
+                  color: kMainSage.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: const SizedBox.expand(),
-              ),
-            ),
-            // 카드 reveal
-            Center(
-              child: AnimatedBuilder(
-                animation: _ctrl,
-                builder: (_, child) => Transform.scale(
-                  scale: 0.5 + _scale.value * 0.5,
-                  child: Opacity(opacity: _opacity.value, child: child),
-                ),
-                child: _ResultCard(
-                  item: widget.item,
-                  grade: grade,
-                  gc: gc,
-                  isNew: widget.isNew,
-                  revealed: _revealed,
-                ),
-              ),
-            ),
-            if (_revealed)
-              Positioned(
-                bottom: 40,
-                left: 0,
-                right: 0,
                 child: Center(
                   child: Text(
-                    '탭하여 닫기',
+                    '장착 중 ✓',
                     style: TextStyle(
-                      color: gc.withValues(alpha: 0.7),
-                      fontSize: 13,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: kMainSage,
+                    ),
+                  ),
+                ),
+              )
+            else
+              SizedBox(
+                width: double.infinity,
+                height: 30,
+                child: ElevatedButton(
+                  onPressed: onEquip,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kMainHoney,
+                    padding: EdgeInsets.zero,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text(
+                    '장착',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
@@ -991,134 +838,6 @@ class _GachaAnimOverlayState extends State<_GachaAnimOverlay>
     );
   }
 }
-
-class _ResultCard extends StatelessWidget {
-  final Map<String, dynamic> item;
-  final String grade;
-  final Color gc;
-  final bool isNew;
-  final bool revealed;
-
-  const _ResultCard({
-    required this.item,
-    required this.grade,
-    required this.gc,
-    required this.isNew,
-    required this.revealed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 240,
-      padding: const EdgeInsets.all(28),
-      decoration: BoxDecoration(
-        color: kSurface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: gc, width: 2),
-        boxShadow: [
-          BoxShadow(
-            color: gc.withValues(alpha: 0.4),
-            blurRadius: 30,
-            spreadRadius: 4,
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            item['icon'] as String? ?? '🎁',
-            style: const TextStyle(fontSize: 56),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: gc.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              grade,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w900,
-                color: gc,
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            item['name'] as String? ?? '',
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          if (!isNew) ...[
-            const SizedBox(height: 6),
-            Text(
-              '이미 보유 중 (x1 추가)',
-              style: TextStyle(fontSize: 11, color: kMainMuted),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _GachaBurstPainter extends CustomPainter {
-  final double progress;
-  final Color gradeColor;
-  final String grade;
-
-  _GachaBurstPainter({
-    required this.progress,
-    required this.gradeColor,
-    required this.grade,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (progress < 0.1) return;
-    final cx = size.width / 2;
-    final cy = size.height / 2;
-    final paint = Paint()..style = PaintingStyle.fill;
-
-    final particleCount = grade == 'SSS'
-        ? 20
-        : grade == 'SS'
-        ? 14
-        : 8;
-    for (var i = 0; i < particleCount; i++) {
-      final angle = (i / particleCount) * 3.14159 * 2;
-      final radius = size.width * 0.4 * progress;
-      final px = cx + radius * 0.8 * (1 + 0.3 * ((i % 3) - 1));
-      final py = cy + radius * 0.6 * (1 - 0.3 * ((i % 2)));
-      final dx = px * (angle.abs() % 1.0);
-      final dy = py * ((angle + 1) % 1.0);
-      paint.color = gradeColor.withValues(alpha: (1 - progress) * 0.7);
-      canvas.drawCircle(
-        Offset(cx + dx - cx * 0.5, cy + dy - cy * 0.5),
-        4 + (i % 3) * 2.0,
-        paint,
-      );
-    }
-
-    // 글로우 원
-    final glowPaint = Paint()
-      ..color = gradeColor.withValues(alpha: (1 - progress) * 0.15)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 40);
-    canvas.drawCircle(Offset(cx, cy), size.width * 0.3 * progress, glowPaint);
-  }
-
-  @override
-  bool shouldRepaint(_GachaBurstPainter old) => old.progress != progress;
-}
-
 // ── _CompendiumSheet (도감) ────────────────────────────────────────────────────
 
 class _CompendiumSheet extends StatefulWidget {

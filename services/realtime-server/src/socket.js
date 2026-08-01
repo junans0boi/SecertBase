@@ -1953,14 +1953,17 @@ export const registerSocketHandlers = (io) => {
       const gameState = createUnoGameState(orderedPlayers, 7, { mode });
       gameState.stake = parsed.data.stake ?? 0;
 
-      // 양 플레이어 스탯 미리 로드
+      // 양 플레이어 스탯 + 장착 아이템 미리 로드
       const unoPlayerStats = {};
+      const unoEquippedItems = {};
       for (const code of orderedPlayers) {
         const { rows } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [code]);
         const numId = rows[0]?.UserId;
         unoPlayerStats[code] = numId ? await getEquippedStats(numId) : {};
+        unoEquippedItems[code] = numId ? await getEquippedItemsInfo(numId) : {};
       }
       gameState.playerStats = unoPlayerStats;
+      gameState.equippedItems = unoEquippedItems;
 
       await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
 
@@ -1973,6 +1976,7 @@ export const registerSocketHandlers = (io) => {
         drawStack: 0,
         drawStackType: null,
         handCount: getUnoHandCount(gameState),
+        equippedItems: gameState.equippedItems,
       });
 
       // Send each player their private hand separately
@@ -2608,14 +2612,17 @@ export const registerSocketHandlers = (io) => {
         });
         gameState.stake = previous.stake ?? 0;
 
-        // 아이템 스탯 재적재
+        // 아이템 스탯 + 장착 아이템 재적재
         const unoRestartStats = {};
+        const unoRestartEquipped = {};
         for (const code of orderedPlayers) {
           const { rows } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [code]);
           const numId = rows[0]?.UserId;
           unoRestartStats[code] = numId ? await getEquippedStats(numId) : {};
+          unoRestartEquipped[code] = numId ? await getEquippedItemsInfo(numId) : {};
         }
         gameState.playerStats = unoRestartStats;
+        gameState.equippedItems = unoRestartEquipped;
 
         await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
         io.to(roomCode).emit("game:uno:started", {
@@ -2626,6 +2633,7 @@ export const registerSocketHandlers = (io) => {
           drawStack: 0,
           drawStackType: null,
           handCount: getUnoHandCount(gameState),
+          equippedItems: gameState.equippedItems,
         });
         const sockets = await io.in(roomCode).fetchSockets();
         for (const sock of sockets) {

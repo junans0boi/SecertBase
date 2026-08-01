@@ -28,6 +28,7 @@ class UnoBoard extends StatefulWidget {
   final double topInset;
   final String? opponentName;
   final String cardBackSkin;
+  final String opponentCardBackSkin;
 
   const UnoBoard({
     super.key,
@@ -55,6 +56,7 @@ class UnoBoard extends StatefulWidget {
     this.topInset = 0,
     this.opponentName,
     this.cardBackSkin = 'base',
+    this.opponentCardBackSkin = 'base',
   });
 
   @override
@@ -429,7 +431,8 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
                                       (i) => UnoCardBack(
                                         width: (38 * scale).clamp(31.0, 46.0),
                                         height: (57 * scale).clamp(46.5, 69.0),
-                                        cardBackSkin: widget.cardBackSkin,
+                                        cardBackSkin:
+                                            widget.opponentCardBackSkin,
                                       ),
                                     ),
                                   ),
@@ -1145,7 +1148,8 @@ class _UnoCallButtonState extends State<_UnoCallButton>
 
 // ── Card Widgets ──────────────────────────────────────────────────────────────
 
-// cardBackSkin values: 'base' | 'cherry_blossom' | 'space' | 'heart' | 'gold' | 'rainbow' | 'couple_card'
+// cardBackSkin values: 'base'|'cherry_blossom'|'space'|'heart'|'gold'|'rainbow'|'couple_card'
+//   + 신규: 'fog'|'sunset'|'water'|'night'|'autumn'|'aurora'|'firefly'|'stardust'|'fireworks'|'eternity'|'fate'
 class UnoCardBack extends StatelessWidget {
   final double width;
   final double height;
@@ -1159,6 +1163,7 @@ class UnoCardBack extends StatelessWidget {
   });
 
   static const _skins = {
+    // ── 기존 ──────────────────────────────────────────────────
     'cherry_blossom': (
       gradient: [Color(0xFFFFB7D5), Color(0xFFFF6F9F)],
       icon: '🌸',
@@ -1192,6 +1197,73 @@ class UnoCardBack extends StatelessWidget {
     'couple_card': (
       gradient: [Color(0xFFFF8FAB), Color(0xFFB983FF)],
       icon: '💑',
+      label: 'ONE CARD',
+      textColor: Colors.white,
+    ),
+    // ── 신규 ──────────────────────────────────────────────────
+    'fog': (
+      gradient: [Color(0xFFD0D8E4), Color(0xFF8FA3B1)],
+      icon: '🌫️',
+      label: 'ONE CARD',
+      textColor: Colors.white,
+    ),
+    'sunset': (
+      gradient: [Color(0xFFFF7F50), Color(0xFFFF4500)],
+      icon: '🌅',
+      label: 'ONE CARD',
+      textColor: Colors.white,
+    ),
+    'water': (
+      gradient: [Color(0xFF00B4DB), Color(0xFF0083B0)],
+      icon: '💧',
+      label: 'ONE CARD',
+      textColor: Colors.white,
+    ),
+    'night': (
+      gradient: [Color(0xFF1A1A2E), Color(0xFF16213E)],
+      icon: '🌙',
+      label: 'ONE CARD',
+      textColor: Colors.white,
+    ),
+    'autumn': (
+      gradient: [Color(0xFFE65C00), Color(0xFFF9D423)],
+      icon: '🍁',
+      label: 'ONE CARD',
+      textColor: Colors.white,
+    ),
+    'aurora': (
+      gradient: [Color(0xFF0F2027), Color(0xFF203A43)],
+      icon: '🌌',
+      label: 'ONE CARD',
+      textColor: Colors.white,
+    ),
+    'firefly': (
+      gradient: [Color(0xFF0D1B2A), Color(0xFF1B4332)],
+      icon: '✨',
+      label: 'ONE CARD',
+      textColor: Colors.white,
+    ),
+    'stardust': (
+      gradient: [Color(0xFF1C1C3C), Color(0xFF2D2D5E)],
+      icon: '⭐',
+      label: 'ONE CARD',
+      textColor: Colors.white,
+    ),
+    'fireworks': (
+      gradient: [Color(0xFF0D0D0D), Color(0xFF1A0033)],
+      icon: '🎆',
+      label: 'ONE CARD',
+      textColor: Colors.white,
+    ),
+    'eternity': (
+      gradient: [Color(0xFF1A0038), Color(0xFF2D0057)],
+      icon: '♾️',
+      label: 'ONE CARD',
+      textColor: Colors.white,
+    ),
+    'fate': (
+      gradient: [Color(0xFF7B0000), Color(0xFFB8860B)],
+      icon: '🎴',
       label: 'ONE CARD',
       textColor: Colors.white,
     ),

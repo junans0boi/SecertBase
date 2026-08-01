@@ -32,6 +32,8 @@ class YutBoard extends StatefulWidget {
   final String Function(String) displayName;
   final String pieceSkin;
   final String yutSkin;
+  final String opponentPieceSkin;
+  final String opponentYutSkin;
 
   const YutBoard({
     super.key,
@@ -61,6 +63,8 @@ class YutBoard extends StatefulWidget {
     this.displayName = _defaultDisplayName,
     this.pieceSkin = 'base',
     this.yutSkin = 'base',
+    this.opponentPieceSkin = 'base',
+    this.opponentYutSkin = 'base',
   });
 
   @override
@@ -109,6 +113,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
 
   int? _selectedPieceId;
   bool _moveInFlight = false;
+  bool _isOpponentThrow = false;
 
   String _display(String uid) => widget.displayName(uid);
 
@@ -159,6 +164,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
         setState(() => _animResult = widget.lastResultName);
       } else {
         // Opponent's throw: play the same throw animation then show result
+        _isOpponentThrow = true;
         setState(() {
           _animResult = widget.lastResultName;
           _showThrowAnim = true;
@@ -174,6 +180,11 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
       _selectedPieceId = null;
       _moveUnlockTimer?.cancel();
       _moveInFlight = false;
+      final hadMoves = oldWidget.pendingMoves?.isNotEmpty == true;
+      final hasMoves = widget.pendingMoves?.isNotEmpty == true;
+      if (!hadMoves && hasMoves) {
+        _selectedPieceId = _autoDefaultPieceId();
+      }
     }
     if (widget.phase != oldWidget.phase ||
         widget.orderCountdownUntil != oldWidget.orderCountdownUntil) {
@@ -220,6 +231,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
   }
 
   void _handleThrow() {
+    _isOpponentThrow = false;
     setState(() {
       _showThrowAnim = true;
       _animResult = null;
@@ -561,6 +573,29 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
       pos = nextPos;
     }
     return pos;
+  }
+
+  int? _autoDefaultPieceId() {
+    if (widget.turn != widget.currentUser) return null;
+    final pieces = widget.currentUser == widget.p2UserId
+        ? widget.p2Pieces
+        : widget.p1Pieces;
+    if (pieces == null) return null;
+    // 우선: 대기 중인 말 (pos == 0, 미완료)
+    for (var i = 0; i < pieces.length; i++) {
+      if (!_isFinished(pieces[i]) &&
+          _getPos(pieces[i]) == 0 &&
+          _hasMoveOptionFor(pieces[i])) {
+        return i;
+      }
+    }
+    // 폴백: 이동 가능한 첫 번째 말
+    for (var i = 0; i < pieces.length; i++) {
+      if (_hasMoveOptionFor(pieces[i])) {
+        return i;
+      }
+    }
+    return null;
   }
 
   void _selectPiece(int pieceId) {
@@ -940,6 +975,9 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     final opColor = isP2 ? const Color(0xFFE45858) : const Color(0xFF4B8DD8);
     final myCharacter = isP2 ? widget.p2Character : widget.p1Character;
     final opCharacter = isP2 ? widget.p1Character : widget.p2Character;
+    // 내 스킨 vs 상대 스킨을 플레이어 순서에 맞게 정렬
+    final p1PieceSkin = isP2 ? widget.opponentPieceSkin : widget.pieceSkin;
+    final p2PieceSkin = isP2 ? widget.pieceSkin : widget.opponentPieceSkin;
 
     Map<int, int> p1Counts = {};
     if (widget.p1Pieces != null) {
@@ -1035,7 +1073,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                 widget.turn == opponent,
                                 false,
                                 null,
-                                pieceSkin: widget.pieceSkin,
+                                pieceSkin: widget.opponentPieceSkin,
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -1103,7 +1141,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                               ? () => _selectPiece(e.key)
                                               : null,
                                           stackOffset: const Offset(-10, -10),
-                                          pieceSkin: widget.pieceSkin,
+                                          pieceSkin: p1PieceSkin,
                                         );
                                       }),
                                     if (widget.p2Pieces != null)
@@ -1132,7 +1170,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                               ? () => _selectPiece(e.key)
                                               : null,
                                           stackOffset: const Offset(10, 10),
-                                          pieceSkin: widget.pieceSkin,
+                                          pieceSkin: p2PieceSkin,
                                         );
                                       }),
                                     ...guideOptions.map(
@@ -1241,7 +1279,9 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                       child: _YutThrowOverlay(
                         animation: _stickThrowCtrl,
                         resultName: _animResult,
-                        yutSkin: widget.yutSkin,
+                        yutSkin: _isOpponentThrow
+                            ? widget.opponentYutSkin
+                            : widget.yutSkin,
                       ),
                     ),
                 ],
@@ -1432,7 +1472,9 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
             Padding(
               padding: const EdgeInsets.only(top: 3.0),
               child: Text(
-                widget.pendingMoves?.isNotEmpty == true ? '말 선택' : '윷 던지기',
+                widget.pendingMoves?.isNotEmpty == true
+                    ? (_selectedPieceId != null ? '이동 위치 선택' : '말 선택')
+                    : '윷 던지기',
                 style: const TextStyle(
                   color: Color(0xFF1A7D4E),
                   fontSize: 11,
@@ -1552,13 +1594,15 @@ class _CharacterTokenPainter extends CustomPainter {
   }
 
   void _drawSkinEmoji(Canvas canvas, Offset center, double radius) {
+    // 레거시 skin ID 매핑 + 신규 아이템은 icon 이모지 직접 사용
     final emoji = switch (pieceSkin) {
       'animal' => '🐾',
       'food' => '🍡',
       'star' => '⭐',
       'crown' => '👑',
       'couple' => '💑',
-      _ => '✨',
+      'base' || '' => '✨',
+      _ => pieceSkin, // 신규 아이템: icon 이모지 그대로
     };
     final tp = TextPainter(
       text: TextSpan(
@@ -1952,6 +1996,8 @@ class HangameYutPainter extends CustomPainter {
 
 // ─── Yut Stick Throw Animation ─────────────────────────────────────────────
 
+enum _ParticleShape { circle, diamond, petal, star }
+
 class _YutThrowOverlay extends StatelessWidget {
   final Animation<double> animation;
   final String? resultName;
@@ -2038,6 +2084,9 @@ class _YutSticksPainter extends CustomPainter {
     final cx = size.width / 2;
     final flatCount = _flatCount;
 
+    // 스킨별 이펙트 (던지는 중에만)
+    if (t > 0.05 && t < 0.98) _drawSkinEffect(canvas, size, cx);
+
     // Each stick has a slightly different trajectory
     final offsets = [-1.5, -0.5, 0.5, 1.5]; // horizontal spread multipliers
     final peakYOffsets = [-0.12, -0.18, -0.15, -0.10]; // different heights
@@ -2093,6 +2142,197 @@ class _YutSticksPainter extends CustomPainter {
     }
   }
 
+  void _drawSkinEffect(Canvas canvas, Size size, double cx) {
+    final rng = sin(t * 31.4 + 7.3); // pseudo-random seed from t
+    switch (yutSkin) {
+      case 'fire':
+        _drawLightning(canvas, size, cx);
+        _drawParticles(
+          canvas,
+          size,
+          cx,
+          count: 22,
+          seed: rng,
+          color1: const Color(0xFFFF6B00),
+          color2: const Color(0xFFFFD700),
+        );
+      case 'cherry':
+        _drawParticles(
+          canvas,
+          size,
+          cx,
+          count: 20,
+          seed: rng,
+          color1: const Color(0xFFFFB7C5),
+          color2: const Color(0xFFFF69B4),
+          shape: _ParticleShape.petal,
+        );
+      case 'crystal':
+        _drawParticles(
+          canvas,
+          size,
+          cx,
+          count: 18,
+          seed: rng,
+          color1: const Color(0xFF88C0D0),
+          color2: const Color(0xFFB0E0FF),
+          shape: _ParticleShape.diamond,
+        );
+      case 'bamboo':
+        _drawParticles(
+          canvas,
+          size,
+          cx,
+          count: 16,
+          seed: rng,
+          color1: const Color(0xFF8BC34A),
+          color2: const Color(0xFFC5E1A5),
+        );
+      case 'legend':
+        _drawRainbowBurst(canvas, size, cx, seed: rng);
+      case 'stone':
+        _drawParticles(
+          canvas,
+          size,
+          cx,
+          count: 14,
+          seed: rng,
+          color1: const Color(0xFF9E9E9E),
+          color2: const Color(0xFFBDBDBD),
+        );
+      case 'gold':
+        _drawParticles(
+          canvas,
+          size,
+          cx,
+          count: 20,
+          seed: rng,
+          color1: const Color(0xFFFFD700),
+          color2: const Color(0xFFFFF8DC),
+          shape: _ParticleShape.star,
+        );
+      default:
+        break;
+    }
+  }
+
+  void _drawLightning(Canvas canvas, Size size, double cx) {
+    final paint = Paint()
+      ..color = const Color(
+        0xFFFFFF00,
+      ).withValues(alpha: (0.6 + sin(t * 9) * 0.3).clamp(0.0, 1.0))
+      ..strokeWidth = 2.5
+      ..style = PaintingStyle.stroke;
+    final seeds = [0.0, 0.38, 0.73];
+    for (final s in seeds) {
+      final x = cx + (s - 0.5) * size.width * 0.5;
+      final path = Path();
+      path.moveTo(x, size.height * 0.05);
+      path.lineTo(x - 10, size.height * 0.22);
+      path.lineTo(x + 8, size.height * 0.22);
+      path.lineTo(x - 6, size.height * 0.4);
+      path.lineTo(x + 12, size.height * 0.4);
+      path.lineTo(x - 4, size.height * 0.6);
+      canvas.drawPath(path, paint);
+    }
+    // flash overlay
+    final flash = Paint()
+      ..color = const Color(
+        0xFFFFFF88,
+      ).withValues(alpha: (sin(t * 18) * 0.12).clamp(0.0, 0.18));
+    canvas.drawRect(Offset.zero & size, flash);
+  }
+
+  void _drawRainbowBurst(
+    Canvas canvas,
+    Size size,
+    double cx, {
+    required double seed,
+  }) {
+    const colors = [
+      Color(0xFFFF0000),
+      Color(0xFFFF7700),
+      Color(0xFFFFFF00),
+      Color(0xFF00FF00),
+      Color(0xFF0088FF),
+      Color(0xFF8800FF),
+    ];
+    final center = Offset(cx, size.height * 0.45);
+    for (var k = 0; k < 24; k++) {
+      final angle = (k / 24) * 6.283 + t * 3.14;
+      final r = (60 + sin(t * 5 + k) * 30) * t;
+      final x = center.dx + cos(angle) * r;
+      final y = center.dy + sin(angle) * r;
+      final col = colors[k % colors.length];
+      canvas.drawCircle(
+        Offset(x, y),
+        4 + sin(t * 8 + k) * 2,
+        Paint()..color = col.withValues(alpha: ((1 - t) * 0.9).clamp(0.0, 1.0)),
+      );
+    }
+  }
+
+  void _drawParticles(
+    Canvas canvas,
+    Size size,
+    double cx, {
+    required int count,
+    required double seed,
+    required Color color1,
+    required Color color2,
+    _ParticleShape shape = _ParticleShape.circle,
+  }) {
+    final center = Offset(cx, size.height * 0.45);
+    for (var i = 0; i < count; i++) {
+      final angle = (i / count) * 6.283 + seed * 2.1 + i * 0.37;
+      final speed = 0.5 + ((i * 7 + 3) % 10) / 10.0;
+      final r = (size.shortestSide * 0.3 * t * speed).clamp(
+        0.0,
+        size.shortestSide * 0.5,
+      );
+      final x = center.dx + cos(angle) * r + sin(t * 4 + i) * 6;
+      final y = center.dy + sin(angle) * r + t * t * 40;
+      final alpha = ((1 - t * 0.85) * 0.9).clamp(0.0, 1.0);
+      final col = i.isEven
+          ? color1.withValues(alpha: alpha)
+          : color2.withValues(alpha: alpha);
+      final radius = (3.0 + ((i * 3 + 1) % 5)).toDouble();
+      switch (shape) {
+        case _ParticleShape.circle:
+          canvas.drawCircle(Offset(x, y), radius, Paint()..color = col);
+        case _ParticleShape.diamond:
+          final path = Path()
+            ..moveTo(x, y - radius * 1.4)
+            ..lineTo(x + radius, y)
+            ..lineTo(x, y + radius * 1.4)
+            ..lineTo(x - radius, y)
+            ..close();
+          canvas.drawPath(path, Paint()..color = col);
+        case _ParticleShape.petal:
+          canvas.drawOval(
+            Rect.fromCenter(
+              center: Offset(x, y),
+              width: radius * 2,
+              height: radius * 3.5,
+            ),
+            Paint()..color = col,
+          );
+        case _ParticleShape.star:
+          for (var s = 0; s < 4; s++) {
+            final sa = s * 1.571 + angle;
+            canvas.drawLine(
+              Offset(x + cos(sa) * radius * 1.8, y + sin(sa) * radius * 1.8),
+              Offset(x - cos(sa) * radius * 0.5, y - sin(sa) * radius * 0.5),
+              Paint()
+                ..color = col
+                ..strokeWidth = 1.5
+                ..style = PaintingStyle.stroke,
+            );
+          }
+      }
+    }
+  }
+
   void _drawStick(Canvas canvas, bool showFlat) {
     const w = 78.0;
     const h = 20.0;
@@ -2126,6 +2366,16 @@ class _YutSticksPainter extends CustomPainter {
         const Color(0xFFAB47BC),
         const Color(0xFF4A148C),
         const Color(0xFFCE93D8),
+      ),
+      'cherry' => (
+        const Color(0xFFFFB7C5),
+        const Color(0xFFE91E63),
+        const Color(0xFFFF69B4),
+      ),
+      'stone' => (
+        const Color(0xFF9E9E9E),
+        const Color(0xFF424242),
+        const Color(0xFF616161),
       ),
       _ => (
         const Color(0xFFDEB887),

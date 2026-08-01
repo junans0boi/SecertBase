@@ -122,6 +122,7 @@ class SocketService extends ChangeNotifier {
   Map<String, List<dynamic>> yutPieceDetails = {};
 
   // uno
+  Map<String, Map<String, dynamic>> unoEquippedItems = {};
   bool unoActive = false;
   String? unoCurrentPlayer;
   String? unoTopCard;
@@ -612,6 +613,13 @@ class SocketService extends ChangeNotifier {
       _applyUnoCounts(map['handCount']);
       unoHand = [];
       unoWinner = null;
+      final equippedRaw = map['equippedItems'];
+      if (equippedRaw is Map) {
+        unoEquippedItems = equippedRaw.map(
+          (k, v) =>
+              MapEntry('$k', v is Map ? Map<String, dynamic>.from(v) : {}),
+        );
+      }
       _log('UNO 시작 - 첫 턴: $unoCurrentPlayer');
       notifyListeners();
     });
@@ -1072,6 +1080,7 @@ class SocketService extends ChangeNotifier {
     yutLastCarriedCount = 0;
     yutLastStackedCount = 0;
     unoActive = false;
+    unoEquippedItems = {};
     unoPendingCall = false;
     unoCatchable = false;
     unoDrawStack = 0;

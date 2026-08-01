@@ -47,11 +47,14 @@ class _YutScreenState extends State<YutScreen> {
         String yutSkin = 'base';
         final piece = slots['yut_piece'];
         if (piece != null) {
-          pieceSkin = _nameToPieceSkin(piece['name'] as String? ?? '');
+          final icon = piece['icon'] as String? ?? '';
+          pieceSkin = icon.isNotEmpty ? icon : 'base';
         }
         final yut = slots['yut_yut'];
         if (yut != null) {
-          yutSkin = _nameToYutSkin(yut['name'] as String? ?? '');
+          final icon = yut['icon'] as String? ?? '';
+          final grade = yut['grade'] as String? ?? 'B';
+          yutSkin = _iconToYutSkin(icon, grade);
         }
         if (mounted) {
           setState(() {
@@ -63,22 +66,23 @@ class _YutScreenState extends State<YutScreen> {
     } catch (_) {}
   }
 
-  String _nameToPieceSkin(String name) {
-    if (name.contains('동물') || name.contains('animal')) return 'animal';
-    if (name.contains('음식') || name.contains('food')) return 'food';
-    if (name.contains('별') || name.contains('star')) return 'star';
-    if (name.contains('왕관') || name.contains('crown')) return 'crown';
-    if (name.contains('커플') || name.contains('couple')) return 'couple';
-    return 'base';
-  }
-
-  String _nameToYutSkin(String name) {
-    if (name.contains('대나무') || name.contains('bamboo')) return 'bamboo';
-    if (name.contains('황금') || name.contains('gold')) return 'gold';
-    if (name.contains('크리스탈') || name.contains('crystal')) return 'crystal';
-    if (name.contains('불꽃') || name.contains('fire')) return 'fire';
-    if (name.contains('전설') || name.contains('legend')) return 'legend';
-    return 'base';
+  String _iconToYutSkin(String icon, String grade) {
+    return switch (icon) {
+      '🌸' || '🌺' || '💝' || '🌷' => 'cherry',
+      '🍁' || '🔥' || '⚡' || '🌪️' || '⛈️' => 'fire',
+      '🌱' || '🍃' || '🌿' || '🐉' => 'bamboo',
+      '🌙' || '⭐' || '❄️' || '🧊' || '🌊' || '💨' => 'crystal',
+      '🌌' || '✨' || '🎯' || '🦅' => 'legend',
+      '🪨' || '🪵' => 'stone',
+      '☀️' || '🌞' => 'gold',
+      _ => switch (grade) {
+        'SSS' => 'legend',
+        'SS' => 'crystal',
+        'S' => 'gold',
+        'A' => 'bamboo',
+        _ => 'base',
+      },
+    };
   }
 
   @override
@@ -224,6 +228,18 @@ class _YutScreenState extends State<YutScreen> {
     final p2Pieces = sock.yutPieceDetails[p2] ?? sock.yutPieces[p2];
     final opponentCode = (currentUser == p1) ? p2 : p1;
     final opponentItems = sock.yutEquippedItems[opponentCode] ?? {};
+    final opPieceData = opponentItems['yut_piece'] as Map? ?? {};
+    final opYutData = opponentItems['yut_yut'] as Map? ?? {};
+    final opponentPieceSkin =
+        (opPieceData['icon'] as String?)?.isNotEmpty == true
+        ? opPieceData['icon'] as String
+        : 'base';
+    final opponentYutSkin = opYutData.isNotEmpty
+        ? _iconToYutSkin(
+            opYutData['icon'] as String? ?? '',
+            opYutData['grade'] as String? ?? 'B',
+          )
+        : 'base';
 
     return GameScaffold(
       title: '🀄 윷놀이',
@@ -275,6 +291,8 @@ class _YutScreenState extends State<YutScreen> {
                   displayName: sock.nameOf,
                   pieceSkin: _pieceSkin,
                   yutSkin: _yutSkin,
+                  opponentPieceSkin: opponentPieceSkin,
+                  opponentYutSkin: opponentYutSkin,
                 ),
               ),
             ),
