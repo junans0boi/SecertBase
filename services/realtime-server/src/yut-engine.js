@@ -245,6 +245,7 @@ export function serializeYutGame(gameState) {
         state.pieces,
       ]),
     ),
+    equippedItems: gameState.equippedItems ?? {},
   };
 }
 
