@@ -670,24 +670,9 @@ export const registerSocketHandlers = (io) => {
         ack({ ok: false, reason: "need_two_players" });
         return;
       }
-      if (gameType === "yut") {
-        const selectedCharacters = lobby.players.map(
-          (player) => lobby.characterSelections[player],
-        );
-        if (selectedCharacters.some((character) => !character)) {
-          ack({ ok: false, reason: "need_character_selection" });
-          return;
-        }
-        if (new Set(selectedCharacters).size !== selectedCharacters.length) {
-          ack({ ok: false, reason: "duplicate_character" });
-          return;
-        }
-      }
-
       const metadata = gameType === "yut"
         ? {
             yutBgm: randomYutBgm(),
-            yutCharacters: lobby.characterSelections,
             stake: lobby.stake ?? 0,
           }
         : { stake: lobby.stake ?? 0 };
