@@ -312,22 +312,43 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (!hasTodayPins && !hasTodayMoments) {
       return MainCard(
-        child: ListTile(
-          leading: const Icon(Icons.auto_stories_outlined, color: kMainRose),
-          title: Text(
-            '아직 오늘 남긴 기록이 없어요',
-            style: mainBody(weight: FontWeight.w700),
+        padding: EdgeInsets.zero,
+        child: Material(
+          type: MaterialType.transparency,
+          borderRadius: BorderRadius.circular(22),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(22),
+            onTap: () => widget.onNavigate(1),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  const Icon(Icons.auto_stories_outlined, color: kMainRose),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '아직 오늘 남긴 기록이 없어요',
+                          style: mainBody(weight: FontWeight.w700),
+                        ),
+                        Text(
+                          '오늘의 추억이나 장소를 기록해보세요!',
+                          style: mainBody(size: 12, color: kMainSub),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 16,
+                    color: kMainMuted,
+                  ),
+                ],
+              ),
+            ),
           ),
-          subtitle: Text(
-            '오늘의 추억이나 장소를 기록해보세요!',
-            style: mainBody(size: 12, color: kMainSub),
-          ),
-          trailing: const Icon(
-            Icons.arrow_forward_ios_rounded,
-            size: 16,
-            color: kMainMuted,
-          ),
-          onTap: () => widget.onNavigate(1),
         ),
       );
     }

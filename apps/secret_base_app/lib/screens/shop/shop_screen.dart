@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' show pi, cos, sin;
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -10,8 +11,6 @@ import '../../core/socket_service.dart';
 import 'inventory_tab.dart';
 
 // ── Grade helpers ─────────────────────────────────────────────────────────────
-
-const _gradeOrder = ['B', 'A', 'S', 'SS', 'SSS'];
 
 Color _gradeColor(String grade) => switch (grade) {
   'B' => kMainMuted,
@@ -61,10 +60,8 @@ class _ShopScreenState extends State<ShopScreen>
 
   late final TabController _tabCtrl;
 
-  static const _gameTabs = [
-    ('전체', null),
-    ('원카드', 'onecard'),
-    ('윷놀이', 'yut'),
+  static const _mainTabs = [
+    ('상점', 'shop'),
     ('인벤토리', 'inventory'),
     ('미션', 'mission'),
     ('데이트쿠폰', 'coupon'),
@@ -74,7 +71,7 @@ class _ShopScreenState extends State<ShopScreen>
   void initState() {
     super.initState();
     _tabCtrl = TabController(
-      length: _gameTabs.length,
+      length: _mainTabs.length,
       vsync: this,
       initialIndex: 0,
     );
@@ -338,6 +335,95 @@ class _ShopScreenState extends State<ShopScreen>
     }
   }
 
+  // ── Gacha ────────────────────────────────────────────────────────────────────
+
+  Color _tierColor(String tier) => switch (tier) {
+    'advanced' => kMainSky,
+    'rare' => kMainLilac,
+    _ => kMainSage,
+  };
+
+  Future<void> _gacha(String game, String tier) async {
+    final cost = switch (tier) {
+      'advanced' => 45000,
+      'rare' => 100000,
+      _ => 3000,
+    };
+    if (_balance < cost) {
+      _showSnack('코인이 부족해요 (필요: ${_formatCoins(cost)})');
+      return;
+    }
+    final tierName = switch (tier) {
+      'advanced' => '고급 뽑기',
+      'rare' => '레어 뽑기',
+      _ => '일반 뽑기',
+    };
+    final gameName = game == 'yut' ? '윷놀이' : '원카드';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: kSurface,
+        title: Text(
+          '$gameName $tierName',
+          style: const TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          '🪙 ${_formatCoins(cost)} 코인을 소모합니다.',
+          style: TextStyle(color: kMainMuted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: _tierColor(tier)),
+            child: const Text('뽑기!', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      final base = _socket.serverUrl ?? '';
+      final res = await http.post(
+        Uri.parse('$base/api/shop/gacha'),
+        headers: {
+          'Authorization': 'Bearer ${_auth.token}',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({'game': game, 'tier': tier}),
+      );
+      final body = jsonDecode(res.body) as Map;
+      if (!mounted) return;
+      if (body['ok'] == true) {
+        final item = body['item'] as Map<String, dynamic>;
+        final isNew = body['is_new'] as bool? ?? true;
+        setState(
+          () => _balance = (body['new_balance'] as num?)?.toInt() ?? _balance,
+        );
+        await Navigator.of(context).push(
+          PageRouteBuilder(
+            opaque: false,
+            pageBuilder: (_, a, b) =>
+                _GachaResultOverlay(item: item, isNew: isNew),
+          ),
+        );
+        await _load();
+      } else {
+        final reason = body['reason'] as String? ?? '';
+        _showSnack(
+          reason == 'insufficient_coins' ? '코인이 부족해요' : '뽑기 실패: $reason',
+        );
+      }
+    } catch (_) {
+      _showSnack('오류가 발생했어요');
+    }
+  }
+
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
   String _buyErrorMsg(String? reason) => switch (reason) {
@@ -458,9 +544,8 @@ class _ShopScreenState extends State<ShopScreen>
               ),
               TabBar(
                 controller: _tabCtrl,
-                isScrollable: true,
-                tabAlignment: TabAlignment.start,
-                tabs: _gameTabs
+                isScrollable: false,
+                tabs: _mainTabs
                     .map(
                       (t) => Tab(
                         child: Text(
@@ -488,75 +573,53 @@ class _ShopScreenState extends State<ShopScreen>
           ? Center(child: Text('오류: $_error'))
           : TabBarView(
               controller: _tabCtrl,
-              children: _gameTabs.map((t) {
+              children: _mainTabs.map((t) {
                 if (t.$2 == 'coupon') return _buildCouponsTab();
                 if (t.$2 == 'mission') return _buildMissionsTab();
-                if (t.$2 == 'inventory')
+                if (t.$2 == 'inventory') {
                   return InventoryTab(onBalanceChanged: _load);
-                return _buildItemsTab(t.$2);
+                }
+                return _buildShopTab(); // 상점 탭
               }).toList(),
             ),
     );
   }
 
-  Widget _buildItemsTab(String? gameFilter) {
-    final filtered = gameFilter == null
-        ? _items.where((i) => i['category'] != 'coupon').toList()
-        : _items.where((i) => i['game'] == gameFilter).toList();
-
-    if (filtered.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('🛒', style: TextStyle(fontSize: 40)),
-            const SizedBox(height: 8),
-            Text('준비 중이에요', style: TextStyle(color: kMainMuted)),
-          ],
-        ),
-      );
-    }
-
-    // Group by grade order
-    final grouped = <String, List<Map<String, dynamic>>>{};
-    for (final grade in _gradeOrder) {
-      final gradeItems = filtered.where((i) => i['grade'] == grade).toList();
-      if (gradeItems.isNotEmpty) grouped[grade] = gradeItems;
-    }
-
+  Widget _buildShopTab() {
+    final yutItems = _items.where((i) => i['game'] == 'yut').toList();
+    final onecardItems = _items.where((i) => i['game'] == 'onecard').toList();
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(0, 12, 0, 40),
         children: [
-          for (final entry in grouped.entries) ...[
-            _GradeHeader(grade: entry.key),
-            const SizedBox(height: 8),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 10,
-                crossAxisSpacing: 10,
-                childAspectRatio: 0.78,
-              ),
-              itemCount: entry.value.length,
-              itemBuilder: (_, idx) {
-                final item = entry.value[idx];
-                final id = (item['id'] as num).toInt();
-                return _ShopItemCard(
-                  item: item,
-                  owned: _ownedItemIds.contains(id),
-                  equipped: _equippedItemIds.contains(id),
-                  balance: _balance,
-                  formatCoins: _formatCoins,
-                  onTap: () => _preview(item),
-                );
-              },
-            ),
-            const SizedBox(height: 20),
-          ],
+          _GameSection(
+            title: '윷놀이',
+            icon: '🎲',
+            game: 'yut',
+            items: yutItems,
+            ownedIds: _ownedItemIds,
+            equippedIds: _equippedItemIds,
+            balance: _balance,
+            formatCoins: _formatCoins,
+            onItemTap: _preview,
+            onGacha: _gacha,
+            tierColor: _tierColor,
+          ),
+          const SizedBox(height: 8),
+          _GameSection(
+            title: '원카드',
+            icon: '🃏',
+            game: 'onecard',
+            items: onecardItems,
+            ownedIds: _ownedItemIds,
+            equippedIds: _equippedItemIds,
+            balance: _balance,
+            formatCoins: _formatCoins,
+            onItemTap: _preview,
+            onGacha: _gacha,
+            tierColor: _tierColor,
+          ),
         ],
       ),
     );
@@ -883,194 +946,6 @@ class _RewardTag extends StatelessWidget {
   }
 }
 
-// ── Grade Header ─────────────────────────────────────────────────────────────
-
-class _GradeHeader extends StatelessWidget {
-  final String grade;
-  const _GradeHeader({required this.grade});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = _gradeColor(grade);
-    final label = switch (grade) {
-      'B' => 'B등급 · 코인 구매',
-      'A' => 'A등급 · 코인 구매',
-      'S' => 'S등급 · 뽑기 전용',
-      'SS' => 'SS등급 · 뽑기 전용',
-      'SSS' => 'SSS등급 · 뽑기 전용',
-      _ => grade,
-    };
-
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: color.withValues(alpha: 0.4)),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: color,
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(child: Divider(color: color.withValues(alpha: 0.2))),
-      ],
-    );
-  }
-}
-
-// ── Shop Item Card (Grid) ─────────────────────────────────────────────────────
-
-class _ShopItemCard extends StatelessWidget {
-  final Map<String, dynamic> item;
-  final bool owned;
-  final bool equipped;
-  final int balance;
-  final String Function(int) formatCoins;
-  final VoidCallback onTap;
-
-  const _ShopItemCard({
-    required this.item,
-    required this.owned,
-    required this.equipped,
-    required this.balance,
-    required this.formatCoins,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final grade = item['grade'] as String? ?? 'B';
-    final color = _gradeColor(grade);
-    final price = (item['price'] as num?)?.toInt() ?? 0;
-    final isGachaOnly = ['S', 'SS', 'SSS'].contains(grade);
-    final canAfford = balance >= price;
-    final stats = (item['stats'] as List? ?? []).cast<Map<String, dynamic>>();
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: _gradeGradient(grade),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: equipped ? color : color.withValues(alpha: 0.3),
-            width: equipped ? 2.5 : 1,
-          ),
-        ),
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Grade badge + owned badge
-            Row(
-              children: [
-                _GradeBadge(grade: grade),
-                const Spacer(),
-                if (equipped)
-                  _StatusBadge(label: '장착 중', color: color)
-                else if (owned)
-                  _StatusBadge(label: '보유', color: kMainSage),
-              ],
-            ),
-            const SizedBox(height: 10),
-            // Icon
-            Center(
-              child: Text(
-                item['icon'] as String? ?? '📦',
-                style: const TextStyle(fontSize: 36),
-              ),
-            ),
-            const SizedBox(height: 8),
-            // Name
-            Text(
-              item['name'] as String,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            // Stats preview (first one)
-            if (stats.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(
-                _statLabels[stats[0]['key']] ?? stats[0]['key'],
-                style: TextStyle(fontSize: 10, color: kMainSub),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-            const Spacer(),
-            // Price / status
-            if (owned)
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: equipped ? color : kMainSage),
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  onPressed: onTap,
-                  child: Text(
-                    equipped ? '장착 중' : '장착하기',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: equipped ? color : kMainSage,
-                    ),
-                  ),
-                ),
-              )
-            else if (isGachaOnly)
-              Center(
-                child: Text(
-                  '🎰 뽑기 전용',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: color,
-                  ),
-                ),
-              )
-            else
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: canAfford
-                        ? color
-                        : kMainMuted.withValues(alpha: 0.3),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    elevation: canAfford ? 2 : 0,
-                  ),
-                  onPressed: canAfford ? onTap : null,
-                  child: Text(
-                    '🪙 ${formatCoins(price)}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 // ── Grade Badge ───────────────────────────────────────────────────────────────
 
 class _GradeBadge extends StatelessWidget {
@@ -1093,32 +968,6 @@ class _GradeBadge extends StatelessWidget {
           fontSize: 10,
           fontWeight: FontWeight.w800,
           letterSpacing: 0.5,
-        ),
-      ),
-    );
-  }
-}
-
-class _StatusBadge extends StatelessWidget {
-  final String label;
-  final Color color;
-  const _StatusBadge({required this.label, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 9,
-          fontWeight: FontWeight.w700,
         ),
       ),
     );
@@ -1473,121 +1322,537 @@ class _CouponCard extends StatelessWidget {
   }
 }
 
-// ── Gacha Overlay ─────────────────────────────────────────────────────────────
+// ── Game Section (상점 섹션: 가로 스크롤 아이템 + 뽑기) ───────────────────────
 
-class _GachaOverlay extends StatefulWidget {
-  final Map<String, dynamic> item;
-  const _GachaOverlay({required this.item});
+class _GameSection extends StatelessWidget {
+  final String title, icon, game;
+  final List<Map<String, dynamic>> items;
+  final Set<int> ownedIds, equippedIds;
+  final int balance;
+  final String Function(int) formatCoins;
+  final void Function(Map<String, dynamic>) onItemTap;
+  final Future<void> Function(String, String) onGacha;
+  final Color Function(String) tierColor;
+
+  const _GameSection({
+    required this.title,
+    required this.icon,
+    required this.game,
+    required this.items,
+    required this.ownedIds,
+    required this.equippedIds,
+    required this.balance,
+    required this.formatCoins,
+    required this.onItemTap,
+    required this.onGacha,
+    required this.tierColor,
+  });
+
+  static const _slotOrder = {
+    'yut_yut': 0,
+    'yut_piece': 1,
+    'onecard_cardback': 2,
+  };
+  static const _slotLabels = {
+    'yut_yut': '🎲 윷',
+    'yut_piece': '♟️ 말',
+    'onecard_cardback': '🃏 카드백',
+  };
 
   @override
-  State<_GachaOverlay> createState() => _GachaOverlayState();
+  Widget build(BuildContext context) {
+    final tiers = [
+      ('normal', '일반', 'B~S', 3000),
+      ('advanced', '고급', 'S~SS', 45000),
+      ('rare', '레어', 'SS~SSS', 100000),
+    ];
+
+    // 슬롯별로 그루핑
+    final slotMap = <String, List<Map<String, dynamic>>>{};
+    for (final item in items) {
+      final slot = item['slot'] as String? ?? '';
+      (slotMap[slot] ??= []).add(item);
+    }
+    final slots = slotMap.keys.toList()
+      ..sort((a, b) => (_slotOrder[a] ?? 99).compareTo(_slotOrder[b] ?? 99));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 섹션 헤더
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+          child: Row(
+            children: [
+              Text(icon, style: const TextStyle(fontSize: 18)),
+              const SizedBox(width: 6),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '${items.length}종',
+                style: TextStyle(fontSize: 11, color: kMainMuted),
+              ),
+            ],
+          ),
+        ),
+        // 슬롯별 가로 스크롤
+        if (items.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: Text(
+                '준비 중',
+                style: TextStyle(color: kMainMuted, fontSize: 12),
+              ),
+            ),
+          )
+        else
+          for (final slot in slots) ...[
+            if (slots.length > 1)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+                child: Text(
+                  _slotLabels[slot] ?? slot,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: kMainMuted,
+                  ),
+                ),
+              ),
+            SizedBox(
+              height: 148,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: slotMap[slot]!.length,
+                itemBuilder: (_, i) {
+                  final item = slotMap[slot]![i];
+                  final id = (item['id'] as num).toInt();
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: _HorizItemCard(
+                      item: item,
+                      owned: ownedIds.contains(id),
+                      equipped: equippedIds.contains(id),
+                      onTap: () => onItemTap(item),
+                    ),
+                  );
+                },
+              ),
+            ),
+            if (slot != slots.last) const SizedBox(height: 10),
+          ],
+        const SizedBox(height: 12),
+        // 뽑기 서브섹션
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Text(
+                '$title 뽑기',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: kMainMuted,
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Text('🎰', style: TextStyle(fontSize: 12)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+          child: Row(
+            children: [
+              for (final (tier, label, range, cost) in tiers) ...[
+                Expanded(
+                  child: _GachaTierCard(
+                    label: label,
+                    range: range,
+                    cost: cost,
+                    tier: tier,
+                    canAfford: balance >= cost,
+                    formatCoins: formatCoins,
+                    tierColor: tierColor,
+                    onTap: () => onGacha(game, tier),
+                  ),
+                ),
+                if (tier != 'rare') const SizedBox(width: 8),
+              ],
+            ],
+          ),
+        ),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: Divider(height: 24),
+        ),
+      ],
+    );
+  }
 }
 
-class _GachaOverlayState extends State<_GachaOverlay>
+// ── Horizontal Item Card ──────────────────────────────────────────────────────
+
+class _HorizItemCard extends StatelessWidget {
+  final Map<String, dynamic> item;
+  final bool owned, equipped;
+  final VoidCallback onTap;
+
+  const _HorizItemCard({
+    required this.item,
+    required this.owned,
+    required this.equipped,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final grade = item['grade'] as String? ?? 'B';
+    final gc = _gradeColor(grade);
+    final isGachaOnly = ['S', 'SS', 'SSS'].contains(grade);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 90,
+        decoration: BoxDecoration(
+          color: kSurface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: equipped ? gc : gc.withValues(alpha: 0.3),
+            width: equipped ? 2 : 1,
+          ),
+        ),
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                _GradeBadge(grade: grade),
+                const Spacer(),
+                if (equipped)
+                  Icon(Icons.check_circle, size: 11, color: gc)
+                else if (owned)
+                  Icon(Icons.inventory_2_outlined, size: 11, color: kMainSage),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Center(
+              child: Text(
+                item['icon'] as String? ?? '📦',
+                style: const TextStyle(fontSize: 28),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              item['name'] as String? ?? '',
+              style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (isGachaOnly) ...[
+              const SizedBox(height: 2),
+              Text('🎰 뽑기전용', style: TextStyle(fontSize: 8, color: gc)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Gacha Tier Card ───────────────────────────────────────────────────────────
+
+class _GachaTierCard extends StatelessWidget {
+  final String label, range, tier;
+  final int cost;
+  final bool canAfford;
+  final String Function(int) formatCoins;
+  final Color Function(String) tierColor;
+  final VoidCallback onTap;
+
+  const _GachaTierCard({
+    required this.label,
+    required this.range,
+    required this.cost,
+    required this.tier,
+    required this.canAfford,
+    required this.formatCoins,
+    required this.tierColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final gc = tierColor(tier);
+    return GestureDetector(
+      onTap: canAfford ? onTap : null,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+        decoration: BoxDecoration(
+          color: canAfford
+              ? gc.withValues(alpha: 0.12)
+              : Colors.white.withValues(alpha: 0.03),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: canAfford ? gc.withValues(alpha: 0.4) : Colors.white12,
+          ),
+        ),
+        child: Column(
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: canAfford ? gc : kMainMuted,
+              ),
+            ),
+            const SizedBox(height: 1),
+            Text(range, style: TextStyle(fontSize: 9, color: kMainMuted)),
+            const SizedBox(height: 4),
+            Text(
+              '🪙${formatCoins(cost)}',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: canAfford ? kMainHoney : kMainMuted,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Gacha Result Overlay (플립 카드 애니메이션) ───────────────────────────────
+
+class _GachaResultOverlay extends StatefulWidget {
+  final Map<String, dynamic> item;
+  final bool isNew;
+  const _GachaResultOverlay({required this.item, required this.isNew});
+
+  @override
+  State<_GachaResultOverlay> createState() => _GachaResultOverlayState();
+}
+
+class _GachaResultOverlayState extends State<_GachaResultOverlay>
     with TickerProviderStateMixin {
+  // Phase 1: accelerating spin (easeIn – slow start, fast end)
+  late final AnimationController _spinCtrl;
+  late final Animation<double> _spinAnim;
+  // Phase 2: snap reveal (easeOut – fast start, decelerates to stop)
   late final AnimationController _flipCtrl;
-  late final AnimationController _burstCtrl;
-  late final AnimationController _scaleCtrl;
   late final Animation<double> _flipAnim;
   late final Animation<double> _scaleAnim;
+  // Effects
+  late final AnimationController _flashCtrl;
+  late final AnimationController _burstCtrl;
+  late final AnimationController _idleCtrl;
+  late final int _spinRotations;
+  bool _flashTriggered = false;
 
   @override
   void initState() {
     super.initState();
+    final grade = widget.item['grade'] as String? ?? 'B';
+
+    _spinRotations = switch (grade) {
+      'SSS' => 6,
+      'SS' => 5,
+      'S' => 4,
+      _ => 3,
+    };
+    final spinMs = switch (grade) {
+      'SSS' => 2000,
+      'SS' => 1700,
+      'S' => 1450,
+      _ => 1200,
+    };
+    final flipMs = switch (grade) {
+      'SSS' => 480,
+      'SS' => 420,
+      'S' => 370,
+      _ => 330,
+    };
+
+    _spinCtrl = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: spinMs),
+    );
     _flipCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: Duration(milliseconds: flipMs),
+    );
+    _flashCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
     );
     _burstCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 900),
+      duration: const Duration(milliseconds: 1600),
     );
-    _scaleCtrl = AnimationController(
+    _idleCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 500),
+      duration: const Duration(milliseconds: 2200),
     );
 
-    _flipAnim = CurvedAnimation(parent: _flipCtrl, curve: Curves.easeInOut);
-    _scaleAnim = CurvedAnimation(parent: _scaleCtrl, curve: Curves.elasticOut);
+    // easeIn: card slowly starts spinning, accelerates to peak velocity
+    _spinAnim = CurvedAnimation(parent: _spinCtrl, curve: Curves.easeIn);
+    // easeOut: snaps in fast (matching spin exit speed), decelerates to stop
+    _flipAnim = CurvedAnimation(parent: _flipCtrl, curve: Curves.easeOut);
+    // elasticOut scale pop starting from the reveal midpoint
+    _scaleAnim = CurvedAnimation(
+      parent: _flipCtrl,
+      curve: const Interval(0.5, 1.0, curve: Curves.elasticOut),
+    );
 
-    _flipCtrl.forward().then((_) {
-      _burstCtrl.forward();
-      _scaleCtrl.forward();
+    // Flash + burst trigger exactly at reveal midpoint
+    _flipCtrl.addListener(() {
+      if (!_flashTriggered && _flipCtrl.value >= 0.5) {
+        _flashTriggered = true;
+        _flashCtrl.forward();
+        _burstCtrl.forward();
+      }
+    });
+
+    // Chain: spin → snap flip → idle glow
+    _spinCtrl.forward().then((_) {
+      _flipCtrl.forward().then((_) {
+        if (['A', 'S', 'SS', 'SSS'].contains(grade)) {
+          _idleCtrl.repeat(reverse: true);
+        }
+      });
     });
   }
 
   @override
   void dispose() {
+    _spinCtrl.dispose();
     _flipCtrl.dispose();
+    _flashCtrl.dispose();
     _burstCtrl.dispose();
-    _scaleCtrl.dispose();
+    _idleCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final grade = widget.item['grade'] as String? ?? 'S';
-    final gradeColor = _gradeColor(grade);
+    final grade = widget.item['grade'] as String? ?? 'B';
+    final gc = _gradeColor(grade);
     final icon = widget.item['icon'] as String? ?? '✨';
     final name = widget.item['name'] as String? ?? '';
 
     return Scaffold(
-      backgroundColor: Colors.black87,
+      backgroundColor: Colors.black,
       body: AnimatedBuilder(
-        animation: Listenable.merge([_flipAnim, _burstCtrl, _scaleAnim]),
+        animation: Listenable.merge([
+          _spinCtrl,
+          _flipCtrl,
+          _flashCtrl,
+          _burstCtrl,
+          _idleCtrl,
+        ]),
         builder: (ctx, _) {
-          final flip = _flipAnim.value;
+          final flash = _flashCtrl.value;
           final burst = _burstCtrl.value;
-          final isRevealed = flip > 0.5;
+          final idle = _idleCtrl.value;
+          final spinDone = _spinCtrl.status == AnimationStatus.completed;
+          // Phase 1: spin angle (0 → rotations×2π, easeIn)
+          final spinAngle = _spinAnim.value * _spinRotations * 2 * pi;
+          // Phase 2: reveal angle (0 → π, easeOut)
+          final flipAngle = _flipAnim.value * pi;
+          final isRevealed = spinDone && _flipCtrl.value >= 0.5;
+
+          // Flash: peaks at t=0.3, gone by t=0.85
+          final rawFlash = flash < 0.3 ? flash / 0.3 : (1.0 - flash) / 0.7;
+          final flashPeak = switch (grade) {
+            'SSS' => 0.92,
+            'SS' => 0.80,
+            'S' => 0.65,
+            'A' => 0.40,
+            _ => 0.18,
+          };
 
           return Stack(
             children: [
-              // Burst particles
-              if (isRevealed)
-                CustomPaint(
-                  painter: _BurstPainter(t: burst, color: gradeColor),
-                  child: const SizedBox.expand(),
+              // Effect layer
+              CustomPaint(
+                painter: _EffectPainter(
+                  grade: grade,
+                  color: gc,
+                  burstT: burst,
+                  idleT: idle,
                 ),
+                child: const SizedBox.expand(),
+              ),
 
+              // Card (spin phase → flip phase)
               Center(
                 child: GestureDetector(
-                  onTap: () => Navigator.of(context).pop(),
+                  onTap: isRevealed ? () => Navigator.of(context).pop() : null,
                   child: Transform(
                     alignment: Alignment.center,
                     transform: Matrix4.identity()
                       ..setEntry(3, 2, 0.001)
-                      ..rotateY(flip * 3.14159),
-                    child: isRevealed
-                        ? Transform(
-                            alignment: Alignment.center,
-                            transform: Matrix4.identity()..rotateY(3.14159),
-                            child: ScaleTransition(
-                              scale: _scaleAnim,
-                              child: _buildRevealCard(
-                                grade,
-                                gradeColor,
-                                icon,
-                                name,
-                              ),
-                            ),
-                          )
-                        : _buildHiddenCard(gradeColor),
+                      ..rotateY(spinDone ? flipAngle : spinAngle),
+                    child: spinDone
+                        // Flip phase: switch face at midpoint
+                        ? (isRevealed
+                              ? Transform(
+                                  alignment: Alignment.center,
+                                  transform: Matrix4.identity()..rotateY(pi),
+                                  child: ScaleTransition(
+                                    scale: _scaleAnim,
+                                    child: _buildRevealCard(
+                                      grade,
+                                      gc,
+                                      icon,
+                                      name,
+                                      idle,
+                                    ),
+                                  ),
+                                )
+                              : _buildHiddenCard(gc, _flipCtrl.value))
+                        // Spin phase: always show hidden card (full glow)
+                        : _buildHiddenCard(gc, 1.0),
                   ),
                 ),
               ),
 
+              // White flash
+              if (isRevealed && flash > 0)
+                IgnorePointer(
+                  child: Container(
+                    color: Colors.white.withValues(
+                      alpha: (rawFlash.clamp(0.0, 1.0) * flashPeak),
+                    ),
+                  ),
+                ),
+
               // Tap hint
-              if (isRevealed && burst > 0.8)
+              if (isRevealed && burst > 0.65)
                 Positioned(
-                  bottom: 60,
+                  bottom: 56,
                   left: 0,
                   right: 0,
                   child: Center(
-                    child: Text(
-                      '탭하여 닫기',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.6),
-                        fontSize: 14,
+                    child: Opacity(
+                      opacity: ((burst - 0.65) / 0.2).clamp(0.0, 0.6),
+                      child: const Text(
+                        '탭하여 닫기',
+                        style: TextStyle(color: Colors.white70, fontSize: 14),
                       ),
                     ),
                   ),
@@ -1599,60 +1864,90 @@ class _GachaOverlayState extends State<_GachaOverlay>
     );
   }
 
-  Widget _buildHiddenCard(Color gradeColor) {
+  Widget _buildHiddenCard(Color gc, double flipProgress) {
     return Container(
       width: 220,
       height: 300,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [const Color(0xFF1A1A2E), const Color(0xFF16213E)],
+        gradient: const LinearGradient(
+          colors: [Color(0xFF12121E), Color(0xFF1A1A30)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: gradeColor.withValues(alpha: 0.5), width: 2),
+        border: Border.all(
+          color: gc.withValues(alpha: 0.3 + flipProgress * 0.5),
+          width: 2,
+        ),
         boxShadow: [
           BoxShadow(
-            color: gradeColor.withValues(alpha: 0.3),
-            blurRadius: 20,
-            spreadRadius: 2,
+            color: gc.withValues(alpha: flipProgress * 0.45),
+            blurRadius: 20 + flipProgress * 24,
+            spreadRadius: flipProgress * 5,
           ),
         ],
       ),
-      child: const Center(
-        child: Text('?', style: TextStyle(fontSize: 80, color: Colors.white38)),
+      child: Center(
+        child: Text(
+          '?',
+          style: TextStyle(
+            fontSize: 80,
+            color: Colors.white.withValues(alpha: 0.15 + flipProgress * 0.25),
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildRevealCard(
     String grade,
-    Color gradeColor,
+    Color gc,
     String icon,
     String name,
+    double idle,
   ) {
+    final glowRadius = switch (grade) {
+      'SSS' => 42.0 + idle * 22,
+      'SS' => 30.0 + idle * 16,
+      'S' => 22.0 + idle * 10,
+      'A' => 16.0 + idle * 6,
+      _ => 16.0,
+    };
+    final spread = switch (grade) {
+      'SSS' => 5.0 + idle * 5,
+      'SS' => 3.0 + idle * 3,
+      'S' => 2.0 + idle * 2,
+      _ => 2.0,
+    };
+    // SSS: rainbow border color
+    final borderColor = (grade == 'SSS')
+        ? HSVColor.fromAHSV(1.0, idle * 360, 0.85, 1.0).toColor()
+        : gc;
+
     return Container(
       width: 220,
       height: 300,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            gradeColor.withValues(alpha: 0.9),
-            gradeColor.withValues(alpha: 0.5),
+            gc.withValues(alpha: 0.65),
+            gc.withValues(alpha: 0.28),
+            const Color(0xFF12121E),
           ],
+          stops: const [0.0, 0.5, 1.0],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.4),
-          width: 2,
+          color: borderColor.withValues(alpha: 0.85),
+          width: grade == 'SSS' ? 3 : 2,
         ),
         boxShadow: [
           BoxShadow(
-            color: gradeColor.withValues(alpha: 0.6),
-            blurRadius: 30,
-            spreadRadius: 5,
+            color: gc.withValues(alpha: 0.55 + idle * 0.15),
+            blurRadius: glowRadius,
+            spreadRadius: spread,
           ),
         ],
       ),
@@ -1660,30 +1955,48 @@ class _GachaOverlayState extends State<_GachaOverlay>
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(icon, style: const TextStyle(fontSize: 64)),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
+              color: gc.withValues(alpha: 0.22),
               borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: gc.withValues(alpha: 0.6)),
             ),
             child: Text(
               grade,
-              style: const TextStyle(
-                fontSize: 16,
+              style: TextStyle(
+                fontSize: grade == 'SSS' ? 22 : 17,
                 fontWeight: FontWeight.w900,
                 color: Colors.white,
+                shadows: ['S', 'SS', 'SSS'].contains(grade)
+                    ? [Shadow(color: gc, blurRadius: 10)]
+                    : null,
               ),
             ),
           ),
-          const SizedBox(height: 12),
+          if (!widget.isNew) ...[
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text(
+                '코인으로 교환 +500',
+                style: TextStyle(fontSize: 11, color: Colors.amber),
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
               name,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                fontSize: 16,
+                fontSize: 15,
                 fontWeight: FontWeight.w700,
                 color: Colors.white,
               ),
@@ -1695,56 +2008,180 @@ class _GachaOverlayState extends State<_GachaOverlay>
   }
 }
 
-class _BurstPainter extends CustomPainter {
-  final double t;
-  final Color color;
-  static const _particleCount = 24;
+// ── _EffectPainter ────────────────────────────────────────────────────────────
 
-  const _BurstPainter({required this.t, required this.color});
+class _EffectPainter extends CustomPainter {
+  final String grade;
+  final Color color;
+  final double burstT; // 0→1 one-shot
+  final double idleT; // 0→1 repeating
+
+  const _EffectPainter({
+    required this.grade,
+    required this.color,
+    required this.burstT,
+    required this.idleT,
+  });
+
+  static int _pCount(String g) => switch (g) {
+    'SSS' => 48,
+    'SS' => 32,
+    'S' => 24,
+    'A' => 16,
+    _ => 10,
+  };
+  static int _beamCount(String g) => switch (g) {
+    'SSS' => 16,
+    'SS' => 12,
+    'S' => 8,
+    _ => 0,
+  };
+  static int _ringCount(String g) => switch (g) {
+    'SSS' => 3,
+    'SS' => 2,
+    'S' => 1,
+    'A' => 1,
+    _ => 0,
+  };
+  static double _speed(String g) => switch (g) {
+    'SSS' => 330,
+    'SS' => 280,
+    'S' => 240,
+    'A' => 190,
+    _ => 150,
+  };
+
+  Color _hueColor(double hue, double alpha) =>
+      HSVColor.fromAHSV(alpha.clamp(0.0, 1.0), hue % 360, 0.85, 1.0).toColor();
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (t <= 0) return;
+    if (burstT <= 0 && idleT <= 0) return;
     final cx = size.width / 2;
     final cy = size.height / 2;
-    final paint = Paint()..style = PaintingStyle.fill;
-    final angle = 3.14159 * 2 / _particleCount;
+    final paint = Paint();
 
-    for (int i = 0; i < _particleCount; i++) {
-      final a = angle * i;
-      final speed = 200 + (i % 3) * 60.0;
-      final dx =
-          cx +
-          speed *
-              t *
-              (1 - t * 0.3) *
-              (1 + (i % 2) * 0.4) *
-              (0.8 + (i % 5) * 0.1) *
-              (a > 3.14159 ? -1 : 1) *
-              (i.isEven ? 1 : -1) *
-              0 +
-          speed * t * _cos(a);
-      final dy = cy + speed * t * _sin(a);
-      final radius = (6 - t * 4).clamp(1.0, 6.0);
-      final alpha = (1 - t).clamp(0.0, 1.0);
-      paint.color = color.withValues(alpha: alpha);
-      canvas.drawCircle(Offset(dx, dy), radius, paint);
+    // 1. Background radial glow (A+, idle-driven)
+    if (['A', 'S', 'SS', 'SSS'].contains(grade) && idleT > 0) {
+      final a = (0.12 + idleT * 0.14).clamp(0.0, 1.0);
+      paint
+        ..style = PaintingStyle.fill
+        ..shader =
+            RadialGradient(
+              colors: [
+                color.withValues(alpha: a),
+                Colors.transparent,
+              ],
+            ).createShader(
+              Rect.fromCircle(
+                center: Offset(cx, cy),
+                radius: size.width * 0.75,
+              ),
+            );
+      canvas.drawCircle(Offset(cx, cy), size.width * 0.75, paint);
+      paint.shader = null;
+    }
+
+    // 2. Rotating light beams (S+, idle-driven)
+    final beams = _beamCount(grade);
+    if (beams > 0 && idleT > 0) {
+      final beamLen = size.width * 0.62;
+      final rot = idleT * pi * 0.5; // 90° over cycle
+      paint
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = grade == 'SSS' ? 2.5 : 1.8;
+      for (int i = 0; i < beams; i++) {
+        final a = (2 * pi * i / beams) + rot;
+        final beamAlpha = (0.28 + idleT * 0.32).clamp(0.0, 1.0);
+        paint.color = (grade == 'SSS')
+            ? _hueColor((i / beams * 360 + idleT * 200) % 360, beamAlpha)
+            : color.withValues(alpha: beamAlpha);
+        canvas.drawLine(
+          Offset(cx, cy),
+          Offset(cx + cos(a) * beamLen, cy + sin(a) * beamLen),
+          paint,
+        );
+      }
+    }
+
+    // 3. Burst particles (all, burstT-driven)
+    if (burstT > 0) {
+      final pCount = _pCount(grade);
+      final spd = _speed(grade);
+      paint.style = PaintingStyle.fill;
+
+      for (int i = 0; i < pCount; i++) {
+        final a = 2 * pi * i / pCount;
+        final speedMult = 0.7 + (i % 3) * 0.3;
+        final t = burstT;
+        final dx = cx + cos(a) * spd * speedMult * t * (1 - t * 0.35);
+        final dy = cy + sin(a) * spd * speedMult * t * (1 - t * 0.35);
+        final alpha = (1.0 - t * 1.05).clamp(0.0, 1.0);
+        final radius = (9 * (1 + (i % 4) * 0.15) - t * 6).clamp(1.5, 12.0);
+
+        paint.color = (grade == 'SSS')
+            ? _hueColor((i / pCount * 360 + burstT * 80) % 360, alpha)
+            : color.withValues(alpha: alpha);
+        canvas.drawCircle(Offset(dx, dy), radius, paint);
+      }
+
+      // Secondary white sparkles (S+)
+      if (['S', 'SS', 'SSS'].contains(grade)) {
+        final sCount = 38;
+        final t2 = (burstT * 1.15).clamp(0.0, 1.0);
+        for (int i = 0; i < sCount; i++) {
+          final a = 2 * pi * i / sCount + 0.08;
+          final dx = cx + cos(a) * spd * 1.5 * t2 * (1 - t2 * 0.5);
+          final dy = cy + sin(a) * spd * 1.5 * t2 * (1 - t2 * 0.5);
+          final alpha = (1.0 - t2 * 1.2).clamp(0.0, 1.0);
+          paint.color = Colors.white.withValues(alpha: alpha * 0.7);
+          canvas.drawCircle(Offset(dx, dy), 3, paint);
+        }
+      }
+    }
+
+    // 4. Expanding rings (A+, burstT-driven)
+    final rings = _ringCount(grade);
+    if (rings > 0 && burstT > 0) {
+      paint
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.2;
+      for (int r = 0; r < rings; r++) {
+        final delay = r * 0.18;
+        final t = (burstT - delay).clamp(0.0, 1.0);
+        if (t <= 0) continue;
+        final ringR = size.width * 0.28 * t + r * 35;
+        final ringA = (1.0 - t).clamp(0.0, 1.0) * 0.85;
+        paint.color = (grade == 'SSS')
+            ? _hueColor((r * 120.0 + idleT * 360) % 360, ringA)
+            : color.withValues(alpha: ringA);
+        canvas.drawCircle(Offset(cx, cy), ringR, paint);
+      }
+    }
+
+    // 5. Orbiting sparkles (S+, idle-driven)
+    if (['S', 'SS', 'SSS'].contains(grade) && idleT > 0) {
+      final sparkCount = switch (grade) {
+        'SSS' => 12,
+        'SS' => 8,
+        _ => 5,
+      };
+      final orbitR = 165.0;
+      paint.style = PaintingStyle.fill;
+      for (int i = 0; i < sparkCount; i++) {
+        final a = 2 * pi * i / sparkCount + idleT * pi;
+        final dx = cx + cos(a) * orbitR;
+        final dy = cy + sin(a) * orbitR;
+        final sparkAlpha = (0.35 + idleT * 0.45).clamp(0.0, 1.0);
+        paint.color = (grade == 'SSS')
+            ? _hueColor((i / sparkCount * 360 + idleT * 270) % 360, sparkAlpha)
+            : Colors.white.withValues(alpha: sparkAlpha);
+        canvas.drawCircle(Offset(dx, dy), 4.5, paint);
+      }
     }
   }
 
-  double _cos(double a) {
-    // Simple cos approximation via Dart's built-in
-    return (a < 1.5708
-        ? 1 - a * a / 2 + a * a * a * a / 24
-        : a < 3.14159
-        ? -(1 - (a - 3.14159) * (a - 3.14159) / 2)
-        : a < 4.71239
-        ? -1 + (a - 3.14159) * (a - 3.14159) / 2
-        : 1 - (a - 6.28318) * (a - 6.28318) / 2);
-  }
-
-  double _sin(double a) => _cos(a - 1.5708);
-
   @override
-  bool shouldRepaint(_BurstPainter old) => old.t != t || old.color != color;
+  bool shouldRepaint(_EffectPainter old) =>
+      old.burstT != burstT || old.idleT != idleT || old.color != color;
 }

@@ -69,12 +69,16 @@ class _YutScreenState extends State<YutScreen> {
   String _iconToYutSkin(String icon, String grade) {
     return switch (icon) {
       '🌸' || '🌺' || '💝' || '🌷' => 'cherry',
-      '🍁' || '🔥' || '⚡' || '🌪️' || '⛈️' => 'fire',
-      '🌱' || '🍃' || '🌿' || '🐉' => 'bamboo',
-      '🌙' || '⭐' || '❄️' || '🧊' || '🌊' || '💨' => 'crystal',
-      '🌌' || '✨' || '🎯' || '🦅' => 'legend',
+      '🔥' || '⛈️' || '🐉' => 'fire',
+      '🌱' || '🍃' || '🌿' || '🎋' => 'bamboo',
+      '❄️' || '🧊' || '🌙' || '⭐' || '💎' => 'crystal',
+      '🌌' || '✨' || '🎯' || '🦅' || '⚡' => 'legend',
       '🪨' || '🪵' => 'stone',
-      '☀️' || '🌞' => 'gold',
+      '☀️' || '🌞' || '🏅' => 'gold',
+      '🍁' => 'autumn',
+      '🌊' => 'wave',
+      '💨' => 'wind',
+      '🌪️' => 'storm',
       _ => switch (grade) {
         'SSS' => 'legend',
         'SS' => 'crystal',
@@ -519,7 +523,7 @@ class _StatusStrip extends StatelessWidget {
         : isMyTurn
         ? (sock.yutPendingMoves.isEmpty
               ? '내 턴 · 윷을 던지세요'
-              : '내 턴 · 말을 선택하고 가이드를 눌러 이동')
+              : '내 턴 · 가이드를 눌러 이동 (다른 말 선택 가능)')
         : '${sock.yutCurrentTurn ?? '상대'} 차례입니다';
 
     return Container(

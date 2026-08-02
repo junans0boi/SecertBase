@@ -23,6 +23,7 @@ ALTER TABLE item_stats
     -- 윷(yut_yut) 전용 4개
     'yut_mo_rate_pct',
     'yut_backdo_shield_pct',
+    'yut_backdo_bonus_pct',  -- 0019에서 추가되나 이미 DB에 존재 가능하므로 여기서도 포함
     'yut_win_coin_pct',
     'yut_overturn_pct',
     -- 말(yut_piece) 전용 4개

@@ -39,8 +39,12 @@ trap cleanup EXIT INT TERM
 
 # ── 기존 프로세스 정리 ───────────────────────────────────────────────────────
 info "기존 프로세스 정리..."
-# 4100 포트 사용 중인 프로세스
+# Node (4100), Flutter dev server (7357)
 lsof -ti:4100 | xargs kill -9 2>/dev/null || true
+lsof -ti:7357 | xargs kill -9 2>/dev/null || true
+# Flutter tool 프로세스
+pkill -f "dart.*flutter_tools" 2>/dev/null || true
+pkill -f "flutter.*run" 2>/dev/null || true
 # 기존 터널
 if [ -f "$TUNNEL_PID_FILE" ]; then
   kill "$(cat "$TUNNEL_PID_FILE")" 2>/dev/null || true
@@ -81,24 +85,22 @@ DB_USER="junzzang"
 DB_PASS="0427"
 DB_NAME="secretbase"
 DB_PORT="3307"
+# SSH 터널은 이미 암호화되므로 SSL 불필요
+MYSQL="mysql --skip-ssl -u${DB_USER} -p${DB_PASS} -P ${DB_PORT} -h 127.0.0.1 ${DB_NAME}"
 
 MIGRATIONS_DIR="$ROOT/services/realtime-server/migrations"
-APPLIED_FILE="/tmp/sb_applied_migrations.txt"
 
 # 적용된 마이그레이션 추적 테이블이 없으면 생성
-mysql -u"$DB_USER" -p"$DB_PASS" -P "$DB_PORT" -h 127.0.0.1 "$DB_NAME" \
-  -e "CREATE TABLE IF NOT EXISTS _migrations (name VARCHAR(120) PRIMARY KEY, applied_at DATETIME DEFAULT NOW());" 2>/dev/null || true
+$MYSQL -e "CREATE TABLE IF NOT EXISTS _migrations (name VARCHAR(120) PRIMARY KEY, applied_at DATETIME DEFAULT NOW());" 2>/dev/null || true
 
 for sql_file in $(ls "$MIGRATIONS_DIR"/*.sql | sort); do
   migration_name="$(basename "$sql_file")"
-  already_applied=$(mysql -u"$DB_USER" -p"$DB_PASS" -P "$DB_PORT" -h 127.0.0.1 "$DB_NAME" \
-    -sNe "SELECT COUNT(*) FROM _migrations WHERE name='$migration_name';" 2>/dev/null || echo "0")
+  already_applied=$($MYSQL -sNe "SELECT COUNT(*) FROM _migrations WHERE name='$migration_name';" 2>/dev/null || echo "0")
 
   if [ "$already_applied" = "0" ]; then
     info "  적용 중: $migration_name"
-    if mysql -u"$DB_USER" -p"$DB_PASS" -P "$DB_PORT" -h 127.0.0.1 "$DB_NAME" < "$sql_file" 2>/tmp/sb_migration_err.txt; then
-      mysql -u"$DB_USER" -p"$DB_PASS" -P "$DB_PORT" -h 127.0.0.1 "$DB_NAME" \
-        -e "INSERT IGNORE INTO _migrations (name) VALUES ('$migration_name');" 2>/dev/null || true
+    if $MYSQL < "$sql_file" 2>/tmp/sb_migration_err.txt; then
+      $MYSQL -e "INSERT IGNORE INTO _migrations (name) VALUES ('$migration_name');" 2>/dev/null || true
       ok "  완료: $migration_name"
     else
       err "  실패: $migration_name"

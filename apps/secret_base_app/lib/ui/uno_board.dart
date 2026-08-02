@@ -89,6 +89,10 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
   late AnimationController _effectCtrl;
   String? _effectCard;
 
+  // --- Card-play skin burst ---
+  late AnimationController _playBurstCtrl;
+  String _playBurstSkin = 'base';
+
   @override
   void initState() {
     super.initState();
@@ -102,6 +106,10 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
         _effectCtrl.reset();
       }
     });
+    _playBurstCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
   }
 
   @override
@@ -152,6 +160,7 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
     _dealTimer?.cancel();
     _turnTimer?.cancel();
     _effectCtrl.dispose();
+    _playBurstCtrl.dispose();
     super.dispose();
   }
 
@@ -241,10 +250,16 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
     }
   }
 
+  void _triggerPlayBurst() {
+    setState(() => _playBurstSkin = widget.cardBackSkin);
+    _playBurstCtrl.forward(from: 0);
+  }
+
   void _handleCardTap(BuildContext context, Map<String, dynamic> cardMap) {
     if (widget.turn != widget.currentUser) return;
 
     UnoAudio.instance.cardPick();
+    _triggerPlayBurst();
 
     final val = cardMap['value'] as String?;
     final id = cardMap['id'] as String;
@@ -823,6 +838,33 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
               ),
             ),
 
+            // Card-play skin burst overlay
+            AnimatedBuilder(
+              animation: _playBurstCtrl,
+              builder: (context2, child2) {
+                final t = _playBurstCtrl.value;
+                if (t == 0) return const SizedBox.shrink();
+                final alpha = (t < 0.3 ? t / 0.3 : (1 - t) / 0.7).clamp(0.0, 1.0);
+                final colors = UnoCardBack.skinGradient(_playBurstSkin);
+                return Positioned.fill(
+                  child: IgnorePointer(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: RadialGradient(
+                          colors: [
+                            colors[0].withValues(alpha: alpha * 0.55),
+                            colors[1].withValues(alpha: alpha * 0.25),
+                            Colors.transparent,
+                          ],
+                          radius: 1.2,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+
             // Special card effect overlay
             if (_effectCard != null)
               Positioned.fill(
@@ -1268,6 +1310,12 @@ class UnoCardBack extends StatelessWidget {
       textColor: Colors.white,
     ),
   };
+
+  static List<Color> skinGradient(String skin) {
+    final entry = _skins[skin];
+    if (entry == null) return const [Color(0xFF463560), Color(0xFF2E2342)];
+    return entry.gradient;
+  }
 
   @override
   Widget build(BuildContext context) {

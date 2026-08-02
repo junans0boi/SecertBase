@@ -29,13 +29,34 @@ ALTER TABLE item_stats
     'card_reverse_bonus'
   ) NOT NULL;
 
--- 2단계: 기존 yut_backdo_shield_pct 행을 yut_backdo_bonus_pct로 업데이트
---   B(43): 3→5%, A(46): 6→8%, S(50): 10→10%, SS(54): 18→17%, SSS(56): 25→25%
-UPDATE item_stats SET stat_key = 'yut_backdo_bonus_pct', stat_value = 5  WHERE item_id = 43 AND stat_key = 'yut_backdo_shield_pct';
-UPDATE item_stats SET stat_key = 'yut_backdo_bonus_pct', stat_value = 8  WHERE item_id = 46 AND stat_key = 'yut_backdo_shield_pct';
-UPDATE item_stats SET stat_key = 'yut_backdo_bonus_pct', stat_value = 10 WHERE item_id = 50 AND stat_key = 'yut_backdo_shield_pct';
-UPDATE item_stats SET stat_key = 'yut_backdo_bonus_pct', stat_value = 17 WHERE item_id = 54 AND stat_key = 'yut_backdo_shield_pct';
-UPDATE item_stats SET stat_key = 'yut_backdo_bonus_pct', stat_value = 25 WHERE item_id = 56 AND stat_key = 'yut_backdo_shield_pct';
+-- 2단계: yut_backdo_shield_pct → yut_backdo_bonus_pct 전환
+-- 전략: bonus_pct 행이 없으면 UPDATE, 이미 있으면 shield 행만 DELETE
+-- (0018 시드가 bonus_pct를 먼저 넣은 경우에도 안전)
+
+-- item_id 43
+INSERT IGNORE INTO item_stats (item_id, stat_key, stat_value) VALUES (43, 'yut_backdo_bonus_pct', 5);
+DELETE FROM item_stats WHERE item_id = 43 AND stat_key = 'yut_backdo_shield_pct';
+UPDATE item_stats SET stat_value = 5  WHERE item_id = 43 AND stat_key = 'yut_backdo_bonus_pct';
+
+-- item_id 46
+INSERT IGNORE INTO item_stats (item_id, stat_key, stat_value) VALUES (46, 'yut_backdo_bonus_pct', 8);
+DELETE FROM item_stats WHERE item_id = 46 AND stat_key = 'yut_backdo_shield_pct';
+UPDATE item_stats SET stat_value = 8  WHERE item_id = 46 AND stat_key = 'yut_backdo_bonus_pct';
+
+-- item_id 50
+INSERT IGNORE INTO item_stats (item_id, stat_key, stat_value) VALUES (50, 'yut_backdo_bonus_pct', 10);
+DELETE FROM item_stats WHERE item_id = 50 AND stat_key = 'yut_backdo_shield_pct';
+UPDATE item_stats SET stat_value = 10 WHERE item_id = 50 AND stat_key = 'yut_backdo_bonus_pct';
+
+-- item_id 54
+INSERT IGNORE INTO item_stats (item_id, stat_key, stat_value) VALUES (54, 'yut_backdo_bonus_pct', 17);
+DELETE FROM item_stats WHERE item_id = 54 AND stat_key = 'yut_backdo_shield_pct';
+UPDATE item_stats SET stat_value = 17 WHERE item_id = 54 AND stat_key = 'yut_backdo_bonus_pct';
+
+-- item_id 56
+INSERT IGNORE INTO item_stats (item_id, stat_key, stat_value) VALUES (56, 'yut_backdo_bonus_pct', 25);
+DELETE FROM item_stats WHERE item_id = 56 AND stat_key = 'yut_backdo_shield_pct';
+UPDATE item_stats SET stat_value = 25 WHERE item_id = 56 AND stat_key = 'yut_backdo_bonus_pct';
 
 -- 3단계: yut_backdo_shield_pct ENUM 값 제거 (데이터 없으므로 안전)
 ALTER TABLE item_stats

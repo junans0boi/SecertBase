@@ -2211,6 +2211,49 @@ class _YutSticksPainter extends CustomPainter {
           color2: const Color(0xFFFFF8DC),
           shape: _ParticleShape.star,
         );
+      case 'autumn':
+        _drawParticles(
+          canvas,
+          size,
+          cx,
+          count: 18,
+          seed: rng,
+          color1: const Color(0xFFFF8C00),
+          color2: const Color(0xFFFFD700),
+          shape: _ParticleShape.petal,
+        );
+      case 'wave':
+        _drawParticles(
+          canvas,
+          size,
+          cx,
+          count: 20,
+          seed: rng,
+          color1: const Color(0xFF0077B6),
+          color2: const Color(0xFF00B4D8),
+          shape: _ParticleShape.diamond,
+        );
+      case 'wind':
+        _drawParticles(
+          canvas,
+          size,
+          cx,
+          count: 24,
+          seed: rng,
+          color1: const Color(0xFFB0BEC5),
+          color2: const Color(0xFFECEFF1),
+        );
+      case 'storm':
+        _drawLightning(canvas, size, cx);
+        _drawParticles(
+          canvas,
+          size,
+          cx,
+          count: 16,
+          seed: rng,
+          color1: const Color(0xFF455A64),
+          color2: const Color(0xFF78909C),
+        );
       default:
         break;
     }

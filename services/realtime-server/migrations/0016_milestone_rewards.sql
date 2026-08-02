@@ -5,7 +5,15 @@
 ALTER TABLE owned_items MODIFY COLUMN couple_id INT NULL;
 
 -- Drop old unique key (couple_id, item_id) — can't dedupe by user with it
-ALTER TABLE owned_items DROP INDEX uq_owned;
+SET @drop_uq = (SELECT IF(
+  EXISTS(SELECT 1 FROM information_schema.statistics
+         WHERE table_schema=DATABASE() AND table_name='owned_items' AND index_name='uq_owned'),
+  'ALTER TABLE owned_items DROP INDEX uq_owned',
+  'SELECT 1'
+));
+PREPARE _stmt FROM @drop_uq;
+EXECUTE _stmt;
+DEALLOCATE PREPARE _stmt;
 
 -- New unique key: one of each item per user
 ALTER TABLE owned_items
