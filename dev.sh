@@ -149,4 +149,5 @@ echo ""
 cd "$ROOT/apps/secret_base_app"
 flutter run -d chrome \
   --web-port 7357 \
-  --dart-define=SOCKET_URL=http://localhost:4100
+  --web-hostname 0.0.0.0 \
+  --dart-define=SOCKET_URL=http://${LOCAL_IP}:4100
