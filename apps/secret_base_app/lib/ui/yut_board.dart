@@ -1227,13 +1227,10 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                 clipBehavior: Clip.none,
                                 children: [
                                   Positioned.fill(
-                                    child: ClipPath(
-                                      clipper: const _YutBoardAssetClipper(),
-                                      child: Image.asset(
-                                        key: const ValueKey('yut_board_art'),
-                                        'assets/images/yut/yut_board_3d_rail_v2_chroma.png',
-                                        fit: BoxFit.fill,
-                                      ),
+                                    child: Image.asset(
+                                      key: const ValueKey('yut_board_art'),
+                                      'assets/images/yut/yut_board_3d_rail_v2.png',
+                                      fit: BoxFit.fill,
                                     ),
                                   ),
                                   Positioned.fill(
@@ -2071,50 +2068,6 @@ class _YutBoardNodePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _YutBoardNodePainter oldDelegate) => false;
-}
-
-class _YutBoardAssetClipper extends CustomClipper<Path> {
-  const _YutBoardAssetClipper();
-
-  @override
-  Path getClip(Size size) {
-    Offset point(double x, double y) => Offset(size.width * x, size.height * y);
-
-    return Path()
-      ..moveTo(point(0.19, 0.132).dx, point(0.19, 0.132).dy)
-      ..lineTo(point(0.755, 0.132).dx, point(0.755, 0.132).dy)
-      ..quadraticBezierTo(
-        point(0.785, 0.132).dx,
-        point(0.785, 0.132).dy,
-        point(0.808, 0.215).dx,
-        point(0.808, 0.215).dy,
-      )
-      ..lineTo(point(0.869, 0.79).dx, point(0.869, 0.79).dy)
-      ..quadraticBezierTo(
-        point(0.877, 0.84).dx,
-        point(0.877, 0.84).dy,
-        point(0.85, 0.87).dx,
-        point(0.85, 0.87).dy,
-      )
-      ..lineTo(point(0.15, 0.87).dx, point(0.15, 0.87).dy)
-      ..quadraticBezierTo(
-        point(0.115, 0.85).dx,
-        point(0.115, 0.85).dy,
-        point(0.12, 0.79).dx,
-        point(0.12, 0.79).dy,
-      )
-      ..lineTo(point(0.175, 0.165).dx, point(0.175, 0.165).dy)
-      ..quadraticBezierTo(
-        point(0.175, 0.132).dx,
-        point(0.175, 0.132).dy,
-        point(0.19, 0.132).dx,
-        point(0.19, 0.132).dy,
-      )
-      ..close();
-  }
-
-  @override
-  bool shouldReclip(covariant _YutBoardAssetClipper oldClipper) => false;
 }
 
 class _YutThrowButton extends StatelessWidget {

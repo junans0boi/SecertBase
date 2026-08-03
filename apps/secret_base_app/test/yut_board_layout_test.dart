@@ -89,7 +89,7 @@ void main() {
     );
     expect(
       (boardArt.image as AssetImage).assetName,
-      'assets/images/yut/yut_board_3d_rail_v2_chroma.png',
+      'assets/images/yut/yut_board_3d_rail_v2.png',
     );
     expect(find.byKey(const ValueKey('yut_board_nodes')), findsOneWidget);
     expect(opponentCard.width, lessThanOrEqualTo(176));
