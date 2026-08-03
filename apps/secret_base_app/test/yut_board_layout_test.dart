@@ -119,24 +119,41 @@ void main() {
     }
   });
 
-  testWidgets('보드 위 말의 시각 중심은 이동 노드 중심과 일치한다', (tester) async {
+  testWidgets('보드 위 말은 이미지에서 측정한 레일 중심 좌표에 놓인다', (tester) async {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
 
     await _pumpBoard(tester, const Size(390, 844));
 
-    for (final target in const [('p1_1', 6), ('p2_1', 3)]) {
-      final pieceCenter = tester.getCenter(
-        find.byKey(ValueKey('yut_board_piece_${target.$1}_visual')),
-      );
-      final nodeCenter = tester.getCenter(
-        find.byKey(ValueKey('yut_board_node_${target.$2}')),
+    final boardRect = tester.getRect(
+      find.byKey(const ValueKey('yut_board_surface')),
+    );
+    for (final target in const [
+      ('p1_1', Offset(0.6538, 0.1710)),
+      ('p2_1', Offset(0.7772, 0.4066)),
+    ]) {
+      final pieceCenter = tester.getCenter(find.byKey(ValueKey(target.$1)));
+      final expectedCenter = Offset(
+        boardRect.left + (boardRect.width * target.$2.dx),
+        boardRect.top + (boardRect.height * target.$2.dy),
       );
       expect(
-        (pieceCenter - nodeCenter).distance,
+        (pieceCenter - expectedCenter).distance,
         lessThanOrEqualTo(1),
-        reason: '${target.$1} 말이 ${target.$2}번 노드 중심에서 벗어남',
+        reason: '${target.$1} 말이 레일 중심에서 벗어남',
       );
     }
+  });
+
+  testWidgets('5칸 레일 보드 렌더링이 유지된다', (tester) async {
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await _pumpBoard(tester, const Size(390, 844));
+
+    await expectLater(
+      find.byKey(const ValueKey('yut_board_surface')),
+      matchesGoldenFile('goldens/yut_board_5_step_rail.png'),
+    );
   });
 }

@@ -706,44 +706,37 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     Color color,
     String character,
     int count, {
-    Key? visualKey,
-    Offset offset = Offset.zero,
     bool selected = false,
     String pieceSkin = 'base',
   }) {
     final inner = (_cPieceSize - 4).clamp(28.0, 44.0);
     final centerInset = (_cPieceSize - inner) / 2;
     final stackCenterOffset = (count - 1) * 2.0;
-    return Transform.translate(
-      key: visualKey,
-      offset: offset,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: List.generate(count, (i) {
-          return Positioned(
-            top: centerInset + stackCenterOffset + (i * -4.0),
-            left: centerInset + stackCenterOffset + (i * -4.0),
-            child: Container(
-              width: inner,
-              height: inner,
-              alignment: Alignment.center,
-              child: _CharacterToken(
-                character: character,
-                color: color,
-                selected: selected,
-                count: i == count - 1 && count > 1 ? count : null,
-                pieceSkin: pieceSkin,
-              ),
+    return Stack(
+      clipBehavior: Clip.none,
+      children: List.generate(count, (i) {
+        return Positioned(
+          top: centerInset + stackCenterOffset + (i * -4.0),
+          left: centerInset + stackCenterOffset + (i * -4.0),
+          child: Container(
+            width: inner,
+            height: inner,
+            alignment: Alignment.center,
+            child: _CharacterToken(
+              character: character,
+              color: color,
+              selected: selected,
+              count: i == count - 1 && count > 1 ? count : null,
+              pieceSkin: pieceSkin,
             ),
-          );
-        }).reversed.toList(),
-      ),
+          ),
+        );
+      }).reversed.toList(),
     );
   }
 
   Widget _buildBoardPiece({
     Key? key,
-    Key? visualKey,
     required Size boardSize,
     required int pos,
     required Color color,
@@ -751,7 +744,6 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     required int count,
     required bool selected,
     required VoidCallback? onTap,
-    required Offset stackOffset,
     String pieceSkin = 'base',
   }) {
     final point = _toCanvasPoint(boardSize, pos);
@@ -775,8 +767,6 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
             color,
             character,
             count,
-            visualKey: visualKey,
-            offset: stackOffset,
             selected: selected,
             pieceSkin: pieceSkin,
           ),
@@ -1254,24 +1244,6 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                       ),
                                     ),
                                   ),
-                                  ...List.generate(29, (index) {
-                                    final position = index + 1;
-                                    final point = _toCanvasPoint(
-                                      boardSize,
-                                      position,
-                                    );
-                                    return Positioned(
-                                      left: point.dx - 0.5,
-                                      top: point.dy - 0.5,
-                                      width: 1,
-                                      height: 1,
-                                      child: SizedBox(
-                                        key: ValueKey(
-                                          'yut_board_node_$position',
-                                        ),
-                                      ),
-                                    );
-                                  }),
                                   if (selectedPiece != null &&
                                       guideOptions.isNotEmpty)
                                     Positioned.fill(
@@ -1311,9 +1283,6 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                       renderedP1.add(pos);
                                       return _buildBoardPiece(
                                         key: ValueKey('p1_${e.key}'),
-                                        visualKey: ValueKey(
-                                          'yut_board_piece_p1_${e.key}_visual',
-                                        ),
                                         boardSize: boardSize,
                                         pos: pos,
                                         color: const Color(0xFFE45858),
@@ -1324,7 +1293,6 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                         onTap: !isP2
                                             ? () => _selectPiece(e.key)
                                             : null,
-                                        stackOffset: Offset.zero,
                                         pieceSkin: p1PieceSkin,
                                       );
                                     }),
@@ -1342,9 +1310,6 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                       renderedP2.add(pos);
                                       return _buildBoardPiece(
                                         key: ValueKey('p2_${e.key}'),
-                                        visualKey: ValueKey(
-                                          'yut_board_piece_p2_${e.key}_visual',
-                                        ),
                                         boardSize: boardSize,
                                         pos: pos,
                                         color: const Color(0xFF4B8DD8),
@@ -1355,7 +1320,6 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                         onTap: isP2
                                             ? () => _selectPiece(e.key)
                                             : null,
-                                        stackOffset: Offset.zero,
                                         pieceSkin: p2PieceSkin,
                                       );
                                     }),
