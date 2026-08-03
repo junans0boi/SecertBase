@@ -70,9 +70,9 @@ void main() {
 
     await _pumpBoard(tester, const Size(390, 844));
 
-    final board = tester.getSize(
-      find.byKey(const ValueKey('yut_board_surface')),
-    );
+    final boardFinder = find.byKey(const ValueKey('yut_board_surface'));
+    final board = tester.getSize(boardFinder);
+    final boardRect = tester.getRect(boardFinder);
     final opponentCard = tester.getRect(
       find.byKey(const ValueKey('yut_opponent_profile')),
     );
@@ -83,18 +83,60 @@ void main() {
 
     expect(board.width, greaterThanOrEqualTo(374));
     expect(board.width / board.height, greaterThanOrEqualTo(1.35));
+    expect(boardRect.top, greaterThanOrEqualTo(220));
     final boardArt = tester.widget<Image>(
       find.byKey(const ValueKey('yut_board_art')),
     );
     expect(
       (boardArt.image as AssetImage).assetName,
-      'assets/images/yut/yut_board_3d_base_v1_chroma.png',
+      'assets/images/yut/yut_board_3d_rail_v2_chroma.png',
     );
     expect(find.byKey(const ValueKey('yut_board_nodes')), findsOneWidget);
     expect(opponentCard.width, lessThanOrEqualTo(176));
     expect(myCard.width, lessThanOrEqualTo(176));
+    expect(opponentCard.height, lessThanOrEqualTo(88));
+    expect(myCard.height, lessThanOrEqualTo(88));
     expect(opponentCard.top, lessThan(board.height * 0.42));
     expect(myCard.bottom, lessThanOrEqualTo(actionBar.top));
     expect(actionBar.height, inInclusiveRange(118, 175));
+
+    final remaining = tester.getRect(
+      find.byKey(const ValueKey('yut_my_profile_remaining')),
+    );
+    final avatar = tester.getRect(
+      find.byKey(const ValueKey('yut_my_profile_avatar')),
+    );
+    final identity = tester.getRect(
+      find.byKey(const ValueKey('yut_my_profile_identity')),
+    );
+    expect(remaining.center.dx, lessThan(avatar.center.dx));
+    expect(identity.top, greaterThanOrEqualTo(avatar.bottom));
+    for (var pieceId = 0; pieceId < 4; pieceId++) {
+      expect(
+        find.byKey(ValueKey('yut_my_profile_piece_$pieceId')),
+        findsOneWidget,
+      );
+    }
+  });
+
+  testWidgets('보드 위 말의 시각 중심은 이동 노드 중심과 일치한다', (tester) async {
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await _pumpBoard(tester, const Size(390, 844));
+
+    for (final target in const [('p1_1', 6), ('p2_1', 3)]) {
+      final pieceCenter = tester.getCenter(
+        find.byKey(ValueKey('yut_board_piece_${target.$1}_visual')),
+      );
+      final nodeCenter = tester.getCenter(
+        find.byKey(ValueKey('yut_board_node_${target.$2}')),
+      );
+      expect(
+        (pieceCenter - nodeCenter).distance,
+        lessThanOrEqualTo(1),
+        reason: '${target.$1} 말이 ${target.$2}번 노드 중심에서 벗어남',
+      );
+    }
   });
 }

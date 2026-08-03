@@ -706,19 +706,23 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     Color color,
     String character,
     int count, {
+    Key? visualKey,
     Offset offset = Offset.zero,
     bool selected = false,
     String pieceSkin = 'base',
   }) {
     final inner = (_cPieceSize - 4).clamp(28.0, 44.0);
+    final centerInset = (_cPieceSize - inner) / 2;
+    final stackCenterOffset = (count - 1) * 2.0;
     return Transform.translate(
+      key: visualKey,
       offset: offset,
       child: Stack(
         clipBehavior: Clip.none,
         children: List.generate(count, (i) {
           return Positioned(
-            top: i * -4.0,
-            left: i * -4.0,
+            top: centerInset + stackCenterOffset + (i * -4.0),
+            left: centerInset + stackCenterOffset + (i * -4.0),
             child: Container(
               width: inner,
               height: inner,
@@ -739,6 +743,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
 
   Widget _buildBoardPiece({
     Key? key,
+    Key? visualKey,
     required Size boardSize,
     required int pos,
     required Color color,
@@ -765,11 +770,12 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
         onTap: onTap,
         child: Transform.scale(
           scale: depthScale,
-          alignment: Alignment.bottomCenter,
+          alignment: Alignment.center,
           child: _buildGroupedPiece(
             color,
             character,
             count,
+            visualKey: visualKey,
             offset: stackOffset,
             selected: selected,
             pieceSkin: pieceSkin,
@@ -1208,7 +1214,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                     screenWidth * 1.24,
                     stageHeight * 0.88 * _yutBoardAssetAspect,
                   );
-                  final boardTop = stageHeight * (_compact ? 0.255 : 0.08);
+                  final boardTop = stageHeight * (_compact ? 0.325 : 0.12);
 
                   return Stack(
                     clipBehavior: Clip.none,
@@ -1235,7 +1241,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                       clipper: const _YutBoardAssetClipper(),
                                       child: Image.asset(
                                         key: const ValueKey('yut_board_art'),
-                                        'assets/images/yut/yut_board_3d_base_v1_chroma.png',
+                                        'assets/images/yut/yut_board_3d_rail_v2_chroma.png',
                                         fit: BoxFit.fill,
                                       ),
                                     ),
@@ -1248,6 +1254,24 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                       ),
                                     ),
                                   ),
+                                  ...List.generate(29, (index) {
+                                    final position = index + 1;
+                                    final point = _toCanvasPoint(
+                                      boardSize,
+                                      position,
+                                    );
+                                    return Positioned(
+                                      left: point.dx - 0.5,
+                                      top: point.dy - 0.5,
+                                      width: 1,
+                                      height: 1,
+                                      child: SizedBox(
+                                        key: ValueKey(
+                                          'yut_board_node_$position',
+                                        ),
+                                      ),
+                                    );
+                                  }),
                                   if (selectedPiece != null &&
                                       guideOptions.isNotEmpty)
                                     Positioned.fill(
@@ -1287,6 +1311,9 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                       renderedP1.add(pos);
                                       return _buildBoardPiece(
                                         key: ValueKey('p1_${e.key}'),
+                                        visualKey: ValueKey(
+                                          'yut_board_piece_p1_${e.key}_visual',
+                                        ),
                                         boardSize: boardSize,
                                         pos: pos,
                                         color: const Color(0xFFE45858),
@@ -1297,7 +1324,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                         onTap: !isP2
                                             ? () => _selectPiece(e.key)
                                             : null,
-                                        stackOffset: const Offset(-10, -10),
+                                        stackOffset: Offset.zero,
                                         pieceSkin: p1PieceSkin,
                                       );
                                     }),
@@ -1315,6 +1342,9 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                       renderedP2.add(pos);
                                       return _buildBoardPiece(
                                         key: ValueKey('p2_${e.key}'),
+                                        visualKey: ValueKey(
+                                          'yut_board_piece_p2_${e.key}_visual',
+                                        ),
                                         boardSize: boardSize,
                                         pos: pos,
                                         color: const Color(0xFF4B8DD8),
@@ -1325,7 +1355,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                                         onTap: isP2
                                             ? () => _selectPiece(e.key)
                                             : null,
-                                        stackOffset: const Offset(10, 10),
+                                        stackOffset: Offset.zero,
                                         pieceSkin: p2PieceSkin,
                                       );
                                     }),
@@ -1412,8 +1442,6 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     final borderColor = isMe
         ? const Color(0xFF54D8FF)
         : const Color(0xFFFFD56A);
-    final badgeColor = isMe ? const Color(0xFF087AC4) : const Color(0xFF1687D4);
-    final label = isMe ? 'MY PROFILE' : 'PLAYER 2';
     final bgGrad = isMe
         ? const LinearGradient(
             colors: [Color(0xFF073F88), Color(0xFF1398D9), Color(0xFF07519D)],
@@ -1425,240 +1453,227 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           );
+    final profileKeyPrefix = isMe ? 'yut_my_profile' : 'yut_opponent_profile';
+    final cardHeight = _compact ? 87.0 : 94.0;
+    final avatarSize = _compact ? 38.0 : 42.0;
+    final pieceSize = _compact ? 23.0 : 25.0;
 
-    return Container(
-      key: key,
-      decoration: BoxDecoration(
-        gradient: bgGrad,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: borderColor, width: 3),
-        boxShadow: [
-          BoxShadow(
-            color: borderColor.withValues(alpha: 0.40),
-            blurRadius: 10,
-            spreadRadius: 2,
-            offset: const Offset(0, 4),
-          ),
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.65),
-            blurRadius: 12,
-            offset: const Offset(0, 7),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // 배지 (상단 전체 폭)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 5),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Color.lerp(badgeColor, Colors.white, 0.25)!,
-                  badgeColor,
-                  Color.lerp(badgeColor, Colors.black, 0.18)!,
-                ],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
+    return SizedBox(
+      height: cardHeight,
+      child: Container(
+        key: key,
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          gradient: bgGrad,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: borderColor, width: 2),
+          boxShadow: [
+            if (isActiveTurn)
+              BoxShadow(
+                color: borderColor.withValues(alpha: 0.55),
+                blurRadius: 10,
+                spreadRadius: 1,
               ),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(12),
-              ),
-              border: const Border(
-                bottom: BorderSide(color: Color(0x55FFFFFF), width: 1),
-              ),
+            const BoxShadow(
+              color: Color(0x99000000),
+              blurRadius: 8,
+              offset: Offset(0, 4),
             ),
-            alignment: Alignment.center,
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w900,
-                fontSize: 11,
-                letterSpacing: 1.2,
-              ),
-            ),
-          ),
-          // 정보 + 아바타
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+          ],
+        ),
+        child: Stack(
+          children: [
+            Row(
               children: [
-                Expanded(
+                SizedBox(
+                  key: ValueKey('${profileKeyPrefix}_remaining'),
+                  width: _compact ? 58 : 64,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'User',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.72),
-                          fontSize: 9,
-                        ),
-                      ),
-                      Text(
-                        _display(userId),
+                        isMe ? '내 남은 말' : '상대 남은 말',
                         maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 13,
-                        ),
-                      ),
-                      Text(
-                        'Lv. -',
-                        style: TextStyle(
-                          color: const Color(0xFFFFE27A),
+                          color: Colors.white.withValues(alpha: 0.82),
+                          fontSize: 8,
                           fontWeight: FontWeight.w700,
-                          fontSize: 11,
                         ),
                       ),
-                      Text(
-                        'Character',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.65),
-                          fontSize: 9,
-                        ),
+                      const SizedBox(height: 3),
+                      Wrap(
+                        spacing: 2,
+                        runSpacing: 2,
+                        children: safePieces.asMap().entries.map((entry) {
+                          final pieceId = entry.key;
+                          final pos = _getPos(entry.value);
+                          final isFinished = _isFinished(entry.value);
+                          final isOnBoard = pos > 0 && !isFinished;
+                          final canTap = isMe && _canSelectPiece(pieceId);
+                          final selected = isMe && _selectedPieceId == pieceId;
+
+                          return GestureDetector(
+                            onTap: canTap
+                                ? () => onPieceTap?.call(pieceId)
+                                : null,
+                            child: AnimatedContainer(
+                              key: ValueKey(
+                                '${profileKeyPrefix}_piece_$pieceId',
+                              ),
+                              duration: const Duration(milliseconds: 200),
+                              width: pieceSize,
+                              height: pieceSize,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: selected
+                                    ? Colors.amber.withValues(alpha: 0.35)
+                                    : Colors.transparent,
+                                border: selected
+                                    ? Border.all(
+                                        color: Colors.amber,
+                                        width: 1.5,
+                                      )
+                                    : null,
+                              ),
+                              alignment: Alignment.center,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                clipBehavior: Clip.none,
+                                children: [
+                                  if (isFinished)
+                                    const Icon(
+                                      Icons.check_circle_rounded,
+                                      color: Color(0xFF9BEA85),
+                                      size: 18,
+                                    )
+                                  else
+                                    Opacity(
+                                      opacity: isOnBoard ? 0.35 : 1,
+                                      child: SizedBox(
+                                        width: pieceSize - 2,
+                                        height: pieceSize - 2,
+                                        child: _CharacterToken(
+                                          character: character,
+                                          color: color,
+                                          selected: selected,
+                                          pieceSkin: pieceSkin,
+                                        ),
+                                      ),
+                                    ),
+                                  if (isOnBoard && !isFinished)
+                                    Positioned(
+                                      bottom: -1,
+                                      right: -1,
+                                      child: Container(
+                                        width: 7,
+                                        height: 7,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: color,
+                                          border: Border.all(
+                                            color: Colors.white,
+                                            width: 1,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  if (!isOnBoard && !isFinished && canTap)
+                                    Positioned(
+                                      bottom: -1,
+                                      right: -1,
+                                      child: Container(
+                                        width: 7,
+                                        height: 7,
+                                        decoration: const BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Colors.amber,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }).toList(),
                       ),
-                      if (isActiveTurn)
-                        Container(
-                          margin: const EdgeInsets.only(top: 3),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 1,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0x3300C853),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: const Color(0xAA00C853),
-                              width: 1,
-                            ),
-                          ),
-                          child: Text(
-                            widget.pendingMoves?.isNotEmpty == true
-                                ? (_selectedPieceId != null ? '이동 선택' : '말 선택')
-                                : '던질 차례',
-                            style: const TextStyle(
-                              color: Color(0xFF00C853),
-                              fontSize: 9,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 6),
-                // 캐릭터 아바타
-                SizedBox(
-                  width: 52,
-                  height: 52,
-                  child: _CharacterToken(
-                    character: character,
-                    color: color,
-                    selected: isActiveTurn,
-                    pieceSkin: pieceSkin,
+                Container(
+                  width: 1,
+                  margin: const EdgeInsets.symmetric(horizontal: 5),
+                  color: Colors.white.withValues(alpha: 0.22),
+                ),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        key: ValueKey('${profileKeyPrefix}_avatar'),
+                        width: avatarSize,
+                        height: avatarSize,
+                        child: _CharacterToken(
+                          character: character,
+                          color: color,
+                          selected: isActiveTurn,
+                          pieceSkin: pieceSkin,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Column(
+                        key: ValueKey('${profileKeyPrefix}_identity'),
+                        children: [
+                          const Text(
+                            'Lv. -',
+                            style: TextStyle(
+                              color: Color(0xFFFFE27A),
+                              fontWeight: FontWeight.w700,
+                              fontSize: 9,
+                              height: 1,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _display(userId),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 10,
+                              height: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-          ),
-          // 말(馬) 아이콘 행
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 0, 4, 6),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: safePieces.asMap().entries.map((entry) {
-                final pieceId = entry.key;
-                final pos = _getPos(entry.value);
-                final isFinished = _isFinished(entry.value);
-                final isOnBoard = pos > 0 && !isFinished;
-                final canTap = isMe && _canSelectPiece(pieceId);
-                final selected = isMe && _selectedPieceId == pieceId;
-
-                return GestureDetector(
-                  onTap: canTap ? () => onPieceTap?.call(pieceId) : null,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: selected
-                          ? Colors.amber.withValues(alpha: 0.35)
-                          : Colors.transparent,
-                      border: selected
-                          ? Border.all(color: Colors.amber, width: 2)
-                          : null,
-                    ),
-                    alignment: Alignment.center,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      clipBehavior: Clip.none,
-                      children: [
-                        if (isFinished)
-                          const Icon(
-                            Icons.check_circle_rounded,
-                            color: Color(0xFF9BEA85),
-                            size: 20,
-                          )
-                        else
-                          Opacity(
-                            opacity: isOnBoard ? 0.35 : 1,
-                            child: SizedBox(
-                              width: 27,
-                              height: 27,
-                              child: _CharacterToken(
-                                character: character,
-                                color: color,
-                                selected: selected,
-                                pieceSkin: pieceSkin,
-                              ),
-                            ),
-                          ),
-                        if (isOnBoard && !isFinished)
-                          Positioned(
-                            bottom: -1,
-                            right: -1,
-                            child: Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: color,
-                                border: Border.all(
-                                  color: Colors.white,
-                                  width: 1,
-                                ),
-                              ),
-                            ),
-                          ),
-                        if (!isOnBoard && !isFinished && canTap)
-                          Positioned(
-                            bottom: -2,
-                            right: -2,
-                            child: Container(
-                              width: 9,
-                              height: 9,
-                              decoration: const BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.amber,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
+            Positioned(
+              top: 0,
+              right: 0,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isActiveTurn
+                      ? const Color(0xFF52FF8A)
+                      : Colors.white24,
+                  boxShadow: isActiveTurn
+                      ? const [
+                          BoxShadow(color: Color(0xFF52FF8A), blurRadius: 6),
+                        ]
+                      : null,
+                ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
