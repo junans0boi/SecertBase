@@ -61,6 +61,10 @@ const featureForSocketPacket = ([event, payload]) => {
     const gameType = String(payload?.gameType ?? payload?.type ?? '');
     if (gameType && !PUBLIC_GAME_TYPES.includes(gameType)) return gameType;
   }
+  if (event.startsWith('game:session:')) {
+    const gameType = String(payload?.gameType ?? '');
+    if (gameType && !PUBLIC_GAME_TYPES.includes(gameType)) return gameType;
+  }
   if (event === 'game:restart:respond') {
     const gameType = String(payload?.gameType ?? '');
     if (gameType && !PUBLIC_GAME_TYPES.includes(gameType)) return gameType;

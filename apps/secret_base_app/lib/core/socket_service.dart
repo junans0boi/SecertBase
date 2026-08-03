@@ -55,6 +55,7 @@ class SocketService extends ChangeNotifier {
   String? lobbyStartedYutBgm;
   int lobbyStake = 0;
   int lobbyStartedStake = 0;
+  String? lobbyResumedGameType;
 
   // wallet
   int? walletBalance;
@@ -1062,6 +1063,7 @@ class SocketService extends ChangeNotifier {
     lobbyStartedYutBgm = null;
     lobbyStake = 0;
     lobbyStartedStake = 0;
+    lobbyResumedGameType = null;
     pirateActive = false;
     pirateCurrentTurn = null;
     piratePickedSlots = [];
@@ -1130,6 +1132,7 @@ class SocketService extends ChangeNotifier {
     lobbyHost = null;
     lobbyPlayers = me == null ? [] : [me];
     lobbyStartedGameType = null;
+    lobbyResumedGameType = null;
     lobbyCharacterSelections = {};
     lobbyStartedYutCharacters = {};
     lobbyStartedYutBgm = null;
@@ -1174,6 +1177,13 @@ class SocketService extends ChangeNotifier {
       ack: (r) {
         final map = _m(r);
         if (map['ok'] == true) {
+          // Resume path: server detected an active game with a viewer — go straight to game screen.
+          if (map['status'] == 'resumed') {
+            lobbyResumedGameType = map['gameType'] as String?;
+            notifyListeners();
+            return;
+          }
+          // Normal waiting lobby path.
           final lobby = _m(map['lobby']);
           lobbyHost = lobby['host'] as String?;
           final players = lobby['players'];
@@ -1264,6 +1274,17 @@ class SocketService extends ChangeNotifier {
     lobbyStartedGameType = null;
     notifyListeners();
   }
+
+  void clearLobbyResume() {
+    lobbyResumedGameType = null;
+    notifyListeners();
+  }
+
+  void enterGameSession(String gameType) =>
+      _socket?.emit('game:session:enter', {'gameType': gameType});
+
+  void leaveGameSession(String gameType) =>
+      _socket?.emit('game:session:leave', {'gameType': gameType});
 
   void rollDice() => _socket?.emit('game:dice:roll');
 

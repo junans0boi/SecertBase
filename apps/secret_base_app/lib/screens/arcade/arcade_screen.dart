@@ -23,6 +23,7 @@ import 'games/tank_screen.dart';
 import 'games/gostop_screen.dart';
 import 'games/yut_screen.dart';
 import '../shop/shop_screen.dart';
+import '../../widgets/game_session_presence.dart';
 
 class ArcadeScreen extends StatefulWidget {
   const ArcadeScreen({super.key});
@@ -425,24 +426,31 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     ),
   ];
 
-  Widget _screen(String type) => switch (type) {
-    'blackjack' => const BlackjackScreen(),
-    'oldmaid' => const OldMaidScreen(),
-    'penalty' => const PenaltyScreen(),
-    'bowling' => const BowlingScreen(),
-    'yut' => const YutScreen(),
-    'bomb' => const BombScreen(),
-    'uno' => const UnoScreen(),
-    'zero' => const RpsScreen(fixedMode: 'hanabagi'),
-    'dice' => const DiceScreen(),
-    'roulette' => const RouletteScreen(),
-    'telepathy' => const TelepathyScreen(),
-    'pirate' => const PirateScreen(),
-    'catch' => const CatchScreen(),
-    'tank' => const TankScreen(),
-    'gostop' => const GostopScreen(),
-    _ => const RpsScreen(),
-  };
+  Widget _screen(String type) {
+    Widget screen = switch (type) {
+      'blackjack' => const BlackjackScreen(),
+      'oldmaid' => const OldMaidScreen(),
+      'penalty' => const PenaltyScreen(),
+      'bowling' => const BowlingScreen(),
+      'yut' => const YutScreen(),
+      'bomb' => const BombScreen(),
+      'uno' => const UnoScreen(),
+      'zero' => const RpsScreen(fixedMode: 'hanabagi'),
+      'dice' => const DiceScreen(),
+      'roulette' => const RouletteScreen(),
+      'telepathy' => const TelepathyScreen(),
+      'pirate' => const PirateScreen(),
+      'catch' => const CatchScreen(),
+      'tank' => const TankScreen(),
+      'gostop' => const GostopScreen(),
+      _ => const RpsScreen(),
+    };
+    // Wrap resumable game types so the server tracks which socket is viewing them.
+    if (type == 'yut' || type == 'uno') {
+      screen = GameSessionPresence(gameType: type, child: screen);
+    }
+    return screen;
+  }
 
   void _open(BuildContext context, _GameInfo game) {
     final socket = SocketService();

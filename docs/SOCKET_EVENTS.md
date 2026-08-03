@@ -66,6 +66,28 @@ game:lobby:started
 
 Only `yut`, `bomb`, and `rps` are accepted lobby game types in the MVP.
 
+**`game:lobby:join` response shape** (as of 2026-08-03):
+
+Normal (waiting for partner):
+```json
+{ "ok": true, "status": "waiting", "lobby": { "gameType": "yut", "host": "...", "players": [] } }
+```
+
+Resume (partner is already inside an active game — `yut` or `uno` only):
+```json
+{ "ok": true, "status": "resumed", "gameType": "yut", "state": {} }
+```
+The `state` is the same per-user serialization as `session:restore`. For UNO, `state.hand` contains only the requesting user's cards; the partner's hand is never sent.
+
+**Game session presence events** — track which socket is viewing which game:
+
+```text
+game:session:enter  { gameType }   → { ok: true }
+game:session:leave  { gameType }   → { ok: true }
+```
+
+The server adds the socket to a game-view subroom on `enter` and removes it on `leave` or disconnect. When the last viewer leaves, the active game state is deleted from Redis. `game:lobby:join` checks the subroom before creating a new lobby: if an active game has viewers, the joining socket is added to the subroom and a `resumed` result is returned instead of a lobby object. Unknown (non-public) `gameType` values are rejected by the socket feature gate.
+
 Game events:
 
 ```text

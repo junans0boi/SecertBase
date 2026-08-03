@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { config } from "./config.js";
 import { installSocketAuthentication, installSocketFeatureGate } from "./backend-access.js";
+import {
+  registerGameSessionHandlers,
+  resolveLobbyJoinForResume,
+  cleanupGameSessionOnDisconnect,
+} from "./game-session.js";
 import { query } from "./db.js";
 import { redis } from "./redis.js";
 import { transferGameReward, getBalance, getEquippedStats, getEquippedItemsInfo } from "./wallet-engine.js";
@@ -459,6 +464,7 @@ export const registerSocketHandlers = (io) => {
   installSocketAuthentication(io, config.JWT_SECRET, resolveSocketSession);
   io.on("connection", (socket) => {
     installSocketFeatureGate(socket, config.PUBLIC_FEATURE_SET);
+    registerGameSessionHandlers(socket, { io, redis });
     socket.on("session:join", async (payload, ackRaw) => {
       const ack = normalizeAck(ackRaw);
       const parsed = joinSchema.safeParse(payload);
@@ -526,6 +532,14 @@ export const registerSocketHandlers = (io) => {
       }
 
       const { gameType, stake } = parsed.data;
+
+      // Check for an active game that the partner is viewing — resume it instead of creating a lobby.
+      const resume = await resolveLobbyJoinForResume(socket, io, redis, { roomCode, gameType, userId });
+      if (resume) {
+        ack({ ok: true, ...resume });
+        return;
+      }
+
       const key = gameLobbyKey(roomCode, gameType);
       const presence = getPresence(io, roomCode);
       const lobbyText = await redis.get(key);
@@ -548,7 +562,7 @@ export const registerSocketHandlers = (io) => {
 
       await redis.set(key, JSON.stringify(lobby), "EX", 1800);
       emitLobby(io, roomCode, lobby);
-      ack({ ok: true, lobby: { ...lobby, profileEmojis: getPresenceProfiles(io, roomCode), nicknames: getPresenceNicknames(io, roomCode) } });
+      ack({ ok: true, status: "waiting", lobby: { ...lobby, profileEmojis: getPresenceProfiles(io, roomCode), nicknames: getPresenceNicknames(io, roomCode) } });
     });
 
     socket.on("game:lobby:set_stake", async (payload, ackRaw) => {
@@ -3216,6 +3230,11 @@ export const registerSocketHandlers = (io) => {
           console.error(`lobby cleanup error: ${err.message}`),
         );
       }
+
+      // 게임 화면을 보던 소켓이 끊기면 마지막 뷰어일 때 활성 상태 삭제
+      cleanupGameSessionOnDisconnect(socket, io, redis).catch((err) =>
+        console.error(`game session cleanup error: ${err.message}`),
+      );
 
       // 가위바위보 진행 중 연결 끊기면 미완료 판 취소
       redis.del(rpsGameKey(roomCode)).then(() => {

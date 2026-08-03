@@ -14,6 +14,8 @@ class GameLobbyScreen extends StatefulWidget {
   final Color color;
   final Color backgroundColor;
   final Widget gameScreen;
+  // Injectable for tests: replaces the default SocketService.joinGameLobby call.
+  final void Function(String gameType)? onJoinLobby;
 
   const GameLobbyScreen({
     super.key,
@@ -24,6 +26,7 @@ class GameLobbyScreen extends StatefulWidget {
     required this.color,
     required this.backgroundColor,
     required this.gameScreen,
+    this.onJoinLobby,
   });
 
   @override
@@ -42,7 +45,7 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
     super.initState();
     _socket.addListener(_onSocket);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _socket.joinGameLobby(widget.gameType);
+      (widget.onJoinLobby ?? _socket.joinGameLobby)(widget.gameType);
     });
   }
 
@@ -58,6 +61,14 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
 
   void _onSocket() {
     if (!mounted) return;
+    // Resume path: partner's active game detected — navigate without countdown.
+    if (_socket.lobbyResumedGameType == widget.gameType && !_started) {
+      _started = true;
+      _socket.clearLobbyResume();
+      _launchGame(resumed: true);
+      return;
+    }
+    // Normal lobby start path.
     if (_socket.lobbyStartedGameType == widget.gameType && !_started) {
       _started = true;
       _startedYutBgm = _socket.lobbyStartedYutBgm;
@@ -83,15 +94,16 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
     });
   }
 
-  void _launchGame() {
+  void _launchGame({bool resumed = false}) {
     final isHost = _socket.userId == _socket.lobbyHost;
-    if (widget.gameType == 'yut') {
+    if (!resumed && widget.gameType == 'yut') {
       YutAudio.instance.playGameStart(bgm: _startedYutBgm);
     }
     Navigator.of(
       context,
     ).pushReplacement(MaterialPageRoute(builder: (_) => widget.gameScreen));
-    if (isHost) {
+    // On resume the game is already running on the server — do not create a new game.
+    if (!resumed && isHost) {
       Future.delayed(const Duration(milliseconds: 300), () {
         switch (widget.gameType) {
           case 'yut':
