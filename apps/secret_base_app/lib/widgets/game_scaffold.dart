@@ -8,6 +8,7 @@ class GameScaffold extends StatelessWidget {
   final List<Widget>? actions;
   final double maxContentWidth;
   final bool fullBleed;
+  final bool showAppBar;
 
   const GameScaffold({
     super.key,
@@ -16,36 +17,43 @@ class GameScaffold extends StatelessWidget {
     this.actions,
     this.maxContentWidth = 540,
     this.fullBleed = false,
+    this.showAppBar = true,
   });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: kBg,
-      appBar: AppBar(
-        backgroundColor: kSurface,
-        elevation: 0,
-        shadowColor: Colors.transparent,
-        surfaceTintColor: Colors.transparent,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 18, color: kText),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Text(
-          title,
-          style: GoogleFonts.notoSans(
-            color: kText,
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        centerTitle: true,
-        actions: actions,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(0.5),
-          child: Container(height: 0.5, color: kBorder),
-        ),
-      ),
+      appBar: showAppBar
+          ? AppBar(
+              backgroundColor: kSurface,
+              elevation: 0,
+              shadowColor: Colors.transparent,
+              surfaceTintColor: Colors.transparent,
+              leading: IconButton(
+                icon: const Icon(
+                  Icons.arrow_back_ios_new,
+                  size: 18,
+                  color: kText,
+                ),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+              title: Text(
+                title,
+                style: GoogleFonts.notoSans(
+                  color: kText,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              centerTitle: true,
+              actions: actions,
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(0.5),
+                child: Container(height: 0.5, color: kBorder),
+              ),
+            )
+          : null,
       body: SafeArea(
         child: fullBleed
             ? child

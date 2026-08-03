@@ -248,69 +248,87 @@ class _YutScreenState extends State<YutScreen> {
     return GameScaffold(
       title: '🀄 윷놀이',
       fullBleed: true,
-      actions: [
-        GameMenuButton(
-          hasRestart: sock.yutActive,
-          restartWaiting: sock.restartWaiting,
-          onRequestRestart: () => sock.requestRestart('yut'),
-        ),
-      ],
+      showAppBar: false,
       child: GameMenuListener(
         gameType: 'yut',
         child: Stack(
           children: [
             const Positioned.fill(child: _YutBackdrop()),
             Positioned.fill(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(10, 62, 10, 10),
-                child: YutBoard(
-                  gameId: sock.yutActive ? (sock.yutGameId ?? 'active') : null,
-                  phase: sock.yutPhase,
-                  turn: sock.yutCurrentTurn,
-                  p1Pieces: p1Pieces,
-                  p2Pieces: p2Pieces,
-                  pendingMoves: sock.yutPendingMoves,
-                  startRolls: sock.yutStartRolls,
-                  orderCountdownUntil: sock.yutOrderCountdownUntil,
-                  onNewGame: sock.newYutGame,
-                  onRollStartDice: sock.rollYutStartDice,
-                  hasBonusThrow: sock.yutHasBonusThrow,
-                  onThrow: sock.throwYut,
-                  onMovePiece: (pieceId, moveIndex, {int? backdoDir}) =>
-                      sock.moveYut(
-                        pieceId,
-                        moveIndex: moveIndex,
-                        backdoDir: backdoDir,
-                      ),
-                  onMoveNewPiece: () => sock.moveYut(0),
-                  currentUser: currentUser,
-                  lastResultName: sock.yutLastThrow,
-                  lastThrowAt: sock.yutLastThrowAt,
-                  lastThrowNak: sock.yutLastNak,
-                  p1Character: _characterFor(p1),
-                  p2Character: _characterFor(p2),
-                  onThrowResultRevealed: _playThrowResultAudio,
-                  p1UserId: p1,
-                  p2UserId: p2,
-                  displayName: sock.nameOf,
-                  pieceSkin: _pieceSkin,
-                  yutSkin: _yutSkin,
-                  opponentPieceSkin: opponentPieceSkin,
-                  opponentYutSkin: opponentYutSkin,
-                ),
+              child: YutBoard(
+                gameId: sock.yutActive ? (sock.yutGameId ?? 'active') : null,
+                phase: sock.yutPhase,
+                turn: sock.yutCurrentTurn,
+                p1Pieces: p1Pieces,
+                p2Pieces: p2Pieces,
+                pendingMoves: sock.yutPendingMoves,
+                startRolls: sock.yutStartRolls,
+                orderCountdownUntil: sock.yutOrderCountdownUntil,
+                onNewGame: sock.newYutGame,
+                onRollStartDice: sock.rollYutStartDice,
+                hasBonusThrow: sock.yutHasBonusThrow,
+                onThrow: sock.throwYut,
+                onMovePiece: (pieceId, moveIndex, {int? backdoDir}) =>
+                    sock.moveYut(
+                      pieceId,
+                      moveIndex: moveIndex,
+                      backdoDir: backdoDir,
+                    ),
+                onMoveNewPiece: () => sock.moveYut(0),
+                currentUser: currentUser,
+                lastResultName: sock.yutLastThrow,
+                lastThrowAt: sock.yutLastThrowAt,
+                lastThrowNak: sock.yutLastNak,
+                p1Character: _characterFor(p1),
+                p2Character: _characterFor(p2),
+                onThrowResultRevealed: _playThrowResultAudio,
+                p1UserId: p1,
+                p2UserId: p2,
+                displayName: sock.nameOf,
+                pieceSkin: _pieceSkin,
+                yutSkin: _yutSkin,
+                opponentPieceSkin: opponentPieceSkin,
+                opponentYutSkin: opponentYutSkin,
+                coins: sock.walletBalance,
               ),
             ),
             Positioned(
-              left: 14,
-              right: 14,
-              top: 12,
-              child: _StatusStrip(sock: sock),
+              left: 10,
+              top: 8,
+              child: _YutChromeButton(
+                icon: Icons.arrow_back_ios_new_rounded,
+                tooltip: '나가기',
+                onPressed: () => Navigator.of(context).maybePop(),
+              ),
+            ),
+            Positioned(
+              right: 8,
+              top: 6,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: const Color(0xCC0B4075),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFFFD36A), width: 2),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x66000000),
+                      blurRadius: 8,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: GameMenuButton(
+                  hasRestart: sock.yutActive,
+                  restartWaiting: sock.restartWaiting,
+                  onRequestRestart: () => sock.requestRestart('yut'),
+                ),
+              ),
             ),
             // 상대방 장착 아이템 배지 (우상단)
             if (opponentItems.isNotEmpty)
               Positioned(
                 right: 14,
-                top: 52,
+                top: 58,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -336,6 +354,46 @@ class _YutScreenState extends State<YutScreen> {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _YutChromeButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  const _YutChromeButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF299DEB), Color(0xFF0755A5)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        shape: BoxShape.circle,
+        border: Border.all(color: const Color(0xFFFFD36A), width: 2),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x66000000),
+            blurRadius: 8,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: IconButton(
+        onPressed: onPressed,
+        tooltip: tooltip,
+        visualDensity: VisualDensity.compact,
+        icon: Icon(icon, color: Colors.white, size: 18),
       ),
     );
   }
@@ -388,55 +446,41 @@ class _YutBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF2A211A), Color(0xFF5B4632), Color(0xFF1E2C25)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Image.asset(
+          'assets/images/yut/Summer.png',
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => DecoratedBox(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Color(0xFF2A211A),
+                  Color(0xFF5B4632),
+                  Color(0xFF1E2C25),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          ),
         ),
-      ),
-      child: CustomPaint(painter: _YutBackdropPainter()),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Colors.black.withValues(alpha: 0.03),
+                Colors.black.withValues(alpha: 0.14),
+              ],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+          ),
+        ),
+      ],
     );
   }
-}
-
-class _YutBackdropPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final tilePaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.035)
-      ..strokeWidth = 1;
-    const tile = 42.0;
-    for (double y = 0; y < size.height + tile; y += tile) {
-      final stagger = ((y / tile).round().isEven) ? 0.0 : tile / 2;
-      for (double x = -tile; x < size.width + tile; x += tile) {
-        final rect = Rect.fromLTWH(x + stagger, y, tile, tile * 0.58);
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(rect, const Radius.circular(4)),
-          tilePaint..style = PaintingStyle.stroke,
-        );
-      }
-    }
-
-    final glow = Paint()
-      ..shader =
-          RadialGradient(
-            colors: [
-              const Color(0xFFFFD46B).withValues(alpha: 0.16),
-              Colors.transparent,
-            ],
-          ).createShader(
-            Rect.fromCircle(
-              center: Offset(size.width * 0.7, size.height * 0.18),
-              radius: size.shortestSide * 0.55,
-            ),
-          );
-    canvas.drawRect(Offset.zero & size, glow);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _YutResultDialog extends StatelessWidget {
@@ -503,47 +547,6 @@ class _YutResultDialog extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _StatusStrip extends StatelessWidget {
-  final SocketService sock;
-  const _StatusStrip({required this.sock});
-
-  @override
-  Widget build(BuildContext context) {
-    final isMyTurn = sock.yutCurrentTurn == sock.userId;
-    final text = !sock.yutActive
-        ? '새 게임을 시작하면 선공 주사위부터 굴립니다.'
-        : sock.yutPhase == 'roll_order'
-        ? '선공 정하기 · 각자 주사위를 굴려요'
-        : sock.yutPhase == 'order_countdown'
-        ? '${sock.yutCurrentTurn ?? '선공'} 선공 · 곧 시작합니다'
-        : isMyTurn
-        ? (sock.yutPendingMoves.isEmpty
-              ? '내 턴 · 윷을 던지세요'
-              : '내 턴 · 가이드를 눌러 이동 (다른 말 선택 가능)')
-        : '${sock.yutCurrentTurn ?? '상대'} 차례입니다';
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: kCard,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isMyTurn ? kSuccess.withValues(alpha: 0.5) : kBorder,
-        ),
-      ),
-      child: Text(
-        text,
-        textAlign: TextAlign.center,
-        style: GoogleFonts.notoSans(
-          color: isMyTurn ? kSuccess : kTextSub,
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
     );
   }
 }
