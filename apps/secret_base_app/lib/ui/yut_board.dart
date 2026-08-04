@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../core/socket_service.dart';
 import '../core/yut_audio.dart';
 
 String _defaultDisplayName(String uid) => uid;
@@ -150,7 +151,6 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
   int? _selectedPieceId;
   bool _moveInFlight = false;
   bool _isOpponentThrow = false;
-  int _throwCount = 0;
   int? _lastTrackedThrowAt;
 
   String _display(String uid) => widget.displayName(uid);
@@ -230,12 +230,10 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
       _syncCountdown();
     }
     if (widget.gameId != oldWidget.gameId) {
-      _throwCount = 0;
       _lastTrackedThrowAt = widget.lastThrowAt;
     } else if (widget.lastThrowAt != null &&
         widget.lastThrowAt != _lastTrackedThrowAt) {
       _lastTrackedThrowAt = widget.lastThrowAt;
-      _throwCount++;
     }
   }
 
@@ -1334,7 +1332,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                       Positioned(
                         top: _compact ? stageHeight * 0.105 : 20,
                         left: _compact ? 10 : 16,
-                        width: screenWidth * (_compact ? 0.43 : 0.36),
+                        width: screenWidth * (_compact ? 0.40 : 0.28),
                         child: _buildPlayerCard(
                           key: const ValueKey('yut_opponent_profile'),
                           userId: opponent,
@@ -1344,6 +1342,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                           isActiveTurn:
                               widget.turn == opponent && widget.phase != null,
                           isMe: false,
+                          showPieceControls: false,
                           pieceSkin: widget.opponentPieceSkin,
                         ),
                       ),
@@ -1351,7 +1350,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                       Positioned(
                         bottom: _compact ? 8 : 14,
                         right: _compact ? 10 : 16,
-                        width: screenWidth * (_compact ? 0.43 : 0.36),
+                        width: screenWidth * (_compact ? 0.68 : 0.47),
                         child: _buildPlayerCard(
                           key: const ValueKey('yut_my_profile'),
                           userId: widget.currentUser,
@@ -1360,6 +1359,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                           pieces: myPieces,
                           isActiveTurn: isMyTurn,
                           isMe: true,
+                          showPieceControls: true,
                           onPieceTap: _selectPiece,
                           pieceSkin: widget.pieceSkin,
                         ),
@@ -1396,28 +1396,115 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     required List<dynamic>? pieces,
     required bool isActiveTurn,
     required bool isMe,
+    required bool showPieceControls,
     void Function(int)? onPieceTap,
     String pieceSkin = 'base',
   }) {
     final safePieces = pieces ?? List.generate(4, (_) => 0);
-    final borderColor = isMe
-        ? const Color(0xFF54D8FF)
-        : const Color(0xFFFFD56A);
-    final bgGrad = isMe
-        ? const LinearGradient(
-            colors: [Color(0xFF073F88), Color(0xFF1398D9), Color(0xFF07519D)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          )
-        : const LinearGradient(
-            colors: [Color(0xFF9E5412), Color(0xFFE69A2E), Color(0xFFA85D14)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          );
+    final borderColor = isActiveTurn
+        ? const Color(0xFFA7D8D1)
+        : const Color(0x66FFFFFF);
+    const bgGrad = LinearGradient(
+      colors: [Color(0xA62B3440), Color(0x99202731)],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    );
     final profileKeyPrefix = isMe ? 'yut_my_profile' : 'yut_opponent_profile';
-    final cardHeight = _compact ? 87.0 : 94.0;
-    final avatarSize = _compact ? 38.0 : 42.0;
-    final pieceSize = _compact ? 23.0 : 25.0;
+    final cardHeight = _compact ? 96.0 : 104.0;
+    final avatarSize = _compact ? 42.0 : 48.0;
+    final pieceSize = _compact ? 36.0 : 40.0;
+    final completedCount = safePieces.where(_isFinished).length;
+
+    if (!showPieceControls) {
+      final compactPieceSize = _compact ? 16.0 : 18.0;
+      return SizedBox(
+        height: _compact ? 62 : 68,
+        child: Container(
+          key: key,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            gradient: bgGrad,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: borderColor, width: 1.5),
+            boxShadow: [
+              if (isActiveTurn)
+                BoxShadow(
+                  color: borderColor.withValues(alpha: 0.38),
+                  blurRadius: 8,
+                ),
+            ],
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: _compact ? 30 : 34,
+                height: _compact ? 30 : 34,
+                child: _CharacterToken(
+                  character: character,
+                  color: color,
+                  selected: isActiveTurn,
+                  pieceSkin: pieceSkin,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _display(userId),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${4 - completedCount}말 남음',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.64),
+                        fontSize: 10,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Row(
+                      children: safePieces.map((piece) {
+                        final isFinished = _isFinished(piece);
+                        return Padding(
+                          padding: const EdgeInsets.only(left: 1),
+                          child: SizedBox(
+                            width: compactPieceSize,
+                            height: compactPieceSize,
+                            child: isFinished
+                                ? const Icon(
+                                    Icons.check_circle_rounded,
+                                    color: Color(0xFF9BEA85),
+                                    size: 14,
+                                  )
+                                : Opacity(
+                                    opacity: _getPos(piece) > 0 ? 0.45 : 1,
+                                    child: _CharacterToken(
+                                      character: character,
+                                      color: color,
+                                      pieceSkin: pieceSkin,
+                                    ),
+                                  ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return SizedBox(
       height: cardHeight,
@@ -1448,9 +1535,10 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
               children: [
                 SizedBox(
                   key: ValueKey('${profileKeyPrefix}_remaining'),
-                  width: _compact ? 58 : 64,
+                  width: _compact ? 154 : 174,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
                         isMe ? '내 남은 말' : '상대 남은 말',
@@ -1462,9 +1550,8 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                         ),
                       ),
                       const SizedBox(height: 3),
-                      Wrap(
-                        spacing: 2,
-                        runSpacing: 2,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: safePieces.asMap().entries.map((entry) {
                           final pieceId = entry.key;
                           final pos = _getPos(entry.value);
@@ -1640,213 +1727,54 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
   }
 
   Widget _buildActionBar({required bool canThrow}) {
-    final coinText = widget.coins != null
-        ? '${_formatCoins(widget.coins!)}G'
-        : '---G';
-
     return Container(
       key: const ValueKey('yut_action_bar'),
       decoration: const BoxDecoration(
-        color: Color(0xEE060D1A),
-        border: Border(top: BorderSide(color: Color(0x22FFFFFF), width: 0.5)),
+        color: Color(0xD90F1720),
+        border: Border(top: BorderSide(color: Color(0x18FFFFFF), width: 0.5)),
       ),
       child: SafeArea(
         top: false,
         child: Padding(
           padding: EdgeInsets.fromLTRB(
             _compact ? 10 : 14,
-            8,
+            10,
             _compact ? 10 : 14,
-            _compact ? 8 : 10,
+            10,
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // 좌측: Turns / Coins / Skill Slots
-              SizedBox(
-                width: _compact ? 80 : 92,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        const Expanded(
-                          child: Text(
-                            'Turns',
-                            maxLines: 1,
-                            overflow: TextOverflow.fade,
-                            style: TextStyle(
-                              color: Color(0xFF90A4AE),
-                              fontSize: 11,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          '$_throwCount',
-                          key: const ValueKey('yut_throw_count'),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 3),
-                    Row(
-                      children: [
-                        Image.asset(
-                          'assets/images/yut/coin.png',
-                          width: 16,
-                          height: 16,
-                          errorBuilder: (_, _, _) =>
-                              const Text('🪙', style: TextStyle(fontSize: 13)),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          coinText,
-                          style: const TextStyle(
-                            color: Color(0xFFFFD700),
-                            fontWeight: FontWeight.w800,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Skill Slots',
-                      style: TextStyle(color: Color(0xFF607D8B), fontSize: 9),
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: List.generate(
-                        4,
-                        (i) => Padding(
-                          padding: const EdgeInsets.only(right: 3),
-                          child: Container(
-                            width: 15,
-                            height: 15,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: const Color(0x33000000),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.28),
-                                width: 1.2,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // 중앙: 결과 + 원형 던지기 버튼
               Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      height: 28,
-                      child: _revealedResultName != null && !_showThrowAnim
-                          ? ScaleTransition(
-                              scale: _resultBounce,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFFFF8E1),
-                                  borderRadius: BorderRadius.circular(16),
-                                  boxShadow: const [
-                                    BoxShadow(
-                                      color: Colors.amber,
-                                      blurRadius: 10,
-                                    ),
-                                  ],
-                                ),
-                                child: Text(
-                                  _revealedNak ? '낙!' : _revealedResultName!,
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w900,
-                                    color: _revealedNak
-                                        ? const Color(0xFFB13B2E)
-                                        : const Color(0xFF6E3F1D),
-                                  ),
-                                ),
-                              ),
-                            )
-                          : const SizedBox.shrink(),
-                    ),
-                    const SizedBox(height: 4),
-                    _YutThrowButton(
-                      enabled: canThrow,
-                      loading: _showThrowAnim,
-                      compact: _compact,
-                      onTap: _handleThrow,
-                    ),
-                    if (!_showThrowAnim && _revealedResultName != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 3),
-                        child: Text(
-                          _revealedNak
-                              ? '낙 · 다음 차례'
-                              : '이동 대기: ${_pendingMoveText()}',
-                          style: TextStyle(
-                            color: _revealedNak
-                                ? const Color(0xFFEF9A9A)
-                                : const Color(0xFF90A4AE),
-                            fontSize: 9,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      )
-                    else
-                      const SizedBox(height: 12),
-                  ],
+                child: Text(
+                  _actionPrompt(canThrow: canThrow),
+                  maxLines: 2,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.84),
+                    fontSize: _compact ? 12 : 14,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-              const SizedBox(width: 6),
-              // 우측: 2x2 액션 버튼
-              Column(
+              const SizedBox(width: 10),
+              _YutThrowButton(
+                enabled: canThrow,
+                loading: _showThrowAnim,
+                compact: _compact,
+                onTap: _handleThrow,
+              ),
+              const SizedBox(width: 10),
+              Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildActionBtn(
-                        'assets/images/yut/settings.png',
-                        Icons.settings,
-                        () {},
-                      ),
-                      const SizedBox(width: 5),
-                      _buildActionBtn(
-                        'assets/images/yut/giftbox.png',
-                        Icons.card_giftcard,
-                        () {},
-                      ),
-                    ],
+                  _buildActionBtn(
+                    Icons.settings_outlined,
+                    () => _showSettings(context),
                   ),
-                  const SizedBox(height: 5),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildActionBtn(
-                        'assets/images/yut/ready.png',
-                        Icons.inventory_2_outlined,
-                        () {},
-                      ),
-                      const SizedBox(width: 5),
-                      _buildActionBtn(
-                        'assets/images/yut/chat.png',
-                        Icons.chat_bubble_outline,
-                        () {},
-                      ),
-                    ],
+                  const SizedBox(width: 4),
+                  _buildActionBtn(
+                    Icons.chat_bubble_outline,
+                    () => _showChat(context),
                   ),
                 ],
               ),
@@ -1857,51 +1785,335 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildActionBtn(
-    String assetPath,
-    IconData fallback,
-    VoidCallback onTap,
-  ) {
-    final size = _compact ? 38.0 : 44.0;
+  Widget _buildActionBtn(IconData icon, VoidCallback onTap) {
+    final size = _compact ? 36.0 : 40.0;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         width: size,
         height: size,
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF1565C0), Color(0xFF0D47A1)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.6),
-              blurRadius: 6,
-              offset: const Offset(0, 3),
-            ),
-          ],
+          color: Colors.white.withValues(alpha: 0.08),
+          shape: BoxShape.circle,
           border: Border.all(
-            color: Colors.white.withValues(alpha: 0.25),
+            color: Colors.white.withValues(alpha: 0.14),
             width: 1,
           ),
         ),
-        padding: const EdgeInsets.all(7),
-        child: Image.asset(
-          assetPath,
-          fit: BoxFit.contain,
-          errorBuilder: (_, _, _) =>
-              Icon(fallback, color: Colors.white, size: size * 0.5),
-        ),
+        child: Icon(icon, color: Colors.white70, size: size * 0.52),
       ),
     );
   }
 
-  String _formatCoins(int coins) {
-    if (coins >= 1000000) return '${(coins / 1000000).toStringAsFixed(1)}M';
-    if (coins >= 1000) return '${(coins / 1000).toStringAsFixed(0)}K';
-    return '$coins';
+  String _actionPrompt({required bool canThrow}) {
+    if (_showThrowAnim) return '윷을 던지는 중';
+    final isMyTurn = widget.turn == widget.currentUser;
+    final hasMoves = widget.pendingMoves?.isNotEmpty ?? false;
+    if (!isMyTurn) {
+      return widget.phase == 'moving' ? '상대가 말을 이동하는 중' : '상대가 윷을 던지는 중';
+    }
+    if (hasMoves) {
+      return _selectedPieceId == null ? '내 말 선택' : '이동 칸 선택';
+    }
+    if (canThrow) return '윷을 던져주세요';
+    return '상대방을 기다리는 중';
+  }
+
+  void _showSettings(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _YutSettingsSheet(),
+    );
+  }
+
+  void _showChat(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _YutChatSheet(),
+    );
+  }
+}
+
+class _YutSettingsSheet extends StatefulWidget {
+  const _YutSettingsSheet();
+
+  @override
+  State<_YutSettingsSheet> createState() => _YutSettingsSheetState();
+}
+
+class _YutSettingsSheetState extends State<_YutSettingsSheet> {
+  final _audio = YutAudio.instance;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Container(
+        margin: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        decoration: BoxDecoration(
+          color: const Color(0xE62B3440),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '게임 설정',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('효과음', style: TextStyle(color: Colors.white)),
+              subtitle: Text(
+                '던지기와 게임 결과 효과음',
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
+              ),
+              value: _audio.effectsEnabled,
+              activeTrackColor: const Color(0xFF79B8B1),
+              onChanged: (value) async {
+                await _audio.setEffectsEnabled(value);
+                if (mounted) setState(() {});
+              },
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('배경음악', style: TextStyle(color: Colors.white)),
+              subtitle: Text(
+                '게임 중 반복 재생되는 음악',
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
+              ),
+              value: _audio.backgroundMusicEnabled,
+              activeTrackColor: const Color(0xFF79B8B1),
+              onChanged: (value) async {
+                await _audio.setBackgroundMusicEnabled(value);
+                if (mounted) setState(() {});
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _YutChatSheet extends StatefulWidget {
+  const _YutChatSheet();
+
+  @override
+  State<_YutChatSheet> createState() => _YutChatSheetState();
+}
+
+class _YutChatSheetState extends State<_YutChatSheet> {
+  final _socket = SocketService();
+  final _messageController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _socket.addListener(_rebuild);
+  }
+
+  @override
+  void dispose() {
+    _socket.removeListener(_rebuild);
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  void _rebuild() {
+    if (mounted) setState(() {});
+  }
+
+  void _send() {
+    _socket.sendYutChat(_messageController.text);
+    _messageController.clear();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final messages = _socket.yutChatMessages;
+    return SafeArea(
+      child: Container(
+        height: MediaQuery.sizeOf(context).height * 0.58,
+        margin: const EdgeInsets.all(12),
+        padding: EdgeInsets.fromLTRB(
+          16,
+          12,
+          16,
+          12 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        decoration: BoxDecoration(
+          color: const Color(0xE62B3440),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '게임 채팅',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: messages.isEmpty
+                  ? Center(
+                      child: Text(
+                        '상대방에게 메시지를 보내보세요.',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.55),
+                        ),
+                      ),
+                    )
+                  : ListView.separated(
+                      reverse: true,
+                      itemCount: messages.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
+                      itemBuilder: (_, index) {
+                        final message = messages[messages.length - 1 - index];
+                        final isMine = message['by'] == _socket.userId;
+                        final senderId = message['by'] as String;
+                        final isFirstPlayer =
+                            _socket.yutPlayers.isNotEmpty &&
+                            _socket.yutPlayers.first == senderId;
+                        final character =
+                            _socket.yutCharacters[senderId] ??
+                            (isFirstPlayer ? 'honggilldong' : 'miho');
+                        final tokenColor = isFirstPlayer
+                            ? const Color(0xFFE45858)
+                            : const Color(0xFF4B8DD8);
+                        final avatar = SizedBox(
+                          width: 34,
+                          height: 34,
+                          child: _CharacterToken(
+                            character: character,
+                            color: tokenColor,
+                            pieceSkin: 'base',
+                          ),
+                        );
+                        final bubble = ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 218),
+                          child: Column(
+                            crossAxisAlignment: isMine
+                                ? CrossAxisAlignment.end
+                                : CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                isMine ? '나' : _socket.nameOf(senderId),
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.62),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isMine
+                                      ? const Color(0xFF5F8D88)
+                                      : Colors.white.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Text(
+                                  message['message'] as String,
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                        return Align(
+                          alignment: isMine
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: isMine
+                                ? [bubble, const SizedBox(width: 6), avatar]
+                                : [avatar, const SizedBox(width: 6), bubble],
+                          ),
+                        );
+                      },
+                    ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _messageController,
+                    maxLength: 200,
+                    textInputAction: TextInputAction.send,
+                    onSubmitted: (_) => _send(),
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      counterText: '',
+                      hintText: '메시지 입력',
+                      hintStyle: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.45),
+                      ),
+                      filled: true,
+                      fillColor: Colors.black.withValues(alpha: 0.18),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: _send,
+                  icon: const Icon(Icons.send_rounded),
+                  color: const Color(0xFFA7D8D1),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -2085,93 +2297,73 @@ class _YutThrowButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final width = compact ? 88.0 : 102.0;
-    final buttonSize = compact ? 72.0 : 84.0;
+    final width = compact ? 122.0 : 140.0;
+    final height = compact ? 58.0 : 66.0;
     return Semantics(
       button: true,
       enabled: enabled,
       label: '윷 던지기',
       child: GestureDetector(
         onTap: enabled ? onTap : null,
-        child: SizedBox(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
           width: width,
-          height: compact ? 92 : 106,
-          child: Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.bottomCenter,
+          height: height,
+          decoration: BoxDecoration(
+            gradient: enabled
+                ? const LinearGradient(
+                    colors: [Color(0xFFFFD786), Color(0xFFC77425)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  )
+                : null,
+            color: enabled ? null : Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: enabled
+                  ? const Color(0xFFFFE9B0)
+                  : Colors.white.withValues(alpha: 0.14),
+              width: enabled ? 1.5 : 1,
+            ),
+            boxShadow: enabled
+                ? const [
+                    BoxShadow(
+                      color: Color(0x66000000),
+                      blurRadius: 7,
+                      offset: Offset(0, 3),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              for (final data in const [
-                (-0.34, -20.0, 8.0),
-                (-0.12, -28.0, 31.0),
-                (0.13, 28.0, 31.0),
-                (0.35, 20.0, 8.0),
-              ])
-                Positioned(
-                  top: data.$3,
-                  left: width * (0.5 + data.$1) - 7,
-                  child: Transform.rotate(
-                    angle: data.$2 * pi / 180,
-                    child: _MiniYutStick(enabled: enabled),
-                  ),
-                ),
-              Container(
-                width: buttonSize + 12,
-                height: buttonSize + 12,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: const Color(0xFFFCF5D8),
-                  border: Border.all(color: const Color(0xFFFFE99B), width: 3),
-                  boxShadow: enabled
-                      ? const [
-                          BoxShadow(
-                            color: Color(0xAA62D9FF),
-                            blurRadius: 20,
-                            spreadRadius: 4,
-                          ),
-                          BoxShadow(
-                            color: Color(0x88000000),
-                            blurRadius: 8,
-                            offset: Offset(0, 5),
-                          ),
-                        ]
-                      : const [],
-                ),
-                alignment: Alignment.center,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  width: buttonSize,
-                  height: buttonSize,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: enabled
-                          ? const [
-                              Color(0xFFFFF59B),
-                              Color(0xFFFFC928),
-                              Color(0xFFFF8500),
-                            ]
-                          : const [Color(0xFF607681), Color(0xFF344650)],
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                    ),
-                    border: Border.all(
-                      color: enabled ? const Color(0xFFFFA000) : Colors.white24,
-                      width: 2,
-                    ),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    loading ? '…' : '던지기',
+              _YutStickGlyph(enabled: enabled, compact: compact),
+              SizedBox(width: compact ? 6 : 8),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    loading ? '던지는 중' : '윷 던지기',
                     style: TextStyle(
-                      fontSize: compact ? 16 : 19,
+                      fontSize: compact ? 15 : 17,
                       fontWeight: FontWeight.w900,
-                      color: enabled ? const Color(0xFF5F210B) : Colors.white38,
-                      shadows: enabled
-                          ? const [Shadow(color: Colors.white, blurRadius: 1)]
-                          : null,
+                      color: enabled ? const Color(0xFF4A2512) : Colors.white38,
+                      height: 1,
                     ),
                   ),
-                ),
+                  const SizedBox(height: 3),
+                  Text(
+                    loading ? '결과 확인 중' : '윷을 던져보세요',
+                    style: TextStyle(
+                      fontSize: compact ? 9 : 10,
+                      fontWeight: FontWeight.w700,
+                      color: enabled ? const Color(0xFF70401E) : Colors.white30,
+                      height: 1,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -2181,32 +2373,52 @@ class _YutThrowButton extends StatelessWidget {
   }
 }
 
-class _MiniYutStick extends StatelessWidget {
+class _YutStickGlyph extends StatelessWidget {
   final bool enabled;
+  final bool compact;
 
-  const _MiniYutStick({required this.enabled});
+  const _YutStickGlyph({required this.enabled, required this.compact});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 14,
-      height: 48,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        gradient: LinearGradient(
-          colors: enabled
-              ? const [Color(0xFFFFE7A4), Color(0xFFE9A64E), Color(0xFFB8672E)]
-              : const [Color(0xFF9BA7AC), Color(0xFF58666C)],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        ),
-        border: Border.all(color: const Color(0xFF8A4A24), width: 1.2),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x66000000),
-            blurRadius: 3,
-            offset: Offset(0, 2),
-          ),
+    final width = compact ? 28.0 : 32.0;
+    final height = compact ? 36.0 : 40.0;
+    final stickColor = enabled
+        ? const [Color(0xFFFFE5A7), Color(0xFFAD592A)]
+        : const [Color(0xFF7A858A), Color(0xFF465158)];
+
+    return SizedBox(
+      width: width,
+      height: height,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          for (final (offset, angle) in const [
+            (Offset(-6, 2), -0.33),
+            (Offset(0, -2), 0.04),
+            (Offset(6, 2), 0.33),
+          ])
+            Transform.translate(
+              offset: offset,
+              child: Transform.rotate(
+                angle: angle,
+                child: Container(
+                  width: compact ? 7 : 8,
+                  height: compact ? 31 : 34,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(6),
+                    gradient: LinearGradient(
+                      colors: stickColor,
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ),
+                    border: Border.all(
+                      color: enabled ? const Color(0xFF7D3D1E) : Colors.white24,
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );

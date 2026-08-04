@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'yut_audio_stub.dart'
     if (dart.library.html) 'yut_audio_web.dart'
@@ -11,11 +12,37 @@ class YutAudio {
   final _backend = impl.YutAudioBackend();
   final _random = Random();
 
-  bool _enabled = true;
-  bool get enabled => _enabled;
-  set enabled(bool value) {
-    _enabled = value;
-    if (!value) stopBackground();
+  static const _effectsEnabledKey = 'yut_audio_effects_enabled';
+  static const _backgroundMusicEnabledKey = 'yut_audio_background_enabled';
+
+  bool _effectsEnabled = true;
+  bool _backgroundMusicEnabled = true;
+  String? _requestedBackground;
+
+  bool get effectsEnabled => _effectsEnabled;
+  bool get backgroundMusicEnabled => _backgroundMusicEnabled;
+
+  Future<void> loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    _effectsEnabled = prefs.getBool(_effectsEnabledKey) ?? true;
+    _backgroundMusicEnabled = prefs.getBool(_backgroundMusicEnabledKey) ?? true;
+  }
+
+  Future<void> setEffectsEnabled(bool value) async {
+    _effectsEnabled = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_effectsEnabledKey, value);
+  }
+
+  Future<void> setBackgroundMusicEnabled(bool value) async {
+    _backgroundMusicEnabled = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_backgroundMusicEnabledKey, value);
+    if (!value) {
+      await _backend.stopBackground();
+    } else if (_requestedBackground != null) {
+      await _backend.playBackground(_requestedBackground!);
+    }
   }
 
   Future<void> playCharacterSelect(String character) =>
@@ -28,11 +55,15 @@ class YutAudio {
   }
 
   Future<void> playBackground(String file) async {
-    if (!_enabled) return;
+    _requestedBackground = file;
+    if (!_backgroundMusicEnabled) return;
     await _backend.playBackground(file);
   }
 
-  Future<void> stopBackground() => _backend.stopBackground();
+  Future<void> stopBackground() {
+    _requestedBackground = null;
+    return _backend.stopBackground();
+  }
 
   Future<void> playThrow() => _play('yutthrow.mp3');
 
@@ -66,7 +97,7 @@ class YutAudio {
   }
 
   Future<void> _play(String file) async {
-    if (!_enabled) return;
+    if (!_effectsEnabled) return;
     await _backend.play(file);
   }
 }

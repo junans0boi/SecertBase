@@ -5,6 +5,7 @@ import 'core/app_theme.dart';
 import 'core/main_design.dart';
 import 'core/socket_service.dart';
 import 'core/auth_service.dart';
+import 'core/yut_audio.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/partner_screen.dart';
 import 'screens/home_shell.dart';
@@ -17,6 +18,7 @@ Future<void> main() async {
   // Initialize AuthService
   final auth = AuthService();
   await auth.init();
+  await YutAudio.instance.loadSettings();
 
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,

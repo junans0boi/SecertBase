@@ -121,6 +121,7 @@ class SocketService extends ChangeNotifier {
   List<String> yutPlayers = [];
   Map<String, List<int>> yutPieces = {}; // userId -> piece positions (0-20)
   Map<String, List<dynamic>> yutPieceDetails = {};
+  List<Map<String, dynamic>> yutChatMessages = [];
 
   // uno
   Map<String, Map<String, dynamic>> unoEquippedItems = {};
@@ -586,6 +587,27 @@ class SocketService extends ChangeNotifier {
       yutWinner = _m(data)['winner'] as String?;
       yutActive = false;
       _log('윷놀이 종료 - 승리: $yutWinner');
+      notifyListeners();
+    });
+
+    socket.on('game:yut:chat', (data) {
+      final map = _m(data);
+      final message = map['message'] as String?;
+      final by = map['by'] as String?;
+      if (message == null || by == null) return;
+      yutChatMessages = [
+        ...yutChatMessages,
+        {
+          'by': by,
+          'message': message,
+          'at':
+              (map['at'] as num?)?.toInt() ??
+              DateTime.now().millisecondsSinceEpoch,
+        },
+      ];
+      if (yutChatMessages.length > 50) {
+        yutChatMessages = yutChatMessages.sublist(yutChatMessages.length - 50);
+      }
       notifyListeners();
     });
 
@@ -1570,6 +1592,12 @@ class SocketService extends ChangeNotifier {
     _socket?.emit('game:yut:move', payload);
   }
 
+  void sendYutChat(String message) {
+    final trimmed = message.trim();
+    if (trimmed.isEmpty) return;
+    _socket?.emit('game:yut:chat', {'message': trimmed});
+  }
+
   void setUnoMode(String mode) {
     if (mode != 'classic' && mode != 'go_wild') return;
     selectedUnoMode = mode;
@@ -1668,8 +1696,12 @@ class SocketService extends ChangeNotifier {
   }
 
   void _applyYutState(Map<String, dynamic> map) {
+    final nextGameId = map['id'] as String? ?? yutGameId ?? 'active';
+    if (nextGameId != yutGameId) {
+      yutChatMessages = [];
+    }
     yutActive = true;
-    yutGameId = map['id'] as String? ?? yutGameId ?? 'active';
+    yutGameId = nextGameId;
     yutPhase = map['phase'] as String? ?? yutPhase ?? 'throwing';
     yutCurrentTurn = map['currentTurn'] as String?;
     yutCharacters = _stringMap(map['characters']);

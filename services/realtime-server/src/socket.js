@@ -182,6 +182,10 @@ const yutMoveSchema = z.object({
   backdoDir: z.number().int().optional(),
 });
 
+const yutChatSchema = z.object({
+  message: z.string().trim().min(1).max(200),
+});
+
 const unoPlaySchema = z.object({
   cardId: z.string().min(1),
   declaredColor: z.preprocess(
@@ -1654,6 +1658,41 @@ export const registerSocketHandlers = (io) => {
           grantGameXpAndMissions(gameState.winner, yutLoserId, 'yut'),
         ]);
       }
+    });
+
+    socket.on("game:yut:chat", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+
+      const parsed = yutChatSchema.safeParse(payload);
+      if (!parsed.success) {
+        ack({ ok: false, reason: "invalid_message" });
+        return;
+      }
+
+      const gameText = await redis.get(yutGameKey(roomCode));
+      if (!gameText) {
+        ack({ ok: false, reason: "no_game" });
+        return;
+      }
+      const gameState = JSON.parse(gameText);
+      if (!gameState.playersOrder?.includes(userId)) {
+        ack({ ok: false, reason: "not_a_player" });
+        return;
+      }
+
+      const event = {
+        by: userId,
+        message: parsed.data.message,
+        at: Date.now(),
+      };
+      io.to(roomCode).emit("game:yut:chat", event);
+      ack({ ok: true, event });
     });
 
     socket.on("game:blackjack:start", async (payload, ackRaw) => {

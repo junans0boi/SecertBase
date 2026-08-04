@@ -306,16 +306,9 @@ class _YutScreenState extends State<YutScreen> {
               top: 6,
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: const Color(0xCC0B4075),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFFFD36A), width: 2),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x66000000),
-                      blurRadius: 8,
-                      offset: Offset(0, 4),
-                    ),
-                  ],
+                  color: const Color(0x992B3440),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0x33FFFFFF)),
                 ),
                 child: GameMenuButton(
                   hasRestart: sock.yutActive,
@@ -374,20 +367,9 @@ class _YutChromeButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF299DEB), Color(0xFF0755A5)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: const Color(0x992B3440),
         shape: BoxShape.circle,
-        border: Border.all(color: const Color(0xFFFFD36A), width: 2),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x66000000),
-            blurRadius: 8,
-            offset: Offset(0, 4),
-          ),
-        ],
+        border: Border.all(color: const Color(0x33FFFFFF)),
       ),
       child: IconButton(
         onPressed: onPressed,
