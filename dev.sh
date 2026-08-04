@@ -9,6 +9,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVER_HOST="ubuntu@secretbase.cloud"
 SSH_KEY="/Users/junzzang/BACKUP/workspace/ssh-key-2026-07-06.key"
+LOCAL_IP="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || echo "localhost")"
 TUNNEL_PID_FILE="/tmp/sb_ssh_tunnel.pid"
 NODE_PID_FILE="/tmp/sb_node_server.pid"
 
