@@ -22,12 +22,58 @@ class _MarbleYutScreenState extends State<MarbleYutScreen> {
   void initState() {
     super.initState();
     _socket.addListener(_rebuild);
+    _socket.onMarbleYutTollPaid = _showTollPaidSnackbar;
   }
 
   @override
   void dispose() {
     _socket.removeListener(_rebuild);
+    if (_socket.onMarbleYutTollPaid == _showTollPaidSnackbar) {
+      _socket.onMarbleYutTollPaid = null;
+    }
     super.dispose();
+  }
+
+  void _showTollPaidSnackbar(Map<String, dynamic> data) {
+    if (!mounted) return;
+    final payer = data['payer'] as String?;
+    final receiver = data['receiver'] as String?;
+    final toll = data['toll'] as int? ?? 0;
+    
+    if (payer == null || receiver == null || toll == 0) return;
+    
+    final isMePayer = payer == _socket.userId;
+    final isMeReceiver = receiver == _socket.userId;
+    
+    if (!isMePayer && !isMeReceiver) return;
+    
+    final formattedToll = toll.toString().replaceAllMapped(
+      RegExp(r'\B(?=(\d{3})+(?!\d))'),
+      (m) => ',',
+    );
+    
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Text(isMePayer ? '💸' : '💰', style: const TextStyle(fontSize: 20)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                isMePayer
+                    ? '상대 영지에 도착하여 $formattedToll 코인을 지불했습니다!'
+                    : '상대가 내 영지에 도착하여 $formattedToll 코인을 획득했습니다!',
+                style: GoogleFonts.notoSans(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: isMePayer ? const Color(0xFFD32F2F) : const Color(0xFF388E3C),
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   void _rebuild() {
@@ -42,8 +88,10 @@ class _MarbleYutScreenState extends State<MarbleYutScreen> {
   bool _catchBonusShowing = false;
 
   void _handleCatchBonus() {
-    if (!_socket.marbleYutCatchBonusPending || 
-        _socket.marbleYutCurrentTurn != _socket.userId ||
+    // H2: 턴 전환 여부와 독립적으로 catchBonusBy로 판단
+    // currentTurn에만 의존하면 턴 전환이 먼저 일어나 팔업이 누락됨
+    if (!_socket.marbleYutCatchBonusPending ||
+        _socket.marbleYutCatchBonusBy != _socket.userId ||
         _catchBonusShowing) {
       return;
     }
@@ -110,19 +158,24 @@ class _MarbleYutScreenState extends State<MarbleYutScreen> {
     });
   }
 
-  // ─── 승리 다이얼로그 ──────────────────────────────────────────────────────
+  // ─── 승리 다이얼로그 ──────────────────────────────────────────
   void _showWinnerIfNeeded() {
     final winner = _socket.marbleYutWinner;
-    if (winner == null || winner == _lastShownWinner) return;
-    _lastShownWinner = winner;
+    final winReason = _socket.marbleYutWinReason;
+    // C3: timeout_draw는 winner==null 이지만 ended 이벤트가 발송되므로 winReason으로 식별
+    final isDraw = winner == null && winReason == 'timeout_draw';
+    if (!isDraw && winner == null) return; // 실제 게임 진행 중
+    final shownKey = isDraw ? '__draw__' : winner!;
+    if (shownKey == _lastShownWinner) return;
+    _lastShownWinner = shownKey;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       showDialog<void>(
         context: context,
         barrierDismissible: true,
         builder: (_) => _MarbleResultDialog(
-          winner: winner,
-          winReason: _socket.marbleYutWinReason,
+          winner: winner, // draw시 null, timeout시 uid
+          winReason: winReason,
           userId: _socket.userId,
           myCoins: _socket.marbleYutCoins[_socket.userId] ?? 0,
           opCoins: _socket.marbleYutCoins.entries
@@ -192,15 +245,17 @@ class _MarbleYutScreenState extends State<MarbleYutScreen> {
                 p1UserId: p1,
                 p2UserId: p2,
                 displayName: sock.nameOf,
-                pieceSkin: 'base',
-                yutSkin: 'base',
-                opponentPieceSkin: 'base',
-                opponentYutSkin: 'base',
+                p1Character: sock.marbleYutCharacters[p1] ?? 'honggilldong',
+                p2Character: sock.marbleYutCharacters[p2] ?? 'miho',
+                pieceSkin: sock.marbleYutEquippedItems[currentUser]?['piece_skin'] ?? 'base',
+                yutSkin: sock.marbleYutEquippedItems[currentUser]?['yut_skin'] ?? 'base',
+                opponentPieceSkin: sock.marbleYutEquippedItems[opponentId]?['piece_skin'] ?? 'base',
+                opponentYutSkin: sock.marbleYutEquippedItems[opponentId]?['yut_skin'] ?? 'base',
                 coins: myCoins,
               ),
             ),
 
-            // ─── 상단 HUD: 자금 + 라운드 ─────────────────────────────────
+            // ─── 상단 HUD: 자금 + 라운드 ─────────────────────────────
             Positioned(
               top: 0,
               left: 0,
@@ -212,6 +267,7 @@ class _MarbleYutScreenState extends State<MarbleYutScreen> {
                 myCoins: myCoins,
                 opCoins: opCoins,
                 round: sock.marbleYutRound,
+                currentTurn: sock.marbleYutCurrentTurn, // M7: 현재 누구 턴
                 displayName: sock.nameOf,
               ),
             ),
@@ -259,6 +315,7 @@ class _MarbleHud extends StatelessWidget {
   final int myCoins;
   final int opCoins;
   final int round;
+  final String? currentTurn; // M7: 현재 턴 표시용
   final String Function(String) displayName;
 
   const _MarbleHud({
@@ -268,14 +325,16 @@ class _MarbleHud extends StatelessWidget {
     required this.myCoins,
     required this.opCoins,
     required this.round,
+    this.currentTurn,
     required this.displayName,
   });
 
   @override
   Widget build(BuildContext context) {
     final opponentId = (currentUser == p1) ? p2 : p1;
+    final isMyTurn = currentTurn == currentUser;
     return Container(
-      height: 52,
+      height: 56,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [Color(0xDD1A1230), Color(0xAA2A1540)],
@@ -289,33 +348,48 @@ class _MarbleHud extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
-              // 내 자금
+              // 내 자금 + 내 턴 하이라이트
               _CoinChip(
                 label: '나',
                 coins: myCoins,
                 color: const Color(0xFF7C4DFF),
                 isMe: true,
+                isMyTurn: isMyTurn,
               ),
               const Spacer(),
-              // 라운드
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0x44FFFFFF),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0x44FFFFFF)),
-                ),
-                child: Text(
-                  'Round $round / 20',
-                  style: GoogleFonts.notoSans(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
+              // 라운드 + 턴 안내 (M7)
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0x44FFFFFF),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0x44FFFFFF)),
+                    ),
+                    child: Text(
+                      'Round $round / 20',
+                      style: GoogleFonts.notoSans(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 2),
+                  Text(
+                    isMyTurn ? '⚡ 내 턴!' : '상대 턴',
+                    style: GoogleFonts.notoSans(
+                      color: isMyTurn ? const Color(0xFFFFD700) : Colors.white54,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ),
               const Spacer(),
-              // 상대 자금
+              // 상대 자금 + 상대 턴 하이라이트
               _CoinChip(
                 label: displayName(opponentId).isNotEmpty
                     ? displayName(opponentId).characters.first
@@ -323,6 +397,7 @@ class _MarbleHud extends StatelessWidget {
                 coins: opCoins,
                 color: const Color(0xFFE91E63),
                 isMe: false,
+                isMyTurn: !isMyTurn && currentTurn != null,
               ),
             ],
           ),
@@ -337,27 +412,38 @@ class _CoinChip extends StatelessWidget {
   final int coins;
   final Color color;
   final bool isMe;
+  final bool isMyTurn;  // M7: 혁재 턴 사용자인지 여부
 
   const _CoinChip({
     required this.label,
     required this.coins,
     required this.color,
     required this.isMe,
+    this.isMyTurn = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.2),
+        color: isMyTurn
+            ? color.withValues(alpha: 0.45)
+            : color.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.6)),
+        border: Border.all(
+          color: isMyTurn ? color : color.withValues(alpha: 0.6),
+          width: isMyTurn ? 2 : 1,
+        ),
+        boxShadow: isMyTurn
+            ? [BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 6, spreadRadius: 1)]
+            : null,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('💰', style: const TextStyle(fontSize: 12)),
+          const Text('💰', style: TextStyle(fontSize: 12)),
           const SizedBox(width: 4),
           Text(
             coins.toString().replaceAllMapped(
@@ -587,11 +673,14 @@ class _CatchBonusDialogState extends State<_CatchBonusDialog> {
   void _updateTime() {
     if (widget.until == null) return;
     final remain = widget.until! - DateTime.now().millisecondsSinceEpoch;
+    // H1: 재접속 복원 시 이미 지난 타임스킬막이면 즉시 스킵 (자동 입력 방지)
     if (remain <= 0) {
       _timer?.cancel();
+      // 재접속으로 인한 즉시 닫힘 시 서버에게 skip 통보 도 하지 않음
+      // (서버 setTimeout이 15초 후 자동으로 catch skip 처리함)
       if (mounted) {
         Navigator.of(context).pop();
-        widget.onSkip();
+        // 고의적으로 onSkip을 호출하지 않음 (timeout 이전에 닫히면 서버가 타이룬으로 처리)
       }
     } else {
       setState(() => _remainingMs = remain);
@@ -640,7 +729,8 @@ class _CatchBonusDialogState extends State<_CatchBonusDialog> {
                   final entry = widget.lands[index];
                   final pos = int.tryParse(entry.key) ?? 0;
                   final level = entry.value['level'] as int? ?? 1;
-                  // 업기가 아니므로 기본 1.3배
+                  // L5: 신수 위치에 이름 표시 + 실제 서버 calcAcquireCost 동일 로직
+                  final shrineNames = {5: '백호', 10: '청룡', 15: '주작'};
                   int baseVal = 100;
                   if ([5, 10, 15].contains(pos)) {
                     baseVal = 300;
@@ -652,6 +742,9 @@ class _CatchBonusDialogState extends State<_CatchBonusDialog> {
                   final cost = (baseVal * 1.3).floor();
                   final canAfford = widget.myCoins >= cost;
                   final isSelected = _selectedPos == pos;
+                  final posLabel = shrineNames.containsKey(pos)
+                      ? '✨ ${shrineNames[pos]} (Lv$level)'
+                      : 'Pos $pos (Lv$level)';
 
                   return InkWell(
                     onTap: canAfford ? () => setState(() => _selectedPos = pos) : null,
@@ -669,7 +762,7 @@ class _CatchBonusDialogState extends State<_CatchBonusDialog> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('Pos $pos (Lv$level)', style: GoogleFonts.notoSans(color: canAfford ? Colors.white : kTextMuted, fontWeight: FontWeight.w700)),
+                          Text(posLabel, style: GoogleFonts.notoSans(color: canAfford ? Colors.white : kTextMuted, fontWeight: FontWeight.w700)),
                           Text('$cost 💰', style: GoogleFonts.notoSans(color: canAfford ? const Color(0xFFE91E63) : kTextMuted, fontWeight: FontWeight.w700)),
                         ],
                       ),

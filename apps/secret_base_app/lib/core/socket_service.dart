@@ -132,9 +132,12 @@ class SocketService extends ChangeNotifier {
   String? marbleYutWinReason;
   bool marbleYutHasBonusThrow = false;
   bool marbleYutCatchBonusPending = false;
+  /// H2: 잡기를 수행한 플레이어 uid (턴 전환에 독립적)
+  String? marbleYutCatchBonusBy;
   List<dynamic> marbleYutPendingMoves = [];
   Map<String, dynamic> marbleYutStartRolls = {};
   int? marbleYutOrderCountdownUntil;
+  Function(Map<String, dynamic>)? onMarbleYutTollPaid;
   List<String> marbleYutPlayers = [];
   Map<String, List<dynamic>> marbleYutPieceDetails = {};
   Map<String, dynamic> marbleYutLands = {};   // {pos: {owner, level}}
@@ -665,9 +668,17 @@ class SocketService extends ChangeNotifier {
 
     socket.on('game:marble_yut:ended', (data) {
       final map = _m(data);
+      // C3: winner가 null인 timeout_draw도 처리
       marbleYutWinner = map['winner'] as String?;
       marbleYutWinReason = map['winReason'] as String?;
       marbleYutActive = false;
+      // H6: finalScores가 있으면 coins에 반영 (서든데스 점수 표시용)
+      final finalScores = map['finalScores'];
+      if (finalScores is Map) {
+        marbleYutCoins = finalScores.map(
+          (k, v) => MapEntry('$k', (v as num?)?.toInt() ?? 0),
+        );
+      }
       notifyListeners();
     });
 
@@ -684,6 +695,7 @@ class SocketService extends ChangeNotifier {
           (k, v) => MapEntry('$k', (v as num?)?.toInt() ?? 0),
         );
       }
+      onMarbleYutTollPaid?.call(map);
       notifyListeners();
     });
 
@@ -1786,6 +1798,14 @@ class SocketService extends ChangeNotifier {
         bombDuration = (bomb['timer'] as num?)?.toInt();
         _log('폭탄 복원');
       }
+      // M3: 마블윷 게임 복원
+      if (games.containsKey('marble_yut')) {
+        final myt = _m(games['marble_yut']);
+        _applyMarbleYutState(myt);
+        // H3: 재접속 시 이미 처리된 landPrompt가 재팝업되지 않도록 초기화
+        marbleYutLandPrompt = null;
+        _log('마블윷 복원');
+      }
     } catch (e, stack) {
       _log('게임 복원 중 에러 발생: $e\n$stack');
     }
@@ -1871,8 +1891,10 @@ class SocketService extends ChangeNotifier {
     marbleYutCharacters = _stringMap(map['characters']);
     marbleYutHasBonusThrow = map['hasBonusThrow'] == true;
     marbleYutCatchBonusPending = map['catchBonusPending'] == true;
-    marbleYutCatchBonusUntil = map['catchBonusUntil'] as int?;
+    marbleYutCatchBonusUntil = (map['catchBonusUntil'] as num?)?.toInt();
     marbleYutCatchBonusTarget = map['catchBonusTarget'] as String?;
+    // H2: 잡기 수행자 저장 — 턴 전환이 일어나독 팔업 트리거 가능
+    marbleYutCatchBonusBy = map['catchBonusBy'] as String?;
     marbleYutOrderCountdownUntil =
         (map['orderCountdownUntil'] as num?)?.toInt();
     marbleYutStartRolls = _m(map['startRolls'] ?? marbleYutStartRolls);

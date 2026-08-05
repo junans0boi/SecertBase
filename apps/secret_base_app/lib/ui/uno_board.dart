@@ -88,6 +88,7 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
   // --- Special card effect ---
   late AnimationController _effectCtrl;
   String? _effectCard;
+  String _effectCardBackSkin = 'base';
 
   // --- Card-play skin burst ---
   late AnimationController _playBurstCtrl;
@@ -146,7 +147,12 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
         widget.lastSpecialCard != old.lastSpecialCard;
     if (widget.lastSpecialCard != null &&
         (specialChanged || legacySpecialChanged)) {
-      _triggerSpecialEffect(widget.lastSpecialCard!);
+      _triggerSpecialEffect(
+        widget.lastSpecialCard!,
+        widget.lastSpecialBy == widget.currentUser
+            ? widget.cardBackSkin
+            : widget.opponentCardBackSkin,
+      );
     }
 
     // Draw stack resolved → play correct draw voice (M_07/M_08/M_09)
@@ -233,8 +239,11 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
     });
   }
 
-  void _triggerSpecialEffect(String card) {
-    setState(() => _effectCard = card);
+  void _triggerSpecialEffect(String card, String cardBackSkin) {
+    setState(() {
+      _effectCard = card;
+      _effectCardBackSkin = cardBackSkin;
+    });
     _effectCtrl.forward(from: 0);
     switch (card) {
       case 'skip':
@@ -297,11 +306,7 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
     // In draw stack mode, only matching defense cards are playable
     if (widget.drawStack > 0 && widget.drawStackType != null) {
       if (widget.mode == 'classic') return false;
-      // ALL bypasses draw stack in go_wild mode
-      if (val == 'discard_all') return true;
-      // +4 stack: only wild_draw4 can defend (not draw2)
-      if (widget.drawStackType == 'wild_draw4') return val == 'wild_draw4';
-      return val == 'draw2' || val == 'wild_draw4';
+      return val == widget.drawStackType;
     }
     if (widget.mode == 'classic' && val == 'discard_all') return false;
     // Normal playability check (mirrors server canPlayCard)
@@ -871,6 +876,7 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
                 child: _SpecialCardEffect(
                   card: _effectCard!,
                   animation: _effectCtrl,
+                  cardBackSkin: _effectCardBackSkin,
                 ),
               ),
           ],
@@ -973,8 +979,13 @@ class _DrawStackBadge extends StatelessWidget {
 class _SpecialCardEffect extends StatelessWidget {
   final String card;
   final Animation<double> animation;
+  final String cardBackSkin;
 
-  const _SpecialCardEffect({required this.card, required this.animation});
+  const _SpecialCardEffect({
+    required this.card,
+    required this.animation,
+    required this.cardBackSkin,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1028,6 +1039,11 @@ class _SpecialCardEffect extends StatelessWidget {
         final scale = t < 0.15
             ? Curves.elasticOut.transform(t / 0.15) * 0.6 + 0.4
             : 1.0;
+        final attackCardCount = switch (card) {
+          'draw2' => 2,
+          'wild_draw4' => 4,
+          _ => 0,
+        };
 
         return IgnorePointer(
           child: Opacity(
@@ -1035,44 +1051,63 @@ class _SpecialCardEffect extends StatelessWidget {
             child: Container(
               color: color.withValues(alpha: 0.18),
               child: Center(
-                child: Transform.scale(
-                  scale: scale,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 32,
-                      vertical: 20,
-                    ),
-                    decoration: BoxDecoration(
-                      color: color,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: Colors.white, width: 3),
-                      boxShadow: [
-                        BoxShadow(
-                          color: color.withValues(alpha: 0.7),
-                          blurRadius: 32,
-                          spreadRadius: 4,
+                child: SizedBox(
+                  width: 320,
+                  height: 280,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    clipBehavior: Clip.none,
+                    children: [
+                      if (attackCardCount > 0)
+                        _AttackSkinBurst(
+                          cardCount: attackCardCount,
+                          cardBackSkin: cardBackSkin,
+                          animation: animation,
                         ),
-                      ],
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(emoji, style: const TextStyle(fontSize: 40)),
-                        const SizedBox(height: 8),
-                        Text(
-                          label,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 48,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 2,
-                            shadows: [
-                              Shadow(color: Colors.black38, blurRadius: 8),
+                      Transform.scale(
+                        scale: scale,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 32,
+                            vertical: 20,
+                          ),
+                          decoration: BoxDecoration(
+                            color: color,
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(color: Colors.white, width: 3),
+                            boxShadow: [
+                              BoxShadow(
+                                color: color.withValues(alpha: 0.7),
+                                blurRadius: 32,
+                                spreadRadius: 4,
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(emoji, style: const TextStyle(fontSize: 40)),
+                              const SizedBox(height: 8),
+                              Text(
+                                label,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 48,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 2,
+                                  shadows: [
+                                    Shadow(
+                                      color: Colors.black38,
+                                      blurRadius: 8,
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ],
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -1080,6 +1115,56 @@ class _SpecialCardEffect extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _AttackSkinBurst extends StatelessWidget {
+  final int cardCount;
+  final String cardBackSkin;
+  final Animation<double> animation;
+
+  const _AttackSkinBurst({
+    required this.cardCount,
+    required this.cardBackSkin,
+    required this.animation,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = animation.value;
+    final progress = Curves.easeOutBack.transform((t * 1.3).clamp(0.0, 1.0));
+    final fadeOut = t < 0.72 ? 1.0 : 1 - (t - 0.72) / 0.28;
+
+    return SizedBox(
+      key: ValueKey('uno_attack_skin_burst_$cardBackSkin'),
+      width: 300,
+      height: 280,
+      child: Stack(
+        alignment: Alignment.center,
+        children: List.generate(cardCount, (index) {
+          final offsetIndex = index - (cardCount - 1) / 2;
+          final horizontalOffset = offsetIndex * 68 * progress;
+          final verticalOffset =
+              -36 - (1 - progress) * 72 + offsetIndex.abs() * 10;
+          final rotation = offsetIndex * 0.16 * progress;
+
+          return Transform.translate(
+            offset: Offset(horizontalOffset, verticalOffset),
+            child: Transform.rotate(
+              angle: rotation,
+              child: Opacity(
+                opacity: fadeOut.clamp(0.0, 1.0),
+                child: UnoCardBack(
+                  width: 78,
+                  height: 112,
+                  cardBackSkin: cardBackSkin,
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
     );
   }
 }

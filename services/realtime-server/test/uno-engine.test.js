@@ -24,7 +24,7 @@ test('classic deck excludes discard_all cards', () => {
   assert.equal(deck.some((card) => card.value === 'discard_all'), false);
 });
 
-test('go wild allows cross stacking draw2 and wild draw4', () => {
+test('go wild requires a +2 response for a +2 draw stack', () => {
   const topCard = { color: 'red', value: 'draw2', id: 'red-draw2-a' };
 
   assert.equal(
@@ -36,8 +36,70 @@ test('go wild allows cross stacking draw2 and wild draw4', () => {
       'draw2',
       { mode: 'go_wild' },
     ),
+    false,
+  );
+
+  assert.equal(
+    canPlayCard(
+      { color: 'yellow', value: 'draw2', id: 'yellow-draw2-a' },
+      topCard,
+      null,
+      2,
+      'draw2',
+      { mode: 'go_wild' },
+    ),
     true,
   );
+});
+
+test('go wild requires a +4 response for a +4 draw stack', () => {
+  const topCard = { color: null, value: 'wild_draw4', id: 'wild_draw4-0' };
+
+  assert.equal(
+    canPlayCard(
+      { color: 'yellow', value: 'draw2', id: 'yellow-draw2-a' },
+      topCard,
+      'red',
+      4,
+      'wild_draw4',
+      { mode: 'go_wild' },
+    ),
+    false,
+  );
+});
+
+test('discard_all cannot defend a pending draw stack', () => {
+  const discardAll = { color: 'red', value: 'discard_all', id: 'red-discard_all-a' };
+
+  for (const [drawStack, drawStackType, topCard] of [
+    [2, 'draw2', { color: 'blue', value: 'draw2', id: 'blue-draw2-a' }],
+    [4, 'wild_draw4', { color: null, value: 'wild_draw4', id: 'wild_draw4-0' }],
+  ]) {
+    assert.equal(
+      canPlayCard(
+        discardAll,
+        topCard,
+        null,
+        drawStack,
+        drawStackType,
+        { mode: 'go_wild' },
+      ),
+      false,
+    );
+  }
+});
+
+test('discard_all preserves a draw stack created by its batch', () => {
+  const gameState = {
+    drawStack: 0,
+    drawStackType: null,
+  };
+
+  applyCardEffect(gameState, { color: 'red', value: 'draw2', id: 'red-draw2-a' });
+  applyCardEffect(gameState, { color: 'red', value: 'discard_all', id: 'red-discard_all-a' });
+
+  assert.equal(gameState.drawStack, 2);
+  assert.equal(gameState.drawStackType, 'draw2');
 });
 
 test('classic blocks draw stack defense', () => {

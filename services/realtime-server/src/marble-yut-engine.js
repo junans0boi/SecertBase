@@ -181,6 +181,8 @@ export function createMarbleYutGameState(player1, player2, options = {}) {
     hasBonusThrow: false,
     caughtOpponentThisTurn: false,
     catchBonusPending: false,   // 잡기 후 영지 인수 기회 대기 중
+    catchBonusBy: null,         // H2: 잡기를 수행한 플레이어 uid
+    catchBonusUntil: null,      // 보너스 만료 타임스킬프 (ms)
     winner: null,
     winReason: null,
     lastThrow: null,
@@ -240,7 +242,7 @@ export function getLandValue(pos) {
 }
 
 /** 레벨별 통행료 배율 */
-export const LEVEL_RATE = { 1: 1.0, 2: 1.5, 3: 2.5, 4: 2.5 };
+export const LEVEL_RATE = { 1: 1.0, 2: 1.5, 3: 2.5, 4: 3.5 };
 
 /** 레벨별 강화비 (점령비 × 배수) */
 export const UPGRADE_COST_MULT = { 2: 1, 3: 2, 4: 3 };
@@ -336,7 +338,11 @@ export function serializeMarbleYutGame(gameState) {
     orderCountdownUntil: gameState.orderCountdownUntil ?? null,
     pendingMoves: gameState.pendingMoves,
     hasBonusThrow: gameState.hasBonusThrow ?? false,
-    catchBonusPending: gameState.catchBonusPending ?? false,
+    catchBonusPending: gameState.catchBonusPending,
+    // H2: 잡기 수행자 정보를 클라이언트에 전달 (turnChange와 독립적으로 파악 가능)
+    catchBonusBy: gameState.catchBonusBy ?? null,
+    catchBonusUntil: gameState.catchBonusUntil ?? null,
+    catchBonusTarget: gameState.catchBonusTarget ?? null,
     lastThrow: gameState.lastThrow,
     winner: gameState.winner,
     winReason: gameState.winReason ?? null,

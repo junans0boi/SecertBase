@@ -79,11 +79,7 @@ export function canPlayCard(
   // Draw stack restriction: must defend with matching type or accept
   if (drawStack > 0 && drawStackType) {
     if (mode === 'classic') return false;
-    // ALL (discard_all) bypasses any draw stack in go_wild mode
-    if (card.value === 'discard_all') return true;
-    // +4 stack: only wild_draw4 can defend (not draw2)
-    if (drawStackType === 'wild_draw4') return card.value === 'wild_draw4';
-    return card.value === 'draw2' || card.value === 'wild_draw4';
+    return card.value === drawStackType;
   }
 
   if (mode === 'classic' && card.value === 'discard_all') {
@@ -227,10 +223,6 @@ export function applyCardEffect(gameState, card, previousColor = null) {
   } else if (card.value === 'draw2') {
     gameState.drawStack = (gameState.drawStack || 0) + 2;
     gameState.drawStackType = 'draw2';
-  } else if (card.value === 'discard_all') {
-    // ALL clears any pending draw stack — opponent does not draw
-    gameState.drawStack = 0;
-    gameState.drawStackType = null;
   } else if (card.value === 'wild_draw4') {
     gameState.drawStack = (gameState.drawStack || 0) + 4;
     gameState.drawStackType = 'wild_draw4';

@@ -749,11 +749,13 @@ export const registerSocketHandlers = (io) => {
         const yutKey = `yut:${roomCode}:game`;
         const unoKey = `uno:${roomCode}:game`;
         const bombKey = `bomb:${roomCode}:game`;
+        const marbleKey = marbleYutGameKey(roomCode);
 
-        const [yutGame, unoGame, bombGame] = await Promise.all([
+        const [yutGame, unoGame, bombGame, marbleGame] = await Promise.all([
           redis.get(yutKey),
           redis.get(unoKey),
           redis.get(bombKey),
+          redis.get(marbleKey),
         ]);
 
         const activeGames = {};
@@ -795,6 +797,14 @@ export const registerSocketHandlers = (io) => {
             timer: remaining,
             category: game.category,
           };
+        }
+
+        // M3: 마블윷 게임 세션 복원
+        if (marbleGame) {
+          const game = JSON.parse(marbleGame);
+          if (game.playersOrder && !game.winner) {
+            activeGames.marble_yut = serializeMarbleYutGame(game);
+          }
         }
 
         ack({ ok: true, activeGames });
@@ -1814,6 +1824,16 @@ export const registerSocketHandlers = (io) => {
       });
       gameState.lastThrow = throwResult;
 
+      // M5: yut_win_coin_pct — 윤(로유=4)/모(5) 상담 시 스테이크의 % 코인 누적
+      if (throwResult.result === 4 || throwResult.result === 5) {
+        const winCoinPct = Math.min(moverStats.yut_win_coin_pct ?? 0, 15);
+        if (winCoinPct > 0 && (gameState.stake ?? 0) > 0) {
+          const bonus = Math.floor(gameState.stake * winCoinPct / 100);
+          gameState.winCoinBonus = gameState.winCoinBonus ?? {};
+          gameState.winCoinBonus[userId] = (gameState.winCoinBonus[userId] ?? 0) + bonus;
+        }
+      }
+
       const isNak = throwResult.result === -1 &&
         !hasMarbleBackdoMove(gameState.players[userId].pieces);
       throwResult.nak = isNak;
@@ -1941,11 +1961,11 @@ export const registerSocketHandlers = (io) => {
         }
       }
 
-      // 출발지(0/20) 통과 시 월급 지급
-      // 이동 경로상 0/20을 통과했는지: prevPos < newPos이고 0으로 왔거나 20을 통과한 경우
-      const passingStart = (prevPos !== 0 && moveResult.position === 0) ||
-        (prevPos > 0 && moveResult.position > 0 && steps > 0 && prevPos + steps >= 20);
-      if (passingStart) {
+      // C1: 출발지(0/20) 통과 시 월급 지급
+      // moveResult.finished === true = 엔진이 pos20(도착선)에 도달했다고 판단 = 한 바퀴 완주
+      // 마블윷에서는 completed=false로 강제하지만, moveResult.finished는 그 이전에 확인 가능
+      const passedStart = moveResult.finished === true;
+      if (passedStart) {
         gameState.players[userId].coins += MARBLE_SALARY;
       }
 
@@ -1954,35 +1974,41 @@ export const registerSocketHandlers = (io) => {
         gameState.catchBonusPending = true;
         gameState.catchBonusUntil = Date.now() + 15000;
         gameState.catchBonusTarget = opponentId;
+        // H2: 잡은 플레이어를 명시 — 턴 전환이 일어나도 팔업 트리거 정확
+        gameState.catchBonusBy = userId;
+        // M1: 잡기 성공 시 추가 던지기 부여
+        gameState.hasBonusThrow = true;
       }
 
-      // 라운드 진행
-      if (gameState.pendingMoves.length === 0 && !gameState.hasBonusThrow && !gameState.caughtOpponentThisTurn) {
-        gameState.roundTurns = (gameState.roundTurns ?? 0) + 1;
-        if (gameState.roundTurns >= 2) {
-          gameState.roundTurns = 0;
-          gameState.round = (gameState.round ?? 1) + 1;
+      // C2: 라운드 진행 — 잡기 여부와 무관하게 카운트, 보너스 던지기/pendingMoves가 남아있을 때만 지연
+      if (gameState.pendingMoves.length === 0 && !gameState.hasBonusThrow) {
+        // 잡기/기타 사유로 턴이 유지되면 roundTurns 카운트 안 함 (진짜 턴 넘겨줄 때만)
+        const turnWillPass = !gameState.caughtOpponentThisTurn;
+        if (turnWillPass) {
+          gameState.roundTurns = (gameState.roundTurns ?? 0) + 1;
+          if (gameState.roundTurns >= 2) {
+            gameState.roundTurns = 0;
+            gameState.round = (gameState.round ?? 1) + 1;
+          }
         }
       }
 
       // 승리 체크
       const winResult = checkMarbleWin(gameState);
+      let finalScores = null;  // H6: 서든데스 점수를 별도로 전달, Redis에는 저장하지 않음
       if (winResult) {
         gameState.winner = winResult.winner;
         gameState.winReason = winResult.reason;
       } else if (gameState.round > MARBLE_MAX_ROUNDS) {
-        // 타임아웃 승리
+        // C3/H6: 타임아웃 승리 — coins를 덮어쓰지 말고 finalScores로 분리
         const p1 = gameState.playersOrder[0];
         const p2 = gameState.playersOrder[1];
         const s1 = calcScore(gameState, p1);
         const s2 = calcScore(gameState, p2);
-        
-        // 서든데스 종료 시에는 자금을 총점으로 덮어써서 결과창에 점수가 표시되도록 함
-        gameState.players[p1].coins = s1;
-        gameState.players[p2].coins = s2;
+        finalScores = { [p1]: s1, [p2]: s2 };
 
         if (s1 === s2) {
-          gameState.winner = null;
+          gameState.winner = null;  // draw: ended 이벤트 발송 대상이므로 winReason으로 식별
           gameState.winReason = 'timeout_draw';
         } else {
           gameState.winner = s1 > s2 ? p1 : p2;
@@ -1997,7 +2023,11 @@ export const registerSocketHandlers = (io) => {
       const targetPos = moveResult.position;
       const landData = gameState.lands[targetPos];
       let landPrompt = null;
-      const stacked = carriedPieces.length > 1;
+      // M8: stacked = 이동 후 같은 칸에 있는 내 말 수 (업기 후 기준)
+      const stackedAfterMove = gameState.players[userId].pieces.filter(
+        (p) => !p.finished && p.position === moveResult.position
+      ).length;
+      const stacked = stackedAfterMove > 1;
 
       if (!gameState.winner && !MARBLE_START_POSITIONS.has(targetPos)) {
         if (!landData) {
@@ -2009,7 +2039,12 @@ export const registerSocketHandlers = (io) => {
           landPrompt = { type: 'upgrade', pos: targetPos, cost: upgradeCost, level: landData.level };
         } else if (landData.owner !== userId) {
           // 상대 영지: 통행료 자동 징수
-          const toll = calcToll(targetPos, landData.level);
+          // M4: 방어자의 toll_reduce_pct 스탯 적용 (land_toll_reduce_pct 또는 piece_catch_resist_pct로 대체)
+          const rawToll = calcToll(targetPos, landData.level);
+          const tollReducePct = Math.min(defenderStats.land_toll_reduce_pct ?? 0, 30);
+          const toll = tollReducePct > 0
+            ? Math.max(1, Math.floor(rawToll * (1 - tollReducePct / 100)))
+            : rawToll;
           gameState.players[userId].coins = Math.max(0, gameState.players[userId].coins - toll);
           gameState.players[opponentId].coins += toll;
           await redis.set(marbleYutGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
@@ -2040,11 +2075,16 @@ export const registerSocketHandlers = (io) => {
         pieceId,
         newPosition: piece.position,
         movedPieceIds: carriedPieces.map((cp) => cp.id),
+        // M6: stackedPieces(piece_group_pct로 합류된 말) 포함
+        stackedPieceIds: stackedPieces.map((cp) => cp.id),
         capturedPieceIds: capturedPieces.map((cp) => cp.id),
         capturedCount: capturedPieces.length,
+        passedStart,
         landPrompt,
         winner: gameState.winner,
         winReason: gameState.winReason,
+        // H6: 서든데스 점수는 별도 필드로 전달 (Redis coins를 오염시키지 않음)
+        finalScores,
         at: Date.now(),
         ...serializeMarbleYutGame(gameState),
       };
@@ -2056,14 +2096,20 @@ export const registerSocketHandlers = (io) => {
       }
       ack({ ok: true, event: moveEvent });
 
-      if (gameState.winner) {
-        io.to(roomCode).emit("game:marble_yut:ended", {
+      // C3: timeout_draw(winner=null)인 경우도 ended 이벤트 발송
+      const isGameOver = gameState.winner !== null || gameState.winReason === 'timeout_draw';
+      if (isGameOver) {
+        const endedPayload = {
           winner: gameState.winner,
           winReason: gameState.winReason,
-        });
+          finalScores,
+        };
+        io.to(roomCode).emit("game:marble_yut:ended", endedPayload);
         await redis.del(marbleYutGameKey(roomCode));
-        await saveGameResult(roomCode, gameState.winner, opponentId, 'marble_yut', 0).catch(() => {});
-        await grantGameXpAndMissions(gameState.winner, opponentId, 'marble_yut').catch(() => {});
+        if (gameState.winner) {
+          await saveGameResult(roomCode, gameState.winner, opponentId, 'marble_yut', 0).catch(() => {});
+          await grantGameXpAndMissions(gameState.winner, opponentId, 'marble_yut').catch(() => {});
+        }
       } else if (gameState.catchBonusPending) {
         setTimeout(async () => {
           try {
@@ -2131,11 +2177,9 @@ export const registerSocketHandlers = (io) => {
         if (land.level >= 4) { ack({ ok: false, reason: "max_level" }); return; }
         const cost = calcAcquireCost(posNum, stacked);
         if (playerState.coins < cost) { ack({ ok: false, reason: "insufficient_coins" }); return; }
-        
-        const opponentId = land.owner;
+        const prevOwnerId = land.owner;
         playerState.coins -= cost;
-        gameState.players[opponentId].coins += cost;
-        
+        gameState.players[prevOwnerId].coins += cost;
         land.owner = userId;
         landChanged = true;
       } else if (action === 'catch_acquire') {
@@ -2145,11 +2189,9 @@ export const registerSocketHandlers = (io) => {
         if (land.level >= 4) { ack({ ok: false, reason: "max_level" }); return; }
         const cost = calcAcquireCost(posNum, false); // 업기 아님
         if (playerState.coins < cost) { ack({ ok: false, reason: "insufficient_coins" }); return; }
-        
-        const opponentId = land.owner;
+        const prevOwnerId = land.owner;
         playerState.coins -= cost;
-        gameState.players[opponentId].coins += cost;
-        
+        gameState.players[prevOwnerId].coins += cost;
         land.owner = userId;
         landChanged = true;
         gameState.catchBonusPending = false;
@@ -2163,7 +2205,7 @@ export const registerSocketHandlers = (io) => {
       }
       // 'skip' → 아무 변경 없음
 
-      // 승리 조건 재체크 (shrine/line)
+      // 승리 조건 재체크 (bankrupt 포함 — checkMarbleWin이 모두 체크)
       if (landChanged) {
         const winResult = checkMarbleWin(gameState);
         if (winResult) {
@@ -2183,11 +2225,12 @@ export const registerSocketHandlers = (io) => {
         io.to(roomCode).emit("game:marble_yut:ended", {
           winner: gameState.winner,
           winReason: gameState.winReason,
+          finalScores: null,
         });
         await redis.del(marbleYutGameKey(roomCode));
-        const opponentId = getNextMarblePlayer(gameState, userId);
-        await saveGameResult(roomCode, gameState.winner, opponentId, 'marble_yut', 0).catch(() => {});
-        await grantGameXpAndMissions(gameState.winner, opponentId, 'marble_yut').catch(() => {});
+        const landActOpponentId = getNextMarblePlayer(gameState, userId);
+        await saveGameResult(roomCode, gameState.winner, landActOpponentId, 'marble_yut', 0).catch(() => {});
+        await grantGameXpAndMissions(gameState.winner, landActOpponentId, 'marble_yut').catch(() => {});
       }
     });
 
