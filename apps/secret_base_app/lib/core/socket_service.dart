@@ -123,6 +123,29 @@ class SocketService extends ChangeNotifier {
   Map<String, List<dynamic>> yutPieceDetails = {};
   List<Map<String, dynamic>> yutChatMessages = [];
 
+  // marble_yut
+  bool marbleYutActive = false;
+  String? marbleYutGameId;
+  String? marbleYutPhase;
+  String? marbleYutCurrentTurn;
+  String? marbleYutWinner;
+  String? marbleYutWinReason;
+  bool marbleYutHasBonusThrow = false;
+  bool marbleYutCatchBonusPending = false;
+  List<dynamic> marbleYutPendingMoves = [];
+  Map<String, dynamic> marbleYutStartRolls = {};
+  int? marbleYutOrderCountdownUntil;
+  List<String> marbleYutPlayers = [];
+  Map<String, List<dynamic>> marbleYutPieceDetails = {};
+  Map<String, dynamic> marbleYutLands = {};   // {pos: {owner, level}}
+  Map<String, int> marbleYutCoins = {};       // {uid: coins}
+  int marbleYutRound = 1;
+  Map<String, String> marbleYutCharacters = {};
+  String? marbleYutLastThrow;
+  bool marbleYutLastNak = false;
+  int? marbleYutLastThrowAt;
+  Map<String, Map<String, dynamic>> marbleYutEquippedItems = {};
+
   // uno
   Map<String, Map<String, dynamic>> unoEquippedItems = {};
   bool unoActive = false;
@@ -608,6 +631,40 @@ class SocketService extends ChangeNotifier {
       if (yutChatMessages.length > 50) {
         yutChatMessages = yutChatMessages.sublist(yutChatMessages.length - 50);
       }
+      notifyListeners();
+    });
+
+    // marble_yut events
+    socket.on('game:marble_yut:state', (data) {
+      _applyMarbleYutState(_m(data));
+      notifyListeners();
+    });
+
+    socket.on('game:marble_yut:throw_result', (data) {
+      final map = _m(data);
+      _applyMarbleYutState(map);
+      marbleYutLastThrow = map['resultName'] as String?;
+      marbleYutLastNak = map['nak'] == true;
+      marbleYutLastThrowAt = DateTime.now().millisecondsSinceEpoch;
+      notifyListeners();
+    });
+
+    socket.on('game:marble_yut:move_result', (data) {
+      final map = _m(data);
+      _applyMarbleYutState(map);
+      if (map['winner'] != null) {
+        marbleYutWinner = map['winner'] as String?;
+        marbleYutWinReason = map['winReason'] as String?;
+        marbleYutActive = false;
+      }
+      notifyListeners();
+    });
+
+    socket.on('game:marble_yut:ended', (data) {
+      final map = _m(data);
+      marbleYutWinner = map['winner'] as String?;
+      marbleYutWinReason = map['winReason'] as String?;
+      marbleYutActive = false;
       notifyListeners();
     });
 
@@ -1749,6 +1806,56 @@ class SocketService extends ChangeNotifier {
               .toList()
               .cast<int>(),
         ),
+      );
+    }
+  }
+
+  void _applyMarbleYutState(Map<String, dynamic> map) {
+    final nextGameId = map['id'] as String? ?? marbleYutGameId ?? 'active';
+    marbleYutActive = true;
+    marbleYutGameId = nextGameId;
+    marbleYutPhase = map['phase'] as String? ?? marbleYutPhase ?? 'throwing';
+    marbleYutCurrentTurn = map['currentTurn'] as String?;
+    marbleYutCharacters = _stringMap(map['characters']);
+    marbleYutHasBonusThrow = map['hasBonusThrow'] == true;
+    marbleYutCatchBonusPending = map['catchBonusPending'] == true;
+    marbleYutOrderCountdownUntil =
+        (map['orderCountdownUntil'] as num?)?.toInt();
+    marbleYutStartRolls = _m(map['startRolls'] ?? marbleYutStartRolls);
+    final pending = map['pendingMoves'];
+    marbleYutPendingMoves =
+        pending is List ? List<dynamic>.from(pending) : [];
+    marbleYutRound = (map['round'] as num?)?.toInt() ?? marbleYutRound;
+    if (map['winner'] != null) {
+      marbleYutWinner = map['winner'] as String?;
+      marbleYutWinReason = map['winReason'] as String?;
+      marbleYutActive = false;
+    }
+    final playersRaw = map['players'];
+    if (playersRaw is List) {
+      marbleYutPlayers = playersRaw.map((e) => '$e').toList();
+    }
+    final piecesRaw = _m(map['pieces']);
+    if (piecesRaw.isNotEmpty) {
+      marbleYutPieceDetails = piecesRaw.map(
+        (player, value) => MapEntry(player, value is List ? value : []),
+      );
+    }
+    final landsRaw = map['lands'];
+    if (landsRaw is Map) {
+      marbleYutLands = Map<String, dynamic>.from(landsRaw);
+    }
+    final coinsRaw = map['coins'];
+    if (coinsRaw is Map) {
+      marbleYutCoins = coinsRaw.map(
+        (k, v) => MapEntry('$k', (v as num?)?.toInt() ?? 0),
+      );
+    }
+    final equippedRaw = map['equippedItems'];
+    if (equippedRaw is Map) {
+      marbleYutEquippedItems = equippedRaw.map(
+        (k, v) =>
+            MapEntry('$k', v is Map ? Map<String, dynamic>.from(v) : {}),
       );
     }
   }
