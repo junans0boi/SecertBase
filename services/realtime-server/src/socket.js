@@ -1802,7 +1802,16 @@ export const registerSocketHandlers = (io) => {
 
       if (gameState.hasBonusThrow) gameState.hasBonusThrow = false;
 
-      const throwResult = throwMarbleYut();
+      const moverStats = gameState.equippedItems?.[userId]?.stats ?? {};
+      const opponentId = getNextMarblePlayer(gameState, userId);
+      const isLosing = calcScore(gameState, opponentId) > calcScore(gameState, userId);
+
+      const throwResult = throwMarbleYut({
+        yutControlPct: moverStats.yut_control_pct ?? 0,
+        yutMoRatePct: moverStats.yut_mo_rate_pct ?? 0,
+        yutOverturnPct: moverStats.yut_overturn_pct ?? 0,
+        isLosing,
+      });
       gameState.lastThrow = throwResult;
 
       const isNak = throwResult.result === -1 &&
@@ -1861,6 +1870,12 @@ export const registerSocketHandlers = (io) => {
       gameState.pendingMoves.splice(moveIndex, 1);
 
       const carriedPieces = getMarbleCarriedPieces(piece, gameState.players[userId].pieces);
+      const stackedPieces = [...carriedPieces];
+
+      const moverStats = gameState.equippedItems?.[userId]?.stats ?? {};
+      const opponentId = getNextMarblePlayer(gameState, userId);
+      const defenderStats = gameState.equippedItems?.[opponentId]?.stats ?? {};
+
       for (const cp of carriedPieces) {
         cp.lastPos = moveResult.lastPos;
         cp.position = moveResult.position;
@@ -1868,15 +1883,62 @@ export const registerSocketHandlers = (io) => {
         cp.finished = false;
       }
 
-      const opponentId = getNextMarblePlayer(gameState, userId);
+      // piece_group_pct: chance to auto-pull one lonely friendly piece to current position
+      const groupPct = Math.min(moverStats.piece_group_pct ?? 0, 15);
+      if (groupPct > 0 && moveResult.position > 0 && moveResult.position !== 20) {
+        const loner = gameState.players[userId].pieces.find(
+          (p) => p.id !== pieceId && !p.finished && p.position > 0 && p.position !== moveResult.position,
+        );
+        if (loner && Math.random() * 100 < groupPct) {
+          loner.position = moveResult.position;
+          loner.lastPos = moveResult.lastPos;
+          stackedPieces.push(loner);
+        }
+      }
+
       let capturedPieces = [];
       if (moveResult.position !== 0) {
-        capturedPieces = checkMarbleCatch(moveResult.position, gameState.players[opponentId].pieces);
+        const rawCaptured = checkMarbleCatch(moveResult.position, gameState.players[opponentId].pieces);
+        
+        // piece_catch_resist_pct + piece_safe_zone_pct (defender): each piece independently resists
+        const resistPct = Math.min((defenderStats.piece_catch_resist_pct ?? 0), 15);
+        const safePct = Math.min((defenderStats.piece_safe_zone_pct ?? 0), 15);
+        capturedPieces = rawCaptured.filter(() => {
+          const survivedResist = resistPct > 0 && Math.random() * 100 < resistPct;
+          const survivedSafe = safePct > 0 && Math.random() * 100 < safePct;
+          return !survivedResist && !survivedSafe;
+        });
+
         for (const cp of capturedPieces) {
           cp.position = 0;
           cp.lastPos = 0;
         }
         recordMarbleCapture(gameState, capturedPieces.length);
+        
+        // piece_catch_coin_bonus: 잡은 말 1개당 플랫 코인 (최대 25)
+        const catchCoinPer = Math.min(Math.floor(moverStats.piece_catch_coin_bonus ?? 0), 25);
+        if (catchCoinPer > 0 && capturedPieces.length > 0) {
+          gameState.players[userId].coins += catchCoinPer * capturedPieces.length;
+        }
+
+        // yut_catch_bonus: 잡기 이벤트당 플랫 코인, 잡은 말 수 무관 (최대 300)
+        const catchFlatBonus = Math.min(Math.floor(moverStats.yut_catch_bonus ?? 0), 300);
+        if (catchFlatBonus > 0 && capturedPieces.length > 0) {
+          gameState.players[userId].coins += catchFlatBonus;
+        }
+      }
+
+      // yut_backdo_bonus_pct: 유리한 백도 위치에서 추가 던지기 확률
+      if (steps === -1) {
+        const backdoBonus = Math.min(moverStats.yut_backdo_bonus_pct ?? 0, 25);
+        if (backdoBonus > 0) {
+          let triggerPct = 0;
+          if (prevPos === 1) triggerPct = Math.min(backdoBonus * 2, 50); // 날백도
+          else if (prevPos === 23) triggerPct = backdoBonus;              // 대각선
+          if (triggerPct > 0 && Math.random() * 100 < triggerPct) {
+            gameState.hasBonusThrow = true;
+          }
+        }
       }
 
       // 출발지(0/20) 통과 시 월급 지급

@@ -1233,14 +1233,18 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
                                       fit: BoxFit.fill,
                                     ),
                                   ),
-                                  Positioned.fill(
-                                    child: IgnorePointer(
-                                      child: CustomPaint(
-                                        key: const ValueKey('yut_board_nodes'),
-                                        painter: const _YutBoardNodePainter(),
+                                    Positioned.fill(
+                                      child: IgnorePointer(
+                                        child: CustomPaint(
+                                          key: const ValueKey('yut_board_nodes'),
+                                          painter: _YutBoardNodePainter(
+                                            landData: widget.landData,
+                                            p1UserId: widget.p1UserId,
+                                            p2UserId: widget.p2UserId,
+                                          ),
+                                        ),
                                       ),
                                     ),
-                                  ),
                                   if (selectedPiece != null &&
                                       guideOptions.isNotEmpty)
                                     Positioned.fill(
@@ -2188,7 +2192,15 @@ class _MoveTrailPainter extends CustomPainter {
 }
 
 class _YutBoardNodePainter extends CustomPainter {
-  const _YutBoardNodePainter();
+  final Map<String, dynamic> landData;
+  final String? p1UserId;
+  final String? p2UserId;
+
+  const _YutBoardNodePainter({
+    this.landData = const {},
+    this.p1UserId,
+    this.p2UserId,
+  });
 
   static const _red = Color(0xFFFF6B63);
   static const _blue = Color(0xFF45D8FF);
@@ -2262,6 +2274,74 @@ class _YutBoardNodePainter extends CustomPainter {
           );
         }
       }
+
+      // 4대 신수 라벨 그리기
+      if (const {5, 10, 15, 20}.contains(position)) {
+        final label = switch (position) {
+          5 => '백호',
+          10 => '청룡',
+          15 => '주작',
+          20 => '현무',
+          _ => '',
+        };
+        final textPainter = TextPainter(
+          text: TextSpan(
+            text: label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+              shadows: [Shadow(color: Colors.black54, blurRadius: 2, offset: Offset(0, 1))],
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        );
+        textPainter.layout();
+        textPainter.paint(
+          canvas,
+          center + Offset(-textPainter.width / 2, radius + 2),
+        );
+      }
+
+      // 영지 소유권/레벨 그리기
+      final land = landData['$position'];
+      if (land != null) {
+        final owner = land['owner'] as String?;
+        final level = land['level'] as int? ?? 1;
+        Color ownerColor = Colors.transparent;
+        if (owner == p1UserId) ownerColor = const Color(0xFFE45858); // p1
+        if (owner == p2UserId) ownerColor = const Color(0xFF4B8DD8); // p2
+
+        if (ownerColor != Colors.transparent) {
+          // 소유자 띠
+          canvas.drawCircle(
+            center,
+            radius + 3,
+            Paint()
+              ..color = ownerColor
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 3.5,
+          );
+          
+          // 레벨 아이콘
+          String levelIcon = '';
+          if (level == 2) levelIcon = '⭐';
+          if (level == 3) levelIcon = '🌟';
+          if (level >= 4) levelIcon = '🛡️';
+          
+          if (levelIcon.isNotEmpty) {
+            final tp = TextPainter(
+              text: TextSpan(text: levelIcon, style: const TextStyle(fontSize: 12)),
+              textDirection: TextDirection.ltr,
+            );
+            tp.layout();
+            tp.paint(
+              canvas,
+              center + Offset(-tp.width / 2, -radius - 12),
+            );
+          }
+        }
+      }
     }
   }
 
@@ -2281,7 +2361,11 @@ class _YutBoardNodePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _YutBoardNodePainter oldDelegate) => false;
+  bool shouldRepaint(covariant _YutBoardNodePainter oldDelegate) {
+    return oldDelegate.landData != landData || 
+           oldDelegate.p1UserId != p1UserId || 
+           oldDelegate.p2UserId != p2UserId;
+  }
 }
 
 class _YutThrowButton extends StatelessWidget {
