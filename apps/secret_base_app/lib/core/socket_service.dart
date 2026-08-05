@@ -145,6 +145,8 @@ class SocketService extends ChangeNotifier {
   String? marbleYutLastThrow;
   bool marbleYutLastNak = false;
   int? marbleYutLastThrowAt;
+  int? marbleYutCatchBonusUntil;
+  String? marbleYutCatchBonusTarget;
   Map<String, Map<String, dynamic>> marbleYutEquippedItems = {};
 
   // uno
@@ -1869,6 +1871,8 @@ class SocketService extends ChangeNotifier {
     marbleYutCharacters = _stringMap(map['characters']);
     marbleYutHasBonusThrow = map['hasBonusThrow'] == true;
     marbleYutCatchBonusPending = map['catchBonusPending'] == true;
+    marbleYutCatchBonusUntil = map['catchBonusUntil'] as int?;
+    marbleYutCatchBonusTarget = map['catchBonusTarget'] as String?;
     marbleYutOrderCountdownUntil =
         (map['orderCountdownUntil'] as num?)?.toInt();
     marbleYutStartRolls = _m(map['startRolls'] ?? marbleYutStartRolls);

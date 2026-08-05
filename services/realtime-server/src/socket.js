@@ -1928,17 +1928,18 @@ export const registerSocketHandlers = (io) => {
       const targetPos = moveResult.position;
       const landData = gameState.lands[targetPos];
       let landPrompt = null;
+      const stacked = carriedPieces.length > 1;
 
       if (!gameState.winner && !MARBLE_START_POSITIONS.has(targetPos)) {
         if (!landData) {
           // 빈 칸: 점령 프롬프트
-          landPrompt = { type: 'claim', pos: targetPos, cost: getLandValue(targetPos) };
+          landPrompt = { type: 'claim', pos: targetPos, cost: getLandValue(targetPos), stacked };
         } else if (landData.owner === userId && landData.level < 4) {
           // 내 영지 재방문: 강화 프롬프트
           const upgradeCost = getLandValue(targetPos) * (landData.level);
           landPrompt = { type: 'upgrade', pos: targetPos, cost: upgradeCost, level: landData.level };
         } else if (landData.owner !== userId) {
-          // 상대 영지: 통행료 자동 징수 (T3 범위지만 기본 통행료는 여기서 처리)
+          // 상대 영지: 통행료 자동 징수
           const toll = calcToll(targetPos, landData.level);
           gameState.players[userId].coins = Math.max(0, gameState.players[userId].coins - toll);
           gameState.players[opponentId].coins += toll;
@@ -1957,6 +1958,10 @@ export const registerSocketHandlers = (io) => {
             gameState.winner = tollWin.winner;
             gameState.winReason = tollWin.reason;
             await redis.set(marbleYutGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
+          } else if (landData.level < 4) {
+            // 인수 프롬프트
+            const acquireCost = calcAcquireCost(targetPos, stacked);
+            landPrompt = { type: 'acquire', pos: targetPos, cost: acquireCost, level: landData.level, stacked };
           }
         }
       }
@@ -1990,6 +1995,22 @@ export const registerSocketHandlers = (io) => {
         await redis.del(marbleYutGameKey(roomCode));
         await saveGameResult(roomCode, gameState.winner, opponentId, 'marble_yut', 0).catch(() => {});
         await grantGameXpAndMissions(gameState.winner, opponentId, 'marble_yut').catch(() => {});
+      } else if (gameState.catchBonusPending) {
+        setTimeout(async () => {
+          try {
+            const latestText = await redis.get(marbleYutGameKey(roomCode));
+            if (!latestText) return;
+            const latestState = JSON.parse(latestText);
+            if (latestState.id !== gameState.id || !latestState.catchBonusPending) return;
+            latestState.catchBonusPending = false;
+            latestState.catchBonusUntil = null;
+            latestState.catchBonusTarget = null;
+            await redis.set(marbleYutGameKey(roomCode), JSON.stringify(latestState), "EX", 7200);
+            emitMarbleYutState(io, roomCode, "game:marble_yut:state", latestState);
+          } catch (err) {
+            console.error(`marble_yut catch bonus timeout error: ${err.message}`);
+          }
+        }, 15000);
       }
     });
 
@@ -2007,7 +2028,7 @@ export const registerSocketHandlers = (io) => {
       const gameState = JSON.parse(gameText);
 
       const { action, pos } = payload ?? {};
-      if (!['claim', 'upgrade', 'skip'].includes(action) || pos == null) {
+      if (!['claim', 'upgrade', 'acquire', 'skip', 'catch_acquire', 'catch_skip'].includes(action) || pos == null) {
         ack({ ok: false, reason: "invalid_payload" });
         return;
       }
@@ -2016,13 +2037,15 @@ export const registerSocketHandlers = (io) => {
       const playerState = gameState.players[userId];
       if (!playerState) { ack({ ok: false, reason: "invalid_player" }); return; }
 
+      const stacked = playerState.pieces.filter(p => !p.finished && p.position === posNum).length > 1;
+
       let landChanged = false;
       if (action === 'claim') {
-        const cost = getLandValue(posNum);
+        const cost = getLandValue(posNum) * (stacked ? 2 : 1);
         if (playerState.coins < cost) { ack({ ok: false, reason: "insufficient_coins" }); return; }
         if (gameState.lands[posNum]) { ack({ ok: false, reason: "already_claimed" }); return; }
         playerState.coins -= cost;
-        gameState.lands[posNum] = { owner: userId, level: 1 };
+        gameState.lands[posNum] = { owner: userId, level: stacked ? 2 : 1 };
         landChanged = true;
       } else if (action === 'upgrade') {
         const land = gameState.lands[posNum];
@@ -2033,6 +2056,41 @@ export const registerSocketHandlers = (io) => {
         playerState.coins -= upgradeCost;
         land.level += 1;
         landChanged = true;
+      } else if (action === 'acquire') {
+        const land = gameState.lands[posNum];
+        if (!land || land.owner === userId) { ack({ ok: false, reason: "invalid_acquire" }); return; }
+        if (land.level >= 4) { ack({ ok: false, reason: "max_level" }); return; }
+        const cost = calcAcquireCost(posNum, stacked);
+        if (playerState.coins < cost) { ack({ ok: false, reason: "insufficient_coins" }); return; }
+        
+        const opponentId = land.owner;
+        playerState.coins -= cost;
+        gameState.players[opponentId].coins += cost;
+        
+        land.owner = userId;
+        landChanged = true;
+      } else if (action === 'catch_acquire') {
+        if (!gameState.catchBonusPending) { ack({ ok: false, reason: "no_catch_bonus" }); return; }
+        const land = gameState.lands[posNum];
+        if (!land || land.owner === userId) { ack({ ok: false, reason: "invalid_acquire" }); return; }
+        if (land.level >= 4) { ack({ ok: false, reason: "max_level" }); return; }
+        const cost = calcAcquireCost(posNum, false); // 업기 아님
+        if (playerState.coins < cost) { ack({ ok: false, reason: "insufficient_coins" }); return; }
+        
+        const opponentId = land.owner;
+        playerState.coins -= cost;
+        gameState.players[opponentId].coins += cost;
+        
+        land.owner = userId;
+        landChanged = true;
+        gameState.catchBonusPending = false;
+        gameState.catchBonusUntil = null;
+        gameState.catchBonusTarget = null;
+      } else if (action === 'catch_skip') {
+        if (!gameState.catchBonusPending) { ack({ ok: false, reason: "no_catch_bonus" }); return; }
+        gameState.catchBonusPending = false;
+        gameState.catchBonusUntil = null;
+        gameState.catchBonusTarget = null;
       }
       // 'skip' → 아무 변경 없음
 

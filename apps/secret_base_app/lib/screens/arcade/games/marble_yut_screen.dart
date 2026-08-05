@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/app_theme.dart';
@@ -32,8 +33,51 @@ class _MarbleYutScreenState extends State<MarbleYutScreen> {
   void _rebuild() {
     if (!mounted) return;
     _handleLandPrompt();
+    _handleCatchBonus();
     _showWinnerIfNeeded();
     setState(() {});
+  }
+
+  // ─── Catch Bonus 프롬프트 ───────────────────────────────────────────────
+  bool _catchBonusShowing = false;
+
+  void _handleCatchBonus() {
+    if (!_socket.marbleYutCatchBonusPending || 
+        _socket.marbleYutCurrentTurn != _socket.userId ||
+        _catchBonusShowing) {
+      return;
+    }
+    
+    final targetId = _socket.marbleYutCatchBonusTarget;
+    if (targetId == null) return;
+    
+    final lands = _socket.marbleYutLands.entries
+      .where((e) => e.value['owner'] == targetId && (e.value['level'] as int? ?? 1) < 4)
+      .toList();
+      
+    if (lands.isEmpty) return;
+
+    _catchBonusShowing = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _CatchBonusDialog(
+          lands: lands,
+          myCoins: _socket.marbleYutCoins[_socket.userId] ?? 0,
+          onAct: (pos) {
+            _socket.actMarbleYutLand('catch_acquire', pos);
+            _catchBonusShowing = false;
+          },
+          onSkip: () {
+            _socket.actMarbleYutLand('catch_skip', 0);
+            _catchBonusShowing = false;
+          },
+          until: _socket.marbleYutCatchBonusUntil,
+        ),
+      ).whenComplete(() => _catchBonusShowing = false);
+    });
   }
 
   // ─── 영지 프롬프트 팝업 ───────────────────────────────────────────────────
@@ -353,16 +397,35 @@ class _LandPromptDialog extends StatelessWidget {
     final pos = prompt['pos'] as int? ?? 0;
     final cost = prompt['cost'] as int? ?? 0;
     final level = prompt['level'] as int? ?? 1;
+    final stacked = prompt['stacked'] as bool? ?? false;
     final canAfford = myCoins >= cost;
 
     final isClaim = type == 'claim';
-    final title = isClaim ? '영지 점령' : '영지 강화';
+    final isAcquire = type == 'acquire';
+    
+    final String title;
+    final String icon;
+    final String actionLabel;
+    final Color accentColor;
+    
+    if (isAcquire) {
+      title = '영지 인수';
+      icon = '🤝';
+      actionLabel = '인수 (-$cost 💰)';
+      accentColor = const Color(0xFFE91E63);
+    } else if (isClaim) {
+      title = stacked ? '영지 점령 (업기)' : '영지 점령';
+      icon = '🏴';
+      actionLabel = '점령 (-$cost 💰)';
+      accentColor = const Color(0xFF7C4DFF);
+    } else { // upgrade
+      title = '영지 강화';
+      icon = _levelIcon(level + 1);
+      actionLabel = '강화 Lv${level + 1} (-$cost 💰)';
+      accentColor = const Color(0xFFFF6D00);
+    }
+
     final tierLabel = _tierLabel(pos);
-    final icon = isClaim ? '🏴' : _levelIcon(level + 1);
-    final actionLabel = isClaim ? '점령 (-$cost 💰)' : '강화 Lv${level + 1} (-$cost 💰)';
-    final accentColor = isClaim
-        ? const Color(0xFF7C4DFF)
-        : const Color(0xFFFF6D00);
 
     return AlertDialog(
       backgroundColor: kCard,
@@ -386,8 +449,12 @@ class _LandPromptDialog extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _InfoRow(label: '위치', value: 'Pos $pos ($tierLabel)'),
-          if (!isClaim) _InfoRow(label: '현재 레벨', value: 'Lv$level → Lv${level + 1}'),
-          _InfoRow(label: '비용', value: '$cost 💰'),
+          if (type == 'upgrade') _InfoRow(label: '현재 레벨', value: 'Lv$level → Lv${level + 1}'),
+          if (isAcquire) _InfoRow(label: '현재 레벨', value: 'Lv$level'),
+          _InfoRow(
+            label: '비용', 
+            value: '$cost 💰${stacked ? (isClaim ? ' (x2 비용, Lv2)' : (isAcquire ? ' (50% 할인)' : '')) : ''}'
+          ),
           _InfoRow(label: '보유 자금', value: '$myCoins 💰'),
           if (!canAfford)
             Padding(
@@ -477,6 +544,172 @@ class _InfoRow extends StatelessWidget {
     );
   }
 }
+
+// ─── 잡기 보너스 다이얼로그 ─────────────────────────────────────────────────────
+
+class _CatchBonusDialog extends StatefulWidget {
+  final List<MapEntry<String, dynamic>> lands;
+  final int myCoins;
+  final void Function(int pos) onAct;
+  final VoidCallback onSkip;
+  final int? until;
+
+  const _CatchBonusDialog({
+    required this.lands,
+    required this.myCoins,
+    required this.onAct,
+    required this.onSkip,
+    required this.until,
+  });
+
+  @override
+  State<_CatchBonusDialog> createState() => _CatchBonusDialogState();
+}
+
+class _CatchBonusDialogState extends State<_CatchBonusDialog> {
+  int? _selectedPos;
+  Timer? _timer;
+  int _remainingMs = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _updateTime();
+    _timer = Timer.periodic(const Duration(milliseconds: 100), (_) => _updateTime());
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _updateTime() {
+    if (widget.until == null) return;
+    final remain = widget.until! - DateTime.now().millisecondsSinceEpoch;
+    if (remain <= 0) {
+      _timer?.cancel();
+      if (mounted) {
+        Navigator.of(context).pop();
+        widget.onSkip();
+      }
+    } else {
+      setState(() => _remainingMs = remain);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final remainSec = (_remainingMs / 1000).ceil();
+
+    return AlertDialog(
+      backgroundColor: kCard,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      title: Row(
+        children: [
+          const Text('🎯', style: TextStyle(fontSize: 28)),
+          const SizedBox(width: 10),
+          Text(
+            '잡기 보너스! ($remainSec초)',
+            style: GoogleFonts.notoSans(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '상대방을 잡았습니다! 15초 내에 상대의 영지 하나를 인수할 수 있습니다. (레벨4 제외)',
+              style: GoogleFonts.notoSans(color: kTextSub, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            _InfoRow(label: '내 자금', value: '${widget.myCoins} 💰'),
+            const SizedBox(height: 12),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: widget.lands.length,
+                itemBuilder: (context, index) {
+                  final entry = widget.lands[index];
+                  final pos = int.tryParse(entry.key) ?? 0;
+                  final level = entry.value['level'] as int? ?? 1;
+                  // 업기가 아니므로 기본 1.3배
+                  int baseVal = 100;
+                  if ([5, 10, 15].contains(pos)) {
+                    baseVal = 300;
+                  } else if (pos == 23) {
+                    baseVal = 200;
+                  } else if ([21, 22, 24, 25, 26, 27, 28, 29].contains(pos)) {
+                    baseVal = 150;
+                  }
+                  final cost = (baseVal * 1.3).floor();
+                  final canAfford = widget.myCoins >= cost;
+                  final isSelected = _selectedPos == pos;
+
+                  return InkWell(
+                    onTap: canAfford ? () => setState(() => _selectedPos = pos) : null,
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isSelected ? const Color(0x33E91E63) : const Color(0x11FFFFFF),
+                        border: Border.all(
+                          color: isSelected ? const Color(0xFFE91E63) : (canAfford ? const Color(0x22FFFFFF) : const Color(0x11FFFFFF)),
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Pos $pos (Lv$level)', style: GoogleFonts.notoSans(color: canAfford ? Colors.white : kTextMuted, fontWeight: FontWeight.w700)),
+                          Text('$cost 💰', style: GoogleFonts.notoSans(color: canAfford ? const Color(0xFFE91E63) : kTextMuted, fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      actionsAlignment: MainAxisAlignment.end,
+      actions: [
+        TextButton(
+          onPressed: () {
+            Navigator.of(context).pop();
+            widget.onSkip();
+          },
+          child: Text(
+            '건너뛰기',
+            style: GoogleFonts.notoSans(color: kTextMuted, fontWeight: FontWeight.w700),
+          ),
+        ),
+        if (_selectedPos != null)
+          FilledButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              widget.onAct(_selectedPos!);
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFE91E63),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+            child: Text('인수하기', style: GoogleFonts.notoSans(fontWeight: FontWeight.w800)),
+          ),
+      ],
+    );
+  }
+}
+
 
 // ─── 결과 다이얼로그 ──────────────────────────────────────────────────────────
 
