@@ -140,6 +140,7 @@ class SocketService extends ChangeNotifier {
   Map<String, dynamic> marbleYutLands = {};   // {pos: {owner, level}}
   Map<String, int> marbleYutCoins = {};       // {uid: coins}
   int marbleYutRound = 1;
+  Map<String, dynamic>? marbleYutLandPrompt;  // {type, pos, cost, level?}
   Map<String, String> marbleYutCharacters = {};
   String? marbleYutLastThrow;
   bool marbleYutLastNak = false;
@@ -665,6 +666,22 @@ class SocketService extends ChangeNotifier {
       marbleYutWinner = map['winner'] as String?;
       marbleYutWinReason = map['winReason'] as String?;
       marbleYutActive = false;
+      notifyListeners();
+    });
+
+    socket.on('game:marble_yut:land_prompt', (data) {
+      marbleYutLandPrompt = _m(data);
+      notifyListeners();
+    });
+
+    socket.on('game:marble_yut:toll_paid', (data) {
+      final map = _m(data);
+      final coinsRaw = map['coins'];
+      if (coinsRaw is Map) {
+        marbleYutCoins = coinsRaw.map(
+          (k, v) => MapEntry('$k', (v as num?)?.toInt() ?? 0),
+        );
+      }
       notifyListeners();
     });
 
@@ -1653,6 +1670,39 @@ class SocketService extends ChangeNotifier {
     final trimmed = message.trim();
     if (trimmed.isEmpty) return;
     _socket?.emit('game:yut:chat', {'message': trimmed});
+  }
+
+  // ─── marble_yut emit ───────────────────────────────────────────────────────
+
+  void newMarbleYutGame({Map<String, String>? characters, String? bgm}) {
+    final payload = <String, dynamic>{};
+    if (characters != null && characters.isNotEmpty) {
+      payload['characters'] = characters;
+    }
+    if (bgm != null) payload['bgm'] = bgm;
+    _socket?.emit('game:marble_yut:new', payload);
+  }
+
+  void rollMarbleYutStartDice() => _socket?.emit('game:marble_yut:roll_start');
+  void throwMarbleYut() => _socket?.emit('game:marble_yut:throw');
+
+  void moveMarbleYut(int pieceId, {int moveIndex = 0, int? backdoDir}) {
+    final payload = <String, dynamic>{
+      'pieceId': pieceId,
+      'moveIndex': moveIndex,
+    };
+    if (backdoDir != null) payload['backdoDir'] = backdoDir;
+    _socket?.emit('game:marble_yut:move', payload);
+  }
+
+  void actMarbleYutLand(String action, int pos) {
+    marbleYutLandPrompt = null;
+    _socket?.emit('game:marble_yut:land_act', {'action': action, 'pos': pos});
+  }
+
+  void dismissMarbleYutLandPrompt() {
+    marbleYutLandPrompt = null;
+    notifyListeners();
   }
 
   void setUnoMode(String mode) {

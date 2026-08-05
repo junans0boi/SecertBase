@@ -72,6 +72,7 @@ class MarbleYutBoard extends StatefulWidget {
   final String opponentPieceSkin;
   final String opponentYutSkin;
   final int? coins;
+  final Map<String, dynamic> landData; // posStr → {owner, level}
 
   const MarbleYutBoard({
     super.key,
@@ -104,6 +105,7 @@ class MarbleYutBoard extends StatefulWidget {
     this.opponentPieceSkin = 'base',
     this.opponentYutSkin = 'base',
     this.coins,
+    this.landData = const {},
   });
 
   @override

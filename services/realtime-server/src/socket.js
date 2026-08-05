@@ -24,6 +24,26 @@ import {
   serializeYutGame,
 } from "./yut-engine.js";
 import {
+  createMarbleYutGameState,
+  throwYut as throwMarbleYut,
+  movePiece as moveMarblePiece,
+  checkCatch as checkMarbleCatch,
+  getCarriedPieces as getMarbleCarriedPieces,
+  hasBackdoMove as hasMarbleBackdoMove,
+  recordCapture as recordMarbleCapture,
+  settleTurnAfterMove as settleMarbleTurn,
+  serializeMarbleYutGame,
+  checkMarbleWin,
+  calcToll,
+  calcAcquireCost,
+  getLandValue,
+  getNextPlayer as getNextMarblePlayer,
+  MARBLE_SALARY,
+  MARBLE_MAX_ROUNDS,
+  MARBLE_START_POSITIONS,
+  calcScore,
+} from "./marble-yut-engine.js";
+import {
   createUnoGameState,
   canPlayCard,
   drawCards,
@@ -305,6 +325,7 @@ const bombGameKey = (roomCode) => `bomb:${roomCode}:game`;
 const gameLobbyKey = (roomCode, gameType) => `lobby:${roomCode}:${gameType}`;
 const rpsGameKey = (roomCode) => `rps:${roomCode}:game`;
 const pirateKey = (roomCode) => `pirate:${roomCode}:game`;
+const marbleYutGameKey = (roomCode) => `marble_yut:${roomCode}:game`;
 const randomYutBgm = () => `yut${Math.floor(Math.random() * 3) + 1}.mp3`;
 
 const defaultState = {
@@ -452,6 +473,13 @@ const getOrderedPlayers = async (roomCode, presence) => {
 const emitYutState = (io, roomCode, eventName, gameState, extra = {}) => {
   io.to(roomCode).emit(eventName, {
     ...serializeYutGame(gameState),
+    ...extra,
+  });
+};
+
+const emitMarbleYutState = (io, roomCode, eventName, gameState, extra = {}) => {
+  io.to(roomCode).emit(eventName, {
+    ...serializeMarbleYutGame(gameState),
     ...extra,
   });
 };
@@ -1657,6 +1685,382 @@ export const registerSocketHandlers = (io) => {
           saveGameResult(roomCode, gameState.winner, yutLoserId, 'yut', gameState.stake ?? 0),
           grantGameXpAndMissions(gameState.winner, yutLoserId, 'yut'),
         ]);
+      }
+    });
+
+    // ─── 마블윷 핸들러 ──────────────────────────────────────────────────────────
+
+    socket.on("game:marble_yut:new", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+
+      const presence = getPresence(io, roomCode);
+      if (presence.length !== 2) {
+        ack({ ok: false, reason: "need_two_players" });
+        return;
+      }
+
+      const [player1, player2] = await getOrderedPlayers(roomCode, presence);
+      if (!player1 || !player2) {
+        ack({ ok: false, reason: "need_two_players" });
+        return;
+      }
+
+      const gameState = createMarbleYutGameState(player1, player2, {
+        characters: payload?.characters ?? {},
+        bgm: payload?.bgm ?? randomYutBgm(),
+      });
+
+      // 장착 아이템 정보 포함
+      const { rows: p1Rows } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [player1]);
+      const { rows: p2Rows } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [player2]);
+      const [p1Info, p2Info] = await Promise.all([
+        p1Rows[0]?.UserId ? getEquippedItemsInfo(p1Rows[0].UserId) : Promise.resolve({}),
+        p2Rows[0]?.UserId ? getEquippedItemsInfo(p2Rows[0].UserId) : Promise.resolve({}),
+      ]);
+      gameState.equippedItems = { [player1]: p1Info, [player2]: p2Info };
+
+      await redis.set(marbleYutGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
+      emitMarbleYutState(io, roomCode, "game:marble_yut:state", gameState);
+      ack({ ok: true, gameState: serializeMarbleYutGame(gameState) });
+    });
+
+    socket.on("game:marble_yut:roll_start", async (_, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+
+      const gameText = await redis.get(marbleYutGameKey(roomCode));
+      if (!gameText) { ack({ ok: false, reason: "no_game" }); return; }
+      const gameState = JSON.parse(gameText);
+      if (gameState.phase !== "roll_order") { ack({ ok: false, reason: "invalid_phase" }); return; }
+      if (gameState.startRolls?.[userId] != null) { ack({ ok: false, reason: "already_rolled" }); return; }
+
+      gameState.startRolls = { ...(gameState.startRolls ?? {}), [userId]: Math.floor(Math.random() * 6) + 1 };
+
+      const [player1, player2] = gameState.playersOrder;
+      const p1Roll = gameState.startRolls[player1];
+      const p2Roll = gameState.startRolls[player2];
+      if (p1Roll != null && p2Roll != null) {
+        if (p1Roll === p2Roll) {
+          gameState.startRolls = {};
+        } else {
+          gameState.currentTurn = p1Roll > p2Roll ? player1 : player2;
+          gameState.phase = "order_countdown";
+          gameState.orderCountdownUntil = Date.now() + 3000;
+        }
+      }
+
+      await redis.set(marbleYutGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
+      emitMarbleYutState(io, roomCode, "game:marble_yut:state", gameState, { by: userId });
+      ack({ ok: true, gameState: serializeMarbleYutGame(gameState) });
+
+      if (gameState.phase === "order_countdown") {
+        setTimeout(async () => {
+          try {
+            const latestText = await redis.get(marbleYutGameKey(roomCode));
+            if (!latestText) return;
+            const latestState = JSON.parse(latestText);
+            if (latestState.id !== gameState.id || latestState.phase !== "order_countdown") return;
+            latestState.phase = "throwing";
+            latestState.orderCountdownUntil = null;
+            await redis.set(marbleYutGameKey(roomCode), JSON.stringify(latestState), "EX", 7200);
+            emitMarbleYutState(io, roomCode, "game:marble_yut:state", latestState, { orderReady: true });
+          } catch (err) {
+            console.error(`marble_yut order countdown error: ${err.message}`);
+          }
+        }, 3000);
+      }
+    });
+
+    socket.on("game:marble_yut:throw", async (_, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+
+      const gameText = await redis.get(marbleYutGameKey(roomCode));
+      if (!gameText) { ack({ ok: false, reason: "no_game" }); return; }
+      const gameState = JSON.parse(gameText);
+      if (gameState.currentTurn !== userId) { ack({ ok: false, reason: "not_your_turn" }); return; }
+
+      const canThrow = gameState.phase === "throwing" ||
+        (gameState.phase === "moving" && gameState.hasBonusThrow);
+      if (!canThrow) { ack({ ok: false, reason: "must_move_first" }); return; }
+
+      if (gameState.hasBonusThrow) gameState.hasBonusThrow = false;
+
+      const throwResult = throwMarbleYut();
+      gameState.lastThrow = throwResult;
+
+      const isNak = throwResult.result === -1 &&
+        !hasMarbleBackdoMove(gameState.players[userId].pieces);
+      throwResult.nak = isNak;
+
+      if (!isNak) {
+        gameState.pendingMoves.push(throwResult.result);
+      }
+      if (throwResult.bonusThrow) {
+        gameState.hasBonusThrow = true;
+      }
+      if (isNak && gameState.pendingMoves.length === 0) {
+        gameState.hasBonusThrow = false;
+        gameState.currentTurn = getNextMarblePlayer(gameState, userId);
+        gameState.phase = "throwing";
+      } else {
+        gameState.phase = "moving";
+      }
+
+      await redis.set(marbleYutGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
+      emitMarbleYutState(io, roomCode, "game:marble_yut:throw_result", gameState, {
+        by: userId, throwResult, resultName: throwResult.resultName, nak: throwResult.nak, at: Date.now(),
+      });
+      ack({ ok: true, throwResult, gameState: serializeMarbleYutGame(gameState) });
+    });
+
+    socket.on("game:marble_yut:move", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+
+      const gameText = await redis.get(marbleYutGameKey(roomCode));
+      if (!gameText) { ack({ ok: false, reason: "no_game" }); return; }
+      const gameState = JSON.parse(gameText);
+      if (gameState.currentTurn !== userId) { ack({ ok: false, reason: "not_your_turn" }); return; }
+      if (gameState.pendingMoves.length === 0) { ack({ ok: false, reason: "no_pending_moves" }); return; }
+
+      const { pieceId = 0, moveIndex = 0, backdoDir } = payload ?? {};
+      if (moveIndex >= gameState.pendingMoves.length) { ack({ ok: false, reason: "invalid_move_index" }); return; }
+
+      const piece = gameState.players[userId].pieces[pieceId];
+      if (!piece) { ack({ ok: false, reason: "invalid_piece" }); return; }
+
+      const steps = gameState.pendingMoves[moveIndex];
+      if (steps === -1 && piece.position === 0) { ack({ ok: false, reason: "invalid_piece_for_backdo" }); return; }
+
+      const prevPos = piece.position;
+      const moveResult = moveMarblePiece(piece, steps, { backdoDir });
+      if (moveResult === null) { ack({ ok: false, reason: "invalid_move" }); return; }
+
+      gameState.pendingMoves.splice(moveIndex, 1);
+
+      const carriedPieces = getMarbleCarriedPieces(piece, gameState.players[userId].pieces);
+      for (const cp of carriedPieces) {
+        cp.lastPos = moveResult.lastPos;
+        cp.position = moveResult.position;
+        // 마블윷: finished=false, 완주는 출발지 재도착으로 처리 (월급만)
+        cp.finished = false;
+      }
+
+      const opponentId = getNextMarblePlayer(gameState, userId);
+      let capturedPieces = [];
+      if (moveResult.position !== 0) {
+        capturedPieces = checkMarbleCatch(moveResult.position, gameState.players[opponentId].pieces);
+        for (const cp of capturedPieces) {
+          cp.position = 0;
+          cp.lastPos = 0;
+        }
+        recordMarbleCapture(gameState, capturedPieces.length);
+      }
+
+      // 출발지(0/20) 통과 시 월급 지급
+      // 이동 경로상 0/20을 통과했는지: prevPos < newPos이고 0으로 왔거나 20을 통과한 경우
+      const passingStart = (prevPos !== 0 && moveResult.position === 0) ||
+        (prevPos > 0 && moveResult.position > 0 && steps > 0 && prevPos + steps >= 20);
+      if (passingStart) {
+        gameState.players[userId].coins += MARBLE_SALARY;
+      }
+
+      // 잡기 보너스 설정
+      if (capturedPieces.length > 0) {
+        gameState.catchBonusPending = true;
+        gameState.catchBonusUntil = Date.now() + 15000;
+        gameState.catchBonusTarget = opponentId;
+      }
+
+      // 라운드 진행
+      if (gameState.pendingMoves.length === 0 && !gameState.hasBonusThrow && !gameState.caughtOpponentThisTurn) {
+        gameState.roundTurns = (gameState.roundTurns ?? 0) + 1;
+        if (gameState.roundTurns >= 2) {
+          gameState.roundTurns = 0;
+          gameState.round = (gameState.round ?? 1) + 1;
+        }
+      }
+
+      // 승리 체크
+      const winResult = checkMarbleWin(gameState);
+      if (winResult) {
+        gameState.winner = winResult.winner;
+        gameState.winReason = winResult.reason;
+      } else if (gameState.round > MARBLE_MAX_ROUNDS) {
+        // 타임아웃 승리
+        const s1 = calcScore(gameState, gameState.playersOrder[0]);
+        const s2 = calcScore(gameState, gameState.playersOrder[1]);
+        if (s1 === s2) {
+          gameState.winner = null;
+          gameState.winReason = 'timeout_draw';
+        } else {
+          gameState.winner = s1 > s2 ? gameState.playersOrder[0] : gameState.playersOrder[1];
+          gameState.winReason = 'timeout';
+        }
+      } else {
+        settleMarbleTurn(gameState, userId);
+      }
+
+      await redis.set(marbleYutGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
+
+      const targetPos = moveResult.position;
+      const landData = gameState.lands[targetPos];
+      let landPrompt = null;
+
+      if (!gameState.winner && !MARBLE_START_POSITIONS.has(targetPos)) {
+        if (!landData) {
+          // 빈 칸: 점령 프롬프트
+          landPrompt = { type: 'claim', pos: targetPos, cost: getLandValue(targetPos) };
+        } else if (landData.owner === userId && landData.level < 4) {
+          // 내 영지 재방문: 강화 프롬프트
+          const upgradeCost = getLandValue(targetPos) * (landData.level);
+          landPrompt = { type: 'upgrade', pos: targetPos, cost: upgradeCost, level: landData.level };
+        } else if (landData.owner !== userId) {
+          // 상대 영지: 통행료 자동 징수 (T3 범위지만 기본 통행료는 여기서 처리)
+          const toll = calcToll(targetPos, landData.level);
+          gameState.players[userId].coins = Math.max(0, gameState.players[userId].coins - toll);
+          gameState.players[opponentId].coins += toll;
+          await redis.set(marbleYutGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
+          io.to(roomCode).emit("game:marble_yut:toll_paid", {
+            payer: userId,
+            receiver: opponentId,
+            pos: targetPos,
+            toll,
+            level: landData.level,
+            coins: { [userId]: gameState.players[userId].coins, [opponentId]: gameState.players[opponentId].coins },
+          });
+          // 파산 체크
+          const tollWin = checkMarbleWin(gameState);
+          if (tollWin) {
+            gameState.winner = tollWin.winner;
+            gameState.winReason = tollWin.reason;
+            await redis.set(marbleYutGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
+          }
+        }
+      }
+
+      const moveEvent = {
+        by: userId,
+        pieceId,
+        newPosition: piece.position,
+        movedPieceIds: carriedPieces.map((cp) => cp.id),
+        capturedPieceIds: capturedPieces.map((cp) => cp.id),
+        capturedCount: capturedPieces.length,
+        landPrompt,
+        winner: gameState.winner,
+        winReason: gameState.winReason,
+        at: Date.now(),
+        ...serializeMarbleYutGame(gameState),
+      };
+
+      io.to(roomCode).emit("game:marble_yut:move_result", moveEvent);
+      if (landPrompt) {
+        // 이동한 플레이어에게만 프롬프트 전송
+        socket.emit("game:marble_yut:land_prompt", landPrompt);
+      }
+      ack({ ok: true, event: moveEvent });
+
+      if (gameState.winner) {
+        io.to(roomCode).emit("game:marble_yut:ended", {
+          winner: gameState.winner,
+          winReason: gameState.winReason,
+        });
+        await redis.del(marbleYutGameKey(roomCode));
+        await saveGameResult(roomCode, gameState.winner, opponentId, 'marble_yut', 0).catch(() => {});
+        await grantGameXpAndMissions(gameState.winner, opponentId, 'marble_yut').catch(() => {});
+      }
+    });
+
+    socket.on("game:marble_yut:land_act", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+
+      const gameText = await redis.get(marbleYutGameKey(roomCode));
+      if (!gameText) { ack({ ok: false, reason: "no_game" }); return; }
+      const gameState = JSON.parse(gameText);
+
+      const { action, pos } = payload ?? {};
+      if (!['claim', 'upgrade', 'skip'].includes(action) || pos == null) {
+        ack({ ok: false, reason: "invalid_payload" });
+        return;
+      }
+
+      const posNum = Number(pos);
+      const playerState = gameState.players[userId];
+      if (!playerState) { ack({ ok: false, reason: "invalid_player" }); return; }
+
+      let landChanged = false;
+      if (action === 'claim') {
+        const cost = getLandValue(posNum);
+        if (playerState.coins < cost) { ack({ ok: false, reason: "insufficient_coins" }); return; }
+        if (gameState.lands[posNum]) { ack({ ok: false, reason: "already_claimed" }); return; }
+        playerState.coins -= cost;
+        gameState.lands[posNum] = { owner: userId, level: 1 };
+        landChanged = true;
+      } else if (action === 'upgrade') {
+        const land = gameState.lands[posNum];
+        if (!land || land.owner !== userId) { ack({ ok: false, reason: "not_your_land" }); return; }
+        if (land.level >= 4) { ack({ ok: false, reason: "max_level" }); return; }
+        const upgradeCost = getLandValue(posNum) * land.level;
+        if (playerState.coins < upgradeCost) { ack({ ok: false, reason: "insufficient_coins" }); return; }
+        playerState.coins -= upgradeCost;
+        land.level += 1;
+        landChanged = true;
+      }
+      // 'skip' → 아무 변경 없음
+
+      // 승리 조건 재체크 (shrine/line)
+      if (landChanged) {
+        const winResult = checkMarbleWin(gameState);
+        if (winResult) {
+          gameState.winner = winResult.winner;
+          gameState.winReason = winResult.reason;
+        }
+      }
+
+      await redis.set(marbleYutGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
+
+      emitMarbleYutState(io, roomCode, "game:marble_yut:state", gameState, {
+        landAction: { action, pos: posNum, by: userId },
+      });
+      ack({ ok: true, gameState: serializeMarbleYutGame(gameState) });
+
+      if (gameState.winner) {
+        io.to(roomCode).emit("game:marble_yut:ended", {
+          winner: gameState.winner,
+          winReason: gameState.winReason,
+        });
+        await redis.del(marbleYutGameKey(roomCode));
+        const opponentId = getNextMarblePlayer(gameState, userId);
+        await saveGameResult(roomCode, gameState.winner, opponentId, 'marble_yut', 0).catch(() => {});
+        await grantGameXpAndMissions(gameState.winner, opponentId, 'marble_yut').catch(() => {});
       }
     });
 
