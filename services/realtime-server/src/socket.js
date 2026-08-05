@@ -1972,13 +1972,20 @@ export const registerSocketHandlers = (io) => {
         gameState.winReason = winResult.reason;
       } else if (gameState.round > MARBLE_MAX_ROUNDS) {
         // 타임아웃 승리
-        const s1 = calcScore(gameState, gameState.playersOrder[0]);
-        const s2 = calcScore(gameState, gameState.playersOrder[1]);
+        const p1 = gameState.playersOrder[0];
+        const p2 = gameState.playersOrder[1];
+        const s1 = calcScore(gameState, p1);
+        const s2 = calcScore(gameState, p2);
+        
+        // 서든데스 종료 시에는 자금을 총점으로 덮어써서 결과창에 점수가 표시되도록 함
+        gameState.players[p1].coins = s1;
+        gameState.players[p2].coins = s2;
+
         if (s1 === s2) {
           gameState.winner = null;
           gameState.winReason = 'timeout_draw';
         } else {
-          gameState.winner = s1 > s2 ? gameState.playersOrder[0] : gameState.playersOrder[1];
+          gameState.winner = s1 > s2 ? p1 : p2;
           gameState.winReason = 'timeout';
         }
       } else {
