@@ -119,6 +119,7 @@ const gameTypes = [
   "telepathy",
   "pirate",
   "yut",
+  "marble_yut",
   "uno",
   "uno_classic",
   "uno_go_wild",
