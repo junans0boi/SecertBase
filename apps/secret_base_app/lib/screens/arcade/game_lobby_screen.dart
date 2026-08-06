@@ -112,6 +112,9 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
               stake: _socket.lobbyStartedStake,
             );
             break;
+          case 'marble_yut':
+            _socket.newMarbleYutGame();
+            break;
           case 'bomb':
             _socket.newBombGame();
             break;
