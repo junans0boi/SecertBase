@@ -2303,6 +2303,9 @@ class _YutBoardNodePainter extends CustomPainter {
         );
       }
 
+      // 지역 이름 라벨
+      _drawLocationLabel(canvas, center, position, radius);
+
       // 영지 소유권/레벨 그리기
       final land = landData['$position'];
       if (land != null) {
@@ -2343,6 +2346,58 @@ class _YutBoardNodePainter extends CustomPainter {
         }
       }
     }
+  }
+
+  static const _locationNames = {
+    1: '제주도',  2: '부산',   3: '경주',      4: '강릉',
+    6: '도쿄',   7: '오사카', 8: '교토',       9: '방콕',
+    11: '파리',  12: '로마',  13: '바르셀로나', 14: '런던',
+    16: '뉴욕',  17: '하와이', 18: '발리',     19: '두바이',
+    21: '프라하',  22: '산토리니',
+    23: '몰디브',
+    24: '취리히',  25: '빈',
+    26: '싱가포르', 27: '홍콩',
+    28: '마카오',  29: '상하이',
+  };
+
+  Offset _locationLabelOffset(int pos, double radius) {
+    if (pos >= 1 && pos <= 4)   return Offset(radius + 3, -5.0);
+    if (pos >= 6 && pos <= 9)   return Offset(-14.0, -radius - 13.0);
+    if (pos >= 11 && pos <= 14) return Offset(-radius - 36.0, -5.0);
+    if (pos >= 16 && pos <= 19) return Offset(-14.0, radius + 3.0);
+    // 대각선 칸: 중심부이므로 아래쪽에
+    return Offset(-14.0, radius + 3.0);
+  }
+
+  void _drawLocationLabel(Canvas canvas, Offset center, int position, double radius) {
+    final name = _locationNames[position];
+    if (name == null) return;
+
+    final offset = _locationLabelOffset(position, radius);
+    final tp = TextPainter(
+      text: TextSpan(
+        text: name,
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: radius * 0.72,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -0.2,
+          shadows: const [
+            Shadow(color: Colors.black87, blurRadius: 3, offset: Offset(0, 1)),
+          ],
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    tp.layout();
+    final origin = center + offset;
+    // 배경 pill
+    final bgRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(origin.dx - 2, origin.dy - 1, tp.width + 4, tp.height + 2),
+      const Radius.circular(3),
+    );
+    canvas.drawRRect(bgRect, Paint()..color = Colors.black.withValues(alpha: 0.45));
+    tp.paint(canvas, origin);
   }
 
   Color _accentFor(int position) {
