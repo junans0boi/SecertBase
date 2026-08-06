@@ -318,6 +318,16 @@ async function settleAndEmitWallet(io, roomCode, winnerId, loserId, stake, gameR
   }
 }
 
+// In-memory mutex for lobby write operations (single-server race prevention)
+const _lobbyLocks = new Map();
+const withLobbyLock = (key, fn) => {
+  const prev = _lobbyLocks.get(key) ?? Promise.resolve();
+  let resolve;
+  const next = new Promise((r) => (resolve = r));
+  _lobbyLocks.set(key, next);
+  return prev.then(fn).finally(() => { resolve(); if (_lobbyLocks.get(key) === next) _lobbyLocks.delete(key); });
+};
+
 const roomKey = (roomCode) => `room:${roomCode}:state`;
 const yutGameKey = (roomCode) => `yut:${roomCode}:game`;
 const unoGameKey = (roomCode) => `uno:${roomCode}:game`;
@@ -573,28 +583,30 @@ export const registerSocketHandlers = (io) => {
       }
 
       const key = gameLobbyKey(roomCode, gameType);
-      const presence = getPresence(io, roomCode);
-      const lobbyText = await redis.get(key);
-      const baseLobby = lobbyText ? JSON.parse(lobbyText) : { gameType, host: null, players: [], stake: 0 };
-      const lobby = normalizeLobby({ ...baseLobby, gameType }, presence);
+      await withLobbyLock(key, async () => {
+        const presence = getPresence(io, roomCode);
+        const lobbyText = await redis.get(key);
+        const baseLobby = lobbyText ? JSON.parse(lobbyText) : { gameType, host: null, players: [], stake: 0 };
+        const lobby = normalizeLobby({ ...baseLobby, gameType }, presence);
 
-      if (!lobby.players.includes(userId)) {
-        lobby.players.push(userId);
-      }
-      if (!lobby.host) {
-        lobby.host = userId;
-      }
-      // 방장만 stake 변경 가능
-      if (userId === lobby.host && stake > 0) {
-        lobby.stake = stake;
-      } else if (!lobby.stake) {
-        lobby.stake = 0;
-      }
-      lobby.updatedAt = Date.now();
+        if (!lobby.players.includes(userId)) {
+          lobby.players.push(userId);
+        }
+        if (!lobby.host) {
+          lobby.host = userId;
+        }
+        // 방장만 stake 변경 가능
+        if (userId === lobby.host && stake > 0) {
+          lobby.stake = stake;
+        } else if (!lobby.stake) {
+          lobby.stake = 0;
+        }
+        lobby.updatedAt = Date.now();
 
-      await redis.set(key, JSON.stringify(lobby), "EX", 1800);
-      emitLobby(io, roomCode, lobby);
-      ack({ ok: true, status: "waiting", lobby: { ...lobby, profileEmojis: getPresenceProfiles(io, roomCode), nicknames: getPresenceNicknames(io, roomCode) } });
+        await redis.set(key, JSON.stringify(lobby), "EX", 1800);
+        emitLobby(io, roomCode, lobby);
+        ack({ ok: true, status: "waiting", lobby: { ...lobby, profileEmojis: getPresenceProfiles(io, roomCode), nicknames: getPresenceNicknames(io, roomCode) } });
+      });
     });
 
     socket.on("game:lobby:set_stake", async (payload, ackRaw) => {

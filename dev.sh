@@ -87,7 +87,12 @@ DB_PASS="0427"
 DB_NAME="secretbase"
 DB_PORT="3307"
 # SSH 터널은 이미 암호화되므로 SSL 불필요
-MYSQL="mysql --skip-ssl -u${DB_USER} -p${DB_PASS} -P ${DB_PORT} -h 127.0.0.1 ${DB_NAME}"
+MYSQL_BIN="$(command -v mysql || echo /usr/local/opt/mysql-client/bin/mysql)"
+if [ ! -x "$MYSQL_BIN" ]; then
+  err "mysql 클라이언트가 없습니다: brew install mysql-client 후 재시도하세요"
+  exit 1
+fi
+MYSQL="$MYSQL_BIN --ssl-mode=DISABLED -u${DB_USER} -p${DB_PASS} -P ${DB_PORT} -h 127.0.0.1 ${DB_NAME}"
 
 MIGRATIONS_DIR="$ROOT/services/realtime-server/migrations"
 
