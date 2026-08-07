@@ -3,44 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../core/socket_service.dart';
 import '../core/yut_audio.dart';
+import 'marble_map_data.dart';
 
 String _defaultDisplayName(String uid) => uid;
-
-const _yutBoardAssetAspect = 1498 / 1050;
-const _yutBoardTopLeft = Offset(0.237, 0.171);
-const _yutBoardTopRight = Offset(0.758, 0.171);
-const _yutBoardBottomLeft = Offset(0.190, 0.760);
-const _yutBoardBottomRight = Offset(0.806, 0.760);
-
-Offset _projectYutPoint(Rect rect, Offset normalized) {
-  final depth = normalized.dy.clamp(0.0, 1.0);
-  final across = normalized.dx.clamp(0.0, 1.0);
-  final left = Offset.lerp(_yutBoardTopLeft, _yutBoardBottomLeft, depth)!;
-  final right = Offset.lerp(_yutBoardTopRight, _yutBoardBottomRight, depth)!;
-  final projected = Offset.lerp(left, right, across)!;
-  return Offset(
-    rect.left + (projected.dx * rect.width),
-    rect.top + (projected.dy * rect.height),
-  );
-}
-
-Offset _logicalYutPoint(int pos) {
-  if (pos == 0 || pos == 20) return const Offset(1.0, 1.0);
-  if (pos >= 1 && pos <= 5) return Offset(1.0, 1.0 - (pos * 0.2));
-  if (pos >= 6 && pos <= 10) return Offset(1.0 - ((pos - 5) * 0.2), 0.0);
-  if (pos >= 11 && pos <= 15) return Offset(0.0, (pos - 10) * 0.2);
-  if (pos >= 16 && pos <= 19) return Offset((pos - 15) * 0.2, 1.0);
-  if (pos == 21) return const Offset(0.75, 0.25);
-  if (pos == 22) return const Offset(0.6, 0.4);
-  if (pos == 23) return const Offset(0.5, 0.5);
-  if (pos == 24) return const Offset(0.25, 0.25);
-  if (pos == 25) return const Offset(0.4, 0.4);
-  if (pos == 26) return const Offset(0.6, 0.6);
-  if (pos == 27) return const Offset(0.75, 0.75);
-  if (pos == 28) return const Offset(0.4, 0.6);
-  if (pos == 29) return const Offset(0.25, 0.75);
-  return const Offset(1.0, 1.0);
-}
 
 class MarbleYutBoard extends StatefulWidget {
   final String? gameId;
@@ -244,13 +209,9 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
     widget.onRoll();
   }
 
-  Offset _getBoardPoint(int pos) {
-    return _logicalYutPoint(pos);
-  }
-
   Offset _toCanvasPoint(Size size, int pos) {
-    final point = _getBoardPoint(pos);
-    return _projectYutPoint(Offset.zero & size, point);
+    final norm = marbleNormalizedCenter(pos);
+    return Offset(norm.dx * size.width, norm.dy * size.height);
   }
 
   int _getPos(dynamic p) {
@@ -625,7 +586,6 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
     String pieceSkin = 'base',
   }) {
     final point = _toCanvasPoint(boardSize, pos);
-    final depthScale = 0.84 + (_getBoardPoint(pos).dy * 0.16);
 
     return AnimatedPositioned(
       key: key,
@@ -638,16 +598,12 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: Transform.scale(
-          scale: depthScale,
-          alignment: Alignment.center,
-          child: _buildGroupedPiece(
-            color,
-            character,
-            count,
-            selected: selected,
-            pieceSkin: pieceSkin,
-          ),
+        child: _buildGroupedPiece(
+          color,
+          character,
+          count,
+          selected: selected,
+          pieceSkin: pieceSkin,
         ),
       ),
     );
@@ -1061,51 +1017,42 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
               child: LayoutBuilder(
                 builder: (context, stageConstraints) {
                   final stageHeight = stageConstraints.maxHeight;
-                  final boardWidth = min(
-                    screenWidth * 1.24,
-                    stageHeight * 0.88 * _yutBoardAssetAspect,
+                  final boardSide = min(
+                    screenWidth * 0.94,
+                    stageHeight * (_compact ? 0.62 : 0.72),
                   );
-                  final boardTop = stageHeight * (_compact ? 0.325 : 0.12);
+                  final boardTop = stageHeight * (_compact ? 0.30 : 0.12);
 
                   return Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      // 보드는 가로를 넓게, 세로를 눌러 3/4 시점으로 보이게 한다.
                       Positioned(
                         top: boardTop,
-                        left: (screenWidth - boardWidth) / 2,
-                        width: boardWidth,
-                        child: AspectRatio(
-                          key: const ValueKey('yut_board_surface'),
-                          aspectRatio: _yutBoardAssetAspect,
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              final boardSize = Size(
-                                constraints.maxWidth,
-                                constraints.maxHeight,
-                              );
-                              return Stack(
-                                clipBehavior: Clip.none,
-                                children: [
-                                  Positioned.fill(
-                                    child: Image.asset(
-                                      key: const ValueKey('yut_board_art'),
-                                      'assets/images/yut/yut_board_3d_rail_v2.png',
-                                      fit: BoxFit.fill,
-                                    ),
-                                  ),
-                                    Positioned.fill(
-                                      child: IgnorePointer(
-                                        child: CustomPaint(
-                                          key: const ValueKey('yut_board_nodes'),
-                                          painter: _YutBoardNodePainter(
-                                            landData: widget.landData,
-                                            p1UserId: widget.p1UserId,
-                                            p2UserId: widget.p2UserId,
-                                          ),
-                                        ),
+                        left: (screenWidth - boardSide) / 2,
+                        width: boardSide,
+                        height: boardSide,
+                        child: LayoutBuilder(
+                          key: const ValueKey('marble_board_surface'),
+                          builder: (context, constraints) {
+                            final boardSize = Size(
+                              constraints.maxWidth,
+                              constraints.maxHeight,
+                            );
+                            return Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                Positioned.fill(
+                                  child: IgnorePointer(
+                                    child: CustomPaint(
+                                      key: const ValueKey('marble_board_art'),
+                                      painter: _MarbleBoardPainter(
+                                        landData: widget.landData,
+                                        p1UserId: widget.p1UserId,
+                                        p2UserId: widget.p2UserId,
                                       ),
                                     ),
+                                  ),
+                                ),
                                   if (selectedPiece != null &&
                                       guideOptions.isNotEmpty)
                                     Positioned.fill(
@@ -1194,7 +1141,6 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
                             },
                           ),
                         ),
-                      ),
                       // PLAYER 2 카드 (좌상단 오버레이)
                       Positioned(
                         top: _compact ? stageHeight * 0.105 : 20,
@@ -2051,236 +1997,332 @@ class _MoveTrailPainter extends CustomPainter {
   }
 }
 
-class _YutBoardNodePainter extends CustomPainter {
+class _MarbleBoardPainter extends CustomPainter {
   final Map<String, dynamic> landData;
   final String? p1UserId;
   final String? p2UserId;
 
-  const _YutBoardNodePainter({
+  const _MarbleBoardPainter({
     this.landData = const {},
     this.p1UserId,
     this.p2UserId,
   });
 
-  static const _red = Color(0xFFFF6B63);
-  static const _blue = Color(0xFF45D8FF);
-  static const _gold = Color(0xFFFFD85B);
-  static const _violet = Color(0xFFD878FF);
+  // ── Drawing constants ────────────────────────────────────────────────────
+  static const double _unit = 560.0;
+  static const double _c = 80.0;
+
+  static const _p1Color = Color(0xFFE45858);
+  static const _p2Color = Color(0xFF4B8DD8);
+  static const _centerBg = Color(0xFF22573E);
+  static const _borderCol = Color(0xFF0D2B1E);
+  static const _tileStroke = Color(0xFF0A2016);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-    for (var position = 1; position <= 29; position++) {
-      final center = _projectYutPoint(rect, _logicalYutPoint(position));
-      final isCorner = const {5, 10, 15, 20}.contains(position);
-      final isCenter = position == 23;
-      final radius =
-          size.width * (isCorner ? 0.031 : (isCenter ? 0.025 : 0.017));
-      final accent = _accentFor(position);
+    final scale = size.width / _unit;
+    canvas.save();
+    canvas.scale(scale, scale);
 
-      canvas.drawCircle(
-        center.translate(0, radius * 0.30),
-        radius * 1.08,
-        Paint()..color = const Color(0x77331B22),
-      );
-      canvas.drawCircle(
-        center,
-        radius * 1.65,
-        Paint()
-          ..color = accent.withValues(alpha: isCorner ? 0.34 : 0.24)
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, radius * 0.85),
-      );
-      canvas.drawCircle(
-        center,
-        radius,
-        Paint()
-          ..shader = RadialGradient(
-            colors: [
-              Colors.white,
-              Color.lerp(accent, Colors.white, 0.62)!,
-              accent,
-              Color.lerp(accent, Colors.black, 0.32)!,
-            ],
-            stops: const [0, 0.26, 0.72, 1],
-            center: const Alignment(-0.34, -0.40),
-          ).createShader(Rect.fromCircle(center: center, radius: radius)),
-      );
-      canvas.drawCircle(
-        center,
-        radius,
-        Paint()
-          ..color = const Color(0xFFFFF2BD)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = isCorner ? 2.4 : 1.5,
-      );
-      if (isCorner || isCenter) {
-        canvas.drawCircle(
-          center,
-          radius * 0.62,
-          Paint()
-            ..color = Colors.white.withValues(alpha: 0.72)
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.2,
-        );
-        for (var i = 0; i < 4; i++) {
-          final angle = (pi / 2) * i;
-          canvas.drawLine(
-            center + Offset(cos(angle), sin(angle)) * radius * 0.22,
-            center + Offset(cos(angle), sin(angle)) * radius * 0.52,
-            Paint()
-              ..color = Colors.white.withValues(alpha: 0.82)
-              ..strokeWidth = 1.2
-              ..strokeCap = StrokeCap.round,
-          );
-        }
-      }
+    _drawBoard(canvas);
 
-      // 4대 신수 라벨 그리기
-      if (const {5, 10, 15, 20}.contains(position)) {
-        final label = switch (position) {
-          5 => '백호',
-          10 => '청룡',
-          15 => '주작',
-          20 => '현무',
-          _ => '',
-        };
-        final textPainter = TextPainter(
-          text: TextSpan(
-            text: label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 10,
-              fontWeight: FontWeight.w900,
-              shadows: [Shadow(color: Colors.black54, blurRadius: 2, offset: Offset(0, 1))],
-            ),
-          ),
-          textDirection: TextDirection.ltr,
-        );
-        textPainter.layout();
-        textPainter.paint(
-          canvas,
-          center + Offset(-textPainter.width / 2, radius + 2),
-        );
-      }
+    canvas.restore();
+  }
 
-      // 지역 이름 라벨
-      _drawLocationLabel(canvas, center, position, radius);
+  void _drawBoard(Canvas canvas) {
+    // 1. Outer board background
+    final boardRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, 0, _unit, _unit),
+      const Radius.circular(12),
+    );
+    canvas.drawRRect(boardRect, Paint()..color = _borderCol);
 
-      // 영지 소유권/레벨 그리기
-      final land = landData['$position'];
-      if (land != null) {
-        final owner = land['owner'] as String?;
-        final level = land['level'] as int? ?? 1;
-        Color ownerColor = Colors.transparent;
-        if (owner == p1UserId) ownerColor = const Color(0xFFE45858); // p1
-        if (owner == p2UserId) ownerColor = const Color(0xFF4B8DD8); // p2
+    // 2. Center area
+    const centerInset = _c + 2.0;
+    const centerSize = _unit - centerInset * 2;
+    canvas.drawRect(
+      const Rect.fromLTWH(centerInset, centerInset, centerSize, centerSize),
+      Paint()..color = _centerBg,
+    );
 
-        if (ownerColor != Colors.transparent) {
-          // 소유자 띠
-          canvas.drawCircle(
-            center,
-            radius + 3,
-            Paint()
-              ..color = ownerColor
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = 3.5,
-          );
-          
-          // 레벨 아이콘
-          String levelIcon = '';
-          if (level == 2) levelIcon = '⭐';
-          if (level == 3) levelIcon = '🌟';
-          if (level >= 4) levelIcon = '🛡️';
-          
-          if (levelIcon.isNotEmpty) {
-            final tp = TextPainter(
-              text: TextSpan(text: levelIcon, style: const TextStyle(fontSize: 12)),
-              textDirection: TextDirection.ltr,
-            );
-            tp.layout();
-            tp.paint(
-              canvas,
-              center + Offset(-tp.width / 2, -radius - 12),
-            );
-          }
-        }
+    // 3. Diagonal shortcut lanes
+    _drawDiagonals(canvas);
+
+    // 4. Center node
+    _drawCenterNode(canvas);
+
+    // 5. All perimeter tiles
+    for (int pos = 0; pos <= 19; pos++) {
+      _drawPerimeterTile(canvas, pos);
+    }
+
+    // 6. Diagonal shortcut nodes
+    for (final pos in [21, 22, 24, 25, 26, 27, 28, 29]) {
+      _drawShortcutNode(canvas, pos);
+    }
+  }
+
+  void _drawDiagonals(Canvas canvas) {
+    // Diagonal A: pos 5 (520,520) → center (280,280) → pos 15 (40,40)
+    final paintA = Paint()
+      ..color = const Color(0x44705427)
+      ..strokeWidth = 36
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    canvas.drawLine(
+      const Offset(520, 520),
+      const Offset(40, 40),
+      paintA,
+    );
+
+    // Diagonal B: pos 10 (520,40) → center (280,280) → pos 0 (40,520)
+    final paintB = Paint()
+      ..color = const Color(0x440A5272)
+      ..strokeWidth = 36
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    canvas.drawLine(
+      const Offset(520, 40),
+      const Offset(40, 520),
+      paintB,
+    );
+
+    // Lane outlines (thinner)
+    final outlineA = Paint()
+      ..color = const Color(0x66B87A3A)
+      ..strokeWidth = 38
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke
+      ..blendMode = BlendMode.overlay;
+    canvas.drawLine(const Offset(520, 520), const Offset(40, 40), outlineA);
+    final outlineB = outlineA..color = const Color(0x661EB8EA);
+    canvas.drawLine(const Offset(520, 40), const Offset(40, 520), outlineB);
+  }
+
+  void _drawCenterNode(Canvas canvas) {
+    const center = Offset(280, 280);
+    canvas.drawCircle(center, 28, Paint()..color = const Color(0xFF6B21A8));
+    canvas.drawCircle(center, 26, Paint()..color = const Color(0xFF9333EA));
+    canvas.drawCircle(
+      center, 28,
+      Paint()
+        ..color = const Color(0xFFD8B4FE)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5,
+    );
+    _drawText(canvas, '🌐', center, 22, Colors.white);
+    _drawText(canvas, '세계중심', center.translate(0, 18), 8, Colors.white70);
+  }
+
+  void _drawPerimeterTile(Canvas canvas, int pos) {
+    final rect = marbleTileRect(pos);
+    if (rect == null) return;
+    final tile = kTileByPos[pos];
+    final isCorner = (pos == 0 || pos == 5 || pos == 10 || pos == 15);
+
+    // Base tile background
+    final bgColor = isCorner
+        ? _cornerBgColor(pos)
+        : const Color(0xFFF0EFE6);
+    canvas.drawRect(rect, Paint()..color = bgColor);
+
+    // Tile border
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..color = _tileStroke
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0,
+    );
+
+    if (isCorner) {
+      _drawCornerTile(canvas, pos, rect, tile);
+    } else {
+      _drawPropertyTile(canvas, pos, rect, tile);
+    }
+
+    // Ownership overlay
+    _drawOwnership(canvas, pos, rect);
+  }
+
+  Color _cornerBgColor(int pos) {
+    switch (pos) {
+      case 0:  return const Color(0xFF1A3A0E); // start: dark green
+      case 5:  return const Color(0xFF1A1A2E); // jail: dark navy
+      case 10: return const Color(0xFF0D2B4A); // event: deep blue
+      case 15: return const Color(0xFF0D3530); // free: dark teal
+      default: return const Color(0xFF1A3A0E);
+    }
+  }
+
+  void _drawCornerTile(Canvas canvas, int pos, Rect rect, MarbleTile? tile) {
+    if (tile == null) return;
+    final center = rect.center;
+    final name = tile.name;
+    final emoji = tile.emoji;
+
+    // Color accent stripe
+    final accentPaint = Paint()..color = tile.color.withValues(alpha: 0.9);
+    if (pos == 0) {
+      canvas.drawRect(Rect.fromLTRB(rect.left, rect.bottom - 16, rect.right, rect.bottom), accentPaint);
+    } else if (pos == 5) {
+      canvas.drawRect(Rect.fromLTRB(rect.left, rect.top, rect.right, rect.top + 16), accentPaint);
+    } else if (pos == 10) {
+      canvas.drawRect(Rect.fromLTRB(rect.left, rect.top, rect.right, rect.top + 16), accentPaint);
+    } else if (pos == 15) {
+      canvas.drawRect(Rect.fromLTRB(rect.left, rect.bottom - 16, rect.right, rect.bottom), accentPaint);
+    }
+
+    _drawText(canvas, emoji, center.translate(0, -10), 22, Colors.white);
+    _drawText(canvas, name, center.translate(0, 14), 9.5, Colors.white, fontWeight: FontWeight.w800);
+  }
+
+  void _drawPropertyTile(Canvas canvas, int pos, Rect rect, MarbleTile? tile) {
+    if (tile == null) return;
+    final center = rect.center;
+    final color = tile.color;
+
+    // Color band (inner edge of board)
+    const bandW = 14.0;
+    Rect band;
+    bool isHoriz = (pos >= 1 && pos <= 4) || (pos >= 11 && pos <= 14);
+    if (pos >= 1 && pos <= 4) {
+      // bottom side: band at top (inner)
+      band = Rect.fromLTRB(rect.left, rect.top, rect.right, rect.top + bandW);
+    } else if (pos >= 6 && pos <= 9) {
+      // right side: band at left (inner)
+      band = Rect.fromLTRB(rect.left, rect.top, rect.left + bandW, rect.bottom);
+    } else if (pos >= 11 && pos <= 14) {
+      // top side: band at bottom (inner)
+      band = Rect.fromLTRB(rect.left, rect.bottom - bandW, rect.right, rect.bottom);
+    } else {
+      // left side: band at right (inner)
+      band = Rect.fromLTRB(rect.right - bandW, rect.top, rect.right, rect.bottom);
+    }
+    canvas.drawRect(band, Paint()..color = color);
+
+    // Content area
+    final bool vertical = !isHoriz && (pos >= 6 && pos <= 9 || pos >= 16 && pos <= 19);
+    if (vertical) {
+      // For vertical tiles, rotate canvas
+      final tileCx = center.dx;
+      final tileCy = center.dy;
+      canvas.save();
+      canvas.translate(tileCx, tileCy);
+      // Flip 90°: right side reads up, left side reads down
+      final angle = (pos >= 6 && pos <= 9) ? -pi / 2 : pi / 2;
+      canvas.rotate(angle);
+      _drawText(canvas, tile.emoji, const Offset(0, -10), 16, Colors.black87);
+      _drawText(canvas, tile.name, const Offset(0, 8), 8.5, const Color(0xFF1A1A1A), fontWeight: FontWeight.w700);
+      _drawText(canvas, '${tile.price}만', const Offset(0, 19), 7, const Color(0xFF555555));
+      canvas.restore();
+    } else {
+      // Horizontal tiles
+      final textY = (pos >= 1 && pos <= 4) ? center.dy + 4 : center.dy - 4;
+      _drawText(canvas, tile.emoji, Offset(center.dx, textY - 10), 16, Colors.black87);
+      _drawText(canvas, tile.name, Offset(center.dx, textY + 6), 8.5, const Color(0xFF1A1A1A), fontWeight: FontWeight.w700);
+      _drawText(canvas, '${tile.price}만', Offset(center.dx, textY + 17), 7, const Color(0xFF555555));
+    }
+  }
+
+  void _drawShortcutNode(Canvas canvas, int pos) {
+    final norm = marbleNormalizedCenter(pos);
+    final center = Offset(norm.dx * _unit, norm.dy * _unit);
+    final tile = kTileByPos[pos];
+    if (tile == null) return;
+
+    final bgColor = tile.color;
+    canvas.drawCircle(center, 22, Paint()..color = bgColor.withValues(alpha: 0.9));
+    canvas.drawCircle(
+      center, 22,
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.5)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5,
+    );
+    _drawText(canvas, tile.emoji, center.translate(0, -5), 13, Colors.white);
+    _drawText(canvas, tile.name, center.translate(0, 10), 7, Colors.white, fontWeight: FontWeight.w700);
+
+    // Ownership
+    final posStr = '$pos';
+    final land = landData[posStr];
+    if (land is Map) {
+      final owner = land['owner'] as String?;
+      if (owner == p1UserId) {
+        canvas.drawCircle(center, 24, Paint()..color = _p1Color.withValues(alpha: 0.5)..style = PaintingStyle.stroke..strokeWidth = 3);
+      } else if (owner == p2UserId) {
+        canvas.drawCircle(center, 24, Paint()..color = _p2Color.withValues(alpha: 0.5)..style = PaintingStyle.stroke..strokeWidth = 3);
       }
     }
   }
 
-  static const _locationNames = {
-    1: '제주도',  2: '부산',   3: '경주',      4: '강릉',
-    6: '도쿄',   7: '오사카', 8: '교토',       9: '방콕',
-    11: '파리',  12: '로마',  13: '바르셀로나', 14: '런던',
-    16: '뉴욕',  17: '하와이', 18: '발리',     19: '두바이',
-    21: '프라하',  22: '산토리니',
-    23: '몰디브',
-    24: '취리히',  25: '빈',
-    26: '싱가포르', 27: '홍콩',
-    28: '마카오',  29: '상하이',
-  };
+  void _drawOwnership(Canvas canvas, int pos, Rect rect) {
+    final posStr = '$pos';
+    final land = landData[posStr];
+    if (land is! Map) return;
+    final owner = land['owner'] as String?;
+    final level = land['level'] as int? ?? 1;
+    if (owner == null) return;
 
-  Offset _locationLabelOffset(int pos, double radius) {
-    if (pos >= 1 && pos <= 4)   return Offset(radius + 3, -5.0);
-    if (pos >= 6 && pos <= 9)   return Offset(-14.0, -radius - 13.0);
-    if (pos >= 11 && pos <= 14) return Offset(-radius - 36.0, -5.0);
-    if (pos >= 16 && pos <= 19) return Offset(-14.0, radius + 3.0);
-    // 대각선 칸: 중심부이므로 아래쪽에
-    return Offset(-14.0, radius + 3.0);
+    final ownerColor = (owner == p1UserId) ? _p1Color : _p2Color;
+
+    // Ownership tint
+    canvas.drawRect(
+      rect.deflate(1),
+      Paint()..color = ownerColor.withValues(alpha: 0.18),
+    );
+
+    // Ownership border
+    canvas.drawRect(
+      rect.deflate(0.5),
+      Paint()
+        ..color = ownerColor.withValues(alpha: 0.9)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5,
+    );
+
+    // Level stars
+    if (level > 1) {
+      final starText = '★' * (level - 1);
+      final center = rect.center;
+      final isCorner = (pos == 0 || pos == 5 || pos == 10 || pos == 15);
+      final starPos = isCorner
+          ? center.translate(0, 26)
+          : center.translate(0, 28);
+      _drawText(canvas, starText, starPos, 9, ownerColor, fontWeight: FontWeight.w900);
+    }
   }
 
-  void _drawLocationLabel(Canvas canvas, Offset center, int position, double radius) {
-    final name = _locationNames[position];
-    if (name == null) return;
-
-    final offset = _locationLabelOffset(position, radius);
+  void _drawText(
+    Canvas canvas,
+    String text,
+    Offset center,
+    double fontSize,
+    Color color, {
+    FontWeight fontWeight = FontWeight.w400,
+  }) {
     final tp = TextPainter(
       text: TextSpan(
-        text: name,
+        text: text,
         style: TextStyle(
-          color: Colors.white,
-          fontSize: radius * 0.72,
-          fontWeight: FontWeight.w800,
-          letterSpacing: -0.2,
-          shadows: const [
-            Shadow(color: Colors.black87, blurRadius: 3, offset: Offset(0, 1)),
-          ],
+          fontSize: fontSize,
+          color: color,
+          fontWeight: fontWeight,
+          height: 1.0,
         ),
       ),
       textDirection: TextDirection.ltr,
+      textAlign: TextAlign.center,
     );
     tp.layout();
-    final origin = center + offset;
-    // 배경 pill
-    final bgRect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(origin.dx - 2, origin.dy - 1, tp.width + 4, tp.height + 2),
-      const Radius.circular(3),
-    );
-    canvas.drawRRect(bgRect, Paint()..color = Colors.black.withValues(alpha: 0.45));
-    tp.paint(canvas, origin);
-  }
-
-  Color _accentFor(int position) {
-    if (position == 5) return _red;
-    if (position == 10) return _blue;
-    if (position == 15) return _gold;
-    if (position == 20) return _violet;
-    if (position <= 5) return _red;
-    if (position <= 10) return _blue;
-    if (position <= 20) return _gold;
-    if (position == 23) return _blue;
-    if (position == 21 || position == 22 || position == 26 || position == 27) {
-      return _red;
-    }
-    return _blue;
+    tp.paint(canvas, center.translate(-tp.width / 2, -tp.height / 2));
   }
 
   @override
-  bool shouldRepaint(covariant _YutBoardNodePainter oldDelegate) {
-    return oldDelegate.landData != landData || 
-           oldDelegate.p1UserId != p1UserId || 
-           oldDelegate.p2UserId != p2UserId;
-  }
+  bool shouldRepaint(covariant _MarbleBoardPainter old) =>
+      old.landData != landData ||
+      old.p1UserId != p1UserId ||
+      old.p2UserId != p2UserId;
 }
 
 class _DiceRollButton extends StatelessWidget {
