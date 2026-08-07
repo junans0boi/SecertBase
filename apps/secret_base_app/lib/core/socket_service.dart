@@ -130,7 +130,7 @@ class SocketService extends ChangeNotifier {
   String? marbleYutCurrentTurn;
   String? marbleYutWinner;
   String? marbleYutWinReason;
-  bool marbleYutHasBonusThrow = false;
+  bool marbleYutHasDoubleRoll = false;
   bool marbleYutCatchBonusPending = false;
   /// H2: 잡기를 수행한 플레이어 uid (턴 전환에 독립적)
   String? marbleYutCatchBonusBy;
@@ -145,9 +145,8 @@ class SocketService extends ChangeNotifier {
   int marbleYutRound = 1;
   Map<String, dynamic>? marbleYutLandPrompt;  // {type, pos, cost, level?}
   Map<String, String> marbleYutCharacters = {};
-  String? marbleYutLastThrow;
-  bool marbleYutLastNak = false;
-  int? marbleYutLastThrowAt;
+  Map<String, dynamic>? marbleYutLastRoll;   // {dice1, dice2, total, isDouble}
+  int? marbleYutLastRollAt;
   int? marbleYutCatchBonusUntil;
   String? marbleYutCatchBonusTarget;
   Map<String, Map<String, dynamic>> marbleYutEquippedItems = {};
@@ -646,12 +645,14 @@ class SocketService extends ChangeNotifier {
       notifyListeners();
     });
 
-    socket.on('game:marble_yut:throw_result', (data) {
+    socket.on('game:marble_yut:roll_result', (data) {
       final map = _m(data);
       _applyMarbleYutState(map);
-      marbleYutLastThrow = map['resultName'] as String?;
-      marbleYutLastNak = map['nak'] == true;
-      marbleYutLastThrowAt = DateTime.now().millisecondsSinceEpoch;
+      final roll = map['rollResult'];
+      if (roll is Map) {
+        marbleYutLastRoll = Map<String, dynamic>.from(roll);
+      }
+      marbleYutLastRollAt = DateTime.now().millisecondsSinceEpoch;
       notifyListeners();
     });
 
@@ -1698,7 +1699,7 @@ class SocketService extends ChangeNotifier {
   }
 
   void rollMarbleYutStartDice() => _socket?.emit('game:marble_yut:roll_start');
-  void throwMarbleYut() => _socket?.emit('game:marble_yut:throw');
+  void rollMarbleYut() => _socket?.emit('game:marble_yut:roll');
 
   void moveMarbleYut(int pieceId, {int moveIndex = 0, int? backdoDir}) {
     final payload = <String, dynamic>{
@@ -1889,7 +1890,7 @@ class SocketService extends ChangeNotifier {
     marbleYutPhase = map['phase'] as String? ?? marbleYutPhase ?? 'throwing';
     marbleYutCurrentTurn = map['currentTurn'] as String?;
     marbleYutCharacters = _stringMap(map['characters']);
-    marbleYutHasBonusThrow = map['hasBonusThrow'] == true;
+    marbleYutHasDoubleRoll = map['hasDoubleRoll'] == true;
     marbleYutCatchBonusPending = map['catchBonusPending'] == true;
     marbleYutCatchBonusUntil = (map['catchBonusUntil'] as num?)?.toInt();
     marbleYutCatchBonusTarget = map['catchBonusTarget'] as String?;

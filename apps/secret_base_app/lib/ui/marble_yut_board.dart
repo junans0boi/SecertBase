@@ -51,26 +51,22 @@ class MarbleYutBoard extends StatefulWidget {
   final List<dynamic>? pendingMoves;
   final Map<String, dynamic>? startRolls;
   final int? orderCountdownUntil;
-  final bool hasBonusThrow;
+  final bool hasDoubleRoll;
   final VoidCallback onNewGame;
   final VoidCallback onRollStartDice;
-  final VoidCallback onThrow;
-  final void Function(int, int, {int? backdoDir}) onMovePiece;
+  final VoidCallback onRoll;
+  final void Function(int, int) onMovePiece;
   final VoidCallback onMoveNewPiece;
   final String currentUser;
-  final String? lastResultName; // Added to show the recent throw
-  final int? lastThrowAt;
-  final bool lastThrowNak;
+  final Map<String, dynamic>? lastRoll; // {dice1, dice2, total, isDouble}
+  final int? lastRollAt;
   final String p1Character;
   final String p2Character;
-  final ValueChanged<int>? onThrowResultRevealed;
   final String p1UserId;
   final String p2UserId;
   final String Function(String) displayName;
   final String pieceSkin;
-  final String yutSkin;
   final String opponentPieceSkin;
-  final String opponentYutSkin;
   final int? coins;
   final Map<String, dynamic> landData; // posStr → {owner, level}
 
@@ -84,26 +80,22 @@ class MarbleYutBoard extends StatefulWidget {
     this.pendingMoves,
     this.startRolls,
     this.orderCountdownUntil,
-    this.hasBonusThrow = false,
+    this.hasDoubleRoll = false,
     required this.onNewGame,
     required this.onRollStartDice,
-    required this.onThrow,
+    required this.onRoll,
     required this.onMovePiece,
     required this.onMoveNewPiece,
     required this.currentUser,
-    this.lastResultName,
-    this.lastThrowAt,
-    this.lastThrowNak = false,
+    this.lastRoll,
+    this.lastRollAt,
     this.p1Character = 'honggilldong',
     this.p2Character = 'miho',
-    this.onThrowResultRevealed,
     this.p1UserId = '',
     this.p2UserId = '',
     this.displayName = _defaultDisplayName,
     this.pieceSkin = 'base',
-    this.yutSkin = 'base',
     this.opponentPieceSkin = 'base',
-    this.opponentYutSkin = 'base',
     this.coins,
     this.landData = const {},
   });
@@ -116,13 +108,11 @@ class _MoveGuideOption {
   final int index;
   final int steps;
   final int targetPos;
-  final int? backdoDir;
 
   const _MoveGuideOption({
     required this.index,
     required this.steps,
     required this.targetPos,
-    this.backdoDir,
   });
 }
 
@@ -136,24 +126,17 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
   bool _compact = false;
 
   late AnimationController _resultBounceCtrl;
-  late Animation<double> _resultBounce;
-  late AnimationController _stickThrowCtrl;
-  bool _showThrowAnim = false;
-  String? _animResult;
-  int? _animThrowAt;
-  int? _notifiedThrowAt;
-  // 결과는 연출이 끝난 뒤에만 노출한다. widget.lastResultName을 직접 그리면
-  // 서버 응답이 연출 중에 도착했을 때 스포일러가 된다.
-  String? _revealedResultName;
-  bool _revealedNak = false;
+  late AnimationController _diceRollCtrl;
+  bool _showDiceAnim = false;
+  Map<String, dynamic>? _animRoll;
+  Map<String, dynamic>? _revealedRoll;
   Timer? _countdownTimer;
   Timer? _moveUnlockTimer;
   int _countdownSeconds = 0;
 
   int? _selectedPieceId;
   bool _moveInFlight = false;
-  bool _isOpponentThrow = false;
-  int? _lastTrackedThrowAt;
+  int? _lastTrackedRollAt;
 
   String _display(String uid) => widget.displayName(uid);
 
@@ -164,55 +147,39 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
       vsync: this,
       duration: const Duration(milliseconds: 700),
     );
-    _resultBounce = CurvedAnimation(
-      parent: _resultBounceCtrl,
-      curve: Curves.bounceOut,
-    );
-
-    _stickThrowCtrl = AnimationController(
+    _diceRollCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1800),
+      duration: const Duration(milliseconds: 900),
     );
-    _stickThrowCtrl.addStatusListener((status) {
+    _diceRollCtrl.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
         setState(() {
-          _showThrowAnim = false;
-          _revealedResultName = widget.lastResultName;
-          _revealedNak = widget.lastThrowNak;
+          _showDiceAnim = false;
+          _revealedRoll = widget.lastRoll;
         });
         _resultBounceCtrl.forward(from: 0);
-        _notifyThrowResultRevealed();
       }
     });
-    // 재접속 복원 등 연출 없이 진입한 경우 마지막 결과를 즉시 노출한다.
-    _revealedResultName = widget.lastResultName;
-    _revealedNak = widget.lastThrowNak;
-    if (_revealedResultName != null) {
-      _resultBounceCtrl.value = 1.0;
-    }
-    _lastTrackedThrowAt = widget.lastThrowAt;
+    _revealedRoll = widget.lastRoll;
+    if (_revealedRoll != null) _resultBounceCtrl.value = 1.0;
+    _lastTrackedRollAt = widget.lastRollAt;
     _syncCountdown();
   }
 
   @override
   void didUpdateWidget(MarbleYutBoard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.lastThrowAt != oldWidget.lastThrowAt &&
-        widget.lastResultName != null) {
-      _animThrowAt = widget.lastThrowAt;
-      if (_showThrowAnim) {
-        // My throw: result arrived mid-animation — update result so sticks settle correctly
-        setState(() => _animResult = widget.lastResultName);
+    if (widget.lastRollAt != oldWidget.lastRollAt && widget.lastRoll != null) {
+      _animRoll = widget.lastRoll;
+      if (_showDiceAnim) {
+        setState(() => _animRoll = widget.lastRoll);
       } else {
-        // Opponent's throw: play the same throw animation then show result
-        _isOpponentThrow = true;
         setState(() {
-          _animResult = widget.lastResultName;
-          _showThrowAnim = true;
-          _revealedResultName = null;
+          _animRoll = widget.lastRoll;
+          _showDiceAnim = true;
+          _revealedRoll = null;
         });
-        YutAudio.instance.playThrow();
-        _stickThrowCtrl.forward(from: 0);
+        _diceRollCtrl.forward(from: 0);
       }
     }
     if (widget.turn != oldWidget.turn ||
@@ -232,10 +199,10 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
       _syncCountdown();
     }
     if (widget.gameId != oldWidget.gameId) {
-      _lastTrackedThrowAt = widget.lastThrowAt;
-    } else if (widget.lastThrowAt != null &&
-        widget.lastThrowAt != _lastTrackedThrowAt) {
-      _lastTrackedThrowAt = widget.lastThrowAt;
+      _lastTrackedRollAt = widget.lastRollAt;
+    } else if (widget.lastRollAt != null &&
+        widget.lastRollAt != _lastTrackedRollAt) {
+      _lastTrackedRollAt = widget.lastRollAt;
     }
   }
 
@@ -244,7 +211,7 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
     _countdownTimer?.cancel();
     _moveUnlockTimer?.cancel();
     _resultBounceCtrl.dispose();
-    _stickThrowCtrl.dispose();
+    _diceRollCtrl.dispose();
     super.dispose();
   }
 
@@ -255,46 +222,26 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
       _countdownSeconds = 0;
       return;
     }
-
     void tick() {
       final remainingMs =
           widget.orderCountdownUntil! - DateTime.now().millisecondsSinceEpoch;
       final nextSeconds = (remainingMs / 1000).ceil().clamp(0, 3);
-      if (mounted) {
-        setState(() => _countdownSeconds = nextSeconds);
-      } else {
-        _countdownSeconds = nextSeconds;
-      }
-      if (nextSeconds <= 0) {
-        _countdownTimer?.cancel();
-      }
+      if (mounted) setState(() => _countdownSeconds = nextSeconds);
+      else _countdownSeconds = nextSeconds;
+      if (nextSeconds <= 0) _countdownTimer?.cancel();
     }
-
     tick();
-    _countdownTimer = Timer.periodic(
-      const Duration(milliseconds: 250),
-      (_) => tick(),
-    );
+    _countdownTimer = Timer.periodic(const Duration(milliseconds: 250), (_) => tick());
   }
 
-  void _handleThrow() {
-    _isOpponentThrow = false;
+  void _handleRoll() {
     setState(() {
-      _showThrowAnim = true;
-      _animResult = null;
-      _animThrowAt = null;
-      _revealedResultName = null;
+      _showDiceAnim = true;
+      _animRoll = null;
+      _revealedRoll = null;
     });
-    YutAudio.instance.playThrow();
-    _stickThrowCtrl.forward(from: 0);
-    widget.onThrow();
-  }
-
-  void _notifyThrowResultRevealed() {
-    final throwAt = _animThrowAt;
-    if (throwAt == null || throwAt == _notifiedThrowAt) return;
-    _notifiedThrowAt = throwAt;
-    widget.onThrowResultRevealed?.call(throwAt);
+    _diceRollCtrl.forward(from: 0);
+    widget.onRoll();
   }
 
   Offset _getBoardPoint(int pos) {
@@ -329,84 +276,19 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
       return const [];
     }
 
-    final position = _getPos(piece);
     if (_isFinished(piece)) {
       return const [];
     }
 
     final options = <_MoveGuideOption>[];
-    for (var i = 0; i < moves.length; i += 1) {
+    for (var i = 0; i < moves.length; i++) {
       final steps = _moveValue(moves[i]);
-      if (steps == -1 && position == 0) {
-        continue;
-      }
-      // At pos 23, 백도 is ambiguous: two paths (22 or 25). Show both.
-      if (steps == -1 && position == 23) {
-        options.add(
-          _MoveGuideOption(
-            index: i,
-            steps: steps,
-            targetPos: 22,
-            backdoDir: 22,
-          ),
-        );
-        options.add(
-          _MoveGuideOption(
-            index: i,
-            steps: steps,
-            targetPos: 25,
-            backdoDir: 25,
-          ),
-        );
-        continue;
-      }
-      // At pos 15 (bottom-left corner), 백도 is ambiguous: outer left (14) or diagonal (29).
-      if (steps == -1 && position == 15) {
-        options.add(
-          _MoveGuideOption(
-            index: i,
-            steps: steps,
-            targetPos: 14,
-            backdoDir: 14,
-          ),
-        );
-        options.add(
-          _MoveGuideOption(
-            index: i,
-            steps: steps,
-            targetPos: 29,
-            backdoDir: 29,
-          ),
-        );
-        continue;
-      }
-      // At pos 20 (goal checkpoint, not yet finished), 백도 is ambiguous: outer (19) or diagonal (27).
-      if (steps == -1 && position == 20) {
-        options.add(
-          _MoveGuideOption(
-            index: i,
-            steps: steps,
-            targetPos: 19,
-            backdoDir: 19,
-          ),
-        );
-        options.add(
-          _MoveGuideOption(
-            index: i,
-            steps: steps,
-            targetPos: 27,
-            backdoDir: 27,
-          ),
-        );
-        continue;
-      }
-      options.add(
-        _MoveGuideOption(
-          index: i,
-          steps: steps,
-          targetPos: _previewMove(piece, steps),
-        ),
-      );
+      if (steps <= 0) continue;
+      options.add(_MoveGuideOption(
+        index: i,
+        steps: steps,
+        targetPos: _previewMove(piece, steps),
+      ));
     }
     return options;
   }
@@ -673,11 +555,7 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
           _moveUnlockTimer = Timer(const Duration(seconds: 2), () {
             if (mounted) setState(() => _moveInFlight = false);
           });
-          widget.onMovePiece(
-            pieceId,
-            option.index,
-            backdoDir: option.backdoDir,
-          );
+          widget.onMovePiece(pieceId, option.index);
         },
         child: Container(
           decoration: BoxDecoration(
@@ -777,21 +655,7 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
 
   String _moveLabel(dynamic move) {
     final value = move is num ? move.toInt() : int.tryParse('$move');
-    return switch (value) {
-      -1 => '백도',
-      1 => '도',
-      2 => '개',
-      3 => '걸',
-      4 => '윷',
-      5 => '모',
-      _ => '$move',
-    };
-  }
-
-  String _pendingMoveText() {
-    final moves = widget.pendingMoves;
-    if (moves == null || moves.isEmpty) return '-';
-    return moves.map(_moveLabel).join(' · ');
+    return value != null ? '$value칸' : '$move';
   }
 
   Widget _buildRollOrderView() {
@@ -1078,10 +942,7 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
     final isP2 = widget.currentUser == widget.p2UserId;
     final isRollOrder = widget.phase == 'roll_order';
     final isOrderCountdown = widget.phase == 'order_countdown';
-    final canThrow =
-        isMyTurn &&
-        (widget.phase == 'throwing' ||
-            (widget.phase == 'moving' && widget.hasBonusThrow));
+    final canThrow = isMyTurn && widget.phase == 'throwing';
 
     final myPieces = isP2 ? widget.p2Pieces : widget.p1Pieces;
     final opPieces = isP2 ? widget.p1Pieces : widget.p2Pieces;
@@ -1379,15 +1240,11 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
             _buildActionBar(canThrow: canThrow),
           ],
         ),
-        // 윗 던지기 애니메이션 오버레이
-        if (_showThrowAnim)
+        if (_showDiceAnim)
           Positioned.fill(
-            child: _YutThrowOverlay(
-              animation: _stickThrowCtrl,
-              resultName: _animResult,
-              yutSkin: _isOpponentThrow
-                  ? widget.opponentYutSkin
-                  : widget.yutSkin,
+            child: _DiceRollOverlay(
+              animation: _diceRollCtrl,
+              roll: _animRoll,
             ),
           ),
       ],
@@ -1763,11 +1620,11 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
                 ),
               ),
               const SizedBox(width: 10),
-              _YutThrowButton(
+              _DiceRollButton(
                 enabled: canThrow,
-                loading: _showThrowAnim,
+                loading: _showDiceAnim,
                 compact: _compact,
-                onTap: _handleThrow,
+                onTap: _handleRoll,
               ),
               const SizedBox(width: 10),
               Row(
@@ -1812,16 +1669,19 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
   }
 
   String _actionPrompt({required bool canThrow}) {
-    if (_showThrowAnim) return '윷을 던지는 중';
+    if (_showDiceAnim) return '주사위 굴리는 중';
     final isMyTurn = widget.turn == widget.currentUser;
     final hasMoves = widget.pendingMoves?.isNotEmpty ?? false;
     if (!isMyTurn) {
-      return widget.phase == 'moving' ? '상대가 말을 이동하는 중' : '상대가 윷을 던지는 중';
+      return widget.phase == 'moving' ? '상대가 말을 이동하는 중' : '상대가 주사위 굴리는 중';
     }
     if (hasMoves) {
       return _selectedPieceId == null ? '내 말 선택' : '이동 칸 선택';
     }
-    if (canThrow) return '윷을 던져주세요';
+    if (canThrow) {
+      final isDouble = widget.hasDoubleRoll;
+      return isDouble ? '🎲 더블! 한 번 더!' : '주사위를 굴려주세요';
+    }
     return '상대방을 기다리는 중';
   }
 
@@ -2423,13 +2283,13 @@ class _YutBoardNodePainter extends CustomPainter {
   }
 }
 
-class _YutThrowButton extends StatelessWidget {
+class _DiceRollButton extends StatelessWidget {
   final bool enabled;
   final bool loading;
   final bool compact;
   final VoidCallback onTap;
 
-  const _YutThrowButton({
+  const _DiceRollButton({
     required this.enabled,
     required this.loading,
     required this.compact,
@@ -2443,9 +2303,9 @@ class _YutThrowButton extends StatelessWidget {
     return Semantics(
       button: true,
       enabled: enabled,
-      label: '윷 던지기',
+      label: '주사위 굴리기',
       child: GestureDetector(
-        onTap: enabled ? onTap : null,
+        onTap: enabled && !loading ? onTap : null,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           width: width,
@@ -2453,7 +2313,7 @@ class _YutThrowButton extends StatelessWidget {
           decoration: BoxDecoration(
             gradient: enabled
                 ? const LinearGradient(
-                    colors: [Color(0xFFFFD786), Color(0xFFC77425)],
+                    colors: [Color(0xFF5B9BFF), Color(0xFF2554D4)],
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                   )
@@ -2461,46 +2321,41 @@ class _YutThrowButton extends StatelessWidget {
             color: enabled ? null : Colors.white.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: enabled
-                  ? const Color(0xFFFFE9B0)
-                  : Colors.white.withValues(alpha: 0.14),
+              color: enabled ? const Color(0xFF9EC4FF) : Colors.white.withValues(alpha: 0.14),
               width: enabled ? 1.5 : 1,
             ),
             boxShadow: enabled
-                ? const [
-                    BoxShadow(
-                      color: Color(0x66000000),
-                      blurRadius: 7,
-                      offset: Offset(0, 3),
-                    ),
-                  ]
+                ? const [BoxShadow(color: Color(0x66000000), blurRadius: 7, offset: Offset(0, 3))]
                 : null,
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _YutStickGlyph(enabled: enabled, compact: compact),
+              Text(
+                loading ? '🎲' : '🎲',
+                style: TextStyle(fontSize: compact ? 24 : 28),
+              ),
               SizedBox(width: compact ? 6 : 8),
               Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    loading ? '던지는 중' : '윷 던지기',
+                    loading ? '굴리는 중' : '주사위',
                     style: TextStyle(
                       fontSize: compact ? 15 : 17,
                       fontWeight: FontWeight.w900,
-                      color: enabled ? const Color(0xFF4A2512) : Colors.white38,
+                      color: enabled ? Colors.white : Colors.white38,
                       height: 1,
                     ),
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    loading ? '결과 확인 중' : '윷을 던져보세요',
+                    loading ? '결과 확인 중' : '굴려주세요',
                     style: TextStyle(
                       fontSize: compact ? 9 : 10,
                       fontWeight: FontWeight.w700,
-                      color: enabled ? const Color(0xFF70401E) : Colors.white30,
+                      color: enabled ? Colors.white70 : Colors.white30,
                       height: 1,
                     ),
                   ),
@@ -2509,58 +2364,6 @@ class _YutThrowButton extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _YutStickGlyph extends StatelessWidget {
-  final bool enabled;
-  final bool compact;
-
-  const _YutStickGlyph({required this.enabled, required this.compact});
-
-  @override
-  Widget build(BuildContext context) {
-    final width = compact ? 28.0 : 32.0;
-    final height = compact ? 36.0 : 40.0;
-    final stickColor = enabled
-        ? const [Color(0xFFFFE5A7), Color(0xFFAD592A)]
-        : const [Color(0xFF7A858A), Color(0xFF465158)];
-
-    return SizedBox(
-      width: width,
-      height: height,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          for (final (offset, angle) in const [
-            (Offset(-6, 2), -0.33),
-            (Offset(0, -2), 0.04),
-            (Offset(6, 2), 0.33),
-          ])
-            Transform.translate(
-              offset: offset,
-              child: Transform.rotate(
-                angle: angle,
-                child: Container(
-                  width: compact ? 7 : 8,
-                  height: compact ? 31 : 34,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(6),
-                    gradient: LinearGradient(
-                      colors: stickColor,
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                    ),
-                    border: Border.all(
-                      color: enabled ? const Color(0xFF7D3D1E) : Colors.white24,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
       ),
     );
   }
@@ -2886,20 +2689,18 @@ class _CharacterTokenPainter extends CustomPainter {
   }
 }
 
-// ─── Yut Stick Throw Animation ─────────────────────────────────────────────
+// ─── Dice Roll Animation ────────────────────────────────────────────────────
 
-enum _ParticleShape { circle, diamond, petal, star }
-
-class _YutThrowOverlay extends StatelessWidget {
+class _DiceRollOverlay extends StatelessWidget {
   final Animation<double> animation;
-  final String? resultName;
-  final String yutSkin;
+  final Map<String, dynamic>? roll;
 
-  const _YutThrowOverlay({
-    required this.animation,
-    this.resultName,
-    this.yutSkin = 'base',
-  });
+  const _DiceRollOverlay({required this.animation, this.roll});
+
+  String _dieFace(int n) {
+    const faces = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+    return (n >= 1 && n <= 6) ? faces[n] : '🎲';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2907,41 +2708,78 @@ class _YutThrowOverlay extends StatelessWidget {
       animation: animation,
       builder: (ctx, _) {
         final t = animation.value;
+        final revealed = t > 0.85 && roll != null;
+        final dice1 = roll?['dice1'] as int?;
+        final dice2 = roll?['dice2'] as int?;
+        final total = roll?['total'] as int?;
+        final isDouble = roll?['isDouble'] as bool? ?? false;
+
         return Container(
-          color: Colors.black.withValues(alpha: 0.82),
-          child: Stack(
-            children: [
-              CustomPaint(
-                painter: _YutSticksPainter(
-                  t: t,
-                  resultName: resultName,
-                  yutSkin: yutSkin,
+          color: Colors.black.withValues(alpha: 0.85),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _AnimatedDie(
+                      t: t,
+                      face: revealed ? (dice1 ?? 0) : 0,
+                      offset: -1,
+                    ),
+                    const SizedBox(width: 24),
+                    _AnimatedDie(
+                      t: t,
+                      face: revealed ? (dice2 ?? 0) : 0,
+                      offset: 1,
+                    ),
+                  ],
                 ),
-                child: const SizedBox.expand(),
-              ),
-              if (t > 0.96 && resultName != null)
-                Center(
-                  child: TweenAnimationBuilder<double>(
+                if (revealed) ...[
+                  const SizedBox(height: 20),
+                  TweenAnimationBuilder<double>(
                     tween: Tween(begin: 0.0, end: 1.0),
-                    duration: const Duration(milliseconds: 300),
+                    duration: const Duration(milliseconds: 400),
                     builder: (_, v, child) => Transform.scale(
                       scale: Curves.elasticOut.transform(v),
                       child: child,
                     ),
-                    child: Text(
-                      resultName!,
-                      style: const TextStyle(
-                        fontSize: 72,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.amber,
-                        shadows: [
-                          Shadow(color: Colors.black54, blurRadius: 12),
-                        ],
-                      ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '${_dieFace(dice1 ?? 0)} + ${_dieFace(dice2 ?? 0)} = $total',
+                          style: const TextStyle(
+                            fontSize: 36,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                            shadows: [Shadow(color: Colors.black54, blurRadius: 8)],
+                          ),
+                        ),
+                        if (isDouble)
+                          Container(
+                            margin: const EdgeInsets.only(top: 10),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFD700),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Text(
+                              '🎯 더블! 한 번 더!',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF4A2512),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
-                ),
-            ],
+                ],
+              ],
+            ),
           ),
         );
       },
@@ -2949,399 +2787,49 @@ class _YutThrowOverlay extends StatelessWidget {
   }
 }
 
-class _YutSticksPainter extends CustomPainter {
+class _AnimatedDie extends StatelessWidget {
   final double t;
-  final String? resultName;
-  final String yutSkin;
+  final int face;
+  final double offset;
 
-  _YutSticksPainter({required this.t, this.resultName, this.yutSkin = 'base'});
+  const _AnimatedDie({required this.t, required this.face, required this.offset});
 
-  int get _flatCount {
-    switch (resultName) {
-      case '도':
-        return 1;
-      case '개':
-        return 2;
-      case '걸':
-        return 3;
-      case '윷':
-        return 4;
-      default:
-        return 0; // 모
-    }
+  String _randomFace() {
+    const faces = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+    return faces[(DateTime.now().microsecondsSinceEpoch + offset.toInt()) % 6];
+  }
+
+  String _dieFace(int n) {
+    const faces = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+    return (n >= 1 && n <= 6) ? faces[n] : '🎲';
   }
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final cx = size.width / 2;
-    final flatCount = _flatCount;
+  Widget build(BuildContext context) {
+    final revealed = t > 0.85 && face > 0;
+    final scale = revealed
+        ? 1.0
+        : (0.8 + 0.2 * (1 - (t * 8 % 1)));
 
-    // 스킨별 이펙트 (던지는 중에만)
-    if (t > 0.05 && t < 0.98) _drawSkinEffect(canvas, size, cx);
-
-    // Each stick has a slightly different trajectory
-    final offsets = [-1.5, -0.5, 0.5, 1.5]; // horizontal spread multipliers
-    final peakYOffsets = [-0.12, -0.18, -0.15, -0.10]; // different heights
-
-    for (int i = 0; i < 4; i++) {
-      final isFlat = i < flatCount;
-
-      // --- position ---
-      final startX = cx + offsets[i] * 28;
-      final startY = size.height * 0.88;
-
-      final peakX = cx + offsets[i] * 55 + sin(i * 1.4) * 18;
-      final peakY = size.height * (0.38 + peakYOffsets[i]);
-
-      final landX = cx + offsets[i] * 44;
-      final landY = size.height * 0.52 + (i % 2 == 0 ? -10 : 10);
-
-      double x, y;
-      if (t <= 0.55) {
-        final ft = Curves.easeOut.transform(t / 0.55);
-        x = _lerp(startX, peakX, ft);
-        y = _lerp(startY, peakY, ft);
-      } else {
-        final lt = Curves.bounceOut.transform((t - 0.55) / 0.45);
-        x = _lerp(peakX, landX, lt);
-        y = _lerp(peakY, landY, lt);
-      }
-
-      // --- rotation ---
-      final spinSpeed = 10.0 + i * 1.5;
-      double angle;
-      if (t <= 0.55) {
-        // rapid spin while flying
-        angle = t * spinSpeed;
-      } else {
-        // settle: flat=0 (배 up), round=pi (등 up)
-        final targetAngle = isFlat ? 0.0 : pi;
-        // Snap to nearest target quickly as t→1
-        final rawAngle = 0.55 * spinSpeed;
-        // keep spinning direction but converge to target
-        final ft = Curves.easeInOut.transform((t - 0.55) / 0.45);
-        angle = rawAngle + (targetAngle - rawAngle) * ft;
-      }
-
-      canvas.save();
-      canvas.translate(x, y);
-      canvas.rotate(angle);
-
-      // show correct orientation only after landing phase starts
-      _drawStick(canvas, isFlat && t > 0.55);
-
-      canvas.restore();
-    }
-  }
-
-  void _drawSkinEffect(Canvas canvas, Size size, double cx) {
-    final rng = sin(t * 31.4 + 7.3); // pseudo-random seed from t
-    switch (yutSkin) {
-      case 'fire':
-        _drawLightning(canvas, size, cx);
-        _drawParticles(
-          canvas,
-          size,
-          cx,
-          count: 22,
-          seed: rng,
-          color1: const Color(0xFFFF6B00),
-          color2: const Color(0xFFFFD700),
-        );
-      case 'cherry':
-        _drawParticles(
-          canvas,
-          size,
-          cx,
-          count: 20,
-          seed: rng,
-          color1: const Color(0xFFFFB7C5),
-          color2: const Color(0xFFFF69B4),
-          shape: _ParticleShape.petal,
-        );
-      case 'crystal':
-        _drawParticles(
-          canvas,
-          size,
-          cx,
-          count: 18,
-          seed: rng,
-          color1: const Color(0xFF88C0D0),
-          color2: const Color(0xFFB0E0FF),
-          shape: _ParticleShape.diamond,
-        );
-      case 'bamboo':
-        _drawParticles(
-          canvas,
-          size,
-          cx,
-          count: 16,
-          seed: rng,
-          color1: const Color(0xFF8BC34A),
-          color2: const Color(0xFFC5E1A5),
-        );
-      case 'legend':
-        _drawRainbowBurst(canvas, size, cx, seed: rng);
-      case 'stone':
-        _drawParticles(
-          canvas,
-          size,
-          cx,
-          count: 14,
-          seed: rng,
-          color1: const Color(0xFF9E9E9E),
-          color2: const Color(0xFFBDBDBD),
-        );
-      case 'gold':
-        _drawParticles(
-          canvas,
-          size,
-          cx,
-          count: 20,
-          seed: rng,
-          color1: const Color(0xFFFFD700),
-          color2: const Color(0xFFFFF8DC),
-          shape: _ParticleShape.star,
-        );
-      case 'autumn':
-        _drawParticles(
-          canvas,
-          size,
-          cx,
-          count: 18,
-          seed: rng,
-          color1: const Color(0xFFFF8C00),
-          color2: const Color(0xFFFFD700),
-          shape: _ParticleShape.petal,
-        );
-      case 'wave':
-        _drawParticles(
-          canvas,
-          size,
-          cx,
-          count: 20,
-          seed: rng,
-          color1: const Color(0xFF0077B6),
-          color2: const Color(0xFF00B4D8),
-          shape: _ParticleShape.diamond,
-        );
-      case 'wind':
-        _drawParticles(
-          canvas,
-          size,
-          cx,
-          count: 24,
-          seed: rng,
-          color1: const Color(0xFFB0BEC5),
-          color2: const Color(0xFFECEFF1),
-        );
-      case 'storm':
-        _drawLightning(canvas, size, cx);
-        _drawParticles(
-          canvas,
-          size,
-          cx,
-          count: 16,
-          seed: rng,
-          color1: const Color(0xFF455A64),
-          color2: const Color(0xFF78909C),
-        );
-      default:
-        break;
-    }
-  }
-
-  void _drawLightning(Canvas canvas, Size size, double cx) {
-    final paint = Paint()
-      ..color = const Color(
-        0xFFFFFF00,
-      ).withValues(alpha: (0.6 + sin(t * 9) * 0.3).clamp(0.0, 1.0))
-      ..strokeWidth = 2.5
-      ..style = PaintingStyle.stroke;
-    final seeds = [0.0, 0.38, 0.73];
-    for (final s in seeds) {
-      final x = cx + (s - 0.5) * size.width * 0.5;
-      final path = Path();
-      path.moveTo(x, size.height * 0.05);
-      path.lineTo(x - 10, size.height * 0.22);
-      path.lineTo(x + 8, size.height * 0.22);
-      path.lineTo(x - 6, size.height * 0.4);
-      path.lineTo(x + 12, size.height * 0.4);
-      path.lineTo(x - 4, size.height * 0.6);
-      canvas.drawPath(path, paint);
-    }
-    // flash overlay
-    final flash = Paint()
-      ..color = const Color(
-        0xFFFFFF88,
-      ).withValues(alpha: (sin(t * 18) * 0.12).clamp(0.0, 0.18));
-    canvas.drawRect(Offset.zero & size, flash);
-  }
-
-  void _drawRainbowBurst(
-    Canvas canvas,
-    Size size,
-    double cx, {
-    required double seed,
-  }) {
-    const colors = [
-      Color(0xFFFF0000),
-      Color(0xFFFF7700),
-      Color(0xFFFFFF00),
-      Color(0xFF00FF00),
-      Color(0xFF0088FF),
-      Color(0xFF8800FF),
-    ];
-    final center = Offset(cx, size.height * 0.45);
-    for (var k = 0; k < 24; k++) {
-      final angle = (k / 24) * 6.283 + t * 3.14;
-      final r = (60 + sin(t * 5 + k) * 30) * t;
-      final x = center.dx + cos(angle) * r;
-      final y = center.dy + sin(angle) * r;
-      final col = colors[k % colors.length];
-      canvas.drawCircle(
-        Offset(x, y),
-        4 + sin(t * 8 + k) * 2,
-        Paint()..color = col.withValues(alpha: ((1 - t) * 0.9).clamp(0.0, 1.0)),
-      );
-    }
-  }
-
-  void _drawParticles(
-    Canvas canvas,
-    Size size,
-    double cx, {
-    required int count,
-    required double seed,
-    required Color color1,
-    required Color color2,
-    _ParticleShape shape = _ParticleShape.circle,
-  }) {
-    final center = Offset(cx, size.height * 0.45);
-    for (var i = 0; i < count; i++) {
-      final angle = (i / count) * 6.283 + seed * 2.1 + i * 0.37;
-      final speed = 0.5 + ((i * 7 + 3) % 10) / 10.0;
-      final r = (size.shortestSide * 0.3 * t * speed).clamp(
-        0.0,
-        size.shortestSide * 0.5,
-      );
-      final x = center.dx + cos(angle) * r + sin(t * 4 + i) * 6;
-      final y = center.dy + sin(angle) * r + t * t * 40;
-      final alpha = ((1 - t * 0.85) * 0.9).clamp(0.0, 1.0);
-      final col = i.isEven
-          ? color1.withValues(alpha: alpha)
-          : color2.withValues(alpha: alpha);
-      final radius = (3.0 + ((i * 3 + 1) % 5)).toDouble();
-      switch (shape) {
-        case _ParticleShape.circle:
-          canvas.drawCircle(Offset(x, y), radius, Paint()..color = col);
-        case _ParticleShape.diamond:
-          final path = Path()
-            ..moveTo(x, y - radius * 1.4)
-            ..lineTo(x + radius, y)
-            ..lineTo(x, y + radius * 1.4)
-            ..lineTo(x - radius, y)
-            ..close();
-          canvas.drawPath(path, Paint()..color = col);
-        case _ParticleShape.petal:
-          canvas.drawOval(
-            Rect.fromCenter(
-              center: Offset(x, y),
-              width: radius * 2,
-              height: radius * 3.5,
-            ),
-            Paint()..color = col,
-          );
-        case _ParticleShape.star:
-          for (var s = 0; s < 4; s++) {
-            final sa = s * 1.571 + angle;
-            canvas.drawLine(
-              Offset(x + cos(sa) * radius * 1.8, y + sin(sa) * radius * 1.8),
-              Offset(x - cos(sa) * radius * 0.5, y - sin(sa) * radius * 0.5),
-              Paint()
-                ..color = col
-                ..strokeWidth = 1.5
-                ..style = PaintingStyle.stroke,
-            );
-          }
-      }
-    }
-  }
-
-  void _drawStick(Canvas canvas, bool showFlat) {
-    const w = 78.0;
-    const h = 20.0;
-    final rrect = RRect.fromRectAndRadius(
-      Rect.fromCenter(center: Offset.zero, width: w, height: h),
-      const Radius.circular(10),
+    return Transform.translate(
+      offset: Offset(offset * 12 * (1 - t), 0),
+      child: Transform.scale(
+        scale: scale,
+        child: Container(
+          width: 80,
+          height: 80,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 12, offset: Offset(0, 4))],
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            revealed ? _dieFace(face) : _randomFace(),
+            style: const TextStyle(fontSize: 48),
+          ),
+        ),
+      ),
     );
-
-    final (flatColor, roundColor, grainColor) = switch (yutSkin) {
-      'bamboo' => (
-        const Color(0xFF8BC34A),
-        const Color(0xFF33691E),
-        const Color(0xFF558B2F),
-      ),
-      'gold' => (
-        const Color(0xFFFFD700),
-        const Color(0xFFB8860B),
-        const Color(0xFFDAA520),
-      ),
-      'crystal' => (
-        const Color(0xFF88C0D0),
-        const Color(0xFF2E4A6E),
-        const Color(0xFF5E81AC),
-      ),
-      'fire' => (
-        const Color(0xFFFF6B00),
-        const Color(0xFFB71C1C),
-        const Color(0xFFFF8C00),
-      ),
-      'legend' => (
-        const Color(0xFFAB47BC),
-        const Color(0xFF4A148C),
-        const Color(0xFFCE93D8),
-      ),
-      'cherry' => (
-        const Color(0xFFFFB7C5),
-        const Color(0xFFE91E63),
-        const Color(0xFFFF69B4),
-      ),
-      'stone' => (
-        const Color(0xFF9E9E9E),
-        const Color(0xFF424242),
-        const Color(0xFF616161),
-      ),
-      _ => (
-        const Color(0xFFDEB887),
-        const Color(0xFF5C3A21),
-        const Color(0xFFC49A6C),
-      ),
-    };
-
-    final fill = Paint()..color = showFlat ? flatColor : roundColor;
-    canvas.drawRRect(rrect, fill);
-
-    // grain lines
-    final grainLine = Paint()
-      ..color = grainColor
-      ..strokeWidth = 1.2
-      ..style = PaintingStyle.stroke;
-    for (final dx in [-20.0, 0.0, 20.0]) {
-      canvas.drawLine(Offset(dx, -6), Offset(dx, 6), grainLine);
-    }
-
-    // border
-    final border = Paint()
-      ..color = Colors.black38
-      ..strokeWidth = 1.5
-      ..style = PaintingStyle.stroke;
-    canvas.drawRRect(rrect, border);
   }
-
-  double _lerp(double a, double b, double t) => a + (b - a) * t;
-
-  @override
-  bool shouldRepaint(_YutSticksPainter old) =>
-      old.t != t || old.resultName != resultName || old.yutSkin != yutSkin;
 }

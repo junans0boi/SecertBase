@@ -25,11 +25,10 @@ import {
 } from "./yut-engine.js";
 import {
   createMarbleYutGameState,
-  throwYut as throwMarbleYut,
+  rollDice as rollMarbleDice,
   movePiece as moveMarblePiece,
   checkCatch as checkMarbleCatch,
   getCarriedPieces as getMarbleCarriedPieces,
-  hasBackdoMove as hasMarbleBackdoMove,
   recordCapture as recordMarbleCapture,
   settleTurnAfterMove as settleMarbleTurn,
   serializeMarbleYutGame,
@@ -1805,71 +1804,52 @@ export const registerSocketHandlers = (io) => {
       }
     });
 
-    socket.on("game:marble_yut:throw", async (_, ackRaw) => {
+    socket.on("game:marble_yut:roll", async (_, ackRaw) => {
       const ack = normalizeAck(ackRaw);
       const roomCode = socket.data.roomCode;
       const userId = socket.data.userId;
-      if (!roomCode || !userId) {
-        ack({ ok: false, reason: "not_joined" });
-        return;
-      }
+      if (!roomCode || !userId) { ack({ ok: false, reason: "not_joined" }); return; }
 
       const gameText = await redis.get(marbleYutGameKey(roomCode));
       if (!gameText) { ack({ ok: false, reason: "no_game" }); return; }
       const gameState = JSON.parse(gameText);
       if (gameState.currentTurn !== userId) { ack({ ok: false, reason: "not_your_turn" }); return; }
+      if (gameState.phase !== "throwing") { ack({ ok: false, reason: "must_move_first" }); return; }
 
-      const canThrow = gameState.phase === "throwing" ||
-        (gameState.phase === "moving" && gameState.hasBonusThrow);
-      if (!canThrow) { ack({ ok: false, reason: "must_move_first" }); return; }
+      const rollResult = rollMarbleDice();
+      gameState.lastRoll = rollResult;
 
-      if (gameState.hasBonusThrow) gameState.hasBonusThrow = false;
-
-      const moverStats = gameState.equippedItems?.[userId]?.stats ?? {};
-      const opponentId = getNextMarblePlayer(gameState, userId);
-      const isLosing = calcScore(gameState, opponentId) > calcScore(gameState, userId);
-
-      const throwResult = throwMarbleYut({
-        yutControlPct: moverStats.yut_control_pct ?? 0,
-        yutMoRatePct: moverStats.yut_mo_rate_pct ?? 0,
-        yutOverturnPct: moverStats.yut_overturn_pct ?? 0,
-        isLosing,
-      });
-      gameState.lastThrow = throwResult;
-
-      // M5: yut_win_coin_pct — 윤(로유=4)/모(5) 상담 시 스테이크의 % 코인 누적
-      if (throwResult.result === 4 || throwResult.result === 5) {
-        const winCoinPct = Math.min(moverStats.yut_win_coin_pct ?? 0, 15);
-        if (winCoinPct > 0 && (gameState.stake ?? 0) > 0) {
-          const bonus = Math.floor(gameState.stake * winCoinPct / 100);
-          gameState.winCoinBonus = gameState.winCoinBonus ?? {};
-          gameState.winCoinBonus[userId] = (gameState.winCoinBonus[userId] ?? 0) + bonus;
+      // 더블: 한 번 더 굴릴 수 있음 (연속 3번 더블이면 턴 넘김)
+      if (rollResult.isDouble) {
+        gameState.consecutiveDoubles = (gameState.consecutiveDoubles ?? 0) + 1;
+        if (gameState.consecutiveDoubles >= 3) {
+          // 3연속 더블: 턴 넘김 패널티
+          gameState.consecutiveDoubles = 0;
+          gameState.hasDoubleRoll = false;
+          gameState.pendingMoves = [];
+          gameState.currentTurn = getNextMarblePlayer(gameState, userId);
+          gameState.phase = "throwing";
+          await redis.set(marbleYutGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
+          emitMarbleYutState(io, roomCode, "game:marble_yut:roll_result", gameState, {
+            by: userId, rollResult, tripleDouble: true, at: Date.now(),
+          });
+          ack({ ok: true, rollResult, gameState: serializeMarbleYutGame(gameState) });
+          return;
         }
-      }
-
-      const isNak = throwResult.result === -1 &&
-        !hasMarbleBackdoMove(gameState.players[userId].pieces);
-      throwResult.nak = isNak;
-
-      if (!isNak) {
-        gameState.pendingMoves.push(throwResult.result);
-      }
-      if (throwResult.bonusThrow) {
-        gameState.hasBonusThrow = true;
-      }
-      if (isNak && gameState.pendingMoves.length === 0) {
-        gameState.hasBonusThrow = false;
-        gameState.currentTurn = getNextMarblePlayer(gameState, userId);
-        gameState.phase = "throwing";
+        gameState.hasDoubleRoll = true;
       } else {
-        gameState.phase = "moving";
+        gameState.consecutiveDoubles = 0;
+        gameState.hasDoubleRoll = false;
       }
+
+      gameState.pendingMoves.push(rollResult.total);
+      gameState.phase = "moving";
 
       await redis.set(marbleYutGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
-      emitMarbleYutState(io, roomCode, "game:marble_yut:throw_result", gameState, {
-        by: userId, throwResult, resultName: throwResult.resultName, nak: throwResult.nak, at: Date.now(),
+      emitMarbleYutState(io, roomCode, "game:marble_yut:roll_result", gameState, {
+        by: userId, rollResult, at: Date.now(),
       });
-      ack({ ok: true, throwResult, gameState: serializeMarbleYutGame(gameState) });
+      ack({ ok: true, rollResult, gameState: serializeMarbleYutGame(gameState) });
     });
 
     socket.on("game:marble_yut:move", async (payload, ackRaw) => {

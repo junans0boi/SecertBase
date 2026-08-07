@@ -204,7 +204,7 @@ class _MarbleYutScreenState extends State<MarbleYutScreen> {
     final opCoins = sock.marbleYutCoins[opponentId] ?? 1500;
 
     return GameScaffold(
-      title: '🏯 마블윷',
+      title: '🎲 마블',
       fullBleed: true,
       showAppBar: false,
       child: GameMenuListener(
@@ -226,31 +226,24 @@ class _MarbleYutScreenState extends State<MarbleYutScreen> {
                 pendingMoves: sock.marbleYutPendingMoves,
                 startRolls: sock.marbleYutStartRolls,
                 orderCountdownUntil: sock.marbleYutOrderCountdownUntil,
-                hasBonusThrow: sock.marbleYutHasBonusThrow,
+                hasDoubleRoll: sock.marbleYutHasDoubleRoll,
                 landData: sock.marbleYutLands,
                 onNewGame: sock.newMarbleYutGame,
                 onRollStartDice: sock.rollMarbleYutStartDice,
-                onThrow: sock.throwMarbleYut,
-                onMovePiece: (pieceId, moveIndex, {int? backdoDir}) =>
-                    sock.moveMarbleYut(
-                  pieceId,
-                  moveIndex: moveIndex,
-                  backdoDir: backdoDir,
-                ),
+                onRoll: sock.rollMarbleYut,
+                onMovePiece: (pieceId, moveIndex) =>
+                    sock.moveMarbleYut(pieceId, moveIndex: moveIndex),
                 onMoveNewPiece: () => sock.moveMarbleYut(0),
                 currentUser: currentUser,
-                lastResultName: sock.marbleYutLastThrow,
-                lastThrowAt: sock.marbleYutLastThrowAt,
-                lastThrowNak: sock.marbleYutLastNak,
+                lastRoll: sock.marbleYutLastRoll,
+                lastRollAt: sock.marbleYutLastRollAt,
                 p1UserId: p1,
                 p2UserId: p2,
                 displayName: sock.nameOf,
                 p1Character: sock.marbleYutCharacters[p1] ?? 'honggilldong',
                 p2Character: sock.marbleYutCharacters[p2] ?? 'miho',
                 pieceSkin: sock.marbleYutEquippedItems[currentUser]?['piece_skin'] ?? 'base',
-                yutSkin: sock.marbleYutEquippedItems[currentUser]?['yut_skin'] ?? 'base',
                 opponentPieceSkin: sock.marbleYutEquippedItems[opponentId]?['piece_skin'] ?? 'base',
-                opponentYutSkin: sock.marbleYutEquippedItems[opponentId]?['yut_skin'] ?? 'base',
                 coins: myCoins,
               ),
             ),
