@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/socket_service.dart';
 import '../core/yut_audio.dart';
+import '../core/marble_characters.dart';
 import 'marble_map_data.dart';
 
 String _defaultDisplayName(String uid) => uid;
@@ -801,20 +802,12 @@ class _MarbleBoardState extends State<MarbleBoard> with TickerProviderStateMixin
     }
 
     final isMyTurn = widget.turn == widget.currentUser;
-    final opponent = widget.currentUser == widget.p1UserId
-        ? widget.p2UserId
-        : widget.p1UserId;
     final isP2 = widget.currentUser == widget.p2UserId;
     final isRollOrder = widget.phase == 'roll_order';
     final isOrderCountdown = widget.phase == 'order_countdown';
     final canThrow = isMyTurn && widget.phase == 'throwing';
 
     final myPieces = isP2 ? widget.p2Pieces : widget.p1Pieces;
-    final opPieces = isP2 ? widget.p1Pieces : widget.p2Pieces;
-    final myColor = isP2 ? const Color(0xFF4B8DD8) : const Color(0xFFE45858);
-    final opColor = isP2 ? const Color(0xFFE45858) : const Color(0xFF4B8DD8);
-    final myCharacter = isP2 ? widget.p2Character : widget.p1Character;
-    final opCharacter = isP2 ? widget.p1Character : widget.p2Character;
     final p1PieceSkin = isP2 ? widget.opponentPieceSkin : widget.pieceSkin;
     final p2PieceSkin = isP2 ? widget.pieceSkin : widget.opponentPieceSkin;
 
@@ -927,10 +920,10 @@ class _MarbleBoardState extends State<MarbleBoard> with TickerProviderStateMixin
                 builder: (context, stageConstraints) {
                   final stageHeight = stageConstraints.maxHeight;
                   final boardSide = min(
-                    screenWidth * 0.94,
-                    stageHeight * (_compact ? 0.62 : 0.72),
+                    screenWidth * 0.96,
+                    stageHeight * (_compact ? 0.74 : 0.78),
                   );
-                  final boardTop = stageHeight * (_compact ? 0.30 : 0.12);
+                  final boardTop = stageHeight * (_compact ? 0.22 : 0.19);
 
                   return Stack(
                     clipBehavior: Clip.none,
@@ -1050,42 +1043,6 @@ class _MarbleBoardState extends State<MarbleBoard> with TickerProviderStateMixin
                             },
                           ),
                         ),
-                      // PLAYER 2 카드 (좌상단 오버레이)
-                      Positioned(
-                        top: _compact ? stageHeight * 0.105 : 20,
-                        left: _compact ? 10 : 16,
-                        width: screenWidth * (_compact ? 0.40 : 0.28),
-                        child: _buildPlayerCard(
-                          key: const ValueKey('yut_opponent_profile'),
-                          userId: opponent,
-                          color: opColor,
-                          character: opCharacter,
-                          pieces: opPieces,
-                          isActiveTurn:
-                              widget.turn == opponent && widget.phase != null,
-                          isMe: false,
-                          showPieceControls: false,
-                          pieceSkin: widget.opponentPieceSkin,
-                        ),
-                      ),
-                      // MY PROFILE 카드 (우하단 오버레이)
-                      Positioned(
-                        bottom: _compact ? 8 : 14,
-                        right: _compact ? 10 : 16,
-                        width: screenWidth * (_compact ? 0.68 : 0.47),
-                        child: _buildPlayerCard(
-                          key: const ValueKey('yut_my_profile'),
-                          userId: widget.currentUser,
-                          color: myColor,
-                          character: myCharacter,
-                          pieces: myPieces,
-                          isActiveTurn: isMyTurn,
-                          isMe: true,
-                          showPieceControls: true,
-                          onPieceTap: _selectPiece,
-                          pieceSkin: widget.pieceSkin,
-                        ),
-                      ),
                     ],
                   );
                 },
@@ -1120,387 +1077,56 @@ class _MarbleBoardState extends State<MarbleBoard> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildPlayerCard({
-    Key? key,
-    required String userId,
-    required Color color,
-    required String character,
-    required List<dynamic>? pieces,
-    required bool isActiveTurn,
-    required bool isMe,
-    required bool showPieceControls,
-    void Function(int)? onPieceTap,
-    String pieceSkin = 'base',
-  }) {
-    final safePieces = pieces ?? List.generate(1, (_) => 0);
-    final borderColor = isActiveTurn
-        ? const Color(0xFFA7D8D1)
-        : const Color(0x66FFFFFF);
-    const bgGrad = LinearGradient(
-      colors: [Color(0xA62B3440), Color(0x99202731)],
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-    );
-    final profileKeyPrefix = isMe ? 'yut_my_profile' : 'yut_opponent_profile';
-    final cardHeight = _compact ? 72.0 : 78.0;   // §7: 0.75x
-    final avatarSize = _compact ? 32.0 : 36.0;   // 0.75x
-    final pieceSize  = _compact ? 27.0 : 30.0;   // 0.75x
-    if (!showPieceControls) {
-      final compactPieceSize = _compact ? 12.0 : 14.0;
-      return SizedBox(
-        height: _compact ? 46 : 51, // §7: 0.75x
-        child: Container(
-          key: key,
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-          decoration: BoxDecoration(
-            gradient: bgGrad,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: borderColor, width: 1.5),
-            boxShadow: [
-              if (isActiveTurn)
-                BoxShadow(
-                  color: borderColor.withValues(alpha: 0.38),
-                  blurRadius: 8,
-                ),
-            ],
-          ),
-          child: Row(
-            children: [
-              SizedBox(
-                width: _compact ? 30 : 34,
-                height: _compact ? 30 : 34,
-                child: _CharacterToken(
-                  character: character,
-                  color: color,
-                  selected: isActiveTurn,
-                  pieceSkin: pieceSkin,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _display(userId),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      safePieces.isNotEmpty && _getPos(safePieces.first) > 0 ? '이동 중' : '출발 대기',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.64),
-                        fontSize: 10,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Row(
-                      children: safePieces.map((piece) {
-                        final isFinished = _isFinished(piece);
-                        return Padding(
-                          padding: const EdgeInsets.only(left: 1),
-                          child: SizedBox(
-                            width: compactPieceSize,
-                            height: compactPieceSize,
-                            child: isFinished
-                                ? const Icon(
-                                    Icons.check_circle_rounded,
-                                    color: Color(0xFF9BEA85),
-                                    size: 14,
-                                  )
-                                : Opacity(
-                                    opacity: _getPos(piece) > 0 ? 0.45 : 1,
-                                    child: _CharacterToken(
-                                      character: character,
-                                      color: color,
-                                      pieceSkin: pieceSkin,
-                                    ),
-                                  ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return SizedBox(
-      height: cardHeight,
-      child: Container(
-        key: key,
-        padding: const EdgeInsets.all(6),
-        decoration: BoxDecoration(
-          gradient: bgGrad,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: borderColor, width: 2),
-          boxShadow: [
-            if (isActiveTurn)
-              BoxShadow(
-                color: borderColor.withValues(alpha: 0.55),
-                blurRadius: 10,
-                spreadRadius: 1,
-              ),
-            const BoxShadow(
-              color: Color(0x99000000),
-              blurRadius: 8,
-              offset: Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            Row(
-              children: [
-                SizedBox(
-                  key: ValueKey('${profileKeyPrefix}_remaining'),
-                  width: _compact ? 154 : 174,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        isMe ? '내 말' : '상대 말',
-                        maxLines: 1,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.82),
-                          fontSize: 8,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: safePieces.asMap().entries.map((entry) {
-                          final pieceId = entry.key;
-                          final pos = _getPos(entry.value);
-                          final isFinished = _isFinished(entry.value);
-                          final isOnBoard = pos > 0 && !isFinished;
-                          final canTap = isMe && _canSelectPiece(pieceId);
-                          final selected = isMe && _selectedPieceId == pieceId;
-
-                          return GestureDetector(
-                            onTap: canTap
-                                ? () => onPieceTap?.call(pieceId)
-                                : null,
-                            child: AnimatedContainer(
-                              key: ValueKey(
-                                '${profileKeyPrefix}_piece_$pieceId',
-                              ),
-                              duration: const Duration(milliseconds: 200),
-                              width: pieceSize,
-                              height: pieceSize,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: selected
-                                    ? Colors.amber.withValues(alpha: 0.35)
-                                    : Colors.transparent,
-                                border: selected
-                                    ? Border.all(
-                                        color: Colors.amber,
-                                        width: 1.5,
-                                      )
-                                    : null,
-                              ),
-                              alignment: Alignment.center,
-                              child: Stack(
-                                alignment: Alignment.center,
-                                clipBehavior: Clip.none,
-                                children: [
-                                  if (isFinished)
-                                    const Icon(
-                                      Icons.check_circle_rounded,
-                                      color: Color(0xFF9BEA85),
-                                      size: 18,
-                                    )
-                                  else
-                                    Opacity(
-                                      opacity: isOnBoard ? 0.35 : 1,
-                                      child: SizedBox(
-                                        width: pieceSize - 2,
-                                        height: pieceSize - 2,
-                                        child: _CharacterToken(
-                                          character: character,
-                                          color: color,
-                                          selected: selected,
-                                          pieceSkin: pieceSkin,
-                                        ),
-                                      ),
-                                    ),
-                                  if (isOnBoard && !isFinished)
-                                    Positioned(
-                                      bottom: -1,
-                                      right: -1,
-                                      child: Container(
-                                        width: 7,
-                                        height: 7,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: color,
-                                          border: Border.all(
-                                            color: Colors.white,
-                                            width: 1,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  if (!isOnBoard && !isFinished && canTap)
-                                    Positioned(
-                                      bottom: -1,
-                                      right: -1,
-                                      child: Container(
-                                        width: 7,
-                                        height: 7,
-                                        decoration: const BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: Colors.amber,
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  width: 1,
-                  margin: const EdgeInsets.symmetric(horizontal: 5),
-                  color: Colors.white.withValues(alpha: 0.22),
-                ),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SizedBox(
-                        key: ValueKey('${profileKeyPrefix}_avatar'),
-                        width: avatarSize,
-                        height: avatarSize,
-                        child: _CharacterToken(
-                          character: character,
-                          color: color,
-                          selected: isActiveTurn,
-                          pieceSkin: pieceSkin,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Column(
-                        key: ValueKey('${profileKeyPrefix}_identity'),
-                        children: [
-                          const Text(
-                            'Lv. -',
-                            style: TextStyle(
-                              color: Color(0xFFFFE27A),
-                              fontWeight: FontWeight.w700,
-                              fontSize: 9,
-                              height: 1,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            _display(userId),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 10,
-                              height: 1,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            Positioned(
-              top: 0,
-              right: 0,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                width: 7,
-                height: 7,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isActiveTurn
-                      ? const Color(0xFF52FF8A)
-                      : Colors.white24,
-                  boxShadow: isActiveTurn
-                      ? const [
-                          BoxShadow(color: Color(0xFF52FF8A), blurRadius: 6),
-                        ]
-                      : null,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildActionBar({required bool canThrow}) {
+    final roll = _revealedRoll;
+    final d1 = (roll?['dice1'] as num?)?.toInt() ?? 0;
+    final d2 = (roll?['dice2'] as num?)?.toInt() ?? 0;
+    final isDouble = roll?['isDouble'] == true;
     return Container(
       key: const ValueKey('yut_action_bar'),
       decoration: const BoxDecoration(
-        color: Color(0xD90F1720),
-        border: Border(top: BorderSide(color: Color(0x18FFFFFF), width: 0.5)),
+        color: Color(0xF00D1117),
+        border: Border(top: BorderSide(color: Color(0x33FFD700), width: 0.5)),
       ),
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: EdgeInsets.fromLTRB(
-            _compact ? 10 : 14,
-            10,
-            _compact ? 10 : 14,
-            10,
-          ),
+          padding: EdgeInsets.fromLTRB(_compact ? 8 : 12, 8, _compact ? 8 : 12, 8),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // ─ 왼쪽: 주사위 결과 or 안내 텍스트 ─
               Expanded(
-                child: Text(
-                  _actionPrompt(canThrow: canThrow),
-                  maxLines: 2,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.84),
-                    fontSize: _compact ? 12 : 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+                child: roll != null && d1 > 0
+                    ? _buildDiceResultArea(d1, d2, isDouble)
+                    : Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Text(
+                          _actionPrompt(canThrow: canThrow),
+                          maxLines: 2,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.8),
+                            fontSize: _compact ? 12 : 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
+              // ─ 가운데: ROLL 버튼 ─
               _DiceRollButton(
                 enabled: canThrow,
                 loading: _showDiceAnim,
                 compact: _compact,
                 onTap: _handleRoll,
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
+              // ─ 오른쪽: 설정 + 채팅 ─
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _buildActionBtn(
-                    Icons.settings_outlined,
-                    () => _showSettings(context),
-                  ),
+                  _buildActionBtn(Icons.settings_outlined, () => _showSettings(context)),
                   const SizedBox(width: 4),
                   _buildChatBtn(context),
                 ],
@@ -1509,6 +1135,49 @@ class _MarbleBoardState extends State<MarbleBoard> with TickerProviderStateMixin
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildDiceResultArea(int d1, int d2, bool isDouble) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: _compact ? 36 : 42,
+          height: _compact ? 36 : 42,
+          child: CustomPaint(painter: _DieFacePainter(value: d1)),
+        ),
+        const SizedBox(width: 6),
+        SizedBox(
+          width: _compact ? 36 : 42,
+          height: _compact ? 36 : 42,
+          child: CustomPaint(painter: _DieFacePainter(value: d2)),
+        ),
+        const SizedBox(width: 8),
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${d1 + d2}칸',
+              style: GoogleFonts.notoSans(
+                color: const Color(0xFFFFD700),
+                fontSize: _compact ? 16 : 18,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            if (isDouble)
+              Text(
+                '더블!',
+                style: TextStyle(
+                  color: const Color(0xFF00D4FF),
+                  fontSize: _compact ? 9 : 10,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -2461,22 +2130,32 @@ class _DiceRollButtonState extends State<_DiceRollButton>
                           color: Colors.white.withValues(alpha: 0.7),
                         ),
                       )
-                    : Text(
-                        'ROLL',
-                        style: GoogleFonts.notoSans(
-                          color: widget.enabled ? Colors.white : Colors.white30,
-                          fontSize: widget.compact ? 13 : 15,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1,
-                        ),
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: widget.compact ? 26 : 30,
+                            height: widget.compact ? 26 : 30,
+                            child: CustomPaint(
+                              painter: _DieFacePainter(
+                                value: 6,
+                                faceColor: Colors.white.withValues(alpha: 0.18),
+                                dotColor: Colors.white,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            'ROLL',
+                            style: GoogleFonts.notoSans(
+                              color: widget.enabled ? Colors.white : Colors.white30,
+                              fontSize: widget.compact ? 11 : 13,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ],
                       ),
-                if (!widget.loading) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    '🎲',
-                    style: TextStyle(fontSize: widget.compact ? 16 : 18),
-                  ),
-                ],
               ],
             ),
           ),
@@ -2816,22 +2495,11 @@ class _CharacterTokenPainter extends CustomPainter {
     Offset bodyCenter,
     String id,
   ) {
-    final (skinHex, hairHex, outfitHex, symbol) = switch (id) {
-      'k' => (0xFFC88F60, 0xFF141420, 0xFF0C1B2A, 'K'),
-      'ria' => (0xFFE0BFAA, 0xFF160810, 0xFF1E2D4A, 'R'),
-      'luna' => (0xFFF2D8BC, 0xFF5B21B6, 0xFF5B21B6, 'L'),
-      'rex' => (0xFFC07840, 0xFF6B3A12, 0xFF5C3010, 'X'),
-      'zia' => (0xFFDCCAB4, 0xFF070C14, 0xFF0E7490, 'Z'),
-      'drv' => (0xFFDCC8A8, 0xFF8898AA, 0xFFD0D8E8, 'V'),
-      'hayun' => (0xFFC89060, 0xFF1C1008, 0xFF3D5A2A, 'H'),
-      'jake' => (0xFFEACBA0, 0xFF7B4A18, 0xFF1D3461, 'J'),
-      'nova' => (0xFFD4956A, 0xFF2C1810, 0xFFC2410C, 'N'),
-      _ => (0xFF505060, 0xFF050810, 0xFF080C10, 'Ω'),   // omega / unknown
-    };
-
-    final skin = Color(skinHex);
-    final hair = Color(hairHex);
-    final outfit = Color(outfitHex);
+    final charDef = marbleCharById(id);
+    final skin = charDef?.skinColor ?? const Color(0xFF505060);
+    final hair = charDef?.hairColor ?? const Color(0xFF050810);
+    final outfit = charDef?.outfitColor ?? const Color(0xFF080C10);
+    final symbol = charDef?.initial ?? '?';
     final isOmega = id == 'omega';
 
     // Hair / hood (drawn before face)
@@ -3366,4 +3034,59 @@ class _Dice3DPainter extends CustomPainter {
   @override
   bool shouldRepaint(_Dice3DPainter old) =>
       old.face != face || old.rx != rx || old.ry != ry;
+}
+
+// ── Flat 2D die face painter (액션바 주사위 결과 표시용) ──────────────────────
+
+class _DieFacePainter extends CustomPainter {
+  final int value;
+  final Color faceColor;
+  final Color dotColor;
+
+  const _DieFacePainter({
+    required this.value,
+    this.faceColor = const Color(0xFF1E2733),
+    this.dotColor = const Color(0xFFFFD700),
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final r = size.shortestSide / 2;
+    final center = Offset(r, r);
+    final rr = r * 0.88;
+
+    // 배경 다크 라운드 사각형
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Rect.fromCircle(center: center, radius: rr), Radius.circular(rr * 0.32)),
+      Paint()..color = faceColor,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Rect.fromCircle(center: center, radius: rr), Radius.circular(rr * 0.32)),
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.18)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+
+    // 점 그리기
+    final dotR = rr * 0.18;
+    final s = rr * 0.52;
+    final dots = _dotPositions(value.clamp(1, 6));
+    final dotPaint = Paint()..color = dotColor;
+    for (final d in dots) {
+      canvas.drawCircle(center + d * s, dotR, dotPaint);
+    }
+  }
+
+  List<Offset> _dotPositions(int v) => switch (v) {
+    1 => const [Offset(0, 0)],
+    2 => const [Offset(-1, -1), Offset(1, 1)],
+    3 => const [Offset(-1, -1), Offset(0, 0), Offset(1, 1)],
+    4 => const [Offset(-1, -1), Offset(1, -1), Offset(-1, 1), Offset(1, 1)],
+    5 => const [Offset(-1, -1), Offset(1, -1), Offset(0, 0), Offset(-1, 1), Offset(1, 1)],
+    _ => const [Offset(-1, -1), Offset(1, -1), Offset(-1, 0), Offset(1, 0), Offset(-1, 1), Offset(1, 1)],
+  };
+
+  @override
+  bool shouldRepaint(_DieFacePainter old) => old.value != value;
 }

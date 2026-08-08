@@ -425,76 +425,122 @@ class _MarbleHud extends StatelessWidget {
     final opCharacter = characters[opponentId]  ?? 'ria';
 
     return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xEE0D1117), Color(0xAA161B22)],
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0D1117), Color(0xBB161B22)],
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
         ),
-        border: Border(bottom: BorderSide(color: Color(0x22FFFFFF), width: 0.5)),
+        border: Border(
+          bottom: BorderSide(
+            color: isMyTurn
+                ? const Color(0x55FFD700)
+                : const Color(0x22FFFFFF),
+            width: 0.8,
+          ),
+        ),
+        boxShadow: const [
+          BoxShadow(color: Colors.black54, blurRadius: 12, offset: Offset(0, 4)),
+        ],
       ),
       child: SafeArea(
         bottom: false,
         child: SizedBox(
-          height: 72,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                _ProfileCard(
-                  character:   myCharacter,
-                  nickname:    displayName(currentUser),
-                  coins:       myCoins,
-                  totalAssets: myTotal,
-                  rank:        myRank,
-                  isMyTurn:    isMyTurn,
-                  teamColor:   const Color(0xFF7C4DFF),
-                ),
-                const Spacer(),
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: const Color(0x33FFFFFF),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0x33FFFFFF)),
-                      ),
-                      child: Text(
-                        'Round $round / 20',
-                        style: GoogleFonts.notoSans(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                        ),
+          height: 84,
+          child: Stack(
+            children: [
+              // 턴 활성화 시 좌상단 글로우
+              if (isMyTurn)
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: RadialGradient(
+                        center: Alignment.centerLeft,
+                        radius: 0.8,
+                        colors: [const Color(0x22FFD700), Colors.transparent],
                       ),
                     ),
-                    const SizedBox(height: 3),
-                    Text(
-                      isMyTurn ? '⚡ 내 턴!' : '⏳',
-                      style: GoogleFonts.notoSans(
-                        color: isMyTurn ? const Color(0xFFFFD700) : Colors.white38,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(52, 4, 10, 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // ─ 내 카드 ─
+                    _ProfileCard(
+                      character:   myCharacter,
+                      nickname:    displayName(currentUser),
+                      coins:       myCoins,
+                      totalAssets: myTotal,
+                      rank:        myRank,
+                      isMyTurn:    isMyTurn,
+                      teamColor:   const Color(0xFF7C4DFF),
+                    ),
+                    // ─ 가운데 라운드/턴 ─
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0x44FFFFFF),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0x33FFD700)),
+                            ),
+                            child: Text(
+                              'R $round',
+                              style: GoogleFonts.notoSans(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 400),
+                            child: isMyTurn
+                                ? Text(
+                                    'MY TURN',
+                                    key: const ValueKey('my'),
+                                    style: GoogleFonts.notoSans(
+                                      color: const Color(0xFFFFD700),
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: 1.2,
+                                    ),
+                                  )
+                                : Text(
+                                    'VS',
+                                    key: const ValueKey('vs'),
+                                    style: GoogleFonts.notoSans(
+                                      color: Colors.white30,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                          ),
+                        ],
                       ),
+                    ),
+                    // ─ 상대 카드 ─
+                    _ProfileCard(
+                      character:   opCharacter,
+                      nickname:    displayName(opponentId),
+                      coins:       opCoins,
+                      totalAssets: opTotal,
+                      rank:        opRank,
+                      isMyTurn:    !isMyTurn && currentTurn != null,
+                      teamColor:   const Color(0xFFE91E63),
+                      reversed:    true,
                     ),
                   ],
                 ),
-                const Spacer(),
-                _ProfileCard(
-                  character:   opCharacter,
-                  nickname:    displayName(opponentId),
-                  coins:       opCoins,
-                  totalAssets: opTotal,
-                  rank:        opRank,
-                  isMyTurn:    !isMyTurn && currentTurn != null,
-                  teamColor:   const Color(0xFFE91E63),
-                  reversed:    true,
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -502,7 +548,9 @@ class _MarbleHud extends StatelessWidget {
   }
 }
 
-class _ProfileCard extends StatelessWidget {
+// ─── 프로필 카드 (§1) ───────────────────────────────────────────────────────
+
+class _ProfileCard extends StatefulWidget {
   final String character;
   final String nickname;
   final int coins;
@@ -524,76 +572,162 @@ class _ProfileCard extends StatelessWidget {
   });
 
   @override
+  State<_ProfileCard> createState() => _ProfileCardState();
+}
+
+class _ProfileCardState extends State<_ProfileCard>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _pulseCtrl;
+  late Animation<double> _pulseAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    _pulseAnim = Tween<double>(begin: 0.4, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
+    );
+    if (widget.isMyTurn) _pulseCtrl.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(_ProfileCard old) {
+    super.didUpdateWidget(old);
+    if (widget.isMyTurn && !_pulseCtrl.isAnimating) {
+      _pulseCtrl.repeat(reverse: true);
+    } else if (!widget.isMyTurn && _pulseCtrl.isAnimating) {
+      _pulseCtrl.stop();
+      _pulseCtrl.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulseCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final bust = CharacterBust(character: character, width: 40, height: 52);
+    final bust = CharacterBust(character: widget.character, width: 44, height: 56);
 
     final infoCol = Column(
       mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment:
+          widget.reversed ? CrossAxisAlignment.end : CrossAxisAlignment.start,
       children: [
         Text(
-          nickname.length > 6 ? '${nickname.substring(0, 6)}…' : nickname,
+          widget.nickname.length > 7
+              ? '${widget.nickname.substring(0, 7)}…'
+              : widget.nickname,
           style: GoogleFonts.notoSans(
             color: Colors.white,
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            height: 1,
           ),
+          overflow: TextOverflow.ellipsis,
         ),
-        const SizedBox(height: 1),
-        Text(
-          '💰 ${fmm(totalAssets)}',
-          style: GoogleFonts.notoSans(
-            color: const Color(0xFFFFD700),
-            fontSize: 9,
-            fontWeight: FontWeight.w600,
-          ),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 6, height: 6,
+              decoration: const BoxDecoration(
+                color: Color(0xFFFFD700), shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 3),
+            Text(
+              fmm(widget.totalAssets),
+              style: GoogleFonts.notoSans(
+                color: const Color(0xFFFFD700),
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                height: 1,
+              ),
+            ),
+          ],
         ),
-        Text(
-          '🏠 ${fmm(coins)}',
-          style: GoogleFonts.notoSans(
-            color: Colors.white60,
-            fontSize: 9,
-            fontWeight: FontWeight.w600,
-          ),
+        const SizedBox(height: 2),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 6, height: 6,
+              decoration: BoxDecoration(
+                color: Colors.white30, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 3),
+            Text(
+              fmm(widget.coins),
+              style: GoogleFonts.notoSans(
+                color: Colors.white54,
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+                height: 1,
+              ),
+            ),
+          ],
         ),
       ],
     );
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      width: 130,
-      height: 60,
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0x99161B22),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isMyTurn ? const Color(0xFFFFD700) : teamColor.withValues(alpha: 0.4),
-          width: isMyTurn ? 1.5 : 1,
-        ),
-        boxShadow: isMyTurn
-            ? [BoxShadow(color: const Color(0xFFFFD700).withValues(alpha: 0.3), blurRadius: 8, spreadRadius: 1)]
-            : [BoxShadow(color: teamColor.withValues(alpha: 0.15), blurRadius: 4)],
-      ),
+    final rowChildren = widget.reversed
+        ? <Widget>[Expanded(child: infoCol), const SizedBox(width: 5), bust]
+        : <Widget>[bust, const SizedBox(width: 5), Expanded(child: infoCol)];
+
+    return AnimatedBuilder(
+      animation: _pulseAnim,
+      builder: (_, child) {
+        final borderColor = widget.isMyTurn
+            ? const Color(0xFFFFD700).withValues(alpha: _pulseAnim.value)
+            : widget.teamColor.withValues(alpha: 0.45);
+        final glowStrength = widget.isMyTurn ? _pulseAnim.value * 0.4 : 0.0;
+        return Container(
+          width: 140,
+          height: 74,
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+          decoration: BoxDecoration(
+            color: const Color(0xCC161B22),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: borderColor, width: 1.5),
+            boxShadow: [
+              if (widget.isMyTurn)
+                BoxShadow(
+                  color: const Color(0xFFFFD700).withValues(alpha: glowStrength),
+                  blurRadius: 14,
+                  spreadRadius: 2,
+                ),
+              BoxShadow(
+                color: widget.teamColor.withValues(alpha: 0.12),
+                blurRadius: 6,
+              ),
+            ],
+          ),
+          child: child,
+        );
+      },
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          Row(
-            children: reversed
-                ? [Expanded(child: infoCol), const SizedBox(width: 4), bust]
-                : [bust, const SizedBox(width: 4), Expanded(child: infoCol)],
-          ),
+          Row(children: rowChildren),
           Positioned(
-            top: -6,
-            right: reversed ? null : -6,
-            left:  reversed ? -6  : null,
-            child: _RankBadge(rank: rank),
+            top: -8,
+            right: widget.reversed ? null : -8,
+            left:  widget.reversed ? -8  : null,
+            child: _RankBadge(rank: widget.rank),
           ),
         ],
       ),
     );
   }
 }
+
+// ─── 순위 배지 (§1 36px) ────────────────────────────────────────────────────
 
 class _RankBadge extends StatelessWidget {
   final int rank;
@@ -602,27 +736,31 @@ class _RankBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isFirst = rank == 1;
+    final baseColor = isFirst ? const Color(0xFFFFD700) : const Color(0xFFB0BEC5);
     return Container(
-      width: 24,
-      height: 24,
+      width: 30,
+      height: 30,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: isFirst ? const Color(0xFFFFD700) : const Color(0xFFB0BEC5),
+        gradient: RadialGradient(
+          colors: [
+            isFirst ? const Color(0xFFFFEA80) : const Color(0xFFCFD8DC),
+            baseColor,
+          ],
+        ),
         boxShadow: [
-          BoxShadow(
-            color: (isFirst ? const Color(0xFFFFD700) : const Color(0xFFB0BEC5))
-                .withValues(alpha: 0.5),
-            blurRadius: 4,
-          ),
+          BoxShadow(color: baseColor.withValues(alpha: 0.55), blurRadius: 6, spreadRadius: 1),
         ],
+        border: Border.all(color: Colors.white.withValues(alpha: 0.5), width: 1),
       ),
       alignment: Alignment.center,
       child: Text(
-        isFirst ? '1위' : '2위',
+        isFirst ? '1' : '2',
         style: const TextStyle(
           color: Color(0xFF1A1008),
-          fontSize: 7,
+          fontSize: 12,
           fontWeight: FontWeight.w900,
+          height: 1,
         ),
       ),
     );
@@ -1409,7 +1547,7 @@ class _AssetChip extends StatelessWidget {
   }
 }
 
-// ─── 이벤트 타일 오버레이 ───────────────────────────────────────────────────
+// ─── 이벤트 타일 오버레이 (§5) ────────────────────────────────────────────
 
 class _TileEventOverlay extends StatefulWidget {
   final Map<String, dynamic> data;
@@ -1426,13 +1564,14 @@ class _TileEventOverlayState extends State<_TileEventOverlay>
   late AnimationController _ctrl;
   late Animation<double> _scale;
   late Animation<double> _opacity;
+  late Animation<double> _shimmer;
 
   @override
   void initState() {
     super.initState();
     _ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2200),
+      duration: const Duration(milliseconds: 2400),
     )
       ..addStatusListener((s) {
         if (s == AnimationStatus.completed) widget.onDismiss();
@@ -1441,18 +1580,24 @@ class _TileEventOverlayState extends State<_TileEventOverlay>
 
     _scale = TweenSequence<double>([
       TweenSequenceItem(
-        tween: Tween(begin: 0.6, end: 1.0).chain(CurveTween(curve: Curves.elasticOut)),
-        weight: 300,
+        tween: Tween(begin: 0.5, end: 1.05).chain(CurveTween(curve: Curves.elasticOut)),
+        weight: 350,
+      ),
+      TweenSequenceItem(
+        tween: Tween(begin: 1.05, end: 1.0).chain(CurveTween(curve: Curves.easeOut)),
+        weight: 150,
       ),
       TweenSequenceItem(tween: ConstantTween(1.0), weight: 1700),
-      TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.95), weight: 200),
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.9), weight: 200),
     ]).animate(_ctrl);
 
     _opacity = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween(begin: 0.0, end: 1.0), weight: 300),
-      TweenSequenceItem(tween: ConstantTween(1.0), weight: 1700),
-      TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.0), weight: 200),
+      TweenSequenceItem(tween: Tween(begin: 0.0, end: 1.0), weight: 250),
+      TweenSequenceItem(tween: ConstantTween(1.0), weight: 1900),
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.0), weight: 250),
     ]).animate(_ctrl);
+
+    _shimmer = Tween<double>(begin: 0.0, end: 1.0).animate(_ctrl);
   }
 
   @override
@@ -1464,71 +1609,170 @@ class _TileEventOverlayState extends State<_TileEventOverlay>
   @override
   Widget build(BuildContext context) {
     final type = widget.data['type'] as String? ?? '';
-    final (icon, name, description) = _tileInfo(type, widget.data);
+    final (icon, name, description, accentColor) = _tileStyle(type, widget.data);
 
     return AnimatedBuilder(
       animation: _ctrl,
-      builder: (context, _) => GestureDetector(
+      builder: (_, __) => GestureDetector(
         onTap: widget.onDismiss,
-        child: Container(
-          color: Colors.black.withValues(alpha: _opacity.value * 0.75),
-          child: Center(
-            child: Transform.scale(
-              scale: _scale.value,
-              child: Opacity(
-                opacity: _opacity.value,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(icon, style: const TextStyle(fontSize: 72)),
-                    const SizedBox(height: 14),
-                    Text(
-                      name,
-                      style: GoogleFonts.notoSans(
-                        color: Colors.white,
-                        fontSize: 28,
-                        fontWeight: FontWeight.w900,
-                        shadows: const [Shadow(color: Colors.black54, blurRadius: 12)],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      description,
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.notoSans(
-                        color: const Color(0xFFFFD700),
-                        fontSize: 16,
-                        shadows: const [Shadow(color: Colors.black54, blurRadius: 8)],
-                      ),
-                    ),
-                  ],
+        child: Stack(
+          children: [
+            // 배경 오버레이
+            Positioned.fill(
+              child: Container(color: Colors.black.withValues(alpha: _opacity.value * 0.78)),
+            ),
+            // 타입별 배경 글로우
+            Center(
+              child: Container(
+                width: 280, height: 280,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      accentColor.withValues(alpha: _opacity.value * 0.18),
+                      Colors.transparent,
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
+            // 메인 카드
+            Center(
+              child: Transform.scale(
+                scale: _scale.value,
+                child: Opacity(
+                  opacity: _opacity.value,
+                  child: Container(
+                    width: 280,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [const Color(0xFF1A2235), const Color(0xFF0D1117)],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: accentColor.withValues(alpha: 0.6), width: 1.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: accentColor.withValues(alpha: 0.3),
+                          blurRadius: 24,
+                          spreadRadius: 4,
+                        ),
+                        const BoxShadow(color: Colors.black54, blurRadius: 12),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 컬러 배너
+                        Container(
+                          width: double.infinity,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                accentColor.withValues(alpha: 0.3),
+                                accentColor,
+                                accentColor.withValues(alpha: 0.3),
+                              ],
+                            ),
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        // 아이콘
+                        Container(
+                          width: 72,
+                          height: 72,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: accentColor.withValues(alpha: 0.15),
+                            border: Border.all(color: accentColor.withValues(alpha: 0.4), width: 1.5),
+                          ),
+                          child: Icon(icon, color: accentColor, size: 36),
+                        ),
+                        const SizedBox(height: 16),
+                        // 이름
+                        Text(
+                          name,
+                          style: GoogleFonts.notoSans(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            height: 1,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        // 구분선
+                        Container(
+                          height: 1,
+                          margin: const EdgeInsets.symmetric(horizontal: 24),
+                          color: Colors.white.withValues(alpha: 0.1),
+                        ),
+                        const SizedBox(height: 10),
+                        // 설명
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Text(
+                            description,
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.notoSans(
+                              color: accentColor,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        // 진행 바
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 28),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: 1.0 - _shimmer.value,
+                              backgroundColor: Colors.white.withValues(alpha: 0.1),
+                              valueColor: AlwaysStoppedAnimation(accentColor),
+                              minHeight: 3,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  static (String, String, String) _tileInfo(String type, Map<String, dynamic> data) {
+  static (IconData, String, String, Color) _tileStyle(
+      String type, Map<String, dynamic> data) {
     switch (type) {
       case 'tax':
         final amount = data['amount'] as int? ?? 0;
-        return ('🏦', '운영본부', '세금 ${fmm(amount)} 납부');
+        return (Icons.account_balance_rounded, '운영본부', '세금 ${fmm(amount)} 납부',
+            const Color(0xFFEF4444));
       case 'card':
         final card = data['card'] as Map<String, dynamic>?;
-        return ('🗝️', '황금열쇠', card?['text'] as String? ?? '카드를 뽑습니다');
+        return (Icons.style_rounded, '황금열쇠',
+            card?['text'] as String? ?? '카드를 뽑습니다', const Color(0xFFFFD700));
       case 'event':
         final ev = data['event'] as Map<String, dynamic>?;
-        return ('⚡', '이벤트!', ev?['text'] as String? ?? '이벤트가 발생했습니다');
+        return (Icons.bolt_rounded, '이벤트',
+            ev?['text'] as String? ?? '이벤트가 발생했습니다', const Color(0xFF00D4FF));
       default:
-        return ('🎲', '이벤트', '이벤트가 발생했습니다');
+        return (Icons.casino_rounded, '이벤트', '이벤트가 발생했습니다',
+            const Color(0xFF7C4DFF));
     }
   }
 }
 
-// ─── 컨페티 레이어 (임무개시 통과 시) ─────────────────────────────────────
+// ─── 컨페티 레이어 (§10 임무개시 통과 시) ─────────────────────────────────
 
 class _ConfettiLayer extends StatefulWidget {
   final VoidCallback onDone;
@@ -1547,10 +1791,10 @@ class _ConfettiLayerState extends State<_ConfettiLayer>
   @override
   void initState() {
     super.initState();
-    _particles = List.generate(28, (_) => _Particle(_rng));
+    _particles = List.generate(44, (_) => _Particle(_rng));
     _ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1800),
+      duration: const Duration(milliseconds: 2400),
     )
       ..addStatusListener((s) {
         if (s == AnimationStatus.completed && mounted) widget.onDone();
@@ -1579,25 +1823,39 @@ class _ConfettiLayerState extends State<_ConfettiLayer>
   }
 }
 
+enum _ParticleShape { circle, rect, diamond }
+
 class _Particle {
   final double x;
   final double speed;
   final double phase;
   final Color color;
   final double size;
+  final _ParticleShape shape;
+  final double rotation;
+  final double rotSpeed;
+  final double drift;
+
+  static const _colors = [
+    Color(0xFFFFD700),
+    Color(0xFF00D4FF),
+    Colors.white,
+    Color(0xFF7C4DFF),
+    Color(0xFF00C853),
+    Color(0xFFFF6B9D),
+    Color(0xFFFFB347),
+  ];
 
   _Particle(Random rng)
       : x = rng.nextDouble(),
-        speed = 0.55 + rng.nextDouble() * 0.9,
+        speed = 0.4 + rng.nextDouble() * 0.8,
         phase = rng.nextDouble() * 2 * pi,
-        color = const [
-          Color(0xFFFFD700),
-          Color(0xFF00D4FF),
-          Colors.white,
-          Color(0xFF7C4DFF),
-          Color(0xFF00C853),
-        ][Random().nextInt(5)],
-        size = 3 + Random().nextDouble() * 6;
+        color = _colors[rng.nextInt(_colors.length)],
+        size = 4 + rng.nextDouble() * 8,
+        shape = _ParticleShape.values[rng.nextInt(3)],
+        rotation = rng.nextDouble() * pi * 2,
+        rotSpeed = (rng.nextDouble() - 0.5) * 6,
+        drift = (rng.nextDouble() - 0.5) * 0.08;
 }
 
 class _ConfettiPainter extends CustomPainter {
@@ -1608,15 +1866,43 @@ class _ConfettiPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     for (final p in particles) {
-      final progress = (t * p.speed).clamp(0.0, 1.1);
-      if (progress > 1.0) continue;
-      final x = p.x + sin(t * 3 * pi + p.phase) * 0.045;
-      final opacity = t < 0.7 ? 1.0 : ((1.0 - (t - 0.7) / 0.3)).clamp(0.0, 1.0);
-      canvas.drawCircle(
-        Offset(x * size.width, progress * size.height),
-        p.size,
-        Paint()..color = p.color.withValues(alpha: opacity),
-      );
+      final progress = (t * p.speed).clamp(0.0, 1.2);
+      if (progress >= 1.0) continue;
+
+      final x = p.x + sin(t * 3 * pi + p.phase) * 0.05 + p.drift * t;
+      final y = progress;
+      final opacity = t < 0.75 ? 1.0 : (1.0 - (t - 0.75) / 0.25).clamp(0.0, 1.0);
+      final angle = p.rotation + p.rotSpeed * t;
+      final pos = Offset(x * size.width, y * size.height);
+
+      canvas.save();
+      canvas.translate(pos.dx, pos.dy);
+      canvas.rotate(angle);
+
+      final paint = Paint()..color = p.color.withValues(alpha: opacity);
+
+      switch (p.shape) {
+        case _ParticleShape.circle:
+          canvas.drawCircle(Offset.zero, p.size / 2, paint);
+        case _ParticleShape.rect:
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(
+              Rect.fromCenter(center: Offset.zero, width: p.size * 1.4, height: p.size * 0.6),
+              const Radius.circular(2),
+            ),
+            paint,
+          );
+        case _ParticleShape.diamond:
+          final path = Path()
+            ..moveTo(0, -p.size / 2)
+            ..lineTo(p.size / 3, 0)
+            ..lineTo(0, p.size / 2)
+            ..lineTo(-p.size / 3, 0)
+            ..close();
+          canvas.drawPath(path, paint);
+      }
+
+      canvas.restore();
     }
   }
 
