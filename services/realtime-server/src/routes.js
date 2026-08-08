@@ -734,7 +734,7 @@ router.post('/auth/login', async (req, res) => {
       return res.status(401).json({ ok: false, reason: 'invalid_credentials' });
     }
 
-    const isMatch = await bcrypt.compare(password, user.PasswordHash);
+    const isMatch = await bcrypt.compare(password, user.PasswordHash?.toString());
 
     if (!isMatch) {
       return res.status(401).json({ ok: false, reason: 'invalid_credentials' });
@@ -5051,7 +5051,7 @@ import { transferGameReward } from './wallet-engine.js';
 router.get('/shop/items', async (req, res) => {
   try {
     const { rows: items } = await query(
-      `SELECT id, category, game, slot, grade, name, description, price, icon
+      `SELECT id, category, game, slot, grade, name, description, price, icon, character_id
        FROM shop_items WHERE active = 1 ORDER BY game, slot, grade, id`
     );
     const { rows: statRows } = await query(
@@ -5075,7 +5075,7 @@ router.get('/shop/items', async (req, res) => {
 router.get('/shop/owned', async (req, res) => {
   try {
     const { rows: owned } = await query(
-      `SELECT oi.item_id, oi.quantity, si.name, si.category, si.game, si.slot, si.grade, si.icon,
+      `SELECT oi.item_id, oi.quantity, si.name, si.category, si.game, si.slot, si.grade, si.icon, si.character_id,
               ei.slot IS NOT NULL AS is_equipped,
               (SELECT JSON_OBJECTAGG(ist2.stat_key, ist2.stat_value)
                FROM item_stats ist2 WHERE ist2.item_id = si.id) AS stats
@@ -5101,7 +5101,7 @@ router.get('/shop/equipped', async (req, res) => {
       ? [req.auth.userId, game]
       : [req.auth.userId];
     const { rows: equipped } = await query(
-      `SELECT ei.slot, si.id AS item_id, si.name, si.icon, si.grade,
+      `SELECT ei.slot, si.id AS item_id, si.name, si.icon, si.grade, si.character_id,
               ist.stat_key, ist.stat_value
        FROM equipped_items ei
        JOIN shop_items si ON si.id = ei.item_id
@@ -5114,7 +5114,7 @@ router.get('/shop/equipped', async (req, res) => {
     const aggregatedStats = {};
     for (const row of equipped) {
       if (!slotsMap[row.slot]) {
-        slotsMap[row.slot] = { item_id: row.item_id, name: row.name, icon: row.icon, grade: row.grade, stats: {} };
+        slotsMap[row.slot] = { item_id: row.item_id, name: row.name, icon: row.icon, grade: row.grade, character_id: row.character_id ?? null, stats: {} };
       }
       if (row.stat_key) {
         const val = Number(row.stat_value);

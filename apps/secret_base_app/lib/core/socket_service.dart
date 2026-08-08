@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:developer';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import 'auth_service.dart';
@@ -25,6 +27,7 @@ class SocketService extends ChangeNotifier {
   ];
   static const _profileEmojiKey = 'secret_base_profile_emoji';
   static const yutCharacterIds = ['honggilldong', 'nolbu', 'miho'];
+  static const marbleCharacterIds = ['k', 'ria', 'luna', 'rex', 'zia', 'drv', 'hayun', 'jake', 'nova', 'omega'];
   static const yutCharacterNames = {
     'honggilldong': '홍길동',
     'nolbu': '놀부',
@@ -122,34 +125,37 @@ class SocketService extends ChangeNotifier {
   Map<String, List<int>> yutPieces = {}; // userId -> piece positions (0-20)
   Map<String, List<dynamic>> yutPieceDetails = {};
   List<Map<String, dynamic>> yutChatMessages = [];
+  List<Map<String, dynamic>> marbleChatMessages = [];
 
-  // marble_yut
-  bool marbleYutActive = false;
-  String? marbleYutGameId;
-  String? marbleYutPhase;
-  String? marbleYutCurrentTurn;
-  String? marbleYutWinner;
-  String? marbleYutWinReason;
-  bool marbleYutHasDoubleRoll = false;
-  bool marbleYutCatchBonusPending = false;
+  // marble
+  bool marbleActive = false;
+  String? marbleGameId;
+  String? marblePhase;
+  String? marbleCurrentTurn;
+  String? marbleWinner;
+  String? marbleWinReason;
+  bool marbleHasDoubleRoll = false;
+  bool marbleCatchBonusPending = false;
   /// H2: 잡기를 수행한 플레이어 uid (턴 전환에 독립적)
-  String? marbleYutCatchBonusBy;
-  List<dynamic> marbleYutPendingMoves = [];
-  Map<String, dynamic> marbleYutStartRolls = {};
-  int? marbleYutOrderCountdownUntil;
-  Function(Map<String, dynamic>)? onMarbleYutTollPaid;
-  List<String> marbleYutPlayers = [];
-  Map<String, List<dynamic>> marbleYutPieceDetails = {};
-  Map<String, dynamic> marbleYutLands = {};   // {pos: {owner, level}}
-  Map<String, int> marbleYutCoins = {};       // {uid: coins}
-  int marbleYutRound = 1;
-  Map<String, dynamic>? marbleYutLandPrompt;  // {type, pos, cost, level?}
-  Map<String, String> marbleYutCharacters = {};
-  Map<String, dynamic>? marbleYutLastRoll;   // {dice1, dice2, total, isDouble}
-  int? marbleYutLastRollAt;
-  int? marbleYutCatchBonusUntil;
-  String? marbleYutCatchBonusTarget;
-  Map<String, Map<String, dynamic>> marbleYutEquippedItems = {};
+  String? marbleCatchBonusBy;
+  List<dynamic> marblePendingMoves = [];
+  Map<String, dynamic> marbleStartRolls = {};
+  int? marbleOrderCountdownUntil;
+  Function(Map<String, dynamic>)? onMarbleTollPaid;
+  Function(Map<String, dynamic>)? onMarbleSpecialTile;
+  VoidCallback? onMarblePassedStart;
+  List<String> marblePlayers = [];
+  Map<String, List<dynamic>> marblePieceDetails = {};
+  Map<String, dynamic> marbleLands = {};   // {pos: {owner, level}}
+  Map<String, int> marbleCoins = {};       // {uid: coins}
+  int marbleRound = 1;
+  Map<String, dynamic>? marbleLandPrompt;  // {type, pos, cost, level?}
+  Map<String, String> marbleCharacters = {};
+  Map<String, dynamic>? marbleLastRoll;   // {dice1, dice2, total, isDouble}
+  int? marbleLastRollAt;
+  int? marbleCatchBonusUntil;
+  String? marbleCatchBonusTarget;
+  Map<String, Map<String, dynamic>> marbleEquippedItems = {};
 
   // uno
   Map<String, Map<String, dynamic>> unoEquippedItems = {};
@@ -639,64 +645,96 @@ class SocketService extends ChangeNotifier {
       notifyListeners();
     });
 
-    // marble_yut events
-    socket.on('game:marble_yut:state', (data) {
-      _applyMarbleYutState(_m(data));
+    socket.on('game:marble:chat', (data) {
+      final map = _m(data);
+      final message = map['message'] as String?;
+      final by = map['by'] as String?;
+      if (message == null || by == null) return;
+      marbleChatMessages = [
+        ...marbleChatMessages,
+        {
+          'by': by,
+          'message': message,
+          'at': (map['at'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch,
+        },
+      ];
+      if (marbleChatMessages.length > 50) {
+        marbleChatMessages = marbleChatMessages.sublist(marbleChatMessages.length - 50);
+      }
       notifyListeners();
     });
 
-    socket.on('game:marble_yut:roll_result', (data) {
+    // marble events
+    socket.on('game:marble:state', (data) {
+      _applyMarbleState(_m(data));
+      notifyListeners();
+    });
+
+    socket.on('game:marble:roll_result', (data) {
       final map = _m(data);
-      _applyMarbleYutState(map);
+      _applyMarbleState(map);
       final roll = map['rollResult'];
       if (roll is Map) {
-        marbleYutLastRoll = Map<String, dynamic>.from(roll);
+        marbleLastRoll = Map<String, dynamic>.from(roll);
       }
-      marbleYutLastRollAt = DateTime.now().millisecondsSinceEpoch;
+      marbleLastRollAt = DateTime.now().millisecondsSinceEpoch;
       notifyListeners();
     });
 
-    socket.on('game:marble_yut:move_result', (data) {
+    socket.on('game:marble:move_result', (data) {
       final map = _m(data);
-      _applyMarbleYutState(map);
+      _applyMarbleState(map);
       if (map['winner'] != null) {
-        marbleYutWinner = map['winner'] as String?;
-        marbleYutWinReason = map['winReason'] as String?;
-        marbleYutActive = false;
+        marbleWinner = map['winner'] as String?;
+        marbleWinReason = map['winReason'] as String?;
+        marbleActive = false;
       }
+      if (map['passedStart'] == true) onMarblePassedStart?.call();
       notifyListeners();
     });
 
-    socket.on('game:marble_yut:ended', (data) {
+    socket.on('game:marble:ended', (data) {
       final map = _m(data);
       // C3: winner가 null인 timeout_draw도 처리
-      marbleYutWinner = map['winner'] as String?;
-      marbleYutWinReason = map['winReason'] as String?;
-      marbleYutActive = false;
+      marbleWinner = map['winner'] as String?;
+      marbleWinReason = map['winReason'] as String?;
+      marbleActive = false;
       // H6: finalScores가 있으면 coins에 반영 (서든데스 점수 표시용)
       final finalScores = map['finalScores'];
       if (finalScores is Map) {
-        marbleYutCoins = finalScores.map(
+        marbleCoins = finalScores.map(
           (k, v) => MapEntry('$k', (v as num?)?.toInt() ?? 0),
         );
       }
       notifyListeners();
     });
 
-    socket.on('game:marble_yut:land_prompt', (data) {
-      marbleYutLandPrompt = _m(data);
+    socket.on('game:marble:land_prompt', (data) {
+      marbleLandPrompt = _m(data);
       notifyListeners();
     });
 
-    socket.on('game:marble_yut:toll_paid', (data) {
+    socket.on('game:marble:special_tile', (data) {
       final map = _m(data);
       final coinsRaw = map['coins'];
       if (coinsRaw is Map) {
-        marbleYutCoins = coinsRaw.map(
+        coinsRaw.forEach((k, v) {
+          marbleCoins['$k'] = (v as num?)?.toInt() ?? 0;
+        });
+      }
+      onMarbleSpecialTile?.call(map);
+      notifyListeners();
+    });
+
+    socket.on('game:marble:toll_paid', (data) {
+      final map = _m(data);
+      final coinsRaw = map['coins'];
+      if (coinsRaw is Map) {
+        marbleCoins = coinsRaw.map(
           (k, v) => MapEntry('$k', (v as num?)?.toInt() ?? 0),
         );
       }
-      onMarbleYutTollPaid?.call(map);
+      onMarbleTollPaid?.call(map);
       notifyListeners();
     });
 
@@ -1359,6 +1397,80 @@ class SocketService extends ChangeNotifier {
     );
   }
 
+  Future<bool> selectMarbleLobbyCharacter(String charId) async {
+    if (!marbleCharacterIds.contains(charId) || lobbyGameType != 'marble') {
+      return false;
+    }
+    final completer = Completer<bool>();
+    _socket?.emitWithAck(
+      'game:lobby:select_character',
+      {'gameType': 'marble', 'character': charId},
+      ack: (r) {
+        final map = _m(r);
+        if (map['ok'] == true) {
+          final lobby = _m(map['lobby']);
+          lobbyCharacterSelections = _stringMap(lobby['characterSelections']);
+          final players = lobby['players'];
+          lobbyPlayers = players is List
+              ? players.map((e) => '$e').toList()
+              : lobbyPlayers;
+          lobbyHost = lobby['host'] as String? ?? lobbyHost;
+          notifyListeners();
+          completer.complete(true);
+        } else {
+          _log('마블 캐릭터 선택 실패: ${map['reason']}');
+          completer.complete(false);
+        }
+      },
+    );
+    if (_socket == null) return false;
+    return completer.future.timeout(
+      const Duration(seconds: 3),
+      onTimeout: () => false,
+    );
+  }
+
+  Future<void> fetchAndSelectMarbleCharacter() async {
+    // 캐릭터 우선순위: 장착 아이템 → 반대 성별 기본값 → 나머지 목록 순
+    Future<bool> _trySelect(String charId) =>
+        selectMarbleLobbyCharacter(charId);
+
+    String preferredChar = 'k';
+    String fallbackChar = 'ria';
+
+    try {
+      final base = serverUrl ?? '';
+      final token = AuthService().token;
+      if (token != null) {
+        final res = await http.get(
+          Uri.parse('$base/api/shop/equipped?game=marble'),
+          headers: {'Authorization': 'Bearer $token'},
+        );
+        final body = jsonDecode(res.body) as Map;
+        if (body['ok'] == true) {
+          final slots = body['slots'] as Map? ?? {};
+          // 남성 슬롯 우선, 없으면 여성 슬롯
+          final mSlot = slots['marble_character_m'];
+          final fSlot = slots['marble_character_f'];
+          final rawId = (mSlot ?? fSlot)?['character_id'] as String?;
+          if (rawId != null && marbleCharacterIds.contains(rawId)) {
+            preferredChar = rawId;
+            // 반대 성별 기본값을 폴백으로 설정
+            fallbackChar = mSlot != null ? 'ria' : 'k';
+          }
+        }
+      }
+    } catch (_) {}
+
+    // 선호 캐릭터 시도 → 충돌 시 폴백 → 그래도 실패하면 목록 순차 탐색
+    if (await _trySelect(preferredChar)) return;
+    if (await _trySelect(fallbackChar)) return;
+    for (final id in marbleCharacterIds) {
+      if (id == preferredChar || id == fallbackChar) continue;
+      if (await _trySelect(id)) return;
+    }
+  }
+
   void startGameLobby(String gameType) {
     _socket?.emitWithAck(
       'game:lobby:start',
@@ -1687,36 +1799,42 @@ class SocketService extends ChangeNotifier {
     _socket?.emit('game:yut:chat', {'message': trimmed});
   }
 
-  // ─── marble_yut emit ───────────────────────────────────────────────────────
+  void sendMarbleChat(String message) {
+    final trimmed = message.trim();
+    if (trimmed.isEmpty) return;
+    _socket?.emit('game:marble:chat', {'message': trimmed});
+  }
 
-  void newMarbleYutGame({Map<String, String>? characters, String? bgm}) {
+  // ─── marble emit ─────────────────────────────────────────────────────────────
+
+  void newMarbleGame({Map<String, String>? characters, String? bgm}) {
     final payload = <String, dynamic>{};
     if (characters != null && characters.isNotEmpty) {
       payload['characters'] = characters;
     }
     if (bgm != null) payload['bgm'] = bgm;
-    _socket?.emit('game:marble_yut:new', payload);
+    _socket?.emit('game:marble:new', payload);
   }
 
-  void rollMarbleYutStartDice() => _socket?.emit('game:marble_yut:roll_start');
-  void rollMarbleYut() => _socket?.emit('game:marble_yut:roll');
+  void rollMarbleStartDice() => _socket?.emit('game:marble:roll_start');
+  void rollMarble() => _socket?.emit('game:marble:roll');
 
-  void moveMarbleYut(int pieceId, {int moveIndex = 0, int? backdoDir}) {
+  void moveMarble(int pieceId, {int moveIndex = 0, int? backdoDir}) {
     final payload = <String, dynamic>{
       'pieceId': pieceId,
       'moveIndex': moveIndex,
     };
     if (backdoDir != null) payload['backdoDir'] = backdoDir;
-    _socket?.emit('game:marble_yut:move', payload);
+    _socket?.emit('game:marble:move', payload);
   }
 
-  void actMarbleYutLand(String action, int pos) {
-    marbleYutLandPrompt = null;
-    _socket?.emit('game:marble_yut:land_act', {'action': action, 'pos': pos});
+  void actMarbleLand(String action, int pos) {
+    marbleLandPrompt = null;
+    _socket?.emit('game:marble:land_act', {'action': action, 'pos': pos});
   }
 
-  void dismissMarbleYutLandPrompt() {
-    marbleYutLandPrompt = null;
+  void dismissMarbleLandPrompt() {
+    marbleLandPrompt = null;
     notifyListeners();
   }
 
@@ -1800,11 +1918,11 @@ class SocketService extends ChangeNotifier {
         _log('폭탄 복원');
       }
       // M3: 마블윷 게임 복원
-      if (games.containsKey('marble_yut')) {
-        final myt = _m(games['marble_yut']);
-        _applyMarbleYutState(myt);
+      if (games.containsKey('marble')) {
+        final myt = _m(games['marble']);
+        _applyMarbleState(myt);
         // H3: 재접속 시 이미 처리된 landPrompt가 재팝업되지 않도록 초기화
-        marbleYutLandPrompt = null;
+        marbleLandPrompt = null;
         _log('마블윷 복원');
       }
     } catch (e, stack) {
@@ -1883,54 +2001,57 @@ class SocketService extends ChangeNotifier {
     }
   }
 
-  void _applyMarbleYutState(Map<String, dynamic> map) {
-    final nextGameId = map['id'] as String? ?? marbleYutGameId ?? 'active';
-    marbleYutActive = true;
-    marbleYutGameId = nextGameId;
-    marbleYutPhase = map['phase'] as String? ?? marbleYutPhase ?? 'throwing';
-    marbleYutCurrentTurn = map['currentTurn'] as String?;
-    marbleYutCharacters = _stringMap(map['characters']);
-    marbleYutHasDoubleRoll = map['hasDoubleRoll'] == true;
-    marbleYutCatchBonusPending = map['catchBonusPending'] == true;
-    marbleYutCatchBonusUntil = (map['catchBonusUntil'] as num?)?.toInt();
-    marbleYutCatchBonusTarget = map['catchBonusTarget'] as String?;
+  void _applyMarbleState(Map<String, dynamic> map) {
+    final nextGameId = map['id'] as String? ?? marbleGameId ?? 'active';
+    if (nextGameId != marbleGameId) {
+      marbleChatMessages = [];
+    }
+    marbleActive = true;
+    marbleGameId = nextGameId;
+    marblePhase = map['phase'] as String? ?? marblePhase ?? 'throwing';
+    marbleCurrentTurn = map['currentTurn'] as String?;
+    marbleCharacters = _stringMap(map['characters']);
+    marbleHasDoubleRoll = map['hasDoubleRoll'] == true;
+    marbleCatchBonusPending = map['catchBonusPending'] == true;
+    marbleCatchBonusUntil = (map['catchBonusUntil'] as num?)?.toInt();
+    marbleCatchBonusTarget = map['catchBonusTarget'] as String?;
     // H2: 잡기 수행자 저장 — 턴 전환이 일어나독 팔업 트리거 가능
-    marbleYutCatchBonusBy = map['catchBonusBy'] as String?;
-    marbleYutOrderCountdownUntil =
+    marbleCatchBonusBy = map['catchBonusBy'] as String?;
+    marbleOrderCountdownUntil =
         (map['orderCountdownUntil'] as num?)?.toInt();
-    marbleYutStartRolls = _m(map['startRolls'] ?? marbleYutStartRolls);
+    marbleStartRolls = _m(map['startRolls'] ?? marbleStartRolls);
     final pending = map['pendingMoves'];
-    marbleYutPendingMoves =
+    marblePendingMoves =
         pending is List ? List<dynamic>.from(pending) : [];
-    marbleYutRound = (map['round'] as num?)?.toInt() ?? marbleYutRound;
+    marbleRound = (map['round'] as num?)?.toInt() ?? marbleRound;
     if (map['winner'] != null) {
-      marbleYutWinner = map['winner'] as String?;
-      marbleYutWinReason = map['winReason'] as String?;
-      marbleYutActive = false;
+      marbleWinner = map['winner'] as String?;
+      marbleWinReason = map['winReason'] as String?;
+      marbleActive = false;
     }
     final playersRaw = map['players'];
     if (playersRaw is List) {
-      marbleYutPlayers = playersRaw.map((e) => '$e').toList();
+      marblePlayers = playersRaw.map((e) => '$e').toList();
     }
     final piecesRaw = _m(map['pieces']);
     if (piecesRaw.isNotEmpty) {
-      marbleYutPieceDetails = piecesRaw.map(
+      marblePieceDetails = piecesRaw.map(
         (player, value) => MapEntry(player, value is List ? value : []),
       );
     }
     final landsRaw = map['lands'];
     if (landsRaw is Map) {
-      marbleYutLands = Map<String, dynamic>.from(landsRaw);
+      marbleLands = Map<String, dynamic>.from(landsRaw);
     }
     final coinsRaw = map['coins'];
     if (coinsRaw is Map) {
-      marbleYutCoins = coinsRaw.map(
+      marbleCoins = coinsRaw.map(
         (k, v) => MapEntry('$k', (v as num?)?.toInt() ?? 0),
       );
     }
     final equippedRaw = map['equippedItems'];
     if (equippedRaw is Map) {
-      marbleYutEquippedItems = equippedRaw.map(
+      marbleEquippedItems = equippedRaw.map(
         (k, v) =>
             MapEntry('$k', v is Map ? Map<String, dynamic>.from(v) : {}),
       );

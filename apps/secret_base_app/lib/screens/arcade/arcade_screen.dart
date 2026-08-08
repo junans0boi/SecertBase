@@ -22,7 +22,7 @@ import 'games/uno_screen.dart';
 import 'games/tank_screen.dart';
 import 'games/gostop_screen.dart';
 import 'games/yut_screen.dart';
-import 'games/marble_yut_screen.dart';
+import 'games/marble_screen.dart';
 import '../shop/shop_screen.dart';
 import '../../widgets/game_session_presence.dart';
 
@@ -338,7 +338,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       background: kMainSkySoft,
     ),
     _GameInfo(
-      type: 'marble_yut',
+      type: 'marble',
       icon: Icons.castle_rounded,
       title: '마블윷',
       description: '윷판 29칸을 영지로 점령하는 전략 영토 난투 보드게임',
@@ -442,7 +442,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       'penalty' => const PenaltyScreen(),
       'bowling' => const BowlingScreen(),
       'yut' => const YutScreen(),
-      'marble_yut' => const MarbleYutScreen(),
+      'marble' => const MarbleScreen(),
       'bomb' => const BombScreen(),
       'uno' => const UnoScreen(),
       'zero' => const RpsScreen(fixedMode: 'hanabagi'),
@@ -456,7 +456,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       _ => const RpsScreen(),
     };
     // Wrap resumable game types so the server tracks which socket is viewing them.
-    if (type == 'yut' || type == 'marble_yut' || type == 'uno') {
+    if (type == 'yut' || type == 'marble' || type == 'uno') {
       screen = GameSessionPresence(gameType: type, child: screen);
     }
     return screen;
@@ -466,7 +466,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     final socket = SocketService();
     final isActive = switch (game.type) {
       'yut' => socket.yutActive,
-      'marble_yut' => socket.marbleYutActive,
+      'marble' => socket.marbleActive,
       'bomb' => socket.bombActive,
       'uno' => socket.unoActive,
       'gostop' => socket.gostopActive,

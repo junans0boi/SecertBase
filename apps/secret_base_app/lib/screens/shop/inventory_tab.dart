@@ -630,6 +630,7 @@ class _InventoryTabState extends State<InventoryTab> {
                   ('전체', null),
                   ('윷놀이', 'yut'),
                   ('원카드', 'onecard'),
+                  ('마블 작전', 'marble'),
                 ])
                   Padding(
                     padding: const EdgeInsets.only(right: 8),

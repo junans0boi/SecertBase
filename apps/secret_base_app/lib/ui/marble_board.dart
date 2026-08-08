@@ -1,13 +1,26 @@
 import 'dart:math';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../core/socket_service.dart';
 import '../core/yut_audio.dart';
 import 'marble_map_data.dart';
 
 String _defaultDisplayName(String uid) => uid;
 
-class MarbleYutBoard extends StatefulWidget {
+// ─── 돈 포맷 (marble_screen.dart와 동일) ─────────────────────────────────
+String fmm(int n) {
+  if (n == 0) return '0';
+  final abs = n.abs();
+  final sign = n < 0 ? '-' : '';
+  final man = abs ~/ 10000;
+  final rem = abs % 10000;
+  if (man == 0) return '$sign${rem}원';
+  if (rem == 0) return '${sign}${man}만원';
+  return '${sign}${man}만${rem}원';
+}
+
+class MarbleBoard extends StatefulWidget {
   final String? gameId;
   final String? phase;
   final String? turn;
@@ -35,7 +48,7 @@ class MarbleYutBoard extends StatefulWidget {
   final int? coins;
   final Map<String, dynamic> landData; // posStr → {owner, level}
 
-  const MarbleYutBoard({
+  const MarbleBoard({
     super.key,
     this.gameId,
     this.phase,
@@ -54,8 +67,8 @@ class MarbleYutBoard extends StatefulWidget {
     required this.currentUser,
     this.lastRoll,
     this.lastRollAt,
-    this.p1Character = 'honggilldong',
-    this.p2Character = 'miho',
+    this.p1Character = 'k',
+    this.p2Character = 'ria',
     this.p1UserId = '',
     this.p2UserId = '',
     this.displayName = _defaultDisplayName,
@@ -66,7 +79,7 @@ class MarbleYutBoard extends StatefulWidget {
   });
 
   @override
-  State<MarbleYutBoard> createState() => _MarbleYutBoardState();
+  State<MarbleBoard> createState() => _MarbleBoardState();
 }
 
 class _MoveGuideOption {
@@ -81,7 +94,7 @@ class _MoveGuideOption {
   });
 }
 
-class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStateMixin {
+class _MarbleBoardState extends State<MarbleBoard> with TickerProviderStateMixin {
   static const double _pieceSize = 44;
   static const double _guideSize = 56;
 
@@ -102,6 +115,12 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
   int? _selectedPieceId;
   bool _moveInFlight = false;
   int? _lastTrackedRollAt;
+
+  final _socket = SocketService();
+  int _seenMessages = 0;
+  int _chatUnread = 0;
+  Map<String, dynamic>? _chatPreview;
+  Timer? _previewTimer;
 
   String _display(String uid) => widget.displayName(uid);
 
@@ -128,11 +147,13 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
     _revealedRoll = widget.lastRoll;
     if (_revealedRoll != null) _resultBounceCtrl.value = 1.0;
     _lastTrackedRollAt = widget.lastRollAt;
+    _seenMessages = _socket.marbleChatMessages.length;
+    _socket.addListener(_onSocketUpdate);
     _syncCountdown();
   }
 
   @override
-  void didUpdateWidget(MarbleYutBoard oldWidget) {
+  void didUpdateWidget(MarbleBoard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.lastRollAt != oldWidget.lastRollAt && widget.lastRoll != null) {
       _animRoll = widget.lastRoll;
@@ -173,6 +194,8 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
 
   @override
   void dispose() {
+    _socket.removeListener(_onSocketUpdate);
+    _previewTimer?.cancel();
     _countdownTimer?.cancel();
     _moveUnlockTimer?.cancel();
     _resultBounceCtrl.dispose();
@@ -191,12 +214,31 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
       final remainingMs =
           widget.orderCountdownUntil! - DateTime.now().millisecondsSinceEpoch;
       final nextSeconds = (remainingMs / 1000).ceil().clamp(0, 3);
-      if (mounted) setState(() => _countdownSeconds = nextSeconds);
-      else _countdownSeconds = nextSeconds;
+      if (mounted) { setState(() => _countdownSeconds = nextSeconds); }
+      else { _countdownSeconds = nextSeconds; }
       if (nextSeconds <= 0) _countdownTimer?.cancel();
     }
     tick();
     _countdownTimer = Timer.periodic(const Duration(milliseconds: 250), (_) => tick());
+  }
+
+  void _onSocketUpdate() {
+    if (!mounted) return;
+    final msgs = _socket.marbleChatMessages;
+    if (msgs.length > _seenMessages) {
+      final newMsg = msgs.last;
+      if (newMsg['by'] != widget.currentUser) {
+        _previewTimer?.cancel();
+        setState(() {
+          _chatUnread++;
+          _chatPreview = newMsg;
+        });
+        _previewTimer = Timer(const Duration(seconds: 4), () {
+          if (mounted) setState(() => _chatPreview = null);
+        });
+      }
+      _seenMessages = msgs.length;
+    }
   }
 
   void _handleRoll() {
@@ -289,143 +331,11 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
     return Offset(cos(angle), sin(angle)) * 6;
   }
 
-  int _getNextPos(int currentPos, bool isFirstStep, int lastPos) {
-    if (currentPos == 20) return 20;
-    if (isFirstStep) {
-      if (currentPos == 5) return 21;
-      if (currentPos == 10) return 24;
-      if (currentPos == 23) return 26;
-    }
+  int _getNextPos(int currentPos, bool isFirstStep, int lastPos) =>
+      (currentPos + 1) % 24;
 
-    switch (currentPos) {
-      case 0:
-        return 1;
-      case 1:
-        return 2;
-      case 2:
-        return 3;
-      case 3:
-        return 4;
-      case 4:
-        return 5;
-      case 5:
-        return 6;
-      case 6:
-        return 7;
-      case 7:
-        return 8;
-      case 8:
-        return 9;
-      case 9:
-        return 10;
-      case 10:
-        return 11;
-      case 11:
-        return 12;
-      case 12:
-        return 13;
-      case 13:
-        return 14;
-      case 14:
-        return 15;
-      case 15:
-        return 16;
-      case 16:
-        return 17;
-      case 17:
-        return 18;
-      case 18:
-        return 19;
-      case 19:
-        return 20;
-      case 21:
-        return 22;
-      case 22:
-        return 23;
-      case 24:
-        return 25;
-      case 25:
-        return 23;
-      case 23:
-        return lastPos == 22 ? 28 : 26;
-      case 26:
-        return 27;
-      case 27:
-        return 20;
-      case 28:
-        return 29;
-      case 29:
-        return 15;
-    }
-    return 20;
-  }
-
-  int _getPrevPos(int currentPos, int lastPos) {
-    switch (currentPos) {
-      case 0:
-        return 0;
-      case 1:
-        return 0;
-      case 2:
-        return 1;
-      case 3:
-        return 2;
-      case 4:
-        return 3;
-      case 5:
-        return 4;
-      case 6:
-        return 5;
-      case 7:
-        return 6;
-      case 8:
-        return 7;
-      case 9:
-        return 8;
-      case 10:
-        return 9;
-      case 11:
-        return 10;
-      case 12:
-        return 11;
-      case 13:
-        return 12;
-      case 14:
-        return 13;
-      case 15:
-        if (lastPos == 29) return 29;
-        return 14;
-      case 16:
-        return 15;
-      case 17:
-        return 16;
-      case 18:
-        return 17;
-      case 19:
-        return 18;
-      case 20:
-        return lastPos == 0 ? 19 : lastPos;
-      case 21:
-        return 5;
-      case 22:
-        return 21;
-      case 23:
-        return (lastPos == 25 || lastPos == 24 || lastPos == 10) ? 25 : 22;
-      case 24:
-        return 10;
-      case 25:
-        return 24;
-      case 26:
-        return 23;
-      case 27:
-        return 26;
-      case 28:
-        return 23;
-      case 29:
-        return 28;
-    }
-    return 0;
-  }
+  int _getPrevPos(int currentPos, int lastPos) =>
+      (currentPos - 1 + 24) % 24;
 
   int _getLastPos(dynamic p) {
     if (p is Map) return p['lastPos'] as int? ?? 0;
@@ -435,10 +345,9 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
   int _previewMove(dynamic piece, int steps) {
     var pos = _getPos(piece);
     var lastPos = _getLastPos(piece);
-    if (_isFinished(piece)) return 20;
+    if (_isFinished(piece)) return pos;
     if (steps == -1) return _getPrevPos(pos, lastPos);
     for (var i = 0; i < steps; i++) {
-      if (pos == 20) return 20;
       final nextPos = _getNextPos(pos, i == 0, lastPos);
       lastPos = pos;
       pos = nextPos;
@@ -884,10 +793,10 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
     final screenWidth = MediaQuery.of(context).size.width;
     _compact = screenWidth < 430;
     if (_compact) {
-      _cPieceSize = 34.0;
-      _cGuideSize = 48.0;
+      _cPieceSize = 29.0; // §7: 34 * 0.85
+      _cGuideSize = 44.0;
     } else {
-      _cPieceSize = _pieceSize;
+      _cPieceSize = _pieceSize * 0.85; // §7: ≈37.4
       _cGuideSize = _guideSize;
     }
 
@@ -1193,6 +1102,20 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
               roll: _animRoll,
             ),
           ),
+        if (_chatPreview != null)
+          Positioned(
+            left: 12,
+            right: 64,
+            bottom: 72,
+            child: _ChatPreviewBubble(
+              message: _chatPreview!,
+              displayName: widget.displayName,
+              onDismiss: () {
+                _previewTimer?.cancel();
+                setState(() => _chatPreview = null);
+              },
+            ),
+          ),
       ],
     );
   }
@@ -1209,7 +1132,7 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
     void Function(int)? onPieceTap,
     String pieceSkin = 'base',
   }) {
-    final safePieces = pieces ?? List.generate(4, (_) => 0);
+    final safePieces = pieces ?? List.generate(1, (_) => 0);
     final borderColor = isActiveTurn
         ? const Color(0xFFA7D8D1)
         : const Color(0x66FFFFFF);
@@ -1219,18 +1142,16 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
       end: Alignment.bottomRight,
     );
     final profileKeyPrefix = isMe ? 'yut_my_profile' : 'yut_opponent_profile';
-    final cardHeight = _compact ? 96.0 : 104.0;
-    final avatarSize = _compact ? 42.0 : 48.0;
-    final pieceSize = _compact ? 36.0 : 40.0;
-    final completedCount = safePieces.where(_isFinished).length;
-
+    final cardHeight = _compact ? 72.0 : 78.0;   // §7: 0.75x
+    final avatarSize = _compact ? 32.0 : 36.0;   // 0.75x
+    final pieceSize  = _compact ? 27.0 : 30.0;   // 0.75x
     if (!showPieceControls) {
-      final compactPieceSize = _compact ? 16.0 : 18.0;
+      final compactPieceSize = _compact ? 12.0 : 14.0;
       return SizedBox(
-        height: _compact ? 62 : 68,
+        height: _compact ? 46 : 51, // §7: 0.75x
         child: Container(
           key: key,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
           decoration: BoxDecoration(
             gradient: bgGrad,
             borderRadius: BorderRadius.circular(12),
@@ -1273,7 +1194,7 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${4 - completedCount}말 남음',
+                      safePieces.isNotEmpty && _getPos(safePieces.first) > 0 ? '이동 중' : '출발 대기',
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.64),
                         fontSize: 10,
@@ -1350,7 +1271,7 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        isMe ? '내 남은 말' : '상대 남은 말',
+                        isMe ? '내 말' : '상대 말',
                         maxLines: 1,
                         style: TextStyle(
                           color: Colors.white.withValues(alpha: 0.82),
@@ -1581,15 +1502,56 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
                     () => _showSettings(context),
                   ),
                   const SizedBox(width: 4),
-                  _buildActionBtn(
-                    Icons.chat_bubble_outline,
-                    () => _showChat(context),
-                  ),
+                  _buildChatBtn(context),
                 ],
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildChatBtn(BuildContext context) {
+    final size = _compact ? 36.0 : 40.0;
+    return GestureDetector(
+      onTap: () => _showChat(context),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.08),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.14),
+                width: 1,
+              ),
+            ),
+            child: Icon(Icons.chat_bubble_outline, color: Colors.white70, size: size * 0.52),
+          ),
+          if (_chatUnread > 0)
+            Positioned(
+              top: -3,
+              right: -3,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE53935),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.black54, width: 1),
+                ),
+                constraints: const BoxConstraints(minWidth: 16),
+                child: Text(
+                  _chatUnread > 9 ? '9+' : '$_chatUnread',
+                  style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -1640,6 +1602,11 @@ class _MarbleYutBoardState extends State<MarbleYutBoard> with TickerProviderStat
   }
 
   void _showChat(BuildContext context) {
+    setState(() {
+      _chatUnread = 0;
+      _chatPreview = null;
+    });
+    _previewTimer?.cancel();
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -1758,13 +1725,13 @@ class _YutChatSheetState extends State<_YutChatSheet> {
   }
 
   void _send() {
-    _socket.sendYutChat(_messageController.text);
+    _socket.sendMarbleChat(_messageController.text);
     _messageController.clear();
   }
 
   @override
   Widget build(BuildContext context) {
-    final messages = _socket.yutChatMessages;
+    final messages = _socket.marbleChatMessages;
     return SafeArea(
       child: Container(
         height: MediaQuery.sizeOf(context).height * 0.58,
@@ -2008,313 +1975,374 @@ class _MarbleBoardPainter extends CustomPainter {
     this.p2UserId,
   });
 
-  // ── Drawing constants ────────────────────────────────────────────────────
-  static const double _unit = 560.0;
-  static const double _c = 80.0;
+  // ── Board geometry (matches marble_map_data.dart) ──────────────────────
+  static const double _unit  = 560.0;
+  static const double _c     = 70.0;   // corner size
+  static const double _bandW = 20.0;   // color band width (inner edge)
 
+  // Player colors
   static const _p1Color = Color(0xFFE45858);
   static const _p2Color = Color(0xFF4B8DD8);
-  static const _centerBg = Color(0xFF22573E);
-  static const _borderCol = Color(0xFF0D2B1E);
-  static const _tileStroke = Color(0xFF0A2016);
 
   @override
   void paint(Canvas canvas, Size size) {
     final scale = size.width / _unit;
     canvas.save();
     canvas.scale(scale, scale);
-
-    _drawBoard(canvas);
-
+    _drawFrame(canvas);
+    _drawCenterField(canvas);
+    _drawAllTiles(canvas);
+    _drawOwnershipOverlays(canvas);
     canvas.restore();
   }
 
-  void _drawBoard(Canvas canvas) {
-    // 1. Outer board background
-    final boardRect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, 0, _unit, _unit),
-      const Radius.circular(12),
-    );
-    canvas.drawRRect(boardRect, Paint()..color = _borderCol);
+  // ── Board frame & background ──────────────────────────────────────────────
 
-    // 2. Center area
-    const centerInset = _c + 2.0;
-    const centerSize = _unit - centerInset * 2;
-    canvas.drawRect(
-      const Rect.fromLTWH(centerInset, centerInset, centerSize, centerSize),
-      Paint()..color = _centerBg,
+  void _drawFrame(Canvas canvas) {
+    final fullRect = Rect.fromLTWH(0, 0, _unit, _unit);
+
+    // Drop shadow
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(4, 6, _unit - 2, _unit - 2),
+        const Radius.circular(16),
+      ),
+      Paint()..color = const Color(0xCC000000),
     );
 
-    // 3. Diagonal shortcut lanes
-    _drawDiagonals(canvas);
-
-    // 4. Center node
-    _drawCenterNode(canvas);
-
-    // 5. All perimeter tiles
-    for (int pos = 0; pos <= 19; pos++) {
-      _drawPerimeterTile(canvas, pos);
-    }
-
-    // 6. Diagonal shortcut nodes
-    for (final pos in [21, 22, 24, 25, 26, 27, 28, 29]) {
-      _drawShortcutNode(canvas, pos);
-    }
-  }
-
-  void _drawDiagonals(Canvas canvas) {
-    // Diagonal A: pos 5 (520,520) → center (280,280) → pos 15 (40,40)
-    final paintA = Paint()
-      ..color = const Color(0x44705427)
-      ..strokeWidth = 36
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-    canvas.drawLine(
-      const Offset(520, 520),
-      const Offset(40, 40),
-      paintA,
-    );
-
-    // Diagonal B: pos 10 (520,40) → center (280,280) → pos 0 (40,520)
-    final paintB = Paint()
-      ..color = const Color(0x440A5272)
-      ..strokeWidth = 36
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-    canvas.drawLine(
-      const Offset(520, 40),
-      const Offset(40, 520),
-      paintB,
-    );
-
-    // Lane outlines (thinner)
-    final outlineA = Paint()
-      ..color = const Color(0x66B87A3A)
-      ..strokeWidth = 38
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke
-      ..blendMode = BlendMode.overlay;
-    canvas.drawLine(const Offset(520, 520), const Offset(40, 40), outlineA);
-    final outlineB = outlineA..color = const Color(0x661EB8EA);
-    canvas.drawLine(const Offset(520, 40), const Offset(40, 520), outlineB);
-  }
-
-  void _drawCenterNode(Canvas canvas) {
-    const center = Offset(280, 280);
-    canvas.drawCircle(center, 28, Paint()..color = const Color(0xFF6B21A8));
-    canvas.drawCircle(center, 26, Paint()..color = const Color(0xFF9333EA));
-    canvas.drawCircle(
-      center, 28,
+    // Wood-like outer frame
+    final outerRRect = RRect.fromRectAndRadius(fullRect, const Radius.circular(14));
+    canvas.drawRRect(
+      outerRRect,
       Paint()
-        ..color = const Color(0xFFD8B4FE)
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF4A2C0A), Color(0xFF2A1505)],
+        ).createShader(fullRect),
+    );
+
+    // Gold outer trim
+    canvas.drawRRect(
+      outerRRect,
+      Paint()
+        ..color = const Color(0xFFD4A017)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.5,
-    );
-    _drawText(canvas, '🌐', center, 22, Colors.white);
-    _drawText(canvas, '세계중심', center.translate(0, 18), 8, Colors.white70);
-  }
-
-  void _drawPerimeterTile(Canvas canvas, int pos) {
-    final rect = marbleTileRect(pos);
-    if (rect == null) return;
-    final tile = kTileByPos[pos];
-    final isCorner = (pos == 0 || pos == 5 || pos == 10 || pos == 15);
-
-    // Base tile background
-    final bgColor = isCorner
-        ? _cornerBgColor(pos)
-        : const Color(0xFFF0EFE6);
-    canvas.drawRect(rect, Paint()..color = bgColor);
-
-    // Tile border
-    canvas.drawRect(
-      rect,
-      Paint()
-        ..color = _tileStroke
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.0,
+        ..strokeWidth = 3.5,
     );
 
-    if (isCorner) {
-      _drawCornerTile(canvas, pos, rect, tile);
-    } else {
-      _drawPropertyTile(canvas, pos, rect, tile);
-    }
-
-    // Ownership overlay
-    _drawOwnership(canvas, pos, rect);
-  }
-
-  Color _cornerBgColor(int pos) {
-    switch (pos) {
-      case 0:  return const Color(0xFF1A3A0E); // start: dark green
-      case 5:  return const Color(0xFF1A1A2E); // jail: dark navy
-      case 10: return const Color(0xFF0D2B4A); // event: deep blue
-      case 15: return const Color(0xFF0D3530); // free: dark teal
-      default: return const Color(0xFF1A3A0E);
-    }
-  }
-
-  void _drawCornerTile(Canvas canvas, int pos, Rect rect, MarbleTile? tile) {
-    if (tile == null) return;
-    final center = rect.center;
-    final name = tile.name;
-    final emoji = tile.emoji;
-
-    // Color accent stripe
-    final accentPaint = Paint()..color = tile.color.withValues(alpha: 0.9);
-    if (pos == 0) {
-      canvas.drawRect(Rect.fromLTRB(rect.left, rect.bottom - 16, rect.right, rect.bottom), accentPaint);
-    } else if (pos == 5) {
-      canvas.drawRect(Rect.fromLTRB(rect.left, rect.top, rect.right, rect.top + 16), accentPaint);
-    } else if (pos == 10) {
-      canvas.drawRect(Rect.fromLTRB(rect.left, rect.top, rect.right, rect.top + 16), accentPaint);
-    } else if (pos == 15) {
-      canvas.drawRect(Rect.fromLTRB(rect.left, rect.bottom - 16, rect.right, rect.bottom), accentPaint);
-    }
-
-    _drawText(canvas, emoji, center.translate(0, -10), 22, Colors.white);
-    _drawText(canvas, name, center.translate(0, 14), 9.5, Colors.white, fontWeight: FontWeight.w800);
-  }
-
-  void _drawPropertyTile(Canvas canvas, int pos, Rect rect, MarbleTile? tile) {
-    if (tile == null) return;
-    final center = rect.center;
-    final color = tile.color;
-
-    // Color band (inner edge of board)
-    const bandW = 14.0;
-    Rect band;
-    bool isHoriz = (pos >= 1 && pos <= 4) || (pos >= 11 && pos <= 14);
-    if (pos >= 1 && pos <= 4) {
-      // bottom side: band at top (inner)
-      band = Rect.fromLTRB(rect.left, rect.top, rect.right, rect.top + bandW);
-    } else if (pos >= 6 && pos <= 9) {
-      // right side: band at left (inner)
-      band = Rect.fromLTRB(rect.left, rect.top, rect.left + bandW, rect.bottom);
-    } else if (pos >= 11 && pos <= 14) {
-      // top side: band at bottom (inner)
-      band = Rect.fromLTRB(rect.left, rect.bottom - bandW, rect.right, rect.bottom);
-    } else {
-      // left side: band at right (inner)
-      band = Rect.fromLTRB(rect.right - bandW, rect.top, rect.right, rect.bottom);
-    }
-    canvas.drawRect(band, Paint()..color = color);
-
-    // Content area
-    final bool vertical = !isHoriz && (pos >= 6 && pos <= 9 || pos >= 16 && pos <= 19);
-    if (vertical) {
-      // For vertical tiles, rotate canvas
-      final tileCx = center.dx;
-      final tileCy = center.dy;
-      canvas.save();
-      canvas.translate(tileCx, tileCy);
-      // Flip 90°: right side reads up, left side reads down
-      final angle = (pos >= 6 && pos <= 9) ? -pi / 2 : pi / 2;
-      canvas.rotate(angle);
-      _drawText(canvas, tile.emoji, const Offset(0, -10), 16, Colors.black87);
-      _drawText(canvas, tile.name, const Offset(0, 8), 8.5, const Color(0xFF1A1A1A), fontWeight: FontWeight.w700);
-      _drawText(canvas, '${tile.price}만', const Offset(0, 19), 7, const Color(0xFF555555));
-      canvas.restore();
-    } else {
-      // Horizontal tiles
-      final textY = (pos >= 1 && pos <= 4) ? center.dy + 4 : center.dy - 4;
-      _drawText(canvas, tile.emoji, Offset(center.dx, textY - 10), 16, Colors.black87);
-      _drawText(canvas, tile.name, Offset(center.dx, textY + 6), 8.5, const Color(0xFF1A1A1A), fontWeight: FontWeight.w700);
-      _drawText(canvas, '${tile.price}만', Offset(center.dx, textY + 17), 7, const Color(0xFF555555));
-    }
-  }
-
-  void _drawShortcutNode(Canvas canvas, int pos) {
-    final norm = marbleNormalizedCenter(pos);
-    final center = Offset(norm.dx * _unit, norm.dy * _unit);
-    final tile = kTileByPos[pos];
-    if (tile == null) return;
-
-    final bgColor = tile.color;
-    canvas.drawCircle(center, 22, Paint()..color = bgColor.withValues(alpha: 0.9));
-    canvas.drawCircle(
-      center, 22,
+    // Gold inner trim line
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        fullRect.deflate(5.5),
+        const Radius.circular(10),
+      ),
       Paint()
-        ..color = Colors.white.withValues(alpha: 0.5)
+        ..color = const Color(0xFFD4A017).withValues(alpha: 0.45)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.5,
     );
-    _drawText(canvas, tile.emoji, center.translate(0, -5), 13, Colors.white);
-    _drawText(canvas, tile.name, center.translate(0, 10), 7, Colors.white, fontWeight: FontWeight.w700);
+  }
 
-    // Ownership
-    final posStr = '$pos';
-    final land = landData[posStr];
-    if (land is Map) {
-      final owner = land['owner'] as String?;
-      if (owner == p1UserId) {
-        canvas.drawCircle(center, 24, Paint()..color = _p1Color.withValues(alpha: 0.5)..style = PaintingStyle.stroke..strokeWidth = 3);
-      } else if (owner == p2UserId) {
-        canvas.drawCircle(center, 24, Paint()..color = _p2Color.withValues(alpha: 0.5)..style = PaintingStyle.stroke..strokeWidth = 3);
+  // ── Center felt area ──────────────────────────────────────────────────────
+
+  void _drawCenterField(Canvas canvas) {
+    const centerLeft   = _c;
+    const centerTop    = _c;
+    const centerW      = _unit - _c * 2;
+    const centerH      = _unit - _c * 2;
+    const centerRect   = Rect.fromLTWH(centerLeft, centerTop, centerW, centerH);
+    const cx = _unit / 2;
+    const cy = _unit / 2;
+
+    // Felt gradient
+    canvas.drawRect(
+      centerRect,
+      Paint()
+        ..shader = const RadialGradient(
+          center: Alignment.center,
+          radius: 0.75,
+          colors: [Color(0xFF1E5433), Color(0xFF0D2E1B)],
+        ).createShader(centerRect),
+    );
+
+    // Subtle concentric decorative rings
+    final ringPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.04)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+    for (var r in [55.0, 100.0, 145.0, 185.0]) {
+      canvas.drawCircle(const Offset(cx, cy), r, ringPaint);
+    }
+
+    // Game logo text
+    _drawLabel(canvas, '🏰', const Offset(cx, cy - 34), 48, Colors.white);
+    _drawLabel(canvas, 'MARBLE', const Offset(cx, cy + 22), 26,
+      const Color(0xFFD4A017), weight: FontWeight.w900);
+    _drawLabel(canvas, 'SECRET BASE', const Offset(cx, cy + 44), 10,
+      const Color(0xFF5AAA72));
+  }
+
+  // ── All perimeter tiles ───────────────────────────────────────────────────
+
+  void _drawAllTiles(Canvas canvas) {
+    for (int pos = 0; pos < 24; pos++) {
+      final tile = kTileByPos[pos];
+      if (tile == null) continue;
+      final rect = marbleTileRect(pos);
+      if (rect == null) continue;
+
+      if (_isCorner(pos)) {
+        _drawCorner(canvas, pos, rect, tile);
+      } else {
+        _drawSideTile(canvas, pos, rect, tile);
       }
     }
   }
 
-  void _drawOwnership(Canvas canvas, int pos, Rect rect) {
-    final posStr = '$pos';
-    final land = landData[posStr];
-    if (land is! Map) return;
-    final owner = land['owner'] as String?;
-    final level = land['level'] as int? ?? 1;
-    if (owner == null) return;
+  bool _isCorner(int pos) => pos == 0 || pos == 6 || pos == 12 || pos == 18;
 
-    final ownerColor = (owner == p1UserId) ? _p1Color : _p2Color;
+  // Which perimeter side this pos belongs to (non-corners only).
+  // 0=bottom, 1=right, 2=top, 3=left
+  int _sideOf(int pos) {
+    if (pos >= 1  && pos <= 5)  return 0;
+    if (pos >= 7  && pos <= 11) return 1;
+    if (pos >= 13 && pos <= 17) return 2;
+    return 3; // 19–23
+  }
 
-    // Ownership tint
-    canvas.drawRect(
-      rect.deflate(1),
-      Paint()..color = ownerColor.withValues(alpha: 0.18),
-    );
+  // ── Corner tiles ─────────────────────────────────────────────────────────
 
-    // Ownership border
-    canvas.drawRect(
-      rect.deflate(0.5),
+  void _drawCorner(Canvas canvas, int pos, Rect rect, MarbleTile tile) {
+    // Gradient background per corner personality
+    final List<Color> grad;
+    switch (pos) {
+      case 0:  grad = [const Color(0xFF236B2C), const Color(0xFF0E3515)]; break; // START green
+      case 6:  grad = [const Color(0xFF252545), const Color(0xFF10102A)]; break; // JAIL navy
+      case 12: grad = [const Color(0xFF113560), const Color(0xFF061A35)]; break; // TAX blue
+      case 18: grad = [const Color(0xFF0E4040), const Color(0xFF062020)]; break; // GATE teal
+      default: grad = [const Color(0xFF1A1A2E), const Color(0xFF0D0D17)];
+    }
+    canvas.drawRect(rect,
+      Paint()..shader = LinearGradient(
+        begin: Alignment.topLeft, end: Alignment.bottomRight, colors: grad,
+      ).createShader(rect));
+
+    // Diagonal color accent stripe in corner
+    final accentPath = Path();
+    const stripeSize = 28.0;
+    switch (pos) {
+      case 0: // bottom-left
+        accentPath
+          ..moveTo(rect.left, rect.bottom)
+          ..lineTo(rect.left + stripeSize, rect.bottom)
+          ..lineTo(rect.left, rect.bottom - stripeSize)
+          ..close();
+        break;
+      case 6: // bottom-right
+        accentPath
+          ..moveTo(rect.right, rect.bottom)
+          ..lineTo(rect.right - stripeSize, rect.bottom)
+          ..lineTo(rect.right, rect.bottom - stripeSize)
+          ..close();
+        break;
+      case 12: // top-right
+        accentPath
+          ..moveTo(rect.right, rect.top)
+          ..lineTo(rect.right - stripeSize, rect.top)
+          ..lineTo(rect.right, rect.top + stripeSize)
+          ..close();
+        break;
+      case 18: // top-left
+        accentPath
+          ..moveTo(rect.left, rect.top)
+          ..lineTo(rect.left + stripeSize, rect.top)
+          ..lineTo(rect.left, rect.top + stripeSize)
+          ..close();
+        break;
+    }
+    canvas.drawPath(accentPath, Paint()..color = tile.color.withValues(alpha: 0.85));
+
+    // Colored border
+    canvas.drawRect(rect,
       Paint()
-        ..color = ownerColor.withValues(alpha: 0.9)
+        ..color = tile.color.withValues(alpha: 0.6)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.5,
-    );
+        ..strokeWidth = 2.5);
 
-    // Level stars
-    if (level > 1) {
-      final starText = '★' * (level - 1);
-      final center = rect.center;
-      final isCorner = (pos == 0 || pos == 5 || pos == 10 || pos == 15);
-      final starPos = isCorner
-          ? center.translate(0, 26)
-          : center.translate(0, 28);
-      _drawText(canvas, starText, starPos, 9, ownerColor, fontWeight: FontWeight.w900);
+    final ctr = rect.center;
+    _drawLabel(canvas, tile.emoji, ctr.translate(0, -12), 26, Colors.white);
+    _drawLabel(canvas, tile.name, ctr.translate(0, 14), 10, Colors.white,
+      weight: FontWeight.w800);
+  }
+
+  // ── Side property / special tiles ────────────────────────────────────────
+
+  void _drawSideTile(Canvas canvas, int pos, Rect rect, MarbleTile tile) {
+    final side = _sideOf(pos);
+    final isCard = tile.type == MarbleTileType.card;
+    final isTax  = tile.type == MarbleTileType.tax;
+
+    // ── Background ──
+    if (isCard) {
+      canvas.drawRect(rect,
+        Paint()..shader = LinearGradient(
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+          colors: [const Color(0xFF0A2448), const Color(0xFF051428)],
+        ).createShader(rect));
+    } else if (isTax) {
+      canvas.drawRect(rect,
+        Paint()..shader = LinearGradient(
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+          colors: [const Color(0xFF252525), const Color(0xFF151515)],
+        ).createShader(rect));
+    } else {
+      // Property — cream/white
+      canvas.drawRect(rect, Paint()..color = const Color(0xFFF5F2EA));
+
+      // Color band on inner edge
+      final bandRect = _bandRectFor(rect, side);
+      canvas.drawRect(bandRect,
+        Paint()..shader = LinearGradient(
+          begin: side == 0 || side == 2
+              ? Alignment.centerLeft : Alignment.topCenter,
+          end:   side == 0 || side == 2
+              ? Alignment.centerRight : Alignment.bottomCenter,
+          colors: [tile.color, tile.color.withValues(alpha: 0.7)],
+        ).createShader(bandRect));
+
+      // Small shine on band
+      canvas.drawRect(bandRect,
+        Paint()
+          ..color = Colors.white.withValues(alpha: 0.18)
+          ..blendMode = BlendMode.srcOver);
+    }
+
+    // ── Tile border ──
+    canvas.drawRect(rect,
+      Paint()
+        ..color = const Color(0xFF888888).withValues(alpha: 0.5)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.6);
+
+    // ── Content ──
+    final ctr = rect.center;
+    if (isCard) {
+      _drawLabel(canvas, '🃏', ctr.translate(0, -7), 20, Colors.white);
+      _drawLabel(canvas, '황금열쇠', ctr.translate(0, 11), 6,
+        const Color(0xFF7EC8FF), weight: FontWeight.w700);
+    } else if (isTax) {
+      _drawLabel(canvas, '⚖️', ctr.translate(0, -7), 20, Colors.white);
+      _drawLabel(canvas, '세금', ctr.translate(0, 11), 6,
+        Colors.white70, weight: FontWeight.w700);
+    } else if (side == 1 || side == 3) {
+      // Vertical sides — rotate content
+      final angle = (side == 1) ? -pi / 2 : pi / 2;
+      canvas.save();
+      canvas.translate(ctr.dx, ctr.dy);
+      canvas.rotate(angle);
+      _drawLabel(canvas, tile.emoji, const Offset(0, -8), 15, Colors.black87);
+      _drawLabel(canvas, tile.name, const Offset(0, 9), 7.5,
+        const Color(0xFF1A1A1A), weight: FontWeight.w700);
+      if (tile.price > 0) {
+        _drawLabel(canvas, '${tile.price}만', const Offset(0, 19), 6.5,
+          const Color(0xFF555555));
+      }
+      canvas.restore();
+    } else {
+      // Horizontal tiles (top/bottom)
+      final contentCy = side == 0
+          ? ctr.dy + _bandW * 0.5
+          : ctr.dy - _bandW * 0.5;
+      _drawLabel(canvas, tile.emoji, Offset(ctr.dx, contentCy - 8), 15, Colors.black87);
+      _drawLabel(canvas, tile.name, Offset(ctr.dx, contentCy + 8), 7.5,
+        const Color(0xFF1A1A1A), weight: FontWeight.w700);
+      if (tile.price > 0) {
+        _drawLabel(canvas, '${tile.price}만', Offset(ctr.dx, contentCy + 18), 6.5,
+          const Color(0xFF555555));
+      }
     }
   }
 
-  void _drawText(
+  // Returns the color-band Rect for a given tile and its side.
+  // The band sits on the INNER edge (toward the center).
+  Rect _bandRectFor(Rect r, int side) {
+    switch (side) {
+      case 0: return Rect.fromLTWH(r.left, r.top,          r.width,  _bandW); // bottom→band at top
+      case 1: return Rect.fromLTWH(r.left, r.top,          _bandW,   r.height); // right→band at left
+      case 2: return Rect.fromLTWH(r.left, r.bottom - _bandW, r.width, _bandW); // top→band at bottom
+      case 3: return Rect.fromLTWH(r.right - _bandW, r.top, _bandW,  r.height); // left→band at right
+      default: return Rect.fromLTWH(r.left, r.top, r.width, _bandW);
+    }
+  }
+
+  // ── Ownership overlays ────────────────────────────────────────────────────
+
+  void _drawOwnershipOverlays(Canvas canvas) {
+    for (int pos = 0; pos < 24; pos++) {
+      final posStr = '$pos';
+      final land = landData[posStr];
+      if (land is! Map) continue;
+      final owner = land['owner'] as String?;
+      final level = (land['level'] as num?)?.toInt() ?? 1;
+      if (owner == null) continue;
+
+      final rect = marbleTileRect(pos);
+      if (rect == null) continue;
+
+      final ownerColor = (owner == p1UserId) ? _p1Color : _p2Color;
+
+      // Color tint
+      canvas.drawRect(rect.deflate(1),
+        Paint()..color = ownerColor.withValues(alpha: 0.15));
+
+      // Bold ownership border
+      canvas.drawRect(rect.deflate(0.5),
+        Paint()
+          ..color = ownerColor
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.0);
+
+      // Building level indicators
+      if (level > 1) {
+        final side = _isCorner(pos) ? 0 : _sideOf(pos);
+        final Offset iconPos;
+        switch (side) {
+          case 0: iconPos = Offset(rect.right - 9, rect.top + 5); break;
+          case 1: iconPos = Offset(rect.left + 5, rect.bottom - 9); break;
+          case 2: iconPos = Offset(rect.right - 9, rect.bottom - 14); break;
+          case 3: iconPos = Offset(rect.right - 14, rect.top + 5); break;
+          default: iconPos = rect.center;
+        }
+        final buildings = level == 2 ? '🏠' : level == 3 ? '🏠🏠' : '🏢';
+        _drawLabel(canvas, buildings, iconPos, 8, Colors.white);
+      }
+    }
+  }
+
+  // ── Text helper ───────────────────────────────────────────────────────────
+
+  void _drawLabel(
     Canvas canvas,
     String text,
     Offset center,
-    double fontSize,
+    double size,
     Color color, {
-    FontWeight fontWeight = FontWeight.w400,
+    FontWeight weight = FontWeight.w400,
   }) {
     final tp = TextPainter(
       text: TextSpan(
         text: text,
         style: TextStyle(
-          fontSize: fontSize,
+          fontSize: size,
           color: color,
-          fontWeight: fontWeight,
+          fontWeight: weight,
           height: 1.0,
         ),
       ),
       textDirection: TextDirection.ltr,
       textAlign: TextAlign.center,
-    );
-    tp.layout();
+    )..layout();
     tp.paint(canvas, center.translate(-tp.width / 2, -tp.height / 2));
   }
 
@@ -2325,7 +2353,7 @@ class _MarbleBoardPainter extends CustomPainter {
       old.p2UserId != p2UserId;
 }
 
-class _DiceRollButton extends StatelessWidget {
+class _DiceRollButton extends StatefulWidget {
   final bool enabled;
   final bool loading;
   final bool compact;
@@ -2339,71 +2367,118 @@ class _DiceRollButton extends StatelessWidget {
   });
 
   @override
+  State<_DiceRollButton> createState() => _DiceRollButtonState();
+}
+
+class _DiceRollButtonState extends State<_DiceRollButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _pressCtrl;
+  late Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _pressCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 100),
+      reverseDuration: const Duration(milliseconds: 150),
+    );
+    _scale = Tween<double>(begin: 1.0, end: 0.93).animate(
+      CurvedAnimation(parent: _pressCtrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pressCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onTapDown(_) {
+    if (widget.enabled && !widget.loading) _pressCtrl.forward();
+  }
+
+  void _onTapUp(_) {
+    _pressCtrl.reverse();
+    if (widget.enabled && !widget.loading) widget.onTap();
+  }
+
+  void _onTapCancel() => _pressCtrl.reverse();
+
+  @override
   Widget build(BuildContext context) {
-    final width = compact ? 122.0 : 140.0;
-    final height = compact ? 58.0 : 66.0;
+    final size = widget.compact ? 70.0 : 80.0;
     return Semantics(
       button: true,
-      enabled: enabled,
+      enabled: widget.enabled,
       label: '주사위 굴리기',
       child: GestureDetector(
-        onTap: enabled && !loading ? onTap : null,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          width: width,
-          height: height,
-          decoration: BoxDecoration(
-            gradient: enabled
-                ? const LinearGradient(
-                    colors: [Color(0xFF5B9BFF), Color(0xFF2554D4)],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  )
-                : null,
-            color: enabled ? null : Colors.white.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: enabled ? const Color(0xFF9EC4FF) : Colors.white.withValues(alpha: 0.14),
-              width: enabled ? 1.5 : 1,
+        onTapDown: _onTapDown,
+        onTapUp: _onTapUp,
+        onTapCancel: _onTapCancel,
+        child: ScaleTransition(
+          scale: _scale,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: widget.enabled && !widget.loading
+                  ? const RadialGradient(
+                      colors: [Color(0xFFFF5E7E), Color(0xFFE91E63), Color(0xFFC2185B)],
+                      center: Alignment(-0.3, -0.4),
+                    )
+                  : null,
+              color: widget.enabled
+                  ? null
+                  : Colors.white.withValues(alpha: 0.1),
+              boxShadow: widget.enabled && !widget.loading
+                  ? [
+                      BoxShadow(
+                        color: const Color(0xFFE91E63).withValues(alpha: 0.5),
+                        blurRadius: 16,
+                        spreadRadius: 2,
+                        offset: const Offset(0, 4),
+                      ),
+                      const BoxShadow(
+                        color: Color(0x44000000),
+                        blurRadius: 8,
+                        offset: Offset(0, 2),
+                      ),
+                    ]
+                  : null,
             ),
-            boxShadow: enabled
-                ? const [BoxShadow(color: Color(0x66000000), blurRadius: 7, offset: Offset(0, 3))]
-                : null,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                loading ? '🎲' : '🎲',
-                style: TextStyle(fontSize: compact ? 24 : 28),
-              ),
-              SizedBox(width: compact ? 6 : 8),
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                widget.loading
+                    ? SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Colors.white.withValues(alpha: 0.7),
+                        ),
+                      )
+                    : Text(
+                        'ROLL',
+                        style: GoogleFonts.notoSans(
+                          color: widget.enabled ? Colors.white : Colors.white30,
+                          fontSize: widget.compact ? 13 : 15,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                if (!widget.loading) ...[
+                  const SizedBox(height: 2),
                   Text(
-                    loading ? '굴리는 중' : '주사위',
-                    style: TextStyle(
-                      fontSize: compact ? 15 : 17,
-                      fontWeight: FontWeight.w900,
-                      color: enabled ? Colors.white : Colors.white38,
-                      height: 1,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    loading ? '결과 확인 중' : '굴려주세요',
-                    style: TextStyle(
-                      fontSize: compact ? 9 : 10,
-                      fontWeight: FontWeight.w700,
-                      color: enabled ? Colors.white70 : Colors.white30,
-                      height: 1,
-                    ),
+                    '🎲',
+                    style: TextStyle(fontSize: widget.compact ? 16 : 18),
                   ),
                 ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -2510,6 +2585,17 @@ class _CharacterTokenPainter extends CustomPainter {
           _drawNolbu(canvas, radius, faceCenter, faceR, bodyCenter);
         case 'miho':
           _drawMiho(canvas, radius, faceCenter, faceR, bodyCenter);
+        case 'k' ||
+              'ria' ||
+              'luna' ||
+              'rex' ||
+              'zia' ||
+              'drv' ||
+              'hayun' ||
+              'jake' ||
+              'nova' ||
+              'omega':
+          _drawSpyAgent(canvas, radius, faceCenter, faceR, bodyCenter, character);
         default:
           _drawHong(canvas, radius, faceCenter, faceR, bodyCenter);
       }
@@ -2722,6 +2808,105 @@ class _CharacterTokenPainter extends CustomPainter {
     );
   }
 
+  void _drawSpyAgent(
+    Canvas canvas,
+    double radius,
+    Offset faceCenter,
+    double faceR,
+    Offset bodyCenter,
+    String id,
+  ) {
+    final (skinHex, hairHex, outfitHex, symbol) = switch (id) {
+      'k' => (0xFFC88F60, 0xFF141420, 0xFF0C1B2A, 'K'),
+      'ria' => (0xFFE0BFAA, 0xFF160810, 0xFF1E2D4A, 'R'),
+      'luna' => (0xFFF2D8BC, 0xFF5B21B6, 0xFF5B21B6, 'L'),
+      'rex' => (0xFFC07840, 0xFF6B3A12, 0xFF5C3010, 'X'),
+      'zia' => (0xFFDCCAB4, 0xFF070C14, 0xFF0E7490, 'Z'),
+      'drv' => (0xFFDCC8A8, 0xFF8898AA, 0xFFD0D8E8, 'V'),
+      'hayun' => (0xFFC89060, 0xFF1C1008, 0xFF3D5A2A, 'H'),
+      'jake' => (0xFFEACBA0, 0xFF7B4A18, 0xFF1D3461, 'J'),
+      'nova' => (0xFFD4956A, 0xFF2C1810, 0xFFC2410C, 'N'),
+      _ => (0xFF505060, 0xFF050810, 0xFF080C10, 'Ω'),   // omega / unknown
+    };
+
+    final skin = Color(skinHex);
+    final hair = Color(hairHex);
+    final outfit = Color(outfitHex);
+    final isOmega = id == 'omega';
+
+    // Hair / hood (drawn before face)
+    if (isOmega) {
+      // Full dark hood
+      canvas.drawCircle(
+        faceCenter.translate(0, -faceR * 0.1),
+        faceR * 1.1,
+        Paint()..color = hair,
+      );
+    } else {
+      // Hair cap arc above face
+      canvas.drawArc(
+        Rect.fromCenter(
+          center: faceCenter.translate(0, faceR * 0.1),
+          width: faceR * 2.2,
+          height: faceR * 2.2,
+        ),
+        pi,
+        pi,
+        false,
+        Paint()..color = hair,
+      );
+    }
+
+    // Face
+    if (!isOmega) {
+      _drawFace(canvas, faceCenter, faceR, skin);
+    } else {
+      // Masked face — dark with glowing green eyes
+      canvas.drawCircle(faceCenter, faceR, Paint()..color = const Color(0xFF101418));
+      final glow = Paint()..color = const Color(0xFF00FF88);
+      canvas.drawCircle(
+        faceCenter.translate(-faceR * 0.32, -faceR * 0.08),
+        faceR * 0.14,
+        glow,
+      );
+      canvas.drawCircle(
+        faceCenter.translate(faceR * 0.32, -faceR * 0.08),
+        faceR * 0.14,
+        glow,
+      );
+    }
+
+    // Body (suit)
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: bodyCenter,
+          width: faceR * 1.6,
+          height: radius * 0.40,
+        ),
+        Radius.circular(radius * 0.08),
+      ),
+      Paint()..color = outfit,
+    );
+
+    // Symbol letter on body
+    final tp = TextPainter(
+      text: TextSpan(
+        text: symbol,
+        style: TextStyle(
+          color: Colors.white.withValues(alpha: 0.85),
+          fontSize: faceR * 0.72,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(
+      canvas,
+      bodyCenter - Offset(tp.width / 2, tp.height / 2),
+    );
+  }
+
   @override
   bool shouldRepaint(covariant _CharacterTokenPainter oldDelegate) {
     return oldDelegate.character != character ||
@@ -2731,93 +2916,184 @@ class _CharacterTokenPainter extends CustomPainter {
   }
 }
 
+// ─── Chat preview bubble ─────────────────────────────────────────────────────
+
+class _ChatPreviewBubble extends StatefulWidget {
+  final Map<String, dynamic> message;
+  final String Function(String) displayName;
+  final VoidCallback onDismiss;
+
+  const _ChatPreviewBubble({
+    required this.message,
+    required this.displayName,
+    required this.onDismiss,
+  });
+
+  @override
+  State<_ChatPreviewBubble> createState() => _ChatPreviewBubbleState();
+}
+
+class _ChatPreviewBubbleState extends State<_ChatPreviewBubble>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _opacity;
+  late Animation<Offset> _slide;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 280),
+    )..forward();
+    _opacity = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
+    _slide = Tween<Offset>(
+      begin: const Offset(-0.15, 0),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final by = widget.message['by'] as String? ?? '';
+    final text = widget.message['message'] as String? ?? '';
+    final name = widget.displayName(by);
+
+    return FadeTransition(
+      opacity: _opacity,
+      child: SlideTransition(
+        position: _slide,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xEE1E2530),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+            boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 10, offset: Offset(0, 3))],
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.chat_bubble_rounded, color: Color(0xFF79C8C4), size: 16),
+              const SizedBox(width: 8),
+              Expanded(
+                child: RichText(
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  text: TextSpan(
+                    children: [
+                      TextSpan(
+                        text: '$name: ',
+                        style: const TextStyle(
+                          color: Color(0xFF79C8C4),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      TextSpan(
+                        text: text,
+                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: widget.onDismiss,
+                child: Icon(Icons.close_rounded, color: Colors.white.withValues(alpha: 0.5), size: 16),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ─── Dice Roll Animation ────────────────────────────────────────────────────
 
-class _DiceRollOverlay extends StatelessWidget {
+class _DiceRollOverlay extends StatefulWidget {
   final Animation<double> animation;
   final Map<String, dynamic>? roll;
 
   const _DiceRollOverlay({required this.animation, this.roll});
 
-  String _dieFace(int n) {
-    const faces = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
-    return (n >= 1 && n <= 6) ? faces[n] : '🎲';
+  @override
+  State<_DiceRollOverlay> createState() => _DiceRollOverlayState();
+}
+
+class _DiceRollOverlayState extends State<_DiceRollOverlay> {
+  int _face1 = 3;
+  int _face2 = 5;
+  Timer? _timer;
+  final _rng = Random();
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(milliseconds: 55), _tick);
+  }
+
+  void _tick(Timer _) {
+    if (!mounted) return;
+    final t = widget.animation.value;
+    if (t >= 0.88 && widget.roll != null) {
+      _timer?.cancel();
+      final roll = widget.roll!;
+      setState(() {
+        _face1 = (roll['dice1'] as int? ?? 1).clamp(1, 6);
+        _face2 = (roll['dice2'] as int? ?? 1).clamp(1, 6);
+      });
+    } else if (t < 0.88) {
+      setState(() {
+        _face1 = _rng.nextInt(6) + 1;
+        _face2 = _rng.nextInt(6) + 1;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: animation,
-      builder: (ctx, _) {
-        final t = animation.value;
-        final revealed = t > 0.85 && roll != null;
-        final dice1 = roll?['dice1'] as int?;
-        final dice2 = roll?['dice2'] as int?;
-        final total = roll?['total'] as int?;
-        final isDouble = roll?['isDouble'] as bool? ?? false;
+      animation: widget.animation,
+      builder: (context2, _) {
+        final t = widget.animation.value;
+        final revealed = t >= 0.88 && widget.roll != null;
 
         return Container(
-          color: Colors.black.withValues(alpha: 0.85),
+          color: Colors.black.withValues(alpha: (t * 0.88).clamp(0.0, 0.88)),
           child: Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Row(
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    _AnimatedDie(
-                      t: t,
-                      face: revealed ? (dice1 ?? 0) : 0,
-                      offset: -1,
-                    ),
-                    const SizedBox(width: 24),
-                    _AnimatedDie(
-                      t: t,
-                      face: revealed ? (dice2 ?? 0) : 0,
-                      offset: 1,
-                    ),
+                    _Die3D(t: t, face: _face1, delay: 0.0),
+                    const SizedBox(width: 22),
+                    _Die3D(t: t, face: _face2, delay: 0.06),
                   ],
                 ),
                 if (revealed) ...[
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 28),
                   TweenAnimationBuilder<double>(
                     tween: Tween(begin: 0.0, end: 1.0),
-                    duration: const Duration(milliseconds: 400),
-                    builder: (_, v, child) => Transform.scale(
-                      scale: Curves.elasticOut.transform(v),
-                      child: child,
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          '${_dieFace(dice1 ?? 0)} + ${_dieFace(dice2 ?? 0)} = $total',
-                          style: const TextStyle(
-                            fontSize: 36,
-                            fontWeight: FontWeight.w900,
-                            color: Colors.white,
-                            shadows: [Shadow(color: Colors.black54, blurRadius: 8)],
-                          ),
-                        ),
-                        if (isDouble)
-                          Container(
-                            margin: const EdgeInsets.only(top: 10),
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFFD700),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: const Text(
-                              '🎯 더블! 한 번 더!',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                                color: Color(0xFF4A2512),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
+                    duration: const Duration(milliseconds: 480),
+                    curve: Curves.elasticOut,
+                    builder: (_, v, child) => Transform.scale(scale: v, child: child),
+                    child: _buildResult(widget.roll!),
                   ),
                 ],
               ],
@@ -2827,51 +3103,267 @@ class _DiceRollOverlay extends StatelessWidget {
       },
     );
   }
+
+  Widget _buildResult(Map<String, dynamic> roll) {
+    const faceStr = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+    final dice1   = (roll['dice1'] as int? ?? 1).clamp(1, 6);
+    final dice2   = (roll['dice2'] as int? ?? 1).clamp(1, 6);
+    final total   = roll['total'] as int? ?? 0;
+    final isDouble = roll['isDouble'] as bool? ?? false;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '${faceStr[dice1]} + ${faceStr[dice2]} = $total',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 38,
+            fontWeight: FontWeight.w900,
+            shadows: [Shadow(color: Colors.black54, blurRadius: 8)],
+          ),
+        ),
+        if (isDouble) ...[
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFD700),
+              borderRadius: BorderRadius.circular(22),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFFFD700).withValues(alpha: 0.5),
+                  blurRadius: 14,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: const Text(
+              '🎯 더블! 한 번 더!',
+              style: TextStyle(
+                color: Color(0xFF4A2512),
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
 }
 
-class _AnimatedDie extends StatelessWidget {
+// ── 3D rotating die widget ────────────────────────────────────────────────────
+
+class _Die3D extends StatefulWidget {
   final double t;
   final int face;
-  final double offset;
+  final double delay;
 
-  const _AnimatedDie({required this.t, required this.face, required this.offset});
+  const _Die3D({required this.t, required this.face, this.delay = 0.0});
 
-  String _randomFace() {
-    const faces = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
-    return faces[(DateTime.now().microsecondsSinceEpoch + offset.toInt()) % 6];
+  @override
+  State<_Die3D> createState() => _Die3DState();
+}
+
+class _Die3DState extends State<_Die3D> {
+  double _rx = 0.3;
+  double _ry = 0.5;
+  Timer? _rotTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    final rng = Random();
+    _rx = rng.nextDouble() * pi;
+    _ry = rng.nextDouble() * pi;
+    _rotTimer = Timer.periodic(const Duration(milliseconds: 16), _tick);
   }
 
-  String _dieFace(int n) {
-    const faces = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
-    return (n >= 1 && n <= 6) ? faces[n] : '🎲';
+  void _tick(Timer _) {
+    if (!mounted) return;
+    final tLocal = (widget.t - widget.delay).clamp(0.0, 1.0);
+    if (tLocal >= 0.88) {
+      _rotTimer?.cancel();
+      return;
+    }
+    final progress = tLocal / 0.88;
+    // Start fast (~0.25 rad/frame), ease out to near zero by t=0.88
+    final speed = (1.0 - progress * progress) * 0.28;
+    setState(() {
+      _rx += speed;
+      _ry += speed * 1.35; // slightly different axis for tumble effect
+    });
+  }
+
+  @override
+  void dispose() {
+    _rotTimer?.cancel();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final revealed = t > 0.85 && face > 0;
-    final scale = revealed
-        ? 1.0
-        : (0.8 + 0.2 * (1 - (t * 8 % 1)));
+    final tLocal = (widget.t - widget.delay).clamp(0.0, 1.0);
+    final double bounceScale;
+    if (tLocal < 0.88) {
+      bounceScale = 1.0;
+    } else {
+      final landT = ((tLocal - 0.88) / 0.12).clamp(0.0, 1.0);
+      bounceScale = 1.0 + sin(landT * pi) * 0.13;
+    }
 
-    return Transform.translate(
-      offset: Offset(offset * 12 * (1 - t), 0),
-      child: Transform.scale(
-        scale: scale,
-        child: Container(
-          width: 80,
-          height: 80,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 12, offset: Offset(0, 4))],
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            revealed ? _dieFace(face) : _randomFace(),
-            style: const TextStyle(fontSize: 48),
-          ),
+    return Transform.scale(
+      scale: bounceScale,
+      child: SizedBox(
+        width: 88,
+        height: 88,
+        child: CustomPaint(
+          painter: _Dice3DPainter(face: widget.face.clamp(1, 6), rx: _rx, ry: _ry),
         ),
       ),
     );
   }
+}
+
+// ── Full 3D die CustomPainter ─────────────────────────────────────────────────
+
+class _Dice3DPainter extends CustomPainter {
+  final int face;
+  final double rx;
+  final double ry;
+
+  const _Dice3DPainter({required this.face, this.rx = 0, this.ry = 0});
+
+  static const _baseColor = Color(0xFFCC2525);
+  static const _edgeColor = Color(0xFF3A0000);
+
+  // 8 vertices of unit cube
+  static const _vx = [-1.0, 1.0, 1.0,-1.0,-1.0, 1.0, 1.0,-1.0];
+  static const _vy = [-1.0,-1.0, 1.0, 1.0,-1.0,-1.0, 1.0, 1.0];
+  static const _vz = [-1.0,-1.0,-1.0,-1.0, 1.0, 1.0, 1.0, 1.0];
+
+  // Face defs: [vertex indices CCW from outside], face value
+  // Standard die: 1↔6, 2↔5, 3↔4; 1 on top (+z), 2 faces camera (+y), 3 on right (+x)
+  static const _fi = [[4,5,6,7],[3,2,1,0],[7,6,2,3],[0,1,5,4],[1,2,6,5],[4,7,3,0]];
+  static const _fv = [1, 6, 2, 5, 3, 4]; // face values
+  // Face normals (local space)
+  static const _nx = [0.0, 0.0, 0.0, 0.0, 1.0,-1.0];
+  static const _ny = [0.0, 0.0, 1.0,-1.0, 0.0, 0.0];
+  static const _nz = [1.0,-1.0, 0.0, 0.0, 0.0, 0.0];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cx = size.width  / 2;
+    final cy = size.height / 2;
+    final scale = size.width * 0.30;
+    const fov = 4.5;
+
+    final cosX = cos(rx), sinX = sin(rx);
+    final cosY = cos(ry), sinY = sin(ry);
+
+    // Rotate Y then X
+    (double, double, double) rot(double x, double y, double z) {
+      final x1 = x * cosY + z * sinY;
+      final z1 = -x * sinY + z * cosY;
+      final y2 = y * cosX - z1 * sinX;
+      final z2 = y * sinX + z1 * cosX;
+      return (x1, y2, z2);
+    }
+
+    Offset proj(double x, double y, double z) {
+      final pz = z + fov;
+      final f = fov / (pz < 0.01 ? 0.01 : pz);
+      return Offset(cx + x * scale * f, cy - y * scale * f);
+    }
+
+    // Rotate all vertices
+    final rvx = List<double>.filled(8, 0);
+    final rvy = List<double>.filled(8, 0);
+    final rvz = List<double>.filled(8, 0);
+    for (var i = 0; i < 8; i++) {
+      final r = rot(_vx[i], _vy[i], _vz[i]);
+      rvx[i] = r.$1; rvy[i] = r.$2; rvz[i] = r.$3;
+    }
+
+    // Collect visible faces sorted back-to-front
+    final visible = <(int, double)>[];
+    for (var fi = 0; fi < 6; fi++) {
+      final rn = rot(_nx[fi], _ny[fi], _nz[fi]);
+      if (rn.$3 <= 0) continue; // backface cull
+      final vIdx = _fi[fi];
+      final avgZ = (rvz[vIdx[0]] + rvz[vIdx[1]] + rvz[vIdx[2]] + rvz[vIdx[3]]) / 4;
+      visible.add((fi, avgZ));
+    }
+    visible.sort((a, b) => a.$2.compareTo(b.$2));
+
+    for (final (fi, _) in visible) {
+      final rn = rot(_nx[fi], _ny[fi], _nz[fi]);
+      final bright = (0.35 + 0.65 * rn.$3.clamp(0.0, 1.0));
+      final c = Color.fromARGB(
+        255,
+        ((_baseColor.r * 255.0).round() * bright).round().clamp(0, 255),
+        ((_baseColor.g * 255.0).round() * bright).round().clamp(0, 255),
+        ((_baseColor.b * 255.0).round() * bright).round().clamp(0, 255),
+      );
+      final vIdx = _fi[fi];
+      final pts = vIdx.map((i) => proj(rvx[i], rvy[i], rvz[i])).toList();
+
+      final path = Path()..moveTo(pts[0].dx, pts[0].dy);
+      for (var i = 1; i < pts.length; i++) { path.lineTo(pts[i].dx, pts[i].dy); }
+      path.close();
+      canvas.drawPath(path, Paint()..color = c);
+      canvas.drawPath(path, Paint()
+        ..color = _edgeColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0
+        ..strokeJoin = StrokeJoin.round);
+
+      _drawDots(canvas, pts, _fv[fi]);
+    }
+  }
+
+  void _drawDots(Canvas canvas, List<Offset> pts, int v) {
+    // Face center
+    final center = Offset(
+      (pts[0].dx + pts[1].dx + pts[2].dx + pts[3].dx) / 4,
+      (pts[0].dy + pts[1].dy + pts[2].dy + pts[3].dy) / 4,
+    );
+    // U: right axis, V: up axis in screen space (from center to mid-edges)
+    final midRight = (pts[0] + pts[1]) / 2;
+    final midTop   = (pts[0] + pts[3]) / 2;
+    final hU = midRight - center;
+    final hV = midTop   - center;
+
+    Offset dp(double u, double v) =>
+        Offset(center.dx + u * hU.dx + v * hV.dx, center.dy + u * hU.dy + v * hV.dy);
+
+    final r = sqrt(hU.dx * hU.dx + hU.dy * hU.dy) * 0.18;
+
+    final shadow = Paint()..color = Colors.black.withValues(alpha: 0.25);
+    final dot    = Paint()..color = Colors.white;
+
+    for (final pos in _dotPositions(v)) {
+      final p = dp(pos.dx, pos.dy);
+      canvas.drawCircle(Offset(p.dx + 0.5, p.dy + 0.5), r, shadow);
+      canvas.drawCircle(p, r, dot);
+    }
+  }
+
+  List<Offset> _dotPositions(int v) {
+    const s = 0.58;
+    switch (v) {
+      case 1: return const [Offset(0, 0)];
+      case 2: return const [Offset(-s, -s), Offset(s, s)];
+      case 3: return const [Offset(-s, -s), Offset(0, 0), Offset(s, s)];
+      case 4: return const [Offset(-s, -s), Offset(s, -s), Offset(-s, s), Offset(s, s)];
+      case 5: return const [Offset(-s, -s), Offset(s, -s), Offset(0, 0), Offset(-s, s), Offset(s, s)];
+      case 6: return const [Offset(-s, -s), Offset(s, -s), Offset(-s, 0), Offset(s, 0), Offset(-s, s), Offset(s, s)];
+      default: return const [];
+    }
+  }
+
+  @override
+  bool shouldRepaint(_Dice3DPainter old) =>
+      old.face != face || old.rx != rx || old.ry != ry;
 }

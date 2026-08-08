@@ -46,6 +46,9 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
     _socket.addListener(_onSocket);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       (widget.onJoinLobby ?? _socket.joinGameLobby)(widget.gameType);
+      if (widget.gameType == 'marble') {
+        _socket.fetchAndSelectMarbleCharacter();
+      }
     });
   }
 
@@ -112,8 +115,12 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
               stake: _socket.lobbyStartedStake,
             );
             break;
-          case 'marble_yut':
-            _socket.newMarbleYutGame();
+          case 'marble':
+            _socket.newMarbleGame(
+              characters: Map<String, String>.from(
+                _socket.lobbyCharacterSelections,
+              ),
+            );
             break;
           case 'bomb':
             _socket.newBombGame();

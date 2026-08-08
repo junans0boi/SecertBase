@@ -153,6 +153,12 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
   bool _isOpponentThrow = false;
   int? _lastTrackedThrowAt;
 
+  final _socket = SocketService();
+  int _seenYutMessages = 0;
+  int _chatUnread = 0;
+  Map<String, dynamic>? _chatPreview;
+  Timer? _previewTimer;
+
   String _display(String uid) => widget.displayName(uid);
 
   @override
@@ -189,6 +195,8 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
       _resultBounceCtrl.value = 1.0;
     }
     _lastTrackedThrowAt = widget.lastThrowAt;
+    _seenYutMessages = _socket.yutChatMessages.length;
+    _socket.addListener(_onSocketUpdate);
     _syncCountdown();
   }
 
@@ -239,11 +247,32 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    _socket.removeListener(_onSocketUpdate);
+    _previewTimer?.cancel();
     _countdownTimer?.cancel();
     _moveUnlockTimer?.cancel();
     _resultBounceCtrl.dispose();
     _stickThrowCtrl.dispose();
     super.dispose();
+  }
+
+  void _onSocketUpdate() {
+    if (!mounted) return;
+    final msgs = _socket.yutChatMessages;
+    if (msgs.length > _seenYutMessages) {
+      final newMsg = msgs.last;
+      if (newMsg['by'] != widget.currentUser) {
+        _previewTimer?.cancel();
+        setState(() {
+          _chatUnread++;
+          _chatPreview = newMsg;
+        });
+        _previewTimer = Timer(const Duration(seconds: 4), () {
+          if (mounted) setState(() => _chatPreview = null);
+        });
+      }
+      _seenYutMessages = msgs.length;
+    }
   }
 
   void _syncCountdown() {
@@ -1384,6 +1413,20 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                   : widget.yutSkin,
             ),
           ),
+        if (_chatPreview != null)
+          Positioned(
+            left: 12,
+            right: 64,
+            bottom: 72,
+            child: _ChatPreviewBubble(
+              message: _chatPreview!,
+              displayName: widget.displayName,
+              onDismiss: () {
+                _previewTimer?.cancel();
+                setState(() => _chatPreview = null);
+              },
+            ),
+          ),
       ],
     );
   }
@@ -1772,15 +1815,53 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                     () => _showSettings(context),
                   ),
                   const SizedBox(width: 4),
-                  _buildActionBtn(
-                    Icons.chat_bubble_outline,
-                    () => _showChat(context),
-                  ),
+                  _buildChatBtn(context),
                 ],
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildChatBtn(BuildContext context) {
+    final size = _compact ? 36.0 : 40.0;
+    return GestureDetector(
+      onTap: () => _showChat(context),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.08),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withValues(alpha: 0.14), width: 1),
+            ),
+            child: Icon(Icons.chat_bubble_outline, color: Colors.white70, size: size * 0.52),
+          ),
+          if (_chatUnread > 0)
+            Positioned(
+              top: -3,
+              right: -3,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE53935),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.black54, width: 1),
+                ),
+                constraints: const BoxConstraints(minWidth: 16),
+                child: Text(
+                  _chatUnread > 9 ? '9+' : '$_chatUnread',
+                  style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -1828,6 +1909,11 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
   }
 
   void _showChat(BuildContext context) {
+    setState(() {
+      _chatUnread = 0;
+      _chatPreview = null;
+    });
+    _previewTimer?.cancel();
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -3203,4 +3289,104 @@ class _YutSticksPainter extends CustomPainter {
   @override
   bool shouldRepaint(_YutSticksPainter old) =>
       old.t != t || old.resultName != resultName || old.yutSkin != yutSkin;
+}
+
+// ─── Chat preview bubble ─────────────────────────────────────────────────────
+
+class _ChatPreviewBubble extends StatefulWidget {
+  final Map<String, dynamic> message;
+  final String Function(String) displayName;
+  final VoidCallback onDismiss;
+
+  const _ChatPreviewBubble({
+    required this.message,
+    required this.displayName,
+    required this.onDismiss,
+  });
+
+  @override
+  State<_ChatPreviewBubble> createState() => _ChatPreviewBubbleState();
+}
+
+class _ChatPreviewBubbleState extends State<_ChatPreviewBubble>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _opacity;
+  late Animation<Offset> _slide;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 280),
+    )..forward();
+    _opacity = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
+    _slide = Tween<Offset>(
+      begin: const Offset(-0.15, 0),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final by = widget.message['by'] as String? ?? '';
+    final text = widget.message['message'] as String? ?? '';
+    final name = widget.displayName(by);
+
+    return FadeTransition(
+      opacity: _opacity,
+      child: SlideTransition(
+        position: _slide,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xEE1E2530),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+            boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 10, offset: Offset(0, 3))],
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.chat_bubble_rounded, color: Color(0xFF79C8C4), size: 16),
+              const SizedBox(width: 8),
+              Expanded(
+                child: RichText(
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  text: TextSpan(
+                    children: [
+                      TextSpan(
+                        text: '$name: ',
+                        style: const TextStyle(
+                          color: Color(0xFF79C8C4),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      TextSpan(
+                        text: text,
+                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: widget.onDismiss,
+                child: Icon(Icons.close_rounded, color: Colors.white.withValues(alpha: 0.5), size: 16),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

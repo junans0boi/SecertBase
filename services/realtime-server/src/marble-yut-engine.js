@@ -4,18 +4,16 @@
  * Rules:
  * - 2 players take turns rolling 2 dice
  * - Roll doubles → extra roll this turn (max 3 consecutive doubles)
- * - Board: 20 outer positions + diagonal shortcuts
- * - Win via: bankrupt / shrine monopoly / line monopoly / timeout (20 rounds)
+ * - Board: 32 perimeter positions (0 = START, clockwise loop)
+ * - Passing pos 0 → collect MARBLE_SALARY
+ * - Win via: bankrupt / color monopoly / round limit
  */
 
-// Board positions used by the mobile board UI:
-// 0=start, 1-19=outer route, 20=goal, 21-29=diagonal shortcuts.
-export const GOAL_POSITION = 20;
+export const BOARD_SIZE = 32;
 
-/**
- * Roll 2 dice (each 1-6).
- * Returns { dice1, dice2, total, isDouble }
- */
+// pos 0 = 출발 — 착지해도 점령 프롬프트 없음
+export const MARBLE_START_POSITIONS = new Set([0]);
+
 export function rollDice() {
   const dice1 = Math.floor(Math.random() * 6) + 1;
   const dice2 = Math.floor(Math.random() * 6) + 1;
@@ -23,64 +21,50 @@ export function rollDice() {
 }
 
 /**
- * Move a piece on the visual board.
- * Returns { position, lastPos, finished } or null if move cannot be made.
+ * Move a piece around the 32-tile loop.
+ * Returns { position, passedStart } — pieces never "finish."
  */
 export function movePiece(piece, steps) {
-  if (piece.finished || steps <= 0) return null;
+  if (steps <= 0) return null;
 
   let position = piece.position;
-  let lastPos = piece.lastPos ?? 0;
+  let passedStart = false;
 
   for (let i = 0; i < steps; i++) {
-    if (position === GOAL_POSITION) {
-      return { position: GOAL_POSITION, lastPos: GOAL_POSITION, finished: true };
-    }
-    const nextPosition = getNextPosition(position, i === 0, lastPos);
-    lastPos = position;
-    position = nextPosition;
+    const next = (position + 1) % BOARD_SIZE;
+    if (next === 0 && position !== 0) passedStart = true;
+    position = next;
   }
 
-  return { position, lastPos, finished: false };
+  return { position, lastPos: piece.position, passedStart, finished: false };
 }
 
-/**
- * Check if a piece catches opponent's pieces at the same position.
- */
 export function checkCatch(position, opponentPieces) {
   if (position === 0) return [];
   return opponentPieces.filter((p) => p.position === position && !p.finished);
 }
 
 export function getCarriedPieces(selectedPiece, playerPieces) {
-  if (selectedPiece.position === 0 || selectedPiece.finished) {
-    return [selectedPiece];
-  }
+  if (selectedPiece.position === 0) return [selectedPiece];
   return playerPieces.filter(
     (piece) => !piece.finished && piece.position === selectedPiece.position,
   );
 }
 
 export function recordCapture(gameState, capturedCount) {
-  if (capturedCount > 0) {
-    gameState.caughtOpponentThisTurn = true;
-  }
+  if (capturedCount > 0) gameState.caughtOpponentThisTurn = true;
 }
 
-/**
- * Decide the next turn after a piece move.
- * Stays on mover when pendingMoves remain, doubles granted, or caught opponent.
- */
 export function settleTurnAfterMove(gameState, userId) {
   if (gameState.pendingMoves.length > 0) {
-    gameState.phase = "moving";
+    gameState.phase = 'moving';
     return;
   }
   if (gameState.hasDoubleRoll) {
     gameState.hasDoubleRoll = false;
     gameState.caughtOpponentThisTurn = false;
     gameState.currentTurn = userId;
-    gameState.phase = "throwing";
+    gameState.phase = 'throwing';
     return;
   }
   if (gameState.caughtOpponentThisTurn) {
@@ -89,36 +73,55 @@ export function settleTurnAfterMove(gameState, userId) {
   } else {
     gameState.currentTurn = getNextPlayer(gameState, userId);
   }
-  gameState.phase = "throwing";
+  gameState.phase = 'throwing';
 }
 
-// ─── 마블 영지 상수 ─────────────────────────────────────────────────────────
+// ─── 보드 상수 ──────────────────────────────────────────────────────────────
 
-export const MARBLE_SALARY = 200;
-export const MARBLE_MAX_ROUNDS = 20;
-export const MARBLE_START_POSITIONS = new Set([0, 20]);
-export const SHRINE_POSITIONS = new Set([5, 10, 15]);
+export const MARBLE_SALARY       = 200;    // 출발 통과 시 급여
+export const MARBLE_MAX_ROUNDS   = 30;
+export const MARBLE_START_COINS  = 2000;
+
+// 색상 그룹별 부동산 위치
+export const COLOR_GROUPS = {
+  pink:   [1,  2,  4,  6,  7],   // bottom side
+  orange: [9,  10, 12, 14, 15],  // right side
+  purple: [17, 18, 20, 22, 23],  // top side
+  green:  [25, 26, 28, 30, 31],  // left side
+};
+
+// 부동산 기본값 (land value) — price 데이터와 일치
+const LAND_VALUES = {
+  1: 100, 2: 120, 4: 160, 6: 200, 7: 240,
+  9: 300, 10: 350, 12: 400, 14: 450, 15: 500,
+  17: 600, 18: 650, 20: 700, 22: 800, 23: 900,
+  25: 600, 26: 650, 28: 700, 30: 800, 31: 900,
+};
 
 export function getLandValue(pos) {
-  if (MARBLE_START_POSITIONS.has(pos)) return 0;
-  if (SHRINE_POSITIONS.has(pos)) return 300;
-  if (pos === 23) return 200;
-  if ([21, 22, 24, 25, 26, 27, 28, 29].includes(pos)) return 150;
-  return 100;
+  return LAND_VALUES[pos] ?? 0;
 }
 
-export const LEVEL_RATE = { 1: 1.0, 2: 1.5, 3: 2.5, 4: 3.5 };
-export const UPGRADE_COST_MULT = { 2: 1, 3: 2, 4: 3 };
+// 통행료: base × level multiplier
+export const LEVEL_RATE = { 1: 0.5, 2: 1.0, 3: 1.7, 4: 2.5 };
+
+// 업그레이드 비용: base × multiplier
+export const UPGRADE_COST_MULT = { 2: 1.0, 3: 1.8, 4: 2.8 };
 
 export function calcToll(pos, level) {
   const base = getLandValue(pos);
-  return Math.floor(base * (LEVEL_RATE[level] ?? 1.0));
+  return Math.round(base * (LEVEL_RATE[level] ?? 0.5));
 }
 
 export function calcAcquireCost(pos, stacked = false) {
   const base = getLandValue(pos);
-  const cost = Math.floor(base * 1.3);
-  return stacked ? Math.floor(cost * 0.5) : cost;
+  const cost = Math.round(base * 1.3);
+  return stacked ? Math.round(cost * 0.5) : cost;
+}
+
+export function calcUpgradeCost(pos, targetLevel) {
+  const base = getLandValue(pos);
+  return Math.round(base * (UPGRADE_COST_MULT[targetLevel] ?? 1.0));
 }
 
 export function calcScore(gameState, uid) {
@@ -127,38 +130,26 @@ export function calcScore(gameState, uid) {
   for (const [posStr, land] of Object.entries(gameState.lands)) {
     if (land.owner === uid) {
       const pos = Number(posStr);
-      landValue += calcToll(pos, land.level) * 10;
+      landValue += getLandValue(pos) * (land.level ?? 1) * 8;
     }
   }
   return coins + landValue;
 }
-
-export const LINE_SETS = [
-  [5, 6, 7, 8, 9, 10],
-  [10, 11, 12, 13, 14, 15],
-  [15, 16, 17, 18, 19, 0],
-  [0, 1, 2, 3, 4, 5],
-];
 
 // ─── 승리 조건 ───────────────────────────────────────────────────────────────
 
 export function checkMarbleWin(gameState) {
   const [p1, p2] = gameState.playersOrder;
 
+  // 파산
   if ((gameState.players[p1]?.coins ?? 0) <= 0) return { winner: p2, reason: 'bankrupt' };
   if ((gameState.players[p2]?.coins ?? 0) <= 0) return { winner: p1, reason: 'bankrupt' };
 
+  // 색상 독점 (한 색 5개 모두 소유)
   for (const uid of [p1, p2]) {
-    if ([...SHRINE_POSITIONS].every((pos) => gameState.lands[pos]?.owner === uid)) {
-      return { winner: uid, reason: 'shrine' };
-    }
-  }
-
-  for (const uid of [p1, p2]) {
-    for (const line of LINE_SETS) {
-      const claimable = line.filter((pos) => !MARBLE_START_POSITIONS.has(pos));
-      if (claimable.every((pos) => gameState.lands[pos]?.owner === uid)) {
-        return { winner: uid, reason: 'line' };
+    for (const [, group] of Object.entries(COLOR_GROUPS)) {
+      if (group.every((pos) => gameState.lands[pos]?.owner === uid)) {
+        return { winner: uid, reason: 'monopoly' };
       }
     }
   }
@@ -174,26 +165,24 @@ export function getNextPlayer(gameState, player) {
   return gameState.playersOrder.find((candidate) => candidate !== player);
 }
 
-/**
- * Initialize game state
- */
+// ─── 게임 상태 초기화 ────────────────────────────────────────────────────────
+
 export function createMarbleYutGameState(player1, player2, options = {}) {
   const createPieces = () => [
     { id: 0, position: 0, lastPos: 0, finished: false },
-    { id: 1, position: 0, lastPos: 0, finished: false },
   ];
 
   return {
     id: `marble-${Date.now()}`,
     playersOrder: [player1, player2],
     players: {
-      [player1]: { pieces: createPieces(), coins: 1500 },
-      [player2]: { pieces: createPieces(), coins: 1500 },
+      [player1]: { pieces: createPieces(), coins: MARBLE_START_COINS },
+      [player2]: { pieces: createPieces(), coins: MARBLE_START_COINS },
     },
     lands: {},
     round: 1,
     roundTurns: 0,
-    phase: "roll_order",
+    phase: 'roll_order',
     currentTurn: null,
     characters: options.characters ?? {},
     bgm: options.bgm ?? null,
@@ -242,28 +231,4 @@ export function serializeMarbleYutGame(gameState) {
     ),
     equippedItems: gameState.equippedItems ?? {},
   };
-}
-
-function getNextPosition(currentPosition, isFirstStep, lastPos = 0) {
-  if (currentPosition === GOAL_POSITION) return GOAL_POSITION;
-
-  if (isFirstStep) {
-    if (currentPosition === 5) return 21;
-    if (currentPosition === 10) return 24;
-    if (currentPosition === 23) return 26;
-  }
-
-  const nextMap = {
-    0: 1, 1: 2, 2: 3, 3: 4, 4: 5,
-    5: 6, 6: 7, 7: 8, 8: 9, 9: 10,
-    10: 11, 11: 12, 12: 13, 13: 14, 14: 15,
-    15: 16, 16: 17, 17: 18, 18: 19, 19: GOAL_POSITION,
-    21: 22, 22: 23,
-    24: 25, 25: 23,
-    23: lastPos === 22 ? 28 : 26,
-    26: 27, 27: GOAL_POSITION,
-    28: 29, 29: 15,
-  };
-
-  return nextMap[currentPosition] ?? GOAL_POSITION;
 }

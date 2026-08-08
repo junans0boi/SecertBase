@@ -1,6 +1,14 @@
 import 'package:flutter/material.dart';
 
-enum MarbleTileType { start, jail, event, free, property, shortcut, center }
+enum MarbleTileType {
+  start,    // 임무개시
+  jail,     // 블랙사이트
+  tax,      // 운영본부
+  gate,     // 비밀게이트
+  property, // 도시
+  tourist,  // 관광지 (비밀의 섬/해변)
+  card,     // 작전카드
+}
 
 class MarbleTile {
   final int pos;
@@ -8,7 +16,7 @@ class MarbleTile {
   final String name;
   final String emoji;
   final Color color;
-  final int price;
+  final int price; // 구매가 (MM)
 
   const MarbleTile({
     required this.pos,
@@ -20,161 +28,218 @@ class MarbleTile {
   });
 }
 
-const _kPink   = Color(0xFFE8305A);
-const _kOrange = Color(0xFFF97316);
-const _kPurple = Color(0xFF7C3AED);
+// ── Color palette ────────────────────────────────────────────────────────────
+const _kRed    = Color(0xFFE8305A);
+const _kOrange = Color(0xFFEA7D27);
 const _kGreen  = Color(0xFF16A34A);
-const _kBrown  = Color(0xFF92400E);
-const _kTeal   = Color(0xFF0891B2);
-const _kGold   = Color(0xFFD97706);
-const _kSlate  = Color(0xFF374151);
-const _kBlue   = Color(0xFF0284C7);
-const _kEmerald = Color(0xFF059669);
+const _kBlue   = Color(0xFF2563EB);
+const _kPurple = Color(0xFF7C3AED);
+const _kGold   = Color(0xFFF59E0B);
+const _kTourist = Color(0xFFEC4899);
+const _kCard   = Color(0xFF0EA5E9);
 
-const List<MarbleTile> kClassicWorldTiles = [
-  // Corners
-  MarbleTile(pos: 0,  type: MarbleTileType.start, name: '출발',    emoji: '🚀', color: _kGold),
-  MarbleTile(pos: 5,  type: MarbleTileType.jail,  name: '감옥섬',  emoji: '⛓️', color: _kSlate),
-  MarbleTile(pos: 10, type: MarbleTileType.event, name: '황금도시', emoji: '🌟', color: _kBlue),
-  MarbleTile(pos: 15, type: MarbleTileType.free,  name: '자유여행', emoji: '🏝️', color: _kEmerald),
+// ── 24-tile board (clockwise from bottom-left corner) ───────────────────────
+//
+//  Layout:
+//   pos  0 = 임무개시 (START, bottom-left corner)
+//   pos  1 = 방콕      (red)
+//   pos  2 = 카이로    (red)
+//   pos  3 = 작전카드  (card)
+//   pos  4 = 뭄바이    (orange)
+//   pos  5 = 자카르타  (orange)
+//   pos  6 = 블랙사이트 (JAIL, bottom-right corner)
+//   pos  7 = 시드니    (green)
+//   pos  8 = 비밀의섬  (tourist)
+//   pos  9 = 작전카드  (card)
+//   pos 10 = 베를린    (green)
+//   pos 11 = 모스크바  (green)
+//   pos 12 = 운영본부  (TAX, top-right corner)
+//   pos 13 = 도쿄      (blue)
+//   pos 14 = 상하이    (blue)
+//   pos 15 = 작전카드  (card)
+//   pos 16 = 뉴욕      (purple)
+//   pos 17 = 비밀의해변 (tourist)
+//   pos 18 = 비밀게이트 (GATE, top-left corner)
+//   pos 19 = 파리      (purple)
+//   pos 20 = 런던      (gold)
+//   pos 21 = 작전카드  (card)
+//   pos 22 = 두바이    (gold)
+//   pos 23 = 서울      (gold)
+//
+const List<MarbleTile> kBoardTiles = [
+  // ── Corners ──
+  MarbleTile(pos:  0, type: MarbleTileType.start,   name: '임무개시',  emoji: '🚀', color: Color(0xFF22C55E)),
+  MarbleTile(pos:  6, type: MarbleTileType.jail,    name: '블랙사이트', emoji: '⛓️', color: Color(0xFF6B7280)),
+  MarbleTile(pos: 12, type: MarbleTileType.tax,     name: '운영본부',  emoji: '🏦', color: Color(0xFF6B7280)),
+  MarbleTile(pos: 18, type: MarbleTileType.gate,    name: '비밀게이트', emoji: '🌀', color: Color(0xFF0891B2)),
 
-  // Bottom side — Korean cities (pink)
-  MarbleTile(pos: 1, type: MarbleTileType.property, name: '제주',  emoji: '🌸', color: _kPink,   price: 100),
-  MarbleTile(pos: 2, type: MarbleTileType.property, name: '부산',  emoji: '🐟', color: _kPink,   price: 130),
-  MarbleTile(pos: 3, type: MarbleTileType.property, name: '경주',  emoji: '🏯', color: _kPink,   price: 160),
-  MarbleTile(pos: 4, type: MarbleTileType.property, name: '인천',  emoji: '✈️', color: _kPink,   price: 200),
+  // ── Bottom side (pos 1–5) ──
+  MarbleTile(pos: 1, type: MarbleTileType.property, name: '방콕',    emoji: '🏯', color: _kRed,    price: 500000),
+  MarbleTile(pos: 2, type: MarbleTileType.property, name: '카이로',  emoji: '🐪', color: _kRed,    price: 500000),
+  MarbleTile(pos: 3, type: MarbleTileType.card,     name: '작전카드', emoji: '🃏', color: _kCard),
+  MarbleTile(pos: 4, type: MarbleTileType.property, name: '뭄바이',  emoji: '🕌', color: _kOrange, price: 700000),
+  MarbleTile(pos: 5, type: MarbleTileType.property, name: '자카르타', emoji: '🌴', color: _kOrange, price: 700000),
 
-  // Right side — East Asian cities (orange)
-  MarbleTile(pos: 6, type: MarbleTileType.property, name: '도쿄',    emoji: '⛩️', color: _kOrange, price: 250),
-  MarbleTile(pos: 7, type: MarbleTileType.property, name: '상하이',  emoji: '🏮', color: _kOrange, price: 300),
-  MarbleTile(pos: 8, type: MarbleTileType.property, name: '홍콩',    emoji: '🌃', color: _kOrange, price: 350),
-  MarbleTile(pos: 9, type: MarbleTileType.property, name: '싱가포르', emoji: '🦁', color: _kOrange, price: 400),
+  // ── Right side (pos 7–11) ──
+  MarbleTile(pos:  7, type: MarbleTileType.property, name: '시드니',   emoji: '🦘', color: _kGreen,   price: 1000000),
+  MarbleTile(pos:  8, type: MarbleTileType.tourist,  name: '비밀의섬', emoji: '🏝️', color: _kTourist, price: 1000000),
+  MarbleTile(pos:  9, type: MarbleTileType.card,     name: '작전카드', emoji: '🃏', color: _kCard),
+  MarbleTile(pos: 10, type: MarbleTileType.property, name: '베를린',   emoji: '🧱', color: _kGreen,   price: 1000000),
+  MarbleTile(pos: 11, type: MarbleTileType.property, name: '모스크바', emoji: '🏛️', color: _kGreen,   price: 1000000),
 
-  // Top side — Global cities (purple)
-  MarbleTile(pos: 11, type: MarbleTileType.property, name: '두바이', emoji: '🕌', color: _kPurple, price: 500),
-  MarbleTile(pos: 12, type: MarbleTileType.property, name: '파리',   emoji: '🗼', color: _kPurple, price: 600),
-  MarbleTile(pos: 13, type: MarbleTileType.property, name: '런던',   emoji: '🎡', color: _kPurple, price: 700),
-  MarbleTile(pos: 14, type: MarbleTileType.property, name: '뉴욕',   emoji: '🗽', color: _kPurple, price: 800),
+  // ── Top side (pos 13–17) ──
+  MarbleTile(pos: 13, type: MarbleTileType.property, name: '도쿄',     emoji: '⛩️', color: _kBlue,    price: 1300000),
+  MarbleTile(pos: 14, type: MarbleTileType.property, name: '상하이',   emoji: '🏙️', color: _kBlue,    price: 1300000),
+  MarbleTile(pos: 15, type: MarbleTileType.card,     name: '작전카드', emoji: '🃏', color: _kCard),
+  MarbleTile(pos: 16, type: MarbleTileType.property, name: '뉴욕',     emoji: '🗽', color: _kPurple,  price: 1600000),
+  MarbleTile(pos: 17, type: MarbleTileType.tourist,  name: '비밀의해변', emoji: '🏖️', color: _kTourist, price: 1000000),
 
-  // Left side — Americas / Pacific (green)
-  MarbleTile(pos: 16, type: MarbleTileType.property, name: '하와이',    emoji: '🌺', color: _kGreen, price: 700),
-  MarbleTile(pos: 17, type: MarbleTileType.property, name: '시드니',    emoji: '🦘', color: _kGreen, price: 600),
-  MarbleTile(pos: 18, type: MarbleTileType.property, name: '라스베가스', emoji: '🎰', color: _kGreen, price: 500),
-  MarbleTile(pos: 19, type: MarbleTileType.property, name: '서울',      emoji: '🌸', color: _kGreen, price: 400),
-
-  // Diagonal A: 5 → 21 → 22 → 23 → 28 → 29 → 15  (brown)
-  MarbleTile(pos: 21, type: MarbleTileType.shortcut, name: '이스탄불', emoji: '🕌', color: _kBrown, price: 300),
-  MarbleTile(pos: 22, type: MarbleTileType.shortcut, name: '모스크바', emoji: '⭐', color: _kBrown, price: 350),
-  MarbleTile(pos: 28, type: MarbleTileType.shortcut, name: '취리히',   emoji: '🏔️', color: _kBrown, price: 350),
-  MarbleTile(pos: 29, type: MarbleTileType.shortcut, name: '빈',       emoji: '🎼', color: _kBrown, price: 300),
-
-  // Diagonal B: 10 → 24 → 25 → 23 → 26 → 27 → 0  (teal)
-  MarbleTile(pos: 24, type: MarbleTileType.shortcut, name: '멕시코',   emoji: '🌵', color: _kTeal, price: 250),
-  MarbleTile(pos: 25, type: MarbleTileType.shortcut, name: '리우',     emoji: '🎭', color: _kTeal, price: 300),
-  MarbleTile(pos: 26, type: MarbleTileType.shortcut, name: '바르셀로나', emoji: '⛵', color: _kTeal, price: 400),
-  MarbleTile(pos: 27, type: MarbleTileType.shortcut, name: '로마',     emoji: '🏛️', color: _kTeal, price: 450),
-
-  // Center
-  MarbleTile(pos: 23, type: MarbleTileType.center, name: '세계중심', emoji: '🌐', color: Color(0xFF6B21A8)),
+  // ── Left side (pos 19–23) ──
+  MarbleTile(pos: 19, type: MarbleTileType.property, name: '파리',   emoji: '🗼', color: _kPurple, price: 1600000),
+  MarbleTile(pos: 20, type: MarbleTileType.property, name: '런던',   emoji: '🎡', color: _kGold,   price: 2000000),
+  MarbleTile(pos: 21, type: MarbleTileType.card,     name: '작전카드', emoji: '🃏', color: _kCard),
+  MarbleTile(pos: 22, type: MarbleTileType.property, name: '두바이', emoji: '🌆', color: _kGold,   price: 2000000),
+  MarbleTile(pos: 23, type: MarbleTileType.property, name: '서울',   emoji: '🏙️', color: _kGold,   price: 2000000),
 ];
 
 final Map<int, MarbleTile> kTileByPos = {
-  for (final t in kClassicWorldTiles) t.pos: t,
+  for (final t in kBoardTiles) t.pos: t,
 };
 
-// Board geometry (logical 560×560 coordinate space)
-const double kBoardUnit = 560.0;
-const double kCornerSize = 80.0;
-const double kSideLength = (kBoardUnit - kCornerSize * 2) / 4; // = 100
+// ── Board geometry (logical 560×560 coordinate space) ──────────────────────
+//
+//  24-tile board: 4 corners + 5 non-corner tiles per side.
+//  Corners at pos 0(BL), 6(BR), 12(TR), 18(TL).
+//
+const double kBoardUnit  = 560.0;
+const double kCornerSize = 70.0;
+const double kSideLength = 84.0; // (560 - 70*2) / 5 = 84 exactly
 
-// Returns the normalized center (0.0–1.0) for a board position
+// Returns the normalized center [0.0, 1.0] of each tile.
 Offset marbleNormalizedCenter(int pos) {
-  const double c = kCornerSize / kBoardUnit;     // 80/560 ≈ 0.143
-  const double s = kSideLength / kBoardUnit;     // 100/560 ≈ 0.179
-  const double ch = c / 2;                       // half corner
-  const double sh = s / 2;                       // half side tile
+  const double c  = kCornerSize / kBoardUnit; // 70/560 ≈ 0.125
+  const double s  = kSideLength / kBoardUnit; // 84/560 = 0.15
+  const double ch = c / 2;                    // corner half
+  const double sh = s / 2;                    // side half
 
-  switch (pos) {
-    // Perimeter — bottom side (left→right)
-    case 0: case 20: return Offset(ch, 1.0 - ch);
-    case 1:  return Offset(c + sh,         1.0 - ch);
-    case 2:  return Offset(c + s + sh,     1.0 - ch);
-    case 3:  return Offset(c + s * 2 + sh, 1.0 - ch);
-    case 4:  return Offset(c + s * 3 + sh, 1.0 - ch);
-    case 5:  return Offset(1.0 - ch,       1.0 - ch);
+  // Corners
+  if (pos ==  0) return Offset(ch, 1.0 - ch);           // bottom-left
+  if (pos ==  6) return Offset(1.0 - ch, 1.0 - ch);     // bottom-right
+  if (pos == 12) return Offset(1.0 - ch, ch);            // top-right
+  if (pos == 18) return Offset(ch, ch);                  // top-left
 
-    // Right side (bottom→top)
-    case 6:  return Offset(1.0 - ch, 1.0 - c - sh);
-    case 7:  return Offset(1.0 - ch, 1.0 - c - s - sh);
-    case 8:  return Offset(1.0 - ch, 1.0 - c - s * 2 - sh);
-    case 9:  return Offset(1.0 - ch, 1.0 - c - s * 3 - sh);
-    case 10: return Offset(1.0 - ch, ch);
+  // Bottom side (pos 1–5, left→right)
+  if (pos >= 1 && pos <= 5)   return Offset(c + (pos - 1) * s + sh, 1.0 - ch);
 
-    // Top side (right→left)
-    case 11: return Offset(1.0 - c - sh,         ch);
-    case 12: return Offset(1.0 - c - s - sh,     ch);
-    case 13: return Offset(1.0 - c - s * 2 - sh, ch);
-    case 14: return Offset(1.0 - c - s * 3 - sh, ch);
-    case 15: return Offset(ch, ch);
+  // Right side (pos 7–11, bottom→top)
+  if (pos >= 7 && pos <= 11)  return Offset(1.0 - ch, 1.0 - c - (pos - 6) * s + sh);
 
-    // Left side (top→bottom)
-    case 16: return Offset(ch, c + sh);
-    case 17: return Offset(ch, c + s + sh);
-    case 18: return Offset(ch, c + s * 2 + sh);
-    case 19: return Offset(ch, c + s * 3 + sh);
+  // Top side (pos 13–17, right→left)
+  if (pos >= 13 && pos <= 17) return Offset(1.0 - c - (pos - 12) * s + sh, ch);
 
-    // Diagonal A: 5 → 21 → 22 → 23 → 28 → 29 → 15
-    case 21: return const Offset(440 / kBoardUnit, 440 / kBoardUnit);
-    case 22: return const Offset(360 / kBoardUnit, 360 / kBoardUnit);
-    case 28: return const Offset(200 / kBoardUnit, 200 / kBoardUnit);
-    case 29: return const Offset(120 / kBoardUnit, 120 / kBoardUnit);
+  // Left side (pos 19–23, top→bottom)
+  if (pos >= 19 && pos <= 23) return Offset(ch, c + (pos - 19) * s + sh);
 
-    // Diagonal B: 10 → 24 → 25 → 23 → 26 → 27 → 0
-    case 24: return const Offset(440 / kBoardUnit, 120 / kBoardUnit);
-    case 25: return const Offset(360 / kBoardUnit, 200 / kBoardUnit);
-    case 26: return const Offset(200 / kBoardUnit, 360 / kBoardUnit);
-    case 27: return const Offset(120 / kBoardUnit, 440 / kBoardUnit);
-
-    // Center crossroads
-    case 23: return const Offset(0.5, 0.5);
-
-    default: return const Offset(0.5, 0.5);
-  }
+  return const Offset(0.5, 0.5);
 }
 
-// Returns the bounding Rect for perimeter tiles (corners/properties) in logical space.
-// Returns null for diagonal / center positions.
+// Returns the bounding Rect for each tile in the 560×560 logical space.
 Rect? marbleTileRect(int pos) {
-  const double c = kCornerSize;
-  const double s = kSideLength;
+  const double c = kCornerSize; // 70
+  const double s = kSideLength; // 84
+  const double b = kBoardUnit;  // 560
 
-  // Bottom side
-  if (pos == 0 || pos == 20) return const Rect.fromLTWH(0,             480, c, c);
-  if (pos == 1)  return Rect.fromLTWH(c,             480, s, c);
-  if (pos == 2)  return Rect.fromLTWH(c + s,         480, s, c);
-  if (pos == 3)  return Rect.fromLTWH(c + s * 2,     480, s, c);
-  if (pos == 4)  return Rect.fromLTWH(c + s * 3,     480, s, c);
-  if (pos == 5)  return const Rect.fromLTWH(480,      480, c, c);
+  // Corners
+  if (pos ==  0) return Rect.fromLTWH(0,       b - c, c,     c);
+  if (pos ==  6) return Rect.fromLTWH(b - c,   b - c, c,     c);
+  if (pos == 12) return Rect.fromLTWH(b - c,   0,     c,     c);
+  if (pos == 18) return const Rect.fromLTWH(0, 0,     70,   70);
 
-  // Right side (rotated; width is c, height is s)
-  if (pos == 6)  return Rect.fromLTWH(480, 380, c, s);
-  if (pos == 7)  return Rect.fromLTWH(480, 280, c, s);
-  if (pos == 8)  return Rect.fromLTWH(480, 180, c, s);
-  if (pos == 9)  return Rect.fromLTWH(480, 80,  c, s);
-  if (pos == 10) return const Rect.fromLTWH(480, 0, c, c);
+  // Bottom side (pos 1–5)
+  if (pos >= 1  && pos <= 5)  return Rect.fromLTWH(c + (pos - 1) * s,          b - c, s, c);
 
-  // Top side
-  if (pos == 11) return Rect.fromLTWH(380, 0, s, c);
-  if (pos == 12) return Rect.fromLTWH(280, 0, s, c);
-  if (pos == 13) return Rect.fromLTWH(180, 0, s, c);
-  if (pos == 14) return Rect.fromLTWH(80,  0, s, c);
-  if (pos == 15) return const Rect.fromLTWH(0, 0, c, c);
+  // Right side (pos 7–11)
+  if (pos >= 7  && pos <= 11) return Rect.fromLTWH(b - c, b - c - (pos - 6)  * s, c, s);
 
-  // Left side
-  if (pos == 16) return Rect.fromLTWH(0, 80,  c, s);
-  if (pos == 17) return Rect.fromLTWH(0, 180, c, s);
-  if (pos == 18) return Rect.fromLTWH(0, 280, c, s);
-  if (pos == 19) return Rect.fromLTWH(0, 380, c, s);
+  // Top side (pos 13–17)
+  if (pos >= 13 && pos <= 17) return Rect.fromLTWH(b - c - (pos - 12) * s,    0,   s, c);
 
-  return null; // diagonals / center have no fixed rect
+  // Left side (pos 19–23)
+  if (pos >= 19 && pos <= 23) return Rect.fromLTWH(0, c + (pos - 19) * s,         c, s);
+
+  return null;
+}
+
+// ── Economy helpers ──────────────────────────────────────────────────────────
+
+const _kBuildCosts = {
+  'red':    [200000,   500000,  1000000],
+  'orange': [300000,   700000,  1400000],
+  'green':  [400000,  1000000,  2000000],
+  'blue':   [600000,  1300000,  2600000],
+  'purple': [800000,  1600000,  3200000],
+  'gold':  [1000000,  2000000,  4000000],
+};
+
+const _kTolls = {
+  'red':    [20000,   80000,  250000,   700000],
+  'orange': [30000,  120000,  380000,  1000000],
+  'green':  [50000,  180000,  550000,  1500000],
+  'blue':   [70000,  250000,  780000,  2100000],
+  'purple': [90000,  320000, 1000000,  2700000],
+  'gold':  [120000,  450000, 1400000,  3800000],
+};
+
+String tileColorOf(int pos) {
+  final t = kTileByPos[pos];
+  if (t == null) return '';
+  if (t.type == MarbleTileType.property) {
+    if (t.color == _kRed)    return 'red';
+    if (t.color == _kOrange) return 'orange';
+    if (t.color == _kGreen)  return 'green';
+    if (t.color == _kBlue)   return 'blue';
+    if (t.color == _kPurple) return 'purple';
+    if (t.color == _kGold)   return 'gold';
+  }
+  return '';
+}
+
+/// Build cost (MM) for targetLevel: 1=house, 2=building, 3=landmark.
+int buildCostFor(int pos, int targetLevel) {
+  final color = tileColorOf(pos);
+  final costs = _kBuildCosts[color];
+  if (costs == null || targetLevel < 1 || targetLevel > 3) return 0;
+  return costs[targetLevel - 1];
+}
+
+/// Toll (MM) for visiting pos at level (0=land, 1=house, 2=building, 3=landmark).
+int tollFor(int pos, int level) {
+  final t = kTileByPos[pos];
+  if (t == null) return 0;
+  if (t.type == MarbleTileType.tourist) return 800000; // 관광지 고정
+  final color = tileColorOf(pos);
+  final tolls = _kTolls[color];
+  if (tolls == null) return 0;
+  return tolls[level.clamp(0, 3)];
+}
+
+/// Acquisition cost = (price + invested buildCosts up to currentLevel) × 2
+int acquireCostFor(int pos, int currentLevel) {
+  final t = kTileByPos[pos];
+  if (t == null || t.type == MarbleTileType.tourist) return 0;
+  final color = tileColorOf(pos);
+  final costs = _kBuildCosts[color] ?? [];
+  int invested = t.price;
+  for (int i = 0; i < currentLevel && i < costs.length; i++) {
+    invested += costs[i];
+  }
+  return invested * 2;
+}
+
+/// Display price string, e.g. "50만 MM" or "500만 MM"
+String formatMM(int amount) {
+  if (amount == 0) return '0 MM';
+  final man = amount ~/ 10000;
+  if (man >= 100) return '${man ~/ 100}백만 MM';
+  return '$man만 MM';
 }

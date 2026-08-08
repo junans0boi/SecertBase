@@ -24,14 +24,14 @@ import {
   serializeYutGame,
 } from "./yut-engine.js";
 import {
-  createMarbleYutGameState,
+  createMarbleGameState,
   rollDice as rollMarbleDice,
   movePiece as moveMarblePiece,
   checkCatch as checkMarbleCatch,
   getCarriedPieces as getMarbleCarriedPieces,
   recordCapture as recordMarbleCapture,
   settleTurnAfterMove as settleMarbleTurn,
-  serializeMarbleYutGame,
+  serializeMarbleGame,
   checkMarbleWin,
   calcToll,
   calcAcquireCost,
@@ -41,7 +41,7 @@ import {
   MARBLE_MAX_ROUNDS,
   MARBLE_START_POSITIONS,
   calcScore,
-} from "./marble-yut-engine.js";
+} from "./marble-engine.js";
 import {
   createUnoGameState,
   canPlayCard,
@@ -118,7 +118,7 @@ const gameTypes = [
   "telepathy",
   "pirate",
   "yut",
-  "marble_yut",
+  "marble",
   "uno",
   "uno_classic",
   "uno_go_wild",
@@ -142,11 +142,18 @@ const lobbyStakeSchema = z.object({
 });
 
 const yutCharacters = ["honggilldong", "nolbu", "miho"];
+const marbleCharacterIds = ["k", "ria", "luna", "rex", "zia", "drv", "hayun", "jake", "nova", "omega"];
 
-const lobbyCharacterSchema = z.object({
-  gameType: z.literal("yut"),
-  character: z.enum(yutCharacters),
-});
+const lobbyCharacterSchema = z.union([
+  z.object({
+    gameType: z.literal("yut"),
+    character: z.enum(yutCharacters),
+  }),
+  z.object({
+    gameType: z.literal("marble"),
+    character: z.enum(marbleCharacterIds),
+  }),
+]);
 
 const yutNewSchema = z
   .object({
@@ -335,7 +342,7 @@ const bombGameKey = (roomCode) => `bomb:${roomCode}:game`;
 const gameLobbyKey = (roomCode, gameType) => `lobby:${roomCode}:${gameType}`;
 const rpsGameKey = (roomCode) => `rps:${roomCode}:game`;
 const pirateKey = (roomCode) => `pirate:${roomCode}:game`;
-const marbleYutGameKey = (roomCode) => `marble_yut:${roomCode}:game`;
+const marbleGameKey = (roomCode) => `marble:${roomCode}:game`;
 const randomYutBgm = () => `yut${Math.floor(Math.random() * 3) + 1}.mp3`;
 
 const defaultState = {
@@ -487,9 +494,9 @@ const emitYutState = (io, roomCode, eventName, gameState, extra = {}) => {
   });
 };
 
-const emitMarbleYutState = (io, roomCode, eventName, gameState, extra = {}) => {
+const emitMarbleState = (io, roomCode, eventName, gameState, extra = {}) => {
   io.to(roomCode).emit(eventName, {
-    ...serializeMarbleYutGame(gameState),
+    ...serializeMarbleGame(gameState),
     ...extra,
   });
 };
@@ -761,7 +768,7 @@ export const registerSocketHandlers = (io) => {
         const yutKey = `yut:${roomCode}:game`;
         const unoKey = `uno:${roomCode}:game`;
         const bombKey = `bomb:${roomCode}:game`;
-        const marbleKey = marbleYutGameKey(roomCode);
+        const marbleKey = marbleGameKey(roomCode);
 
         const [yutGame, unoGame, bombGame, marbleGame] = await Promise.all([
           redis.get(yutKey),
@@ -815,7 +822,7 @@ export const registerSocketHandlers = (io) => {
         if (marbleGame) {
           const game = JSON.parse(marbleGame);
           if (game.playersOrder && !game.winner) {
-            activeGames.marble_yut = serializeMarbleYutGame(game);
+            activeGames.marble = serializeMarbleGame(game);
           }
         }
 
@@ -1578,7 +1585,7 @@ export const registerSocketHandlers = (io) => {
       gameState.pendingMoves.splice(moveIndex, 1);
 
       const carriedPieces = getCarriedPieces(piece, gameState.players[userId].pieces);
-      const stackedPieces = moveResult.position > 0 && moveResult.position !== 20
+      const stackedPieces = moveResult.position > 0
         ? gameState.players[userId].pieces.filter(
             (candidate) =>
               candidate.id !== pieceId &&
@@ -1591,13 +1598,8 @@ export const registerSocketHandlers = (io) => {
       const opponentId = getNextYutPlayer(gameState, userId);
       const defenderStats = gameState.playerStats?.[opponentId] ?? {};
 
-      if (moveResult.finished) {
-        for (const carriedPiece of carriedPieces) {
-          carriedPiece.lastPos = moveResult.lastPos;
-          carriedPiece.finished = true;
-          carriedPiece.position = 20;
-        }
-      } else {
+      // Pieces always continue on 32-tile loop (never finish)
+      {
         for (const carriedPiece of carriedPieces) {
           carriedPiece.lastPos = moveResult.lastPos;
           carriedPiece.position = moveResult.position;
@@ -1712,7 +1714,7 @@ export const registerSocketHandlers = (io) => {
 
     // ─── 마블윷 핸들러 ──────────────────────────────────────────────────────────
 
-    socket.on("game:marble_yut:new", async (payload, ackRaw) => {
+    socket.on("game:marble:new", async (payload, ackRaw) => {
       const ack = normalizeAck(ackRaw);
       const roomCode = socket.data.roomCode;
       const userId = socket.data.userId;
@@ -1733,7 +1735,7 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const gameState = createMarbleYutGameState(player1, player2, {
+      const gameState = createMarbleGameState(player1, player2, {
         characters: payload?.characters ?? {},
         bgm: payload?.bgm ?? randomYutBgm(),
       });
@@ -1747,12 +1749,12 @@ export const registerSocketHandlers = (io) => {
       ]);
       gameState.equippedItems = { [player1]: p1Info, [player2]: p2Info };
 
-      await redis.set(marbleYutGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
-      emitMarbleYutState(io, roomCode, "game:marble_yut:state", gameState);
-      ack({ ok: true, gameState: serializeMarbleYutGame(gameState) });
+      await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
+      emitMarbleState(io, roomCode, "game:marble:state", gameState);
+      ack({ ok: true, gameState: serializeMarbleGame(gameState) });
     });
 
-    socket.on("game:marble_yut:roll_start", async (_, ackRaw) => {
+    socket.on("game:marble:roll_start", async (_, ackRaw) => {
       const ack = normalizeAck(ackRaw);
       const roomCode = socket.data.roomCode;
       const userId = socket.data.userId;
@@ -1761,7 +1763,7 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const gameText = await redis.get(marbleYutGameKey(roomCode));
+      const gameText = await redis.get(marbleGameKey(roomCode));
       if (!gameText) { ack({ ok: false, reason: "no_game" }); return; }
       const gameState = JSON.parse(gameText);
       if (gameState.phase !== "roll_order") { ack({ ok: false, reason: "invalid_phase" }); return; }
@@ -1782,35 +1784,35 @@ export const registerSocketHandlers = (io) => {
         }
       }
 
-      await redis.set(marbleYutGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
-      emitMarbleYutState(io, roomCode, "game:marble_yut:state", gameState, { by: userId });
-      ack({ ok: true, gameState: serializeMarbleYutGame(gameState) });
+      await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
+      emitMarbleState(io, roomCode, "game:marble:state", gameState, { by: userId });
+      ack({ ok: true, gameState: serializeMarbleGame(gameState) });
 
       if (gameState.phase === "order_countdown") {
         setTimeout(async () => {
           try {
-            const latestText = await redis.get(marbleYutGameKey(roomCode));
+            const latestText = await redis.get(marbleGameKey(roomCode));
             if (!latestText) return;
             const latestState = JSON.parse(latestText);
             if (latestState.id !== gameState.id || latestState.phase !== "order_countdown") return;
             latestState.phase = "throwing";
             latestState.orderCountdownUntil = null;
-            await redis.set(marbleYutGameKey(roomCode), JSON.stringify(latestState), "EX", 7200);
-            emitMarbleYutState(io, roomCode, "game:marble_yut:state", latestState, { orderReady: true });
+            await redis.set(marbleGameKey(roomCode), JSON.stringify(latestState), "EX", 7200);
+            emitMarbleState(io, roomCode, "game:marble:state", latestState, { orderReady: true });
           } catch (err) {
-            console.error(`marble_yut order countdown error: ${err.message}`);
+            console.error(`marble order countdown error: ${err.message}`);
           }
         }, 3000);
       }
     });
 
-    socket.on("game:marble_yut:roll", async (_, ackRaw) => {
+    socket.on("game:marble:roll", async (_, ackRaw) => {
       const ack = normalizeAck(ackRaw);
       const roomCode = socket.data.roomCode;
       const userId = socket.data.userId;
       if (!roomCode || !userId) { ack({ ok: false, reason: "not_joined" }); return; }
 
-      const gameText = await redis.get(marbleYutGameKey(roomCode));
+      const gameText = await redis.get(marbleGameKey(roomCode));
       if (!gameText) { ack({ ok: false, reason: "no_game" }); return; }
       const gameState = JSON.parse(gameText);
       if (gameState.currentTurn !== userId) { ack({ ok: false, reason: "not_your_turn" }); return; }
@@ -1829,11 +1831,11 @@ export const registerSocketHandlers = (io) => {
           gameState.pendingMoves = [];
           gameState.currentTurn = getNextMarblePlayer(gameState, userId);
           gameState.phase = "throwing";
-          await redis.set(marbleYutGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
-          emitMarbleYutState(io, roomCode, "game:marble_yut:roll_result", gameState, {
+          await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
+          emitMarbleState(io, roomCode, "game:marble:roll_result", gameState, {
             by: userId, rollResult, tripleDouble: true, at: Date.now(),
           });
-          ack({ ok: true, rollResult, gameState: serializeMarbleYutGame(gameState) });
+          ack({ ok: true, rollResult, gameState: serializeMarbleGame(gameState) });
           return;
         }
         gameState.hasDoubleRoll = true;
@@ -1845,14 +1847,14 @@ export const registerSocketHandlers = (io) => {
       gameState.pendingMoves.push(rollResult.total);
       gameState.phase = "moving";
 
-      await redis.set(marbleYutGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
-      emitMarbleYutState(io, roomCode, "game:marble_yut:roll_result", gameState, {
+      await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
+      emitMarbleState(io, roomCode, "game:marble:roll_result", gameState, {
         by: userId, rollResult, at: Date.now(),
       });
-      ack({ ok: true, rollResult, gameState: serializeMarbleYutGame(gameState) });
+      ack({ ok: true, rollResult, gameState: serializeMarbleGame(gameState) });
     });
 
-    socket.on("game:marble_yut:move", async (payload, ackRaw) => {
+    socket.on("game:marble:move", async (payload, ackRaw) => {
       const ack = normalizeAck(ackRaw);
       const roomCode = socket.data.roomCode;
       const userId = socket.data.userId;
@@ -1861,7 +1863,7 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const gameText = await redis.get(marbleYutGameKey(roomCode));
+      const gameText = await redis.get(marbleGameKey(roomCode));
       if (!gameText) { ack({ ok: false, reason: "no_game" }); return; }
       const gameState = JSON.parse(gameText);
       if (gameState.currentTurn !== userId) { ack({ ok: false, reason: "not_your_turn" }); return; }
@@ -1898,7 +1900,7 @@ export const registerSocketHandlers = (io) => {
 
       // piece_group_pct: chance to auto-pull one lonely friendly piece to current position
       const groupPct = Math.min(moverStats.piece_group_pct ?? 0, 15);
-      if (groupPct > 0 && moveResult.position > 0 && moveResult.position !== 20) {
+      if (groupPct > 0 && moveResult.position > 0) {
         const loner = gameState.players[userId].pieces.find(
           (p) => p.id !== pieceId && !p.finished && p.position > 0 && p.position !== moveResult.position,
         );
@@ -1954,10 +1956,8 @@ export const registerSocketHandlers = (io) => {
         }
       }
 
-      // C1: 출발지(0/20) 통과 시 월급 지급
-      // moveResult.finished === true = 엔진이 pos20(도착선)에 도달했다고 판단 = 한 바퀴 완주
-      // 마블윷에서는 completed=false로 강제하지만, moveResult.finished는 그 이전에 확인 가능
-      const passedStart = moveResult.finished === true;
+      // C1: 출발지(pos 0) 통과 시 월급 지급
+      const passedStart = moveResult.passedStart === true;
       if (passedStart) {
         gameState.players[userId].coins += MARBLE_SALARY;
       }
@@ -2011,7 +2011,7 @@ export const registerSocketHandlers = (io) => {
         settleMarbleTurn(gameState, userId);
       }
 
-      await redis.set(marbleYutGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
+      await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
 
       const targetPos = moveResult.position;
       const landData = gameState.lands[targetPos];
@@ -2022,10 +2022,56 @@ export const registerSocketHandlers = (io) => {
       ).length;
       const stacked = stackedAfterMove > 1;
 
-      if (!gameState.winner && !MARBLE_START_POSITIONS.has(targetPos)) {
+      // 특수 칸 처리 (세금, 황금열쇠, 이벤트)
+      const TAX_TILES    = new Set([5, 13, 21, 29]);
+      const CARD_TILES   = new Set([3, 11, 19, 27]);
+      const EVENT_TILE   = 16;
+
+      let specialEvent = null;
+
+      if (!gameState.winner && TAX_TILES.has(targetPos)) {
+        const taxAmount = 200;
+        gameState.players[userId].coins = Math.max(0, gameState.players[userId].coins - taxAmount);
+        await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
+        specialEvent = { type: 'tax', amount: taxAmount, coins: { [userId]: gameState.players[userId].coins } };
+        io.to(roomCode).emit("game:marble:special_tile", specialEvent);
+      } else if (!gameState.winner && CARD_TILES.has(targetPos)) {
+        // 황금열쇠 카드: 랜덤 효과
+        const cards = [
+          { id: 'bonus_coin',  text: '행운의 여신이 미소 지었다! +300 💰',  amount:  300 },
+          { id: 'bonus_coin2', text: '보물 상자를 발견했다! +150 💰',         amount:  150 },
+          { id: 'penalty',     text: '통행세 폭탄! -200 💰',                  amount: -200 },
+          { id: 'teleport',    text: '신비한 바람에 날렸다! 출발 칸으로 이동', amount:    0, move: 0 },
+          { id: 'salary',      text: '특별 보너스! 급여 두 배 +400 💰',        amount:  400 },
+        ];
+        const card = cards[Math.floor(Math.random() * cards.length)];
+        gameState.players[userId].coins = Math.max(0, gameState.players[userId].coins + card.amount);
+        if (card.move !== undefined) {
+          gameState.players[userId].pieces.forEach((p) => {
+            if (p.id === pieceId) { p.lastPos = p.position; p.position = card.move; }
+          });
+        }
+        await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
+        specialEvent = { type: 'card', card, coins: { [userId]: gameState.players[userId].coins } };
+        io.to(roomCode).emit("game:marble:special_tile", specialEvent);
+      } else if (!gameState.winner && targetPos === EVENT_TILE) {
+        // 이벤트 칸: 무작위 이벤트
+        const events = [
+          { id: 'bonus',   text: '이벤트 칸! 행운 +250 💰',   amount:  250 },
+          { id: 'penalty', text: '이벤트 칸! 벌금 -150 💰',   amount: -150 },
+          { id: 'salary2', text: '이벤트 칸! 보너스 +200 💰', amount:  200 },
+        ];
+        const ev = events[Math.floor(Math.random() * events.length)];
+        gameState.players[userId].coins = Math.max(0, gameState.players[userId].coins + ev.amount);
+        await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
+        specialEvent = { type: 'event', event: ev, coins: { [userId]: gameState.players[userId].coins } };
+        io.to(roomCode).emit("game:marble:special_tile", specialEvent);
+      }
+
+      if (!gameState.winner && !MARBLE_START_POSITIONS.has(targetPos) && getLandValue(targetPos) > 0) {
         if (!landData) {
           // 빈 칸: 점령 프롬프트
-          landPrompt = { type: 'claim', pos: targetPos, cost: getLandValue(targetPos), stacked };
+          landPrompt = { type: 'claim', pos: targetPos, cost: calcAcquireCost(targetPos, stacked), stacked };
         } else if (landData.owner === userId && landData.level < 4) {
           // 내 영지 재방문: 강화 프롬프트
           const upgradeCost = getLandValue(targetPos) * (landData.level);
@@ -2040,8 +2086,8 @@ export const registerSocketHandlers = (io) => {
             : rawToll;
           gameState.players[userId].coins = Math.max(0, gameState.players[userId].coins - toll);
           gameState.players[opponentId].coins += toll;
-          await redis.set(marbleYutGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
-          io.to(roomCode).emit("game:marble_yut:toll_paid", {
+          await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
+          io.to(roomCode).emit("game:marble:toll_paid", {
             payer: userId,
             receiver: opponentId,
             pos: targetPos,
@@ -2054,7 +2100,7 @@ export const registerSocketHandlers = (io) => {
           if (tollWin) {
             gameState.winner = tollWin.winner;
             gameState.winReason = tollWin.reason;
-            await redis.set(marbleYutGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
+            await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
           } else if (landData.level < 4) {
             // 인수 프롬프트
             const acquireCost = calcAcquireCost(targetPos, stacked);
@@ -2074,18 +2120,19 @@ export const registerSocketHandlers = (io) => {
         capturedCount: capturedPieces.length,
         passedStart,
         landPrompt,
+        specialEvent,
         winner: gameState.winner,
         winReason: gameState.winReason,
         // H6: 서든데스 점수는 별도 필드로 전달 (Redis coins를 오염시키지 않음)
         finalScores,
         at: Date.now(),
-        ...serializeMarbleYutGame(gameState),
+        ...serializeMarbleGame(gameState),
       };
 
-      io.to(roomCode).emit("game:marble_yut:move_result", moveEvent);
+      io.to(roomCode).emit("game:marble:move_result", moveEvent);
       if (landPrompt) {
         // 이동한 플레이어에게만 프롬프트 전송
-        socket.emit("game:marble_yut:land_prompt", landPrompt);
+        socket.emit("game:marble:land_prompt", landPrompt);
       }
       ack({ ok: true, event: moveEvent });
 
@@ -2097,32 +2144,32 @@ export const registerSocketHandlers = (io) => {
           winReason: gameState.winReason,
           finalScores,
         };
-        io.to(roomCode).emit("game:marble_yut:ended", endedPayload);
-        await redis.del(marbleYutGameKey(roomCode));
+        io.to(roomCode).emit("game:marble:ended", endedPayload);
+        await redis.del(marbleGameKey(roomCode));
         if (gameState.winner) {
-          await saveGameResult(roomCode, gameState.winner, opponentId, 'marble_yut', 0).catch(() => {});
-          await grantGameXpAndMissions(gameState.winner, opponentId, 'marble_yut').catch(() => {});
+          await saveGameResult(roomCode, gameState.winner, opponentId, 'marble', 0).catch(() => {});
+          await grantGameXpAndMissions(gameState.winner, opponentId, 'marble').catch(() => {});
         }
       } else if (gameState.catchBonusPending) {
         setTimeout(async () => {
           try {
-            const latestText = await redis.get(marbleYutGameKey(roomCode));
+            const latestText = await redis.get(marbleGameKey(roomCode));
             if (!latestText) return;
             const latestState = JSON.parse(latestText);
             if (latestState.id !== gameState.id || !latestState.catchBonusPending) return;
             latestState.catchBonusPending = false;
             latestState.catchBonusUntil = null;
             latestState.catchBonusTarget = null;
-            await redis.set(marbleYutGameKey(roomCode), JSON.stringify(latestState), "EX", 7200);
-            emitMarbleYutState(io, roomCode, "game:marble_yut:state", latestState);
+            await redis.set(marbleGameKey(roomCode), JSON.stringify(latestState), "EX", 7200);
+            emitMarbleState(io, roomCode, "game:marble:state", latestState);
           } catch (err) {
-            console.error(`marble_yut catch bonus timeout error: ${err.message}`);
+            console.error(`marble catch bonus timeout error: ${err.message}`);
           }
         }, 15000);
       }
     });
 
-    socket.on("game:marble_yut:land_act", async (payload, ackRaw) => {
+    socket.on("game:marble:land_act", async (payload, ackRaw) => {
       const ack = normalizeAck(ackRaw);
       const roomCode = socket.data.roomCode;
       const userId = socket.data.userId;
@@ -2131,7 +2178,7 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const gameText = await redis.get(marbleYutGameKey(roomCode));
+      const gameText = await redis.get(marbleGameKey(roomCode));
       if (!gameText) { ack({ ok: false, reason: "no_game" }); return; }
       const gameState = JSON.parse(gameText);
 
@@ -2149,7 +2196,7 @@ export const registerSocketHandlers = (io) => {
 
       let landChanged = false;
       if (action === 'claim') {
-        const cost = getLandValue(posNum) * (stacked ? 2 : 1);
+        const cost = calcAcquireCost(posNum, stacked);
         if (playerState.coins < cost) { ack({ ok: false, reason: "insufficient_coins" }); return; }
         if (gameState.lands[posNum]) { ack({ ok: false, reason: "already_claimed" }); return; }
         playerState.coins -= cost;
@@ -2207,23 +2254,23 @@ export const registerSocketHandlers = (io) => {
         }
       }
 
-      await redis.set(marbleYutGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
+      await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
 
-      emitMarbleYutState(io, roomCode, "game:marble_yut:state", gameState, {
+      emitMarbleState(io, roomCode, "game:marble:state", gameState, {
         landAction: { action, pos: posNum, by: userId },
       });
-      ack({ ok: true, gameState: serializeMarbleYutGame(gameState) });
+      ack({ ok: true, gameState: serializeMarbleGame(gameState) });
 
       if (gameState.winner) {
-        io.to(roomCode).emit("game:marble_yut:ended", {
+        io.to(roomCode).emit("game:marble:ended", {
           winner: gameState.winner,
           winReason: gameState.winReason,
           finalScores: null,
         });
-        await redis.del(marbleYutGameKey(roomCode));
+        await redis.del(marbleGameKey(roomCode));
         const landActOpponentId = getNextMarblePlayer(gameState, userId);
-        await saveGameResult(roomCode, gameState.winner, landActOpponentId, 'marble_yut', 0).catch(() => {});
-        await grantGameXpAndMissions(gameState.winner, landActOpponentId, 'marble_yut').catch(() => {});
+        await saveGameResult(roomCode, gameState.winner, landActOpponentId, 'marble', 0).catch(() => {});
+        await grantGameXpAndMissions(gameState.winner, landActOpponentId, 'marble').catch(() => {});
       }
     });
 
@@ -2259,6 +2306,25 @@ export const registerSocketHandlers = (io) => {
         at: Date.now(),
       };
       io.to(roomCode).emit("game:yut:chat", event);
+      ack({ ok: true, event });
+    });
+
+    socket.on("game:marble:chat", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) { ack({ ok: false, reason: "not_joined" }); return; }
+
+      const parsed = yutChatSchema.safeParse(payload);
+      if (!parsed.success) { ack({ ok: false, reason: "invalid_message" }); return; }
+
+      const gameText = await redis.get(marbleGameKey(roomCode));
+      if (!gameText) { ack({ ok: false, reason: "no_game" }); return; }
+      const gameState = JSON.parse(gameText);
+      if (!gameState.playersOrder?.includes(userId)) { ack({ ok: false, reason: "not_a_player" }); return; }
+
+      const event = { by: userId, message: parsed.data.message, at: Date.now() };
+      io.to(roomCode).emit("game:marble:chat", event);
       ack({ ok: true, event });
     });
 

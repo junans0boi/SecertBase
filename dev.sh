@@ -146,6 +146,19 @@ done
 
 # ── 4. Flutter Web ───────────────────────────────────────────────────────────
 info "Flutter Web 실행 중 (포트 7357)..."
+
+# .env에서 빌드 변수 로드 (GOOGLE_CLIENT_ID, KAKAO_REVIEW_AUTO_LOGIN)
+FLUTTER_ENV_FILE="$ROOT/apps/secret_base_app/.env"
+GOOGLE_CLIENT_ID=""
+KAKAO_REVIEW_AUTO_LOGIN="false"
+if [ -f "$FLUTTER_ENV_FILE" ]; then
+  GOOGLE_CLIENT_ID="$(grep -E '^GOOGLE_CLIENT_ID=' "$FLUTTER_ENV_FILE" | cut -d= -f2- | tr -d '\r')"
+  KAKAO_REVIEW_AUTO_LOGIN="$(grep -E '^KAKAO_REVIEW_AUTO_LOGIN=' "$FLUTTER_ENV_FILE" | cut -d= -f2- | tr -d '\r')"
+  info ".env 로드됨 (GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:+설정됨}${GOOGLE_CLIENT_ID:-미설정})"
+else
+  info ".env 없음 — Google 로그인 비활성화 (apps/secret_base_app/.env 생성 후 재시작)"
+fi
+
 echo ""
 echo "  앱 URL: http://localhost:7357"
 echo "  서버:   http://localhost:4100"
@@ -153,6 +166,15 @@ echo "  DB:     127.0.0.1:3307 (→ 서버 실 DB)"
 echo "  Redis:  127.0.0.1:6380 (→ 서버 Redis)"
 echo ""
 cd "$ROOT/apps/secret_base_app"
+
+FLUTTER_DEFINES=(
+  "--dart-define=SOCKET_URL=http://localhost:4100"
+  "--dart-define=KAKAO_REVIEW_AUTO_LOGIN=$KAKAO_REVIEW_AUTO_LOGIN"
+)
+if [ -n "$GOOGLE_CLIENT_ID" ]; then
+  FLUTTER_DEFINES+=("--dart-define=GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID")
+fi
+
 flutter run -d chrome \
   --web-port 7357 \
-  --dart-define=SOCKET_URL=http://localhost:4100
+  "${FLUTTER_DEFINES[@]}"
