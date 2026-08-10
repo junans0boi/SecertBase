@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import 'auth_service.dart';
+import 'marble_characters.dart';
 
 class SocketService extends ChangeNotifier {
   static final SocketService _i = SocketService._internal();
@@ -27,7 +28,7 @@ class SocketService extends ChangeNotifier {
   ];
   static const _profileEmojiKey = 'secret_base_profile_emoji';
   static const yutCharacterIds = ['honggilldong', 'nolbu', 'miho'];
-  static const marbleCharacterIds = ['k', 'ria', 'luna', 'rex', 'zia', 'drv', 'hayun', 'jake', 'nova', 'omega'];
+  static const marbleCharacterIds = kMarbleCharacterIds;
   static const yutCharacterNames = {
     'honggilldong': '홍길동',
     'nolbu': '놀부',

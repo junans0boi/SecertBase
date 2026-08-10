@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MARBLE_CHARACTER_IDS } from "./marble-characters.js";
 import { config } from "./config.js";
 import { installSocketAuthentication, installSocketFeatureGate } from "./backend-access.js";
 import {
@@ -142,7 +143,7 @@ const lobbyStakeSchema = z.object({
 });
 
 const yutCharacters = ["honggilldong", "nolbu", "miho"];
-const marbleCharacterIds = ["k", "ria", "luna", "rex", "zia", "drv", "hayun", "jake", "nova", "omega"];
+const marbleCharacterIds = MARBLE_CHARACTER_IDS;
 
 const lobbyCharacterSchema = z.union([
   z.object({
