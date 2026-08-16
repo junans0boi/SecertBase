@@ -39,6 +39,7 @@ export const serializeUnoGameFor = (game, userId) => {
     drawStackType: game.drawStackType ?? null,
     handCount,
     hand: game.hands[userId] ?? [],
+    drawnCardId: game.drawnCardId ?? null,
     unoCallNeeded: game.unoCallNeeded ?? null,
   };
 };

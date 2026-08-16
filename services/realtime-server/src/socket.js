@@ -18,6 +18,7 @@ import {
   checkWin,
   checkCatch,
   getCarriedPieces,
+  applyMoveToPieces,
   hasBackdoMove,
   getNextPlayer as getNextYutPlayer,
   recordCapture,
@@ -95,6 +96,25 @@ import {
   declareGoStop,
   serializeFor as serializeGostopFor,
 } from "./gostop-engine.js";
+
+// ── 방(room) 단위 직렬 뮤텍스 ─────────────────────────────────────────────────
+// Node.js는 단일 스레드지만 await 사이에 이벤트 루프가 다른 요청을 처리할 수 있어
+// 동일 방의 두 요청이 Redis에서 같은 gameState를 읽고 마지막 쓰기가 앞 쓰기를 덮어쓰는
+// 레이스컨디션이 발생한다. 방 코드별 Promise 체인으로 이를 직렬화한다.
+const roomLocks = new Map();
+async function withRoomLock(roomCode, fn) {
+  const prev = roomLocks.get(roomCode) ?? Promise.resolve();
+  let release;
+  const lock = new Promise((r) => { release = r; });
+  roomLocks.set(roomCode, lock);
+  try {
+    await prev;
+    return await fn();
+  } finally {
+    release();
+    if (roomLocks.get(roomCode) === lock) roomLocks.delete(roomCode);
+  }
+}
 
 function withBowlingFrames(gameState) {
   const frames = {};
@@ -802,6 +822,8 @@ export const registerSocketHandlers = (io) => {
               handCount: getUnoHandCount(game),
               hand: game.hands?.[userId] ?? [],
               unoCallNeeded: game.unoCallNeeded ?? null,
+              drawnCardId: game.drawnCardId ?? null,
+              canPlayDrawn: !!(game.drawnCardId && game.currentPlayer === userId),
             };
           }
         }
@@ -1371,53 +1393,55 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const gameText = await redis.get(yutGameKey(roomCode));
-      if (!gameText) {
-        ack({ ok: false, reason: "no_game" });
-        return;
-      }
-
-      const gameState = JSON.parse(gameText);
-      if (gameState.phase !== "roll_order") {
-        ack({ ok: false, reason: "invalid_phase" });
-        return;
-      }
-      if (gameState.startRolls?.[userId] != null) {
-        ack({ ok: false, reason: "already_rolled" });
-        return;
-      }
-
-      gameState.startRolls = {
-        ...(gameState.startRolls ?? {}),
-        [userId]: Math.floor(Math.random() * 6) + 1,
-      };
-
-      const [player1, player2] = gameState.playersOrder;
-      const p1Roll = gameState.startRolls[player1];
-      const p2Roll = gameState.startRolls[player2];
-      if (p1Roll != null && p2Roll != null) {
-        if (p1Roll === p2Roll) {
-          gameState.startRolls = {};
-        } else {
-          gameState.currentTurn = p1Roll > p2Roll ? player1 : player2;
-          gameState.phase = "order_countdown";
-          gameState.orderCountdownUntil = Date.now() + 3000;
+      let doCountdown = false;
+      await withRoomLock(roomCode, async () => {
+        const gameText = await redis.get(yutGameKey(roomCode));
+        if (!gameText) {
+          ack({ ok: false, reason: "no_game" });
+          return;
         }
-      }
 
-      await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
-      emitYutState(io, roomCode, "game:yut:start_roll", gameState, { by: userId });
-      ack({ ok: true, gameState: serializeYutGame(gameState) });
+        const gameState = JSON.parse(gameText);
+        if (gameState.phase !== "roll_order") {
+          ack({ ok: false, reason: "invalid_phase" });
+          return;
+        }
+        if (gameState.startRolls?.[userId] != null) {
+          ack({ ok: false, reason: "already_rolled" });
+          return;
+        }
 
-      if (gameState.phase === "order_countdown") {
+        gameState.startRolls = {
+          ...(gameState.startRolls ?? {}),
+          [userId]: Math.floor(Math.random() * 6) + 1,
+        };
+
+        const [player1, player2] = gameState.playersOrder;
+        const p1Roll = gameState.startRolls[player1];
+        const p2Roll = gameState.startRolls[player2];
+        if (p1Roll != null && p2Roll != null) {
+          if (p1Roll === p2Roll) {
+            gameState.startRolls = {};
+          } else {
+            gameState.currentTurn = p1Roll > p2Roll ? player1 : player2;
+            gameState.phase = "order_countdown";
+            gameState.orderCountdownUntil = Date.now() + 3000;
+          }
+        }
+
+        await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
+        emitYutState(io, roomCode, "game:yut:start_roll", gameState, { by: userId });
+        ack({ ok: true, gameState: serializeYutGame(gameState) });
+        if (gameState.phase === "order_countdown") doCountdown = true;
+      });
+
+      if (doCountdown) {
         setTimeout(async () => {
           try {
             const latestText = await redis.get(yutGameKey(roomCode));
             if (!latestText) return;
             const latestState = JSON.parse(latestText);
-            if (latestState.id !== gameState.id || latestState.phase !== "order_countdown") {
-              return;
-            }
+            if (latestState.phase !== "order_countdown") return;
             latestState.phase = "throwing";
             latestState.orderCountdownUntil = null;
             await redis.set(yutGameKey(roomCode), JSON.stringify(latestState), "EX", 3600);
@@ -1440,6 +1464,7 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
+      await withRoomLock(roomCode, async () => {
       const gameText = await redis.get(yutGameKey(roomCode));
       if (!gameText) {
         ack({ ok: false, reason: "no_game" });
@@ -1464,11 +1489,8 @@ export const registerSocketHandlers = (io) => {
         gameState.hasBonusThrow = false;
       }
 
-      const { rows: numericRows } = await query(
-        'SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [userId]
-      );
-      const numericUserId = numericRows[0]?.UserId;
-      const stats = numericUserId ? await getEquippedStats(numericUserId) : {};
+      // 게임 시작 시 캐시된 stats 재사용 (DB 재조회 불필요)
+      const stats = gameState.playerStats?.[userId] ?? {};
 
       // 지고 있는지 판단 (상대보다 골인 말이 적으면 losing)
       const opponentCode = gameState.playersOrder.find((p) => p !== userId);
@@ -1493,6 +1515,7 @@ export const registerSocketHandlers = (io) => {
           const bonus = Math.floor(gameState.stake * winCoinPct / 100);
           gameState.winCoinBonus = gameState.winCoinBonus ?? {};
           gameState.winCoinBonus[userId] = (gameState.winCoinBonus[userId] ?? 0) + bonus;
+          socket.emit("game:item_effect", { stat: "yut_win_coin_pct", amount: bonus });
         }
       }
 
@@ -1525,6 +1548,7 @@ export const registerSocketHandlers = (io) => {
         at: Date.now(),
       });
       ack({ ok: true, throwResult, gameState: serializeYutGame(gameState) });
+      }); // withRoomLock
     });
 
     socket.on("game:yut:move", async (payload, ackRaw) => {
@@ -1542,6 +1566,7 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
+      await withRoomLock(roomCode, async () => {
       const gameText = await redis.get(yutGameKey(roomCode));
       if (!gameText) {
         ack({ ok: false, reason: "no_game" });
@@ -1599,25 +1624,11 @@ export const registerSocketHandlers = (io) => {
       const opponentId = getNextYutPlayer(gameState, userId);
       const defenderStats = gameState.playerStats?.[opponentId] ?? {};
 
-      // Pieces always continue on 32-tile loop (never finish)
+      // Only pieces already on the selected piece move together. A separate
+      // piece is never pulled in by chance; landing on an occupied own square
+      // is handled by the normal same-position grouping below.
       {
-        for (const carriedPiece of carriedPieces) {
-          carriedPiece.lastPos = moveResult.lastPos;
-          carriedPiece.position = moveResult.position;
-        }
-
-        // piece_group_pct: chance to auto-pull one lonely friendly piece to current position
-        const groupPct = Math.min(moverStats.piece_group_pct ?? 0, 15);
-        if (groupPct > 0 && moveResult.position > 0 && moveResult.position !== 20) {
-          const loner = gameState.players[userId].pieces.find(
-            (p) => p.id !== pieceId && !p.finished && p.position > 0 && p.position !== moveResult.position,
-          );
-          if (loner && Math.random() * 100 < groupPct) {
-            loner.position = moveResult.position;
-            loner.lastPos = moveResult.lastPos;
-            stackedPieces.push(loner);
-          }
-        }
+        applyMoveToPieces(carriedPieces, moveResult);
 
         const rawCaptured = checkCatch(piece.position, gameState.players[opponentId].pieces);
 
@@ -1642,6 +1653,7 @@ export const registerSocketHandlers = (io) => {
         if (catchCoinPer > 0 && capturedPieces.length > 0) {
           gameState.catchCoinBonus = gameState.catchCoinBonus ?? {};
           gameState.catchCoinBonus[userId] = (gameState.catchCoinBonus[userId] ?? 0) + catchCoinPer * capturedPieces.length;
+          socket.emit("game:item_effect", { stat: "piece_catch_coin_bonus", amount: catchCoinPer * capturedPieces.length });
         }
 
         // yut_catch_bonus: 잡기 이벤트당 플랫 코인, 잡은 말 수 무관 (최대 300)
@@ -1649,6 +1661,7 @@ export const registerSocketHandlers = (io) => {
         if (catchFlatBonus > 0 && capturedPieces.length > 0) {
           gameState.catchCoinBonus = gameState.catchCoinBonus ?? {};
           gameState.catchCoinBonus[userId] = (gameState.catchCoinBonus[userId] ?? 0) + catchFlatBonus;
+          socket.emit("game:item_effect", { stat: "yut_catch_bonus", amount: catchFlatBonus });
         }
       }
 
@@ -1663,6 +1676,7 @@ export const registerSocketHandlers = (io) => {
           else if (preMovePos === 23) triggerPct = backdoBonus;              // 대각선
           if (triggerPct > 0 && Math.random() * 100 < triggerPct) {
             gameState.hasBonusThrow = true;
+            socket.emit("game:item_effect", { stat: "yut_backdo_bonus_pct", amount: 0 });
           }
         }
       }
@@ -1711,6 +1725,7 @@ export const registerSocketHandlers = (io) => {
           grantGameXpAndMissions(gameState.winner, yutLoserId, 'yut'),
         ]);
       }
+      }); // withRoomLock
     });
 
     // ─── 마블윷 핸들러 ──────────────────────────────────────────────────────────
@@ -2678,6 +2693,7 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
+      await withRoomLock(roomCode, async () => {
       const gameText = await redis.get(unoGameKey(roomCode));
       if (!gameText) {
         ack({ ok: false, reason: "no_game" });
@@ -2696,6 +2712,11 @@ export const registerSocketHandlers = (io) => {
 
       if (cardIndex === -1) {
         ack({ ok: false, reason: "card_not_found" });
+        return;
+      }
+
+      if (gameState.drawnCardId && gameState.drawnCardId !== cardId) {
+        ack({ ok: false, reason: "must_choose_drawn_card" });
         return;
       }
 
@@ -2728,6 +2749,7 @@ export const registerSocketHandlers = (io) => {
       // trigger card is removed, all remaining cards of that color are also
       // discarded in current hand order.
       hand.splice(cardIndex, 1);
+      gameState.drawnCardId = null;
       const playedCards = gameState.mode === "go_wild"
         ? collectDiscardAllBatch(hand, card)
         : [card];
@@ -2750,6 +2772,7 @@ export const registerSocketHandlers = (io) => {
           if (opponentId && gameState.hands[opponentId]) {
             const bonusCards = drawCards(gameState, 1);
             gameState.hands[opponentId].push(...bonusCards);
+            socket.emit("game:item_effect", { stat: "card_reverse_bonus", amount: 0 });
           }
         }
       }
@@ -2826,6 +2849,7 @@ export const registerSocketHandlers = (io) => {
           grantGameXpAndMissions(gameState.winner, unoLoserId, 'onecard'),
         ]);
       }
+      }); // withRoomLock
     });
 
     socket.on("game:uno:call", async (_, ackRaw) => {
@@ -2834,20 +2858,22 @@ export const registerSocketHandlers = (io) => {
       const userId = socket.data.userId;
       if (!roomCode || !userId) { ack({ ok: false, reason: "not_joined" }); return; }
 
-      const gameText = await redis.get(unoGameKey(roomCode));
-      if (!gameText) { ack({ ok: false, reason: "no_game" }); return; }
+      await withRoomLock(roomCode, async () => {
+        const gameText = await redis.get(unoGameKey(roomCode));
+        if (!gameText) { ack({ ok: false, reason: "no_game" }); return; }
 
-      const gameState = JSON.parse(gameText);
-      if (gameState.unoCallNeeded !== userId) {
-        ack({ ok: false, reason: "not_needed" });
-        return;
-      }
+        const gameState = JSON.parse(gameText);
+        if (gameState.unoCallNeeded !== userId) {
+          ack({ ok: false, reason: "not_needed" });
+          return;
+        }
 
-      gameState.unoCallNeeded = null;
-      await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
+        gameState.unoCallNeeded = null;
+        await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
 
-      io.to(roomCode).emit("game:uno:called", { by: userId });
-      ack({ ok: true });
+        io.to(roomCode).emit("game:uno:called", { by: userId });
+        ack({ ok: true });
+      }); // withRoomLock
     });
 
     socket.on("game:uno:catch", async (_, ackRaw) => {
@@ -2856,6 +2882,7 @@ export const registerSocketHandlers = (io) => {
       const userId = socket.data.userId;
       if (!roomCode || !userId) { ack({ ok: false, reason: "not_joined" }); return; }
 
+      await withRoomLock(roomCode, async () => {
       const gameText = await redis.get(unoGameKey(roomCode));
       if (!gameText) { ack({ ok: false, reason: "no_game" }); return; }
 
@@ -2907,6 +2934,7 @@ export const registerSocketHandlers = (io) => {
       }
 
       ack({ ok: true });
+      }); // withRoomLock
     });
 
     // +4 도전: 상대가 +4를 낼 자격이 있었는지 확인
@@ -2916,6 +2944,7 @@ export const registerSocketHandlers = (io) => {
       const userId = socket.data.userId;
       if (!roomCode || !userId) { ack({ ok: false, reason: "not_joined" }); return; }
 
+      await withRoomLock(roomCode, async () => {
       const gameText = await redis.get(unoGameKey(roomCode));
       if (!gameText) { ack({ ok: false, reason: "no_game" }); return; }
 
@@ -2985,6 +3014,7 @@ export const registerSocketHandlers = (io) => {
       }
 
       ack({ ok: true, success: challengeSuccess });
+      }); // withRoomLock
     });
 
     socket.on("game:uno:reaction", async (payload, ackRaw) => {
@@ -3033,6 +3063,7 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
+      await withRoomLock(roomCode, async () => {
       const gameText = await redis.get(unoGameKey(roomCode));
       if (!gameText) {
         ack({ ok: false, reason: "no_game" });
@@ -3053,6 +3084,7 @@ export const registerSocketHandlers = (io) => {
         const shieldPct = Math.min(myUnoStats.card_shield_pct ?? 0, 15);
         if (shieldPct > 0 && Math.random() * 100 < shieldPct) {
           drawCount = 0;
+          socket.emit("game:item_effect", { stat: "card_shield_pct", amount: 0 });
         }
       }
 
@@ -3061,6 +3093,7 @@ export const registerSocketHandlers = (io) => {
         const luckyPct = Math.min(myUnoStats.card_lucky_draw_pct ?? 0, 20);
         if (luckyPct > 0 && Math.random() * 100 < luckyPct) {
           drawCount = Math.max(1, drawCount - 1);
+          socket.emit("game:item_effect", { stat: "card_lucky_draw_pct", amount: 0 });
         }
       }
 
@@ -3072,13 +3105,34 @@ export const registerSocketHandlers = (io) => {
 
       const drawnCards = drawCards(gameState, drawCount);
       gameState.hands[userId].push(...drawnCards);
-      clearDrawStack(gameState);
 
-      // Next turn
-      gameState.currentPlayer = getNextPlayer(gameState);
+      const drawnCard = drawnCards[drawnCards.length - 1] ?? null;
+      const topCard = gameState.discardPile[gameState.discardPile.length - 1];
+      const drawnCardIsPlayable = drawnCard != null && canPlayCard(
+        drawnCard,
+        topCard,
+        gameState.declaredColor,
+        gameState.drawStack || 0,
+        gameState.drawStackType,
+        { mode: gameState.mode },
+      );
 
-      // UNO window expires when opponent takes their turn
-      if (gameState.unoCallNeeded && gameState.unoCallNeeded !== userId) {
+      if (drawnCardIsPlayable) {
+        // Keep the turn and pending draw stack until the player chooses.
+        gameState.drawnCardId = drawnCard.id;
+      } else {
+        gameState.drawnCardId = null;
+        clearDrawStack(gameState);
+        gameState.currentPlayer = getNextPlayer(gameState);
+      }
+
+      // UNO 선언 창 처리:
+      // - 상대가 드로우할 때 내 선언 기회 소멸 (기존)
+      // - 자신이 드로우하면 자신의 선언 의무도 소멸 (패가 늘었으므로 캐치 불가 상태)
+      if (gameState.unoCallNeeded && gameState.unoCallNeeded !== userId && !drawnCardIsPlayable) {
+        gameState.unoCallNeeded = null;
+      }
+      if (gameState.unoCallNeeded === userId) {
         gameState.unoCallNeeded = null;
       }
 
@@ -3088,10 +3142,11 @@ export const registerSocketHandlers = (io) => {
         by: userId,
         count: drawCount,
         nextPlayer: gameState.currentPlayer,
+        canPlayDrawn: drawnCardIsPlayable,
         mode: gameState.mode,
         declaredColor: gameState.declaredColor,
-        drawStack: 0,
-        drawStackType: null,
+        drawStack: drawnCardIsPlayable ? (gameState.drawStack || 0) : 0,
+        drawStackType: drawnCardIsPlayable ? (gameState.drawStackType ?? null) : null,
         handCount: getUnoHandCount(gameState),
         unoCallNeeded: gameState.unoCallNeeded ?? null,
       };
@@ -3099,7 +3154,65 @@ export const registerSocketHandlers = (io) => {
       io.to(roomCode).emit("game:uno:drawn", event);
       // Send updated hand privately to the player who drew
       socket.emit("game:uno:hand_update", { hand: gameState.hands[userId] });
+      if (drawnCardIsPlayable) {
+        socket.emit("game:uno:draw_choice", {
+          card: drawnCard,
+          drawStack: gameState.drawStack || 0,
+          drawStackType: gameState.drawStackType ?? null,
+        });
+      }
       ack({ ok: true, event });
+      }); // withRoomLock
+    });
+
+    socket.on("game:uno:draw_decision", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) {
+        ack({ ok: false, reason: "not_joined" });
+        return;
+      }
+
+      await withRoomLock(roomCode, async () => {
+      const gameText = await redis.get(unoGameKey(roomCode));
+      if (!gameText) {
+        ack({ ok: false, reason: "no_game" });
+        return;
+      }
+
+      const gameState = JSON.parse(gameText);
+      if (gameState.currentPlayer !== userId || !gameState.drawnCardId) {
+        ack({ ok: false, reason: "no_draw_choice" });
+        return;
+      }
+
+      if (payload?.play === true) {
+        ack({ ok: true, play: true, cardId: gameState.drawnCardId });
+        return;
+      }
+
+      gameState.drawnCardId = null;
+      clearDrawStack(gameState);
+      gameState.currentPlayer = getNextPlayer(gameState);
+      if (gameState.unoCallNeeded && gameState.unoCallNeeded !== userId) {
+        gameState.unoCallNeeded = null;
+      }
+      await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
+
+      const event = {
+        by: userId,
+        nextPlayer: gameState.currentPlayer,
+        mode: gameState.mode,
+        declaredColor: gameState.declaredColor,
+        drawStack: 0,
+        drawStackType: null,
+        handCount: getUnoHandCount(gameState),
+        unoCallNeeded: gameState.unoCallNeeded ?? null,
+      };
+      io.to(roomCode).emit("game:uno:draw_decided", event);
+      ack({ ok: true, play: false, event });
+      }); // withRoomLock
     });
 
     socket.on("game:bomb:new", async (payload, ackRaw) => {

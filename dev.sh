@@ -92,7 +92,10 @@ if [ ! -x "$MYSQL_BIN" ]; then
   err "mysql 클라이언트가 없습니다: brew install mysql-client 후 재시도하세요"
   exit 1
 fi
-MYSQL="$MYSQL_BIN --ssl-mode=DISABLED -u${DB_USER} -p${DB_PASS} -P ${DB_PORT} -h 127.0.0.1 ${DB_NAME}"
+# The local client may be MariaDB (Homebrew's default on macOS), which does
+# not support MySQL's --ssl-mode option. The SSH tunnel already encrypts this
+# connection, and --skip-ssl is supported by both MariaDB and MySQL clients.
+MYSQL="$MYSQL_BIN --skip-ssl -u${DB_USER} -p${DB_PASS} -P ${DB_PORT} -h 127.0.0.1 ${DB_NAME}"
 
 MIGRATIONS_DIR="$ROOT/services/realtime-server/migrations"
 
@@ -152,8 +155,10 @@ FLUTTER_ENV_FILE="$ROOT/apps/secret_base_app/.env"
 GOOGLE_CLIENT_ID=""
 KAKAO_REVIEW_AUTO_LOGIN="false"
 if [ -f "$FLUTTER_ENV_FILE" ]; then
-  GOOGLE_CLIENT_ID="$(grep -E '^GOOGLE_CLIENT_ID=' "$FLUTTER_ENV_FILE" | cut -d= -f2- | tr -d '\r')"
-  KAKAO_REVIEW_AUTO_LOGIN="$(grep -E '^KAKAO_REVIEW_AUTO_LOGIN=' "$FLUTTER_ENV_FILE" | cut -d= -f2- | tr -d '\r')"
+  # These keys are optional. Avoid grep under `set -o pipefail`: a missing
+  # optional key must not terminate the whole dev launcher.
+  GOOGLE_CLIENT_ID="$(sed -n 's/^GOOGLE_CLIENT_ID=//p' "$FLUTTER_ENV_FILE" | tr -d '\r')"
+  KAKAO_REVIEW_AUTO_LOGIN="$(sed -n 's/^KAKAO_REVIEW_AUTO_LOGIN=//p' "$FLUTTER_ENV_FILE" | tr -d '\r')"
   info ".env 로드됨 (GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:+설정됨}${GOOGLE_CLIENT_ID:-미설정})"
 else
   info ".env 없음 — Google 로그인 비활성화 (apps/secret_base_app/.env 생성 후 재시작)"

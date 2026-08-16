@@ -171,7 +171,8 @@ export function createUnoGameState(players, handSize = 7, options = {}) {
     lastDraw4Player: null,   // who played the last wild_draw4 (for challenge check)
     colorBeforeDraw4: null,  // effective color before last draw4 (for challenge check)
     winner: null,
-    unoCallers: [],
+    // A playable drawn card requires an explicit play/pass decision.
+    drawnCardId: null,
   };
 }
 

@@ -137,6 +137,7 @@ class SocketService extends ChangeNotifier {
   String? marbleWinReason;
   bool marbleHasDoubleRoll = false;
   bool marbleCatchBonusPending = false;
+
   /// H2: 잡기를 수행한 플레이어 uid (턴 전환에 독립적)
   String? marbleCatchBonusBy;
   List<dynamic> marblePendingMoves = [];
@@ -147,12 +148,12 @@ class SocketService extends ChangeNotifier {
   VoidCallback? onMarblePassedStart;
   List<String> marblePlayers = [];
   Map<String, List<dynamic>> marblePieceDetails = {};
-  Map<String, dynamic> marbleLands = {};   // {pos: {owner, level}}
-  Map<String, int> marbleCoins = {};       // {uid: coins}
+  Map<String, dynamic> marbleLands = {}; // {pos: {owner, level}}
+  Map<String, int> marbleCoins = {}; // {uid: coins}
   int marbleRound = 1;
-  Map<String, dynamic>? marbleLandPrompt;  // {type, pos, cost, level?}
+  Map<String, dynamic>? marbleLandPrompt; // {type, pos, cost, level?}
   Map<String, String> marbleCharacters = {};
-  Map<String, dynamic>? marbleLastRoll;   // {dice1, dice2, total, isDouble}
+  Map<String, dynamic>? marbleLastRoll; // {dice1, dice2, total, isDouble}
   int? marbleLastRollAt;
   int? marbleCatchBonusUntil;
   String? marbleCatchBonusTarget;
@@ -174,6 +175,8 @@ class SocketService extends ChangeNotifier {
   String? unoWinner;
   bool unoPendingCall = false; // I played to 1 card, need to press UNO
   bool unoCatchable = false; // Opponent has 1 card and hasn't called UNO
+  Map<String, dynamic>? unoDrawChoiceCard;
+  bool unoCanPlayDrawn = false;
   // draw stack chaining
   int unoDrawStack = 0;
   String? unoDrawStackType; // 'draw2' | 'wild_draw4' | null
@@ -251,6 +254,7 @@ class SocketService extends ChangeNotifier {
   // 드로잉 데이터는 콜백으로 직접 처리 (ChangeNotifier 우회 → 성능)
   Function(Map<String, dynamic>)? _onCatchDraw;
   VoidCallback? _onCatchClear;
+  Function(Map<String, dynamic>)? _onItemEffect;
 
   final List<String> _logs = [];
   List<String> get logs => List.unmodifiable(_logs);
@@ -646,6 +650,10 @@ class SocketService extends ChangeNotifier {
       notifyListeners();
     });
 
+    socket.on('game:item_effect', (data) {
+      _onItemEffect?.call(_m(data));
+    });
+
     socket.on('game:marble:chat', (data) {
       final map = _m(data);
       final message = map['message'] as String?;
@@ -656,11 +664,15 @@ class SocketService extends ChangeNotifier {
         {
           'by': by,
           'message': message,
-          'at': (map['at'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch,
+          'at':
+              (map['at'] as num?)?.toInt() ??
+              DateTime.now().millisecondsSinceEpoch,
         },
       ];
       if (marbleChatMessages.length > 50) {
-        marbleChatMessages = marbleChatMessages.sublist(marbleChatMessages.length - 50);
+        marbleChatMessages = marbleChatMessages.sublist(
+          marbleChatMessages.length - 50,
+        );
       }
       notifyListeners();
     });
@@ -755,6 +767,10 @@ class SocketService extends ChangeNotifier {
       unoDeclaredColor = map['declaredColor'] as String?;
       unoDrawStack = 0;
       unoDrawStackType = null;
+      unoPendingCall = false;
+      unoCatchable = false;
+      unoDrawChoiceCard = null;
+      unoCanPlayDrawn = false;
       unoLastSpecialCard = null;
       unoLastSpecialBy = null;
       unoLastSpecialAt = null;
@@ -794,6 +810,8 @@ class SocketService extends ChangeNotifier {
       unoTopCardMap = card;
       unoTopCard = '${card['color']} ${card['value']}';
       unoDeclaredColor = map['declaredColor'] as String?;
+      unoDrawChoiceCard = null;
+      unoCanPlayDrawn = false;
       unoDrawStack = (map['drawStack'] as num?)?.toInt() ?? unoDrawStack;
       unoDrawStackType = map['drawStackType'] as String?;
       _applyUnoCounts(map['handCount']);
@@ -827,11 +845,33 @@ class SocketService extends ChangeNotifier {
       unoCurrentPlayer = map['nextPlayer'] as String?;
       unoMode = map['mode'] as String? ?? unoMode;
       unoDeclaredColor = map['declaredColor'] as String? ?? unoDeclaredColor;
-      unoDrawStack = 0;
-      unoDrawStackType = null;
+      unoDrawStack = (map['drawStack'] as num?)?.toInt() ?? 0;
+      unoDrawStackType = map['drawStackType'] as String?;
       _applyUnoCounts(map['handCount']);
       _applyUnoCallNeeded(map['unoCallNeeded']);
       _log('카드 뽑기 - 다음 턴: $unoCurrentPlayer');
+      notifyListeners();
+    });
+
+    socket.on('game:uno:draw_choice', (data) {
+      final map = _m(data);
+      final card = _cardMap(map['card']);
+      if (card == null) return;
+      unoDrawChoiceCard = card;
+      unoCanPlayDrawn = true;
+      notifyListeners();
+    });
+
+    socket.on('game:uno:draw_decided', (data) {
+      final map = _m(data);
+      unoCurrentPlayer = map['nextPlayer'] as String?;
+      unoDeclaredColor = map['declaredColor'] as String? ?? unoDeclaredColor;
+      unoDrawStack = 0;
+      unoDrawStackType = null;
+      unoDrawChoiceCard = null;
+      unoCanPlayDrawn = false;
+      _applyUnoCounts(map['handCount']);
+      _applyUnoCallNeeded(map['unoCallNeeded']);
       notifyListeners();
     });
 
@@ -845,23 +885,6 @@ class SocketService extends ChangeNotifier {
       final success = map['success'] == true;
       final by = map['by'] as String?;
       _log('UNO +4 도전 ${success ? "성공" : "실패"}: $by');
-      notifyListeners();
-    });
-
-    socket.on('game:uno:discarded_all', (data) {
-      final map = _m(data);
-      unoCurrentPlayer = map['nextPlayer'] as String?;
-      unoTopCardMap = _m(map['lastCard'] ?? {}).isEmpty
-          ? unoTopCardMap
-          : _m(map['lastCard']);
-      unoTopCard = '${unoTopCardMap?['color']} ${unoTopCardMap?['value']}';
-      unoDeclaredColor = null;
-      unoDrawStack = (map['drawStack'] as num?)?.toInt() ?? 0;
-      unoDrawStackType = map['drawStackType'] as String?;
-      _applyUnoCounts(map['handCount']);
-      _applyUnoCallNeeded(map['unoCallNeeded']);
-      final count = map['count'] as int? ?? 0;
-      _log('UNO 모두내기: ${map['by']} $count장');
       notifyListeners();
     });
 
@@ -894,6 +917,10 @@ class SocketService extends ChangeNotifier {
     socket.on('game:uno:ended', (data) {
       unoWinner = _m(data)['winner'] as String?;
       unoActive = false;
+      unoPendingCall = false;
+      unoCatchable = false;
+      unoDrawChoiceCard = null;
+      unoCanPlayDrawn = false;
       _log('UNO 종료 - 승리: $unoWinner');
       notifyListeners();
     });
@@ -1235,6 +1262,8 @@ class SocketService extends ChangeNotifier {
     unoEquippedItems = {};
     unoPendingCall = false;
     unoCatchable = false;
+    unoDrawChoiceCard = null;
+    unoCanPlayDrawn = false;
     unoDrawStack = 0;
     unoDrawStackType = null;
     unoLastSpecialCard = null;
@@ -1717,6 +1746,9 @@ class SocketService extends ChangeNotifier {
     _onCatchClear = null;
   }
 
+  void setItemEffectCallback(Function(Map<String, dynamic>)? cb) =>
+      _onItemEffect = cb;
+
   void startCatch({int maxRounds = 6}) {
     _socket?.emit('game:catch:start', {'maxRounds': maxRounds});
   }
@@ -1862,6 +1894,8 @@ class SocketService extends ChangeNotifier {
   }
 
   void drawUnoCard() => _socket?.emit('game:uno:draw');
+  void passUnoDrawChoice() =>
+      _socket?.emit('game:uno:draw_decision', {'play': false});
   void callUno() => _socket?.emit('game:uno:call');
   void catchUno() => _socket?.emit('game:uno:catch');
   void pressUnoButton() {
@@ -1909,6 +1943,18 @@ class SocketService extends ChangeNotifier {
         _applyUnoCallNeeded(uno['unoCallNeeded']);
         final hand = uno['hand'];
         unoHand = hand is List ? hand : [];
+        final drawnCardId = uno['drawnCardId'] as String?;
+        unoDrawChoiceCard = null;
+        if (drawnCardId != null) {
+          for (final rawCard in unoHand) {
+            final card = _cardMap(rawCard);
+            if (card?['id'] == drawnCardId) {
+              unoDrawChoiceCard = card;
+              break;
+            }
+          }
+        }
+        unoCanPlayDrawn = unoDrawChoiceCard != null;
         _log('UNO 복원');
       }
       if (games.containsKey('bomb')) {
@@ -2018,12 +2064,10 @@ class SocketService extends ChangeNotifier {
     marbleCatchBonusTarget = map['catchBonusTarget'] as String?;
     // H2: 잡기 수행자 저장 — 턴 전환이 일어나독 팔업 트리거 가능
     marbleCatchBonusBy = map['catchBonusBy'] as String?;
-    marbleOrderCountdownUntil =
-        (map['orderCountdownUntil'] as num?)?.toInt();
+    marbleOrderCountdownUntil = (map['orderCountdownUntil'] as num?)?.toInt();
     marbleStartRolls = _m(map['startRolls'] ?? marbleStartRolls);
     final pending = map['pendingMoves'];
-    marblePendingMoves =
-        pending is List ? List<dynamic>.from(pending) : [];
+    marblePendingMoves = pending is List ? List<dynamic>.from(pending) : [];
     marbleRound = (map['round'] as num?)?.toInt() ?? marbleRound;
     if (map['winner'] != null) {
       marbleWinner = map['winner'] as String?;
@@ -2053,8 +2097,7 @@ class SocketService extends ChangeNotifier {
     final equippedRaw = map['equippedItems'];
     if (equippedRaw is Map) {
       marbleEquippedItems = equippedRaw.map(
-        (k, v) =>
-            MapEntry('$k', v is Map ? Map<String, dynamic>.from(v) : {}),
+        (k, v) => MapEntry('$k', v is Map ? Map<String, dynamic>.from(v) : {}),
       );
     }
   }

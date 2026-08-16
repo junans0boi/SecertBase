@@ -41,7 +41,7 @@ const statLabels = {
   // 말 전용
   'piece_catch_resist_pct': '🛡️ 잡힐 확률 감소 %',
   'piece_catch_coin_bonus': '💥 상대 잡기 추가 코인',
-  'piece_safe_zone_pct': '🏠 모서리 착지 확률 +%',
+  'piece_safe_zone_pct': '🏠 잡힐 확률 추가 감소 %',
   'piece_group_pct': '🤝 업은 말 분리 방지 %',
   // 원카드 전용
   'card_shield_pct': '🛡️ 공격 카드 무효화 %',
@@ -203,17 +203,17 @@ class _InventoryTabState extends State<InventoryTab> {
     'shop_discount_pct': 20,
     'daily_bonus_add': 500,
     'lose_refund_pct': 20,
-    'yut_control_pct': 25,
+    'yut_control_pct': 20,
     'yut_catch_bonus': 300,
     'gacha_rate_up': 20,
     'win_streak_bonus': 400,
-    'yut_mo_rate_pct': 22,
+    'yut_mo_rate_pct': 8,
     'yut_backdo_bonus_pct': 25,
-    'yut_win_coin_pct': 18,
+    'yut_win_coin_pct': 15,
     'yut_overturn_pct': 20,
-    'piece_catch_resist_pct': 25,
+    'piece_catch_resist_pct': 15,
     'piece_catch_coin_bonus': 25,
-    'piece_safe_zone_pct': 25,
+    'piece_safe_zone_pct': 15,
     'piece_group_pct': 22,
     'card_shield_pct': 25,
     'card_lucky_draw_pct': 25,
@@ -452,7 +452,7 @@ class _InventoryTabState extends State<InventoryTab> {
             Expanded(
               child: Text(
                 statLabels[key] ?? key,
-                style: const TextStyle(fontSize: 12, color: Colors.white70),
+                style: const TextStyle(fontSize: 12, color: kMainSub),
               ),
             ),
             Text(

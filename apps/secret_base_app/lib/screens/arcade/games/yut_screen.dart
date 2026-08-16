@@ -25,12 +25,26 @@ class _YutScreenState extends State<YutScreen> {
   String? _lastShownWinner;
   String _pieceSkin = 'base';
   String _yutSkin = 'base';
+  int _effectCounter = 0;
+  final List<({int id, String stat, int? amount})> _itemEffects = [];
 
   @override
   void initState() {
     super.initState();
     _socket.addListener(_rebuild);
+    _socket.setItemEffectCallback(_onItemEffect);
     _loadSkin();
+  }
+
+  void _onItemEffect(Map<String, dynamic> data) {
+    if (!mounted) return;
+    final id = _effectCounter++;
+    final stat = data['stat'] as String? ?? '';
+    final amount = (data['amount'] as num?)?.toInt();
+    setState(() => _itemEffects.add((id: id, stat: stat, amount: amount)));
+    Future<void>.delayed(const Duration(milliseconds: 2500), () {
+      if (mounted) setState(() => _itemEffects.removeWhere((e) => e.id == id));
+    });
   }
 
   Future<void> _loadSkin() async {
@@ -93,6 +107,7 @@ class _YutScreenState extends State<YutScreen> {
   void dispose() {
     YutAudio.instance.stopBackground();
     _socket.removeListener(_rebuild);
+    _socket.setItemEffectCallback(null);
     super.dispose();
   }
 
@@ -345,6 +360,19 @@ class _YutScreenState extends State<YutScreen> {
                   ],
                 ),
               ),
+          if (_itemEffects.isNotEmpty)
+            Positioned(
+              top: 70,
+              left: 0,
+              right: 0,
+              child: IgnorePointer(
+                child: Column(
+                  children: _itemEffects
+                      .map((e) => _ItemEffectBadge(stat: e.stat, amount: e.amount))
+                      .toList(),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -529,6 +557,42 @@ class _YutResultDialog extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ItemEffectBadge extends StatelessWidget {
+  final String stat;
+  final int? amount;
+  const _ItemEffectBadge({required this.stat, this.amount});
+
+  static String _message(String stat, int? amount) => switch (stat) {
+    'yut_win_coin_pct' => '💰 윷/모 보너스 +$amount 코인!',
+    'piece_catch_coin_bonus' || 'yut_catch_bonus' => '⚡ 잡기 보너스 +$amount 코인!',
+    'yut_backdo_bonus_pct' => '🎲 아이템 효과 — 백도 추가 던지기!',
+    _ => '✨ 아이템 효과 발동!',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.78),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFFFBE32).withValues(alpha: 0.6)),
+        ),
+        child: Text(
+          _message(stat, amount),
+          style: const TextStyle(
+            color: Color(0xFFFFBE32),
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
     );
   }
 }

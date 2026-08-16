@@ -5,6 +5,7 @@ import {
   throwYut,
   movePiece,
   getCarriedPieces,
+  applyMoveToPieces,
   hasBackdoMove,
   checkCatch,
   recordCapture,
@@ -128,6 +129,33 @@ test('nal-backdo waits on the goal square instead of returning to start', () => 
     lastPos: 20,
     finished: true,
   });
+});
+
+test('a 도 after 날백도 finishes the piece and does not leave it at goal', () => {
+  const piece = { id: 0, position: 1, lastPos: 0, finished: false };
+  const backdo = movePiece(piece, YUT_RESULTS.BACKDO);
+  piece.position = backdo.position;
+  piece.lastPos = backdo.lastPos;
+
+  const finish = movePiece(piece, YUT_RESULTS.DO);
+  applyMoveToPieces([piece], finish);
+
+  assert.deepEqual(piece, {
+    id: 0,
+    position: 20,
+    lastPos: 20,
+    finished: true,
+  });
+});
+
+test('a move only carries pieces already on the selected piece', () => {
+  const pieces = [
+    { id: 0, position: 1, finished: false },
+    { id: 1, position: 0, finished: false },
+    { id: 2, position: 3, finished: false },
+  ];
+
+  assert.deepEqual(getCarriedPieces(pieces[0], pieces).map((piece) => piece.id), [0]);
 });
 
 test('hasBackdoMove returns false when backdo should become nak', () => {

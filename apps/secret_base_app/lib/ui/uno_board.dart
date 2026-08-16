@@ -21,6 +21,8 @@ class UnoBoard extends StatefulWidget {
   final String currentUser;
   final bool pendingCall;
   final bool catchable;
+  final Map<String, dynamic>? drawChoiceCard;
+  final VoidCallback? onPassDrawChoice;
   final VoidCallback? onUnoButton;
   final String? lastSpecialCard;
   final String? lastSpecialBy;
@@ -49,6 +51,8 @@ class UnoBoard extends StatefulWidget {
     required this.currentUser,
     this.pendingCall = false,
     this.catchable = false,
+    this.drawChoiceCard,
+    this.onPassDrawChoice,
     this.onUnoButton,
     this.lastSpecialCard,
     this.lastSpecialBy,
@@ -155,6 +159,17 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
       );
     }
 
+    final drawnChoiceChanged =
+        widget.drawChoiceCard != null &&
+        widget.drawChoiceCard!['id'] != old.drawChoiceCard?['id'];
+    if (drawnChoiceChanged) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && widget.drawChoiceCard != null) {
+          _showDrawChoice(widget.drawChoiceCard!);
+        }
+      });
+    }
+
     // Draw stack resolved → play correct draw voice (M_07/M_08/M_09)
     if (old.drawStack > 0 && widget.drawStack == 0) {
       UnoAudio.instance.drawResolved(old.drawStack, old.drawStackType);
@@ -195,6 +210,7 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
     if (_autoActed || !mounted) return;
     _autoActed = true;
     if (widget.turn != widget.currentUser) return;
+    if (widget.drawChoiceCard != null) return;
 
     final hand = (widget.hand ?? []).map(_asMap).toList();
     final playable = hand.where(_isCardPlayable).toList();
@@ -290,8 +306,45 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
   }
 
   void _handleDrawCard() {
+    if (widget.drawChoiceCard != null) return;
     UnoAudio.instance.cardDrawFromDeck();
     widget.onDrawCard();
+  }
+
+  void _showDrawChoice(Map<String, dynamic> card) {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('낼 수 있는 카드가 나왔어요'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('이 카드를 지금 낼까요?'),
+            const SizedBox(height: 12),
+            UnoCardFront(cardMap: card, width: 72, height: 108),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              widget.onPassDrawChoice?.call();
+            },
+            child: const Text('넘기기'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              Future<void>.microtask(() {
+                if (mounted) _handleCardTap(context, card);
+              });
+            },
+            child: const Text('내기'),
+          ),
+        ],
+      ),
+    );
   }
 
   Map<String, dynamic> _asMap(dynamic value) {
@@ -302,6 +355,9 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
 
   bool _isCardPlayable(Map<String, dynamic> card) {
     if (widget.turn != widget.currentUser) return false;
+    if (widget.drawChoiceCard != null) {
+      return card['id'] == widget.drawChoiceCard!['id'];
+    }
     final val = card['value'] as String?;
     // In draw stack mode, only matching defense cards are playable
     if (widget.drawStack > 0 && widget.drawStackType != null) {
@@ -317,6 +373,43 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
     if (card['color'] == effectiveColor) return true;
     if (val == topCard['value']) return true;
     return false;
+  }
+
+  int _cardGroupRank(Map<String, dynamic> card) {
+    switch (card['value']) {
+      case 'wild_draw4':
+        return 0;
+      case 'wild':
+        return 1;
+    }
+    return switch (card['color']) {
+      'red' => 2,
+      'yellow' => 3,
+      'blue' => 4,
+      'green' => 5,
+      _ => 6,
+    };
+  }
+
+  int _cardValueRank(Map<String, dynamic> card) {
+    final value = card['value'] as String? ?? '';
+    final number = int.tryParse(value);
+    if (number != null) return number;
+    return const {
+          'skip': 10,
+          'reverse': 11,
+          'draw2': 12,
+          'discard_all': 13,
+        }[value] ??
+        99;
+  }
+
+  int _compareCards(Map<String, dynamic> a, Map<String, dynamic> b) {
+    final group = _cardGroupRank(a).compareTo(_cardGroupRank(b));
+    if (group != 0) return group;
+    final value = _cardValueRank(a).compareTo(_cardValueRank(b));
+    if (value != 0) return value;
+    return (a['id'] as String? ?? '').compareTo(b['id'] as String? ?? '');
   }
 
   @override
@@ -377,15 +470,7 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
         );
 
         final sortedHand = [...(widget.hand ?? [])]
-          ..sort((a, b) {
-            final aIsWild4 = (_asMap(a)['value'] as String?) == 'wild_draw4'
-                ? 0
-                : 1;
-            final bIsWild4 = (_asMap(b)['value'] as String?) == 'wild_draw4'
-                ? 0
-                : 1;
-            return aIsWild4.compareTo(bIsWild4);
-          });
+          ..sort((a, b) => _compareCards(_asMap(a), _asMap(b)));
         final displayHand = _isDealing
             ? sortedHand.take(_visibleCardCount).toList()
             : sortedHand;
@@ -849,7 +934,10 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
               builder: (context2, child2) {
                 final t = _playBurstCtrl.value;
                 if (t == 0) return const SizedBox.shrink();
-                final alpha = (t < 0.3 ? t / 0.3 : (1 - t) / 0.7).clamp(0.0, 1.0);
+                final alpha = (t < 0.3 ? t / 0.3 : (1 - t) / 0.7).clamp(
+                  0.0,
+                  1.0,
+                );
                 final colors = UnoCardBack.skinGradient(_playBurstSkin);
                 return Positioned.fill(
                   child: IgnorePointer(

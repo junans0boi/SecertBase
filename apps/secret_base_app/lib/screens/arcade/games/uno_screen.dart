@@ -23,13 +23,27 @@ class _UnoScreenState extends State<UnoScreen> {
   String? _lastWinner;
   bool _resultShown = false;
   String _cardBackSkin = 'base';
+  int _effectCounter = 0;
+  final List<({int id, String stat, int? amount})> _itemEffects = [];
 
   @override
   void initState() {
     super.initState();
     _socket.addListener(_rebuild);
+    _socket.setItemEffectCallback(_onItemEffect);
     UnoAudio.instance.unlock();
     _loadSkin();
+  }
+
+  void _onItemEffect(Map<String, dynamic> data) {
+    if (!mounted) return;
+    final id = _effectCounter++;
+    final stat = data['stat'] as String? ?? '';
+    final amount = (data['amount'] as num?)?.toInt();
+    setState(() => _itemEffects.add((id: id, stat: stat, amount: amount)));
+    Future<void>.delayed(const Duration(milliseconds: 2500), () {
+      if (mounted) setState(() => _itemEffects.removeWhere((e) => e.id == id));
+    });
   }
 
   Future<void> _loadSkin() async {
@@ -96,6 +110,7 @@ class _UnoScreenState extends State<UnoScreen> {
   @override
   void dispose() {
     _socket.removeListener(_rebuild);
+    _socket.setItemEffectCallback(null);
     super.dispose();
   }
 
@@ -178,6 +193,10 @@ class _UnoScreenState extends State<UnoScreen> {
                       currentUser: currentUser,
                       pendingCall: sock.unoPendingCall,
                       catchable: sock.unoCatchable,
+                      drawChoiceCard: sock.unoCanPlayDrawn
+                          ? sock.unoDrawChoiceCard
+                          : null,
+                      onPassDrawChoice: sock.passUnoDrawChoice,
                       onUnoButton: () {
                         if (sock.unoPendingCall) {
                           UnoAudio.instance.unoCall();
@@ -230,6 +249,19 @@ class _UnoScreenState extends State<UnoScreen> {
                       child: _WinBanner(
                         winner: sock.unoWinner!,
                         userId: sock.userId,
+                      ),
+                    ),
+                  if (_itemEffects.isNotEmpty)
+                    Positioned(
+                      top: topInset + 10,
+                      left: 0,
+                      right: 0,
+                      child: IgnorePointer(
+                        child: Column(
+                          children: _itemEffects
+                              .map((e) => _UnoItemEffectBadge(stat: e.stat, amount: e.amount))
+                              .toList(),
+                        ),
                       ),
                     ),
                 ],
@@ -704,6 +736,42 @@ class _ResultDialog extends StatelessWidget {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _UnoItemEffectBadge extends StatelessWidget {
+  final String stat;
+  final int? amount;
+  const _UnoItemEffectBadge({required this.stat, this.amount});
+
+  static String _message(String stat, int? amount) => switch (stat) {
+    'card_shield_pct' => '🛡️ 아이템 효과 — 공격 무효화!',
+    'card_lucky_draw_pct' => '🍀 아이템 효과 — 드로우 1장 감소!',
+    'card_reverse_bonus' => '↩️ 아이템 효과 — 리버스 보너스 발동!',
+    _ => '✨ 아이템 효과 발동!',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.78),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFF9D83FF).withValues(alpha: 0.6)),
+        ),
+        child: Text(
+          _message(stat, amount),
+          style: const TextStyle(
+            color: Color(0xFF9D83FF),
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
     );

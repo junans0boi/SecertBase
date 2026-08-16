@@ -136,6 +136,19 @@ export function getCarriedPieces(selectedPiece, playerPieces) {
   );
 }
 
+/**
+ * Apply one resolved move to the selected piece and any pieces already on it.
+ * Keeping this at the engine seam prevents callers from dropping `finished`.
+ */
+export function applyMoveToPieces(carriedPieces, moveResult) {
+  for (const piece of carriedPieces) {
+    piece.lastPos = moveResult.lastPos;
+    piece.position = moveResult.position;
+    piece.finished = moveResult.finished === true;
+  }
+  return carriedPieces;
+}
+
 export function hasBackdoMove(playerPieces) {
   return playerPieces.some(
     (piece) => !piece.finished && piece.position !== 0,
@@ -198,9 +211,9 @@ export function settleTurnAfterMove(gameState, userId) {
     return;
   }
   if (gameState.hasBonusThrow) {
-    // Consume the bonus: keep turn and go back to throwing
+    // Consume one bonus throw; caughtOpponentThisTurn is left intact so it
+    // grants another throw on the subsequent settleTurnAfterMove call.
     gameState.hasBonusThrow = false;
-    gameState.caughtOpponentThisTurn = false;
     gameState.currentTurn = userId;
     gameState.phase = "throwing";
     return;
