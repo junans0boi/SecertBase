@@ -1972,20 +1972,74 @@ class _MarbleBoardPainter extends CustomPainter {
           ..style = PaintingStyle.stroke
           ..strokeWidth = 3.0);
 
-      // Building level indicators
-      if (level > 1) {
-        final side = _isCorner(pos) ? 0 : _sideOf(pos);
-        final Offset iconPos;
-        switch (side) {
-          case 0: iconPos = Offset(rect.right - 9, rect.top + 5); break;
-          case 1: iconPos = Offset(rect.left + 5, rect.bottom - 9); break;
-          case 2: iconPos = Offset(rect.right - 9, rect.bottom - 14); break;
-          case 3: iconPos = Offset(rect.right - 14, rect.top + 5); break;
-          default: iconPos = rect.center;
-        }
-        final buildings = level == 2 ? '🏠' : level == 3 ? '🏠🏠' : '🏢';
-        _drawLabel(canvas, buildings, iconPos, 8, Colors.white);
+      _drawOwnerBadge(canvas, rect, ownerColor,
+          owner == p1UserId ? '1' : owner == p2UserId ? '2' : '?');
+      _drawPropertyStructure(canvas, rect, level, ownerColor);
+    }
+  }
+
+  void _drawOwnerBadge(Canvas canvas, Rect rect, Color color, String label) {
+    final center = Offset(rect.left + 11, rect.top + 11);
+    canvas.drawCircle(center, 9, Paint()..color = color);
+    canvas.drawCircle(center, 9, Paint()
+      ..color = Colors.white.withValues(alpha: 0.9)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5);
+    _drawLabel(canvas, label, center, 9, Colors.white, weight: FontWeight.w900);
+  }
+
+  // Draw vector markers instead of emoji: Canvas emoji rendering differs by
+  // platform and made owned buildings effectively invisible on some devices.
+  void _drawPropertyStructure(Canvas canvas, Rect rect, int level, Color color) {
+    final center = Offset(rect.right - 13, rect.top + 13);
+    final fill = Paint()..color = color;
+    final outline = Paint()
+      ..color = Colors.white.withValues(alpha: 0.95)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+
+    if (level <= 1) {
+      canvas.drawLine(center.translate(-5, 7), center.translate(-5, -7), outline);
+      final flag = Path()
+        ..moveTo(center.dx - 5, center.dy - 7)
+        ..lineTo(center.dx + 6, center.dy - 3)
+        ..lineTo(center.dx - 5, center.dy + 1)
+        ..close();
+      canvas.drawPath(flag, fill);
+      canvas.drawPath(flag, outline);
+    } else if (level == 2) {
+      final house = Path()
+        ..moveTo(center.dx - 9, center.dy - 1)
+        ..lineTo(center.dx, center.dy - 9)
+        ..lineTo(center.dx + 9, center.dy - 1)
+        ..lineTo(center.dx + 7, center.dy - 1)
+        ..lineTo(center.dx + 7, center.dy + 8)
+        ..lineTo(center.dx - 7, center.dy + 8)
+        ..lineTo(center.dx - 7, center.dy - 1)
+        ..close();
+      canvas.drawPath(house, fill);
+      canvas.drawPath(house, outline);
+    } else if (level == 3) {
+      final building = RRect.fromRectAndRadius(
+          Rect.fromCenter(center: center.translate(0, 1), width: 15, height: 19),
+          const Radius.circular(2));
+      canvas.drawRRect(building, fill);
+      canvas.drawRRect(building, outline);
+      final window = Paint()..color = Colors.white.withValues(alpha: 0.85);
+      for (final y in [-5.0, 1.0, 7.0]) {
+        canvas.drawRect(Rect.fromLTWH(center.dx - 4, center.dy + y, 3, 3), window);
+        canvas.drawRect(Rect.fromLTWH(center.dx + 1, center.dy + y, 3, 3), window);
       }
+    } else {
+      final tower = Path()
+        ..moveTo(center.dx, center.dy - 11)
+        ..lineTo(center.dx + 7, center.dy + 8)
+        ..lineTo(center.dx - 7, center.dy + 8)
+        ..close();
+      canvas.drawPath(tower, fill);
+      canvas.drawPath(tower, outline);
+      canvas.drawCircle(center.translate(0, -12), 3, fill);
+      canvas.drawCircle(center.translate(0, -12), 3, outline);
     }
   }
 

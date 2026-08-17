@@ -36,12 +36,15 @@ import {
   serializeMarbleGame,
   checkMarbleWin,
   calcToll,
+  calcUpgradeCost,
   calcAcquireCost,
   getLandValue,
+  getMarbleSpecialType,
   getNextPlayer as getNextMarblePlayer,
   MARBLE_SALARY,
   MARBLE_MAX_ROUNDS,
   MARBLE_START_POSITIONS,
+  SPECIAL_FEE,
   calcScore,
 } from "./marble-engine.js";
 import {
@@ -2038,27 +2041,23 @@ export const registerSocketHandlers = (io) => {
       ).length;
       const stacked = stackedAfterMove > 1;
 
-      // 특수 칸 처리 (세금, 황금열쇠, 이벤트)
-      const TAX_TILES    = new Set([5, 13, 21, 29]);
-      const CARD_TILES   = new Set([3, 11, 19, 27]);
-      const EVENT_TILE   = 16;
-
       let specialEvent = null;
+      const specialType = getMarbleSpecialType(targetPos);
 
-      if (!gameState.winner && TAX_TILES.has(targetPos)) {
-        const taxAmount = 200;
+      if (!gameState.winner && specialType === 'tax') {
+        const taxAmount = SPECIAL_FEE;
         gameState.players[userId].coins = Math.max(0, gameState.players[userId].coins - taxAmount);
         await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
         specialEvent = { type: 'tax', amount: taxAmount, coins: { [userId]: gameState.players[userId].coins } };
         io.to(roomCode).emit("game:marble:special_tile", specialEvent);
-      } else if (!gameState.winner && CARD_TILES.has(targetPos)) {
+      } else if (!gameState.winner && specialType === 'card') {
         // 황금열쇠 카드: 랜덤 효과
         const cards = [
-          { id: 'bonus_coin',  text: '행운의 여신이 미소 지었다! +300 💰',  amount:  300 },
-          { id: 'bonus_coin2', text: '보물 상자를 발견했다! +150 💰',         amount:  150 },
-          { id: 'penalty',     text: '통행세 폭탄! -200 💰',                  amount: -200 },
+          { id: 'bonus_coin',  text: '행운의 여신이 미소 지었다! +30만 MM',  amount:  300_000 },
+          { id: 'bonus_coin2', text: '보물 상자를 발견했다! +15만 MM',       amount:  150_000 },
+          { id: 'penalty',     text: '통행세 폭탄! -20만 MM',                 amount: -200_000 },
           { id: 'teleport',    text: '신비한 바람에 날렸다! 출발 칸으로 이동', amount:    0, move: 0 },
-          { id: 'salary',      text: '특별 보너스! 급여 두 배 +400 💰',        amount:  400 },
+          { id: 'salary',      text: '특별 보너스! 급여 두 배 +40만 MM',       amount:  400_000 },
         ];
         const card = cards[Math.floor(Math.random() * cards.length)];
         gameState.players[userId].coins = Math.max(0, gameState.players[userId].coins + card.amount);
@@ -2070,18 +2069,6 @@ export const registerSocketHandlers = (io) => {
         await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
         specialEvent = { type: 'card', card, coins: { [userId]: gameState.players[userId].coins } };
         io.to(roomCode).emit("game:marble:special_tile", specialEvent);
-      } else if (!gameState.winner && targetPos === EVENT_TILE) {
-        // 이벤트 칸: 무작위 이벤트
-        const events = [
-          { id: 'bonus',   text: '이벤트 칸! 행운 +250 💰',   amount:  250 },
-          { id: 'penalty', text: '이벤트 칸! 벌금 -150 💰',   amount: -150 },
-          { id: 'salary2', text: '이벤트 칸! 보너스 +200 💰', amount:  200 },
-        ];
-        const ev = events[Math.floor(Math.random() * events.length)];
-        gameState.players[userId].coins = Math.max(0, gameState.players[userId].coins + ev.amount);
-        await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
-        specialEvent = { type: 'event', event: ev, coins: { [userId]: gameState.players[userId].coins } };
-        io.to(roomCode).emit("game:marble:special_tile", specialEvent);
       }
 
       if (!gameState.winner && !MARBLE_START_POSITIONS.has(targetPos) && getLandValue(targetPos) > 0) {
@@ -2090,7 +2077,7 @@ export const registerSocketHandlers = (io) => {
           landPrompt = { type: 'claim', pos: targetPos, cost: calcAcquireCost(targetPos, stacked), stacked };
         } else if (landData.owner === userId && landData.level < 4) {
           // 내 영지 재방문: 강화 프롬프트
-          const upgradeCost = getLandValue(targetPos) * (landData.level);
+          const upgradeCost = calcUpgradeCost(targetPos, landData.level);
           landPrompt = { type: 'upgrade', pos: targetPos, cost: upgradeCost, level: landData.level };
         } else if (landData.owner !== userId) {
           // 상대 영지: 통행료 자동 징수
@@ -2222,7 +2209,7 @@ export const registerSocketHandlers = (io) => {
         const land = gameState.lands[posNum];
         if (!land || land.owner !== userId) { ack({ ok: false, reason: "not_your_land" }); return; }
         if (land.level >= 4) { ack({ ok: false, reason: "max_level" }); return; }
-        const upgradeCost = getLandValue(posNum) * land.level;
+        const upgradeCost = calcUpgradeCost(posNum, land.level);
         if (playerState.coins < upgradeCost) { ack({ ok: false, reason: "insufficient_coins" }); return; }
         playerState.coins -= upgradeCost;
         land.level += 1;

@@ -83,6 +83,12 @@ export function getTileType(pos) {
   return 'unknown';
 }
 
+// Keep server special-tile dispatch tied to the canonical 24-tile board.
+export function getMarbleSpecialType(pos) {
+  const type = TILE_TYPES[pos];
+  return type === 'card' || type === 'tax' ? type : null;
+}
+
 export function rollDice() {
   const dice1 = Math.floor(Math.random() * 6) + 1;
   const dice2 = Math.floor(Math.random() * 6) + 1;
