@@ -92,24 +92,29 @@ if [ ! -x "$MYSQL_BIN" ]; then
   err "mysql 클라이언트가 없습니다: brew install mysql-client 후 재시도하세요"
   exit 1
 fi
-# The local client may be MariaDB (Homebrew's default on macOS), which does
-# not support MySQL's --ssl-mode option. The SSH tunnel already encrypts this
-# connection, and --skip-ssl is supported by both MariaDB and MySQL clients.
-MYSQL="$MYSQL_BIN --skip-ssl -u${DB_USER} -p${DB_PASS} -P ${DB_PORT} -h 127.0.0.1 ${DB_NAME}"
+# The SSH tunnel already encrypts this connection. MySQL 8/9 uses
+# --ssl-mode=DISABLED, while MariaDB clients use --skip-ssl; detect the
+# installed client instead of passing an option unsupported by the other one.
+if "$MYSQL_BIN" --help 2>/dev/null | grep -q -- '--ssl-mode'; then
+  MYSQL_SSL_OPTION=(--ssl-mode=DISABLED)
+else
+  MYSQL_SSL_OPTION=(--skip-ssl)
+fi
+MYSQL=("$MYSQL_BIN" "${MYSQL_SSL_OPTION[@]}" "-u${DB_USER}" "-p${DB_PASS}" -P "$DB_PORT" -h 127.0.0.1 "$DB_NAME")
 
 MIGRATIONS_DIR="$ROOT/services/realtime-server/migrations"
 
 # 적용된 마이그레이션 추적 테이블이 없으면 생성
-$MYSQL -e "CREATE TABLE IF NOT EXISTS _migrations (name VARCHAR(120) PRIMARY KEY, applied_at DATETIME DEFAULT NOW());" 2>/dev/null || true
+"${MYSQL[@]}" -e "CREATE TABLE IF NOT EXISTS _migrations (name VARCHAR(120) PRIMARY KEY, applied_at DATETIME DEFAULT NOW());" 2>/dev/null || true
 
-for sql_file in $(ls "$MIGRATIONS_DIR"/*.sql | sort); do
+for sql_file in "$MIGRATIONS_DIR"/*.sql; do
   migration_name="$(basename "$sql_file")"
-  already_applied=$($MYSQL -sNe "SELECT COUNT(*) FROM _migrations WHERE name='$migration_name';" 2>/dev/null || echo "0")
+  already_applied=$("${MYSQL[@]}" -sNe "SELECT COUNT(*) FROM _migrations WHERE name='$migration_name';" 2>/dev/null || echo "0")
 
   if [ "$already_applied" = "0" ]; then
     info "  적용 중: $migration_name"
-    if $MYSQL < "$sql_file" 2>/tmp/sb_migration_err.txt; then
-      $MYSQL -e "INSERT IGNORE INTO _migrations (name) VALUES ('$migration_name');" 2>/dev/null || true
+    if "${MYSQL[@]}" < "$sql_file" 2>/tmp/sb_migration_err.txt; then
+      "${MYSQL[@]}" -e "INSERT IGNORE INTO _migrations (name) VALUES ('$migration_name');" 2>/dev/null || true
       ok "  완료: $migration_name"
     else
       err "  실패: $migration_name"
