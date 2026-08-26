@@ -116,6 +116,17 @@ export function hadPlayableCardOfColor(hand, color) {
   return hand.some((c) => c.color === color && c.value !== 'wild' && c.value !== 'wild_draw4');
 }
 
+/**
+ * A +4 challenge is available only for a standalone +4 attack.
+ * Once another +2/+4 has been stacked, the draw penalty is greater than 4
+ * and the challenger must draw or defend instead.
+ */
+export function canChallengeDraw4(gameState, player) {
+  return gameState?.drawStack === 4 &&
+    gameState?.drawStackType === 'wild_draw4' &&
+    gameState?.currentPlayer === player;
+}
+
 export function isDiscardAllCard(card) {
   return card?.value === 'discard_all' && COLORS.includes(card.color);
 }
@@ -235,6 +246,18 @@ export function applyCardEffect(gameState, card, previousColor = null) {
     // Track for challenge resolution
     gameState.lastDraw4Player = gameState.currentPlayer;
     gameState.colorBeforeDraw4 = previousColor;
+  }
+}
+
+/**
+ * Apply effects from an All-card batch.
+ * Cards swept up by All are discarded, so an included +2 is not an attack.
+ * Other existing batch effects (skip/reverse) keep their current behavior.
+ */
+export function applyDiscardAllBatchEffects(gameState, cards, previousColor = null) {
+  for (const card of cards) {
+    if (card.value === 'draw2') continue;
+    applyCardEffect(gameState, card, previousColor);
   }
 }
 

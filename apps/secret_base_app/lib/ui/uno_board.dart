@@ -745,6 +745,7 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
                                 // +4 Challenge button (shown when I must respond to +4)
                                 if (hasPendingStack &&
                                     widget.drawStackType == 'wild_draw4' &&
+                                    widget.drawStack == 4 &&
                                     widget.onChallengeDraw4 != null)
                                   Positioned(
                                     top: sideActionInset,
@@ -801,7 +802,9 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
                                         Text(
                                           widget.drawStackType == 'draw2'
                                               ? '+2 또는 +4로 방어 가능'
-                                              : '+4로 방어 또는 도전',
+                                              : widget.drawStack == 4
+                                              ? '+4로 방어 또는 도전'
+                                              : '+4로만 방어 가능',
                                           style: const TextStyle(
                                             color: Colors.orangeAccent,
                                             fontSize: 12,

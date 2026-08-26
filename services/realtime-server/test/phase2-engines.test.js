@@ -1,16 +1,68 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-// Penalty match logic test (Exact 3x3 match out of 9 targets)
-function checkPenaltySave(kickerDir, keeperDir) {
-  return kickerDir === keeperDir;
-}
+import {
+  initPenaltyGame,
+  resolvePenaltyRound,
+} from '../src/penalty-engine.js';
 
 test('Penalty Shootout: saved when kicker and keeper exact 3x3 target match', () => {
-  assert.equal(checkPenaltySave(0, 0), true); // top-left vs top-left => saved
-  assert.equal(checkPenaltySave(4, 4), true); // center vs center => saved
-  assert.equal(checkPenaltySave(0, 1), false); // top-left vs top-center => goal!
-  assert.equal(checkPenaltySave(5, 0), false); // right-mid vs top-left => goal!
+  let game = initPenaltyGame('p1', 'p2');
+  game = resolvePenaltyRound(game, 0, 0);
+  assert.equal(game.rounds[0].isGoal, false); // top-left vs top-left => saved
+
+  game = resolvePenaltyRound(game, 4, 4);
+  assert.equal(game.rounds[1].isGoal, false); // center vs center => saved
+
+  game = resolvePenaltyRound(game, 0, 1);
+  assert.equal(game.rounds[2].isGoal, true); // top-left vs top-center => goal!
+
+  game = resolvePenaltyRound(game, 5, 0);
+  assert.equal(game.rounds[3].isGoal, true); // right-mid vs top-left => goal!
+});
+
+test('Penalty Shootout: ends after the fourth kick pair when a 2-goal lead cannot be caught', () => {
+  let game = initPenaltyGame('p1', 'p2');
+  const shots = [
+    [0, 1], // p1 goal
+    [0, 0], // p2 save
+    [0, 0], // p1 save
+    [0, 0], // p2 save
+    [0, 0], // p1 save
+    [0, 0], // p2 save
+    [0, 1], // p1 goal: p1 leads 2-0
+    [0, 0], // p2 save: p2 has only one kick left
+  ];
+
+  for (const [kickerDir, keeperDir] of shots) {
+    game = resolvePenaltyRound(game, kickerDir, keeperDir);
+  }
+
+  assert.equal(game.status, 'finished');
+  assert.deepEqual(game.scores, { p1: 2, p2: 0 });
+  assert.equal(game.result.winner, 'p1');
+  assert.equal(game.rounds.length, 8);
+});
+
+test('Penalty Shootout: keeps playing when the trailing player can still tie', () => {
+  let game = initPenaltyGame('p1', 'p2');
+  const shots = [
+    [0, 1], // p1 goal
+    [0, 0], // p2 save
+    [0, 0], // p1 save
+    [0, 0], // p2 save
+    [0, 0], // p1 save
+    [0, 0], // p2 save
+    [0, 1], // p1 goal: p1 leads 2-0 with two kicks each left
+  ];
+
+  for (const [kickerDir, keeperDir] of shots) {
+    game = resolvePenaltyRound(game, kickerDir, keeperDir);
+  }
+
+  assert.equal(game.status, 'playing');
+  assert.equal(game.result, null);
+  assert.deepEqual(game.scores, { p1: 2, p2: 0 });
 });
 
 // Bowling Engine tests

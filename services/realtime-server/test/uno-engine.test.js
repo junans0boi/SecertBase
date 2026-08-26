@@ -6,6 +6,8 @@ import {
   createDeck,
   collectDiscardAllBatch,
   applyCardEffect,
+  applyDiscardAllBatchEffects,
+  canChallengeDraw4,
   getNextPlayer,
 } from '../src/uno-engine.js';
 
@@ -68,6 +70,30 @@ test('go wild requires a +4 response for a +4 draw stack', () => {
   );
 });
 
+test('only a standalone +4 can be challenged', () => {
+  assert.equal(
+    canChallengeDraw4(
+      { drawStack: 4, drawStackType: 'wild_draw4', currentPlayer: 'me' },
+      'me',
+    ),
+    true,
+  );
+  assert.equal(
+    canChallengeDraw4(
+      { drawStack: 6, drawStackType: 'wild_draw4', currentPlayer: 'me' },
+      'me',
+    ),
+    false,
+  );
+  assert.equal(
+    canChallengeDraw4(
+      { drawStack: 2, drawStackType: 'draw2', currentPlayer: 'me' },
+      'me',
+    ),
+    false,
+  );
+});
+
 test('discard_all cannot defend a pending draw stack', () => {
   const discardAll = { color: 'red', value: 'discard_all', id: 'red-discard_all-a' };
 
@@ -89,17 +115,19 @@ test('discard_all cannot defend a pending draw stack', () => {
   }
 });
 
-test('discard_all preserves a draw stack created by its batch', () => {
+test('discard_all makes a swept +2 card have no attack effect', () => {
   const gameState = {
     drawStack: 0,
     drawStackType: null,
   };
 
-  applyCardEffect(gameState, { color: 'red', value: 'draw2', id: 'red-draw2-a' });
-  applyCardEffect(gameState, { color: 'red', value: 'discard_all', id: 'red-discard_all-a' });
+  applyDiscardAllBatchEffects(gameState, [
+    { color: 'red', value: 'draw2', id: 'red-draw2-a' },
+    { color: 'red', value: 'discard_all', id: 'red-discard_all-a' },
+  ]);
 
-  assert.equal(gameState.drawStack, 2);
-  assert.equal(gameState.drawStackType, 'draw2');
+  assert.equal(gameState.drawStack, 0);
+  assert.equal(gameState.drawStackType, null);
 });
 
 test('classic blocks draw stack defense', () => {

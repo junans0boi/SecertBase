@@ -114,4 +114,34 @@ void main() {
 
     expect(find.text('색상을 선택하세요'), findsOneWidget);
   });
+
+  testWidgets('hides the +4 challenge during an accumulated draw stack', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 390,
+            height: 844,
+            child: UnoBoard(
+              gameId: 'active',
+              currentUser: 'me',
+              turn: 'me',
+              mode: 'go_wild',
+              drawStack: 6,
+              drawStackType: 'wild_draw4',
+              onNewGame: () {},
+              onDrawCard: () {},
+              onPlayCard: (_, _) {},
+              onChallengeDraw4: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(find.text('도전! 🔍'), findsNothing);
+  });
 }

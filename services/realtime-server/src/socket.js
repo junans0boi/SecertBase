@@ -49,8 +49,10 @@ import {
   canPlayCard,
   drawCards,
   applyCardEffect,
+  applyDiscardAllBatchEffects,
   clearDrawStack,
   hadPlayableCardOfColor,
+  canChallengeDraw4,
   collectDiscardAllBatch,
   UNO_MODES,
   DEFAULT_UNO_MODE,
@@ -83,6 +85,10 @@ import {
   rollFrame as rollBowlingFrame,
   buildFrameDisplayData,
 } from "./bowling-engine.js";
+import {
+  initPenaltyGame,
+  resolvePenaltyRound,
+} from "./penalty-engine.js";
 
 import {
   createFortressState,
@@ -2523,16 +2529,7 @@ export const registerSocketHandlers = (io) => {
         return ack({ ok: false, reason: "game_in_progress" });
       }
 
-      const gameState = {
-        status: "playing",
-        round: 1, // 1 ~ 10
-        kicker: orderedPlayers[0],
-        keeper: orderedPlayers[1],
-        submissions: {},
-        scores: { [orderedPlayers[0]]: 0, [orderedPlayers[1]]: 0 },
-        rounds: [],
-        result: null,
-      };
+      const gameState = initPenaltyGame(orderedPlayers[0], orderedPlayers[1]);
       await redis.set(`game:${roomCode}:penalty`, JSON.stringify(gameState), "EX", 3600);
       io.to(roomCode).emit("game:penalty:updated", gameState);
       ack({ ok: true });
@@ -2563,6 +2560,7 @@ export const registerSocketHandlers = (io) => {
 
       const kickerId = String(gameState.kicker);
       const keeperId = String(gameState.keeper);
+      let nextGameState = gameState;
 
       if (
         gameState.submissions[kickerId] !== undefined &&
@@ -2571,46 +2569,14 @@ export const registerSocketHandlers = (io) => {
         const kickerDir = gameState.submissions[kickerId]; // 0~8 (3x3)
         const keeperDir = gameState.submissions[keeperId]; // 0~8 (3x3 exact match)
 
-        // Exact match required to save!
-        const isSaved = kickerDir === keeperDir;
-        const isGoal = !isSaved;
-
-        if (isGoal) {
-          gameState.scores[kickerId] = (gameState.scores[kickerId] || 0) + 1;
-        }
-
-        gameState.rounds.push({
-          round: gameState.round,
-          kicker: kickerId,
-          keeper: keeperId,
-          kickerDir,
-          keeperDir,
-          isGoal,
-        });
-
-        gameState.submissions = {};
-
-        if (gameState.round >= 10) {
-          gameState.status = "finished";
-          const s1 = gameState.scores[kickerId];
-          const s2 = gameState.scores[keeperId];
-          let winner = "draw";
-          if (s1 > s2) winner = kickerId;
-          else if (s2 > s1) winner = keeperId;
-          gameState.result = { winner, scores: gameState.scores };
-        } else {
-          gameState.round += 1;
-          // Swap roles
-          gameState.kicker = keeperId;
-          gameState.keeper = kickerId;
-        }
+        nextGameState = resolvePenaltyRound(gameState, kickerDir, keeperDir);
       }
 
-      await redis.set(`game:${roomCode}:penalty`, JSON.stringify(gameState), "EX", 3600);
-      io.to(roomCode).emit("game:penalty:updated", gameState);
-      if (gameState.status === 'finished' && gameState.result?.winner && gameState.result.winner !== 'draw') {
-        const loser = Object.keys(gameState.scores).find(p => p !== gameState.result.winner);
-        await saveGameResult(roomCode, gameState.result.winner, loser, 'penalty', 0).catch(() => {});
+      await redis.set(`game:${roomCode}:penalty`, JSON.stringify(nextGameState), "EX", 3600);
+      io.to(roomCode).emit("game:penalty:updated", nextGameState);
+      if (nextGameState.status === 'finished' && nextGameState.result?.winner && nextGameState.result.winner !== 'draw') {
+        const loser = Object.keys(nextGameState.scores).find(p => p !== nextGameState.result.winner);
+        await saveGameResult(roomCode, nextGameState.result.winner, loser, 'penalty', 0).catch(() => {});
       }
       ack({ ok: true });
       });
@@ -2828,8 +2794,13 @@ export const registerSocketHandlers = (io) => {
       gameState.declaredColor = declaredColor || null;
 
       // Apply card effects in the same order the cards reached the discard pile.
-      for (const playedCard of playedCards) {
-        applyCardEffect(gameState, playedCard, previousColor);
+      // A +2 swept up by an All card is discarded, not played as an attack.
+      if (card.value === 'discard_all') {
+        applyDiscardAllBatchEffects(gameState, playedCards, previousColor);
+      } else {
+        for (const playedCard of playedCards) {
+          applyCardEffect(gameState, playedCard, previousColor);
+        }
       }
 
       // card_reverse_bonus: 리버스 카드 플레이 시 상대방이 1장 추가 드로우 (capped 20%)
@@ -3020,8 +2991,8 @@ export const registerSocketHandlers = (io) => {
       const gameState = JSON.parse(gameText);
 
       // Only allowed when draw4 stack is pending and it's the challenger's turn
-      if (gameState.drawStackType !== "wild_draw4" || gameState.currentPlayer !== userId) {
-        ack({ ok: false, reason: "cannot_challenge" });
+      if (!canChallengeDraw4(gameState, userId)) {
+        ack({ ok: false, reason: "cannot_challenge_during_stack" });
         return;
       }
 
