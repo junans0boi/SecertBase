@@ -98,7 +98,6 @@ import {
   declareShake,
   playBomb,
   declareGoStop,
-  resolveGostopTerminalState,
   serializeFor as serializeGostopFor,
 } from "./gostop-engine.js";
 
