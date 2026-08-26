@@ -66,11 +66,10 @@ import {
 
 import {
   initGame as initBlackjackGame,
-  playerHit as hitBlackjack,
-  playerStand as standBlackjack,
-  dealerHit as hitBlackjackDealer,
-  dealerStand as standBlackjackDealer,
+  hit as hitBlackjack,
+  stand as standBlackjack,
   nextRound as nextBlackjackRound,
+  serializeFor as serializeBlackjackFor,
 } from "./blackjack-engine.js";
 
 import {
@@ -100,6 +99,7 @@ import {
   declareShake,
   playBomb,
   declareGoStop,
+  resolveGostopTerminalState,
   serializeFor as serializeGostopFor,
 } from "./gostop-engine.js";
 
@@ -162,6 +162,19 @@ function emitOldMaidState(io, roomCode, gameState) {
       roomSocket.emit(
         "game:oldmaid:updated",
         serializeOldMaidGame(gameState, roomSocket.data.userId),
+      );
+    }
+  });
+}
+
+// Blackjack hands are private during a round. Send each socket a projection
+// containing its own cards, and reveal both hands only after the round ends.
+function emitBlackjackState(io, roomCode, gameState) {
+  return io.in(roomCode).fetchSockets().then((sockets) => {
+    for (const roomSocket of sockets) {
+      roomSocket.emit(
+        "game:blackjack:updated",
+        serializeBlackjackFor(gameState, roomSocket.data.userId),
       );
     }
   });
@@ -2355,7 +2368,7 @@ export const registerSocketHandlers = (io) => {
         }
         const gameState = initBlackjackGame(orderedPlayers[0], orderedPlayers[1]);
         await redis.set(`game:${roomCode}:blackjack`, JSON.stringify(gameState), "EX", 3600);
-        io.to(roomCode).emit("game:blackjack:updated", gameState);
+        await emitBlackjackState(io, roomCode, gameState);
         ack({ ok: true });
       });
     });
@@ -2374,7 +2387,7 @@ export const registerSocketHandlers = (io) => {
           return;
         }
         await redis.set(`game:${roomCode}:blackjack`, JSON.stringify(gameState), "EX", 3600);
-        io.to(roomCode).emit("game:blackjack:updated", gameState);
+        await emitBlackjackState(io, roomCode, gameState);
         if (
           previousState.status !== 'finished' &&
           gameState.status === 'finished' &&
@@ -2403,22 +2416,6 @@ export const registerSocketHandlers = (io) => {
       const userId = socket.data.userId;
       if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
       return runBlackjackAction(userId, roomCode, standBlackjack, ack);
-    });
-
-    socket.on("game:blackjack:dealer_hit", async (payload, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const roomCode = socket.data.roomCode;
-      const userId = socket.data.userId;
-      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
-      return runBlackjackAction(userId, roomCode, hitBlackjackDealer, ack);
-    });
-
-    socket.on("game:blackjack:dealer_stand", async (payload, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const roomCode = socket.data.roomCode;
-      const userId = socket.data.userId;
-      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
-      return runBlackjackAction(userId, roomCode, standBlackjackDealer, ack);
     });
 
     socket.on("game:blackjack:next_round", async (payload, ackRaw) => {
@@ -4200,7 +4197,13 @@ export const registerSocketHandlers = (io) => {
 
       const raw = await redis.get(gostopGameKey(roomCode));
       if (!raw) return ack({ ok: false, reason: "no_game" });
-      ack({ ok: true, state: serializeGostopFor(JSON.parse(raw), userId) });
+      const storedState = JSON.parse(raw);
+      const state = resolveGostopTerminalState(storedState);
+      if (state.phase !== storedState.phase) {
+        // 이미 양쪽 손패가 소진된 구버전 상태를 조회 시점에 복구한다.
+        await handleGostopResult(roomCode, state);
+      }
+      ack({ ok: true, state: serializeGostopFor(state, userId) });
     });
 
     socket.on("disconnect", () => {

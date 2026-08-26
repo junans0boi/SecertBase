@@ -627,11 +627,52 @@ test('last deck card can still trigger the go/stop choice', () => {
     field: [{ id: 'm2_junk_1', month: 2, type: 'junk', subtype: null }],
     hands: {
       [P1]: [{ id: 'm2_ribbon', month: 2, type: 'ribbon', subtype: 'red' }],
-      [P2]: [],
+      [P2]: [{ id: 'm4_junk_1', month: 4, type: 'junk', subtype: null }],
     },
     captures: { [P1]: captures, [P2]: [] },
     scores: { [P1]: calculateScore(captures), [P2]: calculateScore([]) },
   });
   const result = playHandCard(s, P1, 'm2_ribbon');
   assert.equal(result.phase, 'go_stop_choice');
+});
+
+test('양쪽 손패가 모두 소진되면 덱이 남아 있어도 높은 점수로 종료된다', () => {
+  const winnerCaptures = [
+    { id: 'm1_bright', month: 1, type: 'bright', subtype: null },
+    { id: 'm3_bright', month: 3, type: 'bright', subtype: null },
+    { id: 'm8_bright', month: 8, type: 'bright', subtype: null },
+    { id: 'm11_bright', month: 11, type: 'bright', subtype: null },
+    { id: 'm12_bright', month: 12, type: 'bright', subtype: 'rain' },
+    ...Array.from({ length: 10 }, (_, i) => ({
+      id: `winner-junk-${i}`,
+      month: (i % 12) + 1,
+      type: 'junk',
+      subtype: null,
+    })),
+  ];
+  const loserCaptures = Array.from({ length: 10 }, (_, i) => ({
+    id: `loser-junk-${i}`,
+    month: (i % 12) + 1,
+    type: 'junk',
+    subtype: null,
+  }));
+  const s = makeState({
+    deck: [{ id: 'm9_junk_1', month: 9, type: 'junk', subtype: null }],
+    field: [{ id: 'm3_junk_1', month: 3, type: 'junk', subtype: null }],
+    hands: {
+      [P1]: [{ id: 'm7_junk_1', month: 7, type: 'junk', subtype: null }],
+      [P2]: [],
+    },
+    captures: { [P1]: winnerCaptures, [P2]: loserCaptures },
+    scores: {
+      [P1]: calculateScore(winnerCaptures),
+      [P2]: calculateScore(loserCaptures),
+    },
+    goCount: { [P1]: 2, [P2]: 0 },
+  });
+
+  const result = playHandCard(s, P1, 'm7_junk_1');
+  assert.equal(result.phase, 'finished');
+  assert.equal(result.winner, P1);
+  assert.ok(result.settlement.reasonEvents.includes('hand_exhausted'));
 });

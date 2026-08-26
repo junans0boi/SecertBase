@@ -1783,14 +1783,6 @@ class SocketService extends ChangeNotifier {
     _socket?.emit('game:blackjack:stand', {});
   }
 
-  void dealerHitBlackjack() {
-    _socket?.emit('game:blackjack:dealer_hit', {});
-  }
-
-  void dealerStandBlackjack() {
-    _socket?.emit('game:blackjack:dealer_stand', {});
-  }
-
   void nextBlackjackRound() {
     _socket?.emit('game:blackjack:next_round', {});
   }
@@ -1918,6 +1910,23 @@ class SocketService extends ChangeNotifier {
 
   void retryGostopSettlement() =>
       _gostopEmit('game:gostop:settlement_retry', null);
+
+  void requestGostopState() {
+    _socket?.emitWithAck(
+      'game:gostop:state',
+      null,
+      ack: (r) {
+        final map = _m(r);
+        if (map['ok'] == true) {
+          _applyGostopState(_m(map['state']));
+          gostopError = null;
+        } else if (map['reason'] != 'no_game') {
+          gostopError = map['reason']?.toString() ?? '게임 상태를 불러오지 못했습니다.';
+        }
+        notifyListeners();
+      },
+    );
+  }
 
   void clearGostopError() {
     gostopError = null;

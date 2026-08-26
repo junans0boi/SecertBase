@@ -51,164 +51,161 @@ export function isBlackjack(hand) {
   return hand.length === 2 && calculateScore(hand) === 21;
 }
 
-function dealRound(deck, dealerId, playerId, round) {
-  const nextDeck = [...deck];
-  const playerHand = [nextDeck.pop(), nextDeck.pop()];
-  const dealerHand = [nextDeck.pop(), nextDeck.pop()];
-  const playerStatus = isBlackjack(playerHand) ? 'blackjack' : 'playing';
-
-  return {
-    deck: nextDeck,
-    round,
-    dealerId,
-    playerId,
-    playerHand,
-    dealerHand,
-    playerStatus,
-    dealerStatus: 'playing',
-    phase: playerStatus === 'blackjack' ? 'dealer_turn' : 'player_turn',
-  };
-}
-
-export function initGame(player1Id, player2Id) {
-  const round = dealRound(createDeck(), player1Id, player2Id, 1);
-  return {
-    status: 'playing',
-    players: [player1Id, player2Id],
-    ...round,
-    rounds: [],
-    lastRoundResult: null,
-    result: null,
-  };
-}
-
 function sameGame(game, changes = {}) {
   return { ...game, ...changes };
 }
 
-function draw(game, handKey) {
-  if (game.deck.length === 0) return { game, hand: game[handKey] };
-  const deck = [...game.deck];
-  const card = deck.pop();
+function dealRound(deck, players, round) {
+  const nextDeck = [...deck];
+  const [player1Id, player2Id] = players;
+  const hands = {
+    [player1Id]: [nextDeck.pop(), nextDeck.pop()],
+    [player2Id]: [nextDeck.pop(), nextDeck.pop()],
+  };
+  const statuses = {
+    [player1Id]: isBlackjack(hands[player1Id]) ? 'blackjack' : 'playing',
+    [player2Id]: isBlackjack(hands[player2Id]) ? 'blackjack' : 'playing',
+  };
+
+  // Turn order alternates between rounds so neither player always goes first.
+  const preferredTurn = round % 2 === 1 ? player1Id : player2Id;
+  const currentTurn = statuses[preferredTurn] === 'playing'
+    ? preferredTurn
+    : players.find((playerId) => statuses[playerId] === 'playing') ?? null;
+
   return {
-    game: { ...game, deck },
-    hand: [...game[handKey], card],
+    deck: nextDeck,
+    round,
+    hands,
+    statuses,
+    currentTurn,
+    phase: currentTurn ? 'player_turn' : 'round_result',
   };
 }
 
-function finishRound(game, forcedOutcome = null) {
-  const playerScore = calculateScore(game.playerHand);
-  const dealerScore = calculateScore(game.dealerHand);
-  const playerBust = isBust(game.playerHand);
-  const dealerBust = isBust(game.dealerHand);
-  const playerBlackjack = isBlackjack(game.playerHand);
-  const dealerBlackjack = isBlackjack(game.dealerHand);
+export function initGame(player1Id, player2Id) {
+  const players = [String(player1Id), String(player2Id)];
+  let game = {
+    status: 'playing',
+    players,
+    ...dealRound(createDeck(), players, 1),
+    rounds: [],
+    lastRoundResult: null,
+    result: null,
+  };
 
-  let outcome = forcedOutcome;
-  if (!outcome) {
-    if (playerBust) outcome = 'loss';
-    else if (dealerBust) outcome = 'win';
-    else if (playerBlackjack && !dealerBlackjack) outcome = 'win';
-    else if (!playerBlackjack && dealerBlackjack) outcome = 'loss';
-    else if (playerScore > dealerScore) outcome = 'win';
-    else if (playerScore < dealerScore) outcome = 'loss';
-    else outcome = 'tie';
-  }
+  // Both players can receive a natural blackjack. Resolve that round
+  // immediately because there is no action left to take.
+  if (!game.currentTurn) game = finishRound(game);
+  return game;
+}
 
+function draw(game, playerId) {
+  if (game.deck.length === 0) return { game, hand: game.hands[playerId] };
+  const deck = [...game.deck];
+  const card = deck.pop();
+  const hand = [...game.hands[playerId], card];
+  return {
+    game: { ...game, deck },
+    hand,
+  };
+}
+
+function determineRoundWinner(game) {
+  const [player1Id, player2Id] = game.players;
+  const player1Hand = game.hands[player1Id] ?? [];
+  const player2Hand = game.hands[player2Id] ?? [];
+  const player1Score = calculateScore(player1Hand);
+  const player2Score = calculateScore(player2Hand);
+  const player1Bust = isBust(player1Hand);
+  const player2Bust = isBust(player2Hand);
+  const player1Blackjack = isBlackjack(player1Hand);
+  const player2Blackjack = isBlackjack(player2Hand);
+
+  if (player1Bust && player2Bust) return 'tie';
+  if (player1Bust) return player2Id;
+  if (player2Bust) return player1Id;
+  if (player1Blackjack && !player2Blackjack) return player1Id;
+  if (!player1Blackjack && player2Blackjack) return player2Id;
+  if (player1Score > player2Score) return player1Id;
+  if (player1Score < player2Score) return player2Id;
+  return 'tie';
+}
+
+function finishRound(game) {
+  const [player1Id, player2Id] = game.players;
+  const player1Hand = game.hands[player1Id] ?? [];
+  const player2Hand = game.hands[player2Id] ?? [];
+  const scores = {
+    [player1Id]: calculateScore(player1Hand),
+    [player2Id]: calculateScore(player2Hand),
+  };
+  const winner = determineRoundWinner(game);
   const roundResult = {
     round: game.round,
-    dealerId: game.dealerId,
-    playerId: game.playerId,
-    playerHand: game.playerHand,
-    dealerHand: game.dealerHand,
-    playerScore,
-    dealerScore,
-    playerBust,
-    dealerBust,
-    isPlayerBJ: playerBlackjack,
-    isDealerBJ: dealerBlackjack,
-    outcome,
-    winner: outcome === 'win' ? game.playerId : outcome === 'loss' ? game.dealerId : 'tie',
+    players: game.players,
+    hands: game.hands,
+    scores,
+    statuses: game.statuses,
+    winner,
   };
 
   return sameGame(game, {
     phase: 'round_result',
-    playerStatus: playerBust ? 'bust' : game.playerStatus,
-    dealerStatus: dealerBust ? 'bust' : game.dealerStatus,
+    currentTurn: null,
     rounds: [...(game.rounds ?? []), roundResult],
     lastRoundResult: roundResult,
   });
 }
 
-export function playerHit(game, playerId) {
-  if (
-    game.status !== 'playing' ||
-    game.phase !== 'player_turn' ||
-    game.playerId !== playerId ||
-    game.playerStatus !== 'playing'
-  ) return game;
-
-  const drawn = draw(game, 'playerHand');
-  const playerHand = drawn.hand;
-  const nextGame = sameGame(drawn.game, { playerHand });
-  const score = calculateScore(playerHand);
-
-  if (score > 21) return finishRound(nextGame, 'loss');
-  if (score === 21) {
-    return sameGame(nextGame, {
-      playerStatus: 'stand',
-      phase: 'dealer_turn',
-    });
-  }
-  return nextGame;
+function advanceTurn(game) {
+  const nextPlayer = game.players.find(
+    (playerId) => playerId !== game.currentTurn && game.statuses[playerId] === 'playing',
+  );
+  if (!nextPlayer) return finishRound(game);
+  return sameGame(game, { currentTurn: nextPlayer, phase: 'player_turn' });
 }
 
-export function playerStand(game, playerId) {
+export function hit(game, playerId) {
+  const userId = String(playerId);
   if (
     game.status !== 'playing' ||
     game.phase !== 'player_turn' ||
-    game.playerId !== playerId ||
-    game.playerStatus !== 'playing'
+    game.currentTurn !== userId ||
+    game.statuses[userId] !== 'playing'
   ) return game;
 
-  return sameGame(game, {
-    playerStatus: 'stand',
-    phase: 'dealer_turn',
+  const drawn = draw(game, userId);
+  const nextGame = sameGame(drawn.game, {
+    hands: { ...drawn.game.hands, [userId]: drawn.hand },
   });
-}
+  const score = calculateScore(drawn.hand);
 
-export function dealerHit(game, dealerId) {
-  if (
-    game.status !== 'playing' ||
-    game.phase !== 'dealer_turn' ||
-    game.dealerId !== dealerId ||
-    game.dealerStatus !== 'playing'
-  ) return game;
-
-  // Standard blackjack dealer rule: a dealer must stand on 17 or higher.
-  if (calculateScore(game.dealerHand) >= 17) return game;
-
-  const drawn = draw(game, 'dealerHand');
-  const dealerHand = drawn.hand;
-  const nextGame = sameGame(drawn.game, { dealerHand });
-  const score = calculateScore(dealerHand);
-
-  if (score > 21) return finishRound(nextGame, 'win');
-  if (score >= 17) {
-    return finishRound(sameGame(nextGame, { dealerStatus: 'stand' }));
+  if (score > 21) {
+    return advanceTurn(sameGame(nextGame, {
+      statuses: { ...nextGame.statuses, [userId]: 'bust' },
+    }));
+  }
+  if (score === 21) {
+    return advanceTurn(sameGame(nextGame, {
+      statuses: { ...nextGame.statuses, [userId]: 'stand' },
+    }));
   }
   return nextGame;
 }
 
-export function dealerStand(game, dealerId) {
+export function stand(game, playerId) {
+  const userId = String(playerId);
   if (
     game.status !== 'playing' ||
-    game.phase !== 'dealer_turn' ||
-    game.dealerId !== dealerId ||
-    game.dealerStatus !== 'playing'
+    game.phase !== 'player_turn' ||
+    game.currentTurn !== userId ||
+    game.statuses[userId] !== 'playing'
   ) return game;
 
-  return finishRound(sameGame(game, { dealerStatus: 'stand' }));
+  return advanceTurn(sameGame(game, {
+    statuses: { ...game.statuses, [userId]: 'stand' },
+  }));
 }
 
 function countRoundWins(rounds) {
@@ -220,18 +217,19 @@ function countRoundWins(rounds) {
 }
 
 export function nextRound(game, userId) {
+  const playerId = String(userId);
   if (
     game.status !== 'playing' ||
     game.phase !== 'round_result' ||
-    !game.players.includes(userId)
+    !game.players.includes(playerId)
   ) return game;
 
   if (game.round >= 2) {
     const wins = countRoundWins(game.rounds ?? []);
-    const [p1, p2] = game.players;
-    const winner = (wins[p1] ?? 0) > (wins[p2] ?? 0)
-      ? p1
-      : (wins[p2] ?? 0) > (wins[p1] ?? 0) ? p2 : 'tie';
+    const [player1Id, player2Id] = game.players;
+    const winner = (wins[player1Id] ?? 0) > (wins[player2Id] ?? 0)
+      ? player1Id
+      : (wins[player2Id] ?? 0) > (wins[player1Id] ?? 0) ? player2Id : 'tie';
     return sameGame(game, {
       status: 'finished',
       phase: 'finished',
@@ -239,11 +237,55 @@ export function nextRound(game, userId) {
     });
   }
 
-  const round = dealRound(game.deck, game.playerId, game.dealerId, game.round + 1);
-  return sameGame(game, {
+  const round = dealRound(game.deck, game.players, game.round + 1);
+  let nextGame = sameGame(game, {
     ...round,
     lastRoundResult: game.lastRoundResult,
   });
+  if (!nextGame.currentTurn) nextGame = finishRound(nextGame);
+  return nextGame;
+}
+
+// Only the viewer's own hand and score are sent while a round is active.
+// Keeping the redaction here also prevents the hidden cards from leaking via
+// the socket payload or the browser's developer tools.
+export function serializeFor(game, viewerId) {
+  const userId = String(viewerId ?? '');
+  const revealAll = game.status === 'finished' || game.phase === 'round_result';
+  const hands = Object.fromEntries(
+    game.players.map((playerId) => [
+      playerId,
+      (game.hands[playerId] ?? []).map((card) =>
+        revealAll || playerId === userId ? card : { hidden: true },
+      ),
+    ]),
+  );
+  const statuses = Object.fromEntries(
+    game.players.map((playerId) => [
+      playerId,
+      revealAll || playerId === userId ? game.statuses[playerId] : 'hidden',
+    ]),
+  );
+  const scores = {};
+  for (const playerId of game.players) {
+    if (revealAll || playerId === userId) {
+      scores[playerId] = calculateScore(game.hands[playerId] ?? []);
+    }
+  }
+
+  return {
+    status: game.status,
+    players: game.players,
+    round: game.round,
+    phase: game.phase,
+    currentTurn: game.currentTurn,
+    hands,
+    statuses,
+    scores,
+    rounds: game.rounds ?? [],
+    lastRoundResult: game.lastRoundResult,
+    result: game.result,
+  };
 }
 
 // Kept as an explicit helper for callers/tests that need to compare a completed match.

@@ -76,17 +76,17 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
               const SizedBox(height: 12),
               _buildGuideSection(
                 '🎮 플레이 방법',
-                '플레이어가 히트/스탠드한 뒤 딜러가 히트/스탠드합니다.\n라운드가 끝나면 두 사람의 역할이 자동으로 바뀝니다.',
+                '각자 자기 패만 보면서 히트/스탠드를 선택합니다.\n상대 패와 점수는 라운드가 끝날 때까지 공개되지 않습니다.',
               ),
               const SizedBox(height: 12),
               _buildGuideSection(
-                '🤖 딜러 룰',
-                '딜러도 상대방인 커플이 직접 맡습니다. 17점 이상이면 스탠드해야 하며, 두 라운드 동안 역할을 한 번씩 맡습니다.',
+                '🔒 비공개 패',
+                '상대가 몇 장을 가지고 있는지만 보이고, 카드 내용과 점수는 숨겨집니다. 라운드 결과에서 모두 공개됩니다.',
               ),
               const SizedBox(height: 12),
               _buildGuideSection(
                 '🏆 승패 대결',
-                '각 라운드의 승패를 합산해 더 많이 이긴 사람이 최종 승리합니다. 한 라운드씩 역할을 바꾸므로 두 사람 모두 같은 조건으로 대결합니다.',
+                '각 라운드에서 21에 더 가까운 사람이 승리합니다. 두 라운드의 승패를 합산해 최종 승자를 정합니다.',
               ),
             ],
           ),
@@ -220,7 +220,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
                             ),
                             const SizedBox(height: 20),
                             Text(
-                              '커플 역할교대 블랙잭',
+                              '1대1 블랙잭',
                               style: GoogleFonts.notoSans(
                                 color: Colors.white,
                                 fontSize: 22,
@@ -229,7 +229,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
                             ),
                             const SizedBox(height: 10),
                             Text(
-                              '한 라운드는 플레이어, 한 라운드는 딜러가 되어\n서로의 손패를 직접 겨뤄 보세요!',
+                              '각자의 패를 숨긴 채\n상대보다 21에 가깝게 만들어 보세요!',
                               textAlign: TextAlign.center,
                               style: GoogleFonts.notoSans(
                                 color: Colors.white70,
@@ -327,25 +327,28 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
   }
 
   Widget _buildPlayerTable(Map<String, dynamic> state, String myId) {
-    final dealerId = state['dealerId']?.toString() ?? '';
-    final playerId = state['playerId']?.toString() ?? '';
-    final dealerHand = (state['dealerHand'] as List?) ?? const [];
-    final playerHand = (state['playerHand'] as List?) ?? const [];
+    final players =
+        (state['players'] as List?)
+            ?.map((player) => player.toString())
+            .toList() ??
+        const <String>[];
+    final hands = state['hands'] is Map
+        ? Map<String, dynamic>.from(state['hands'] as Map)
+        : const <String, dynamic>{};
+    final statuses = state['statuses'] is Map
+        ? Map<String, dynamic>.from(state['statuses'] as Map)
+        : const <String, dynamic>{};
     final phase = state['phase']?.toString() ?? 'player_turn';
-    final revealDealer =
-        state['status'] == 'finished' ||
-        phase == 'round_result' ||
-        dealerId == myId;
+    final revealAll = state['status'] == 'finished' || phase == 'round_result';
 
     Widget handPanel({
       required String userId,
-      required String role,
       required List hand,
-      required bool isDealer,
+      required bool isMine,
       required Color accent,
       required String status,
     }) {
-      final score = _calculateScore(hand);
+      final score = isMine || revealAll ? _calculateScore(hand) : null;
       return Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
@@ -368,7 +371,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
               children: [
                 Flexible(
                   child: Text(
-                    '$role · ${_socket.nameOf(userId).isEmpty ? userId : _socket.nameOf(userId)}',
+                    '${isMine ? '내 패' : '상대 패'} · ${_socket.nameOf(userId).isEmpty ? userId : _socket.nameOf(userId)}',
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.notoSans(
                       color: accent,
@@ -378,9 +381,11 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
                   ),
                 ),
                 Text(
-                  '점수: $score점',
+                  score == null ? '점수: ?' : '점수: $score점',
                   style: GoogleFonts.notoSans(
-                    color: score > 21 ? Colors.redAccent : Colors.white,
+                    color: score != null && score > 21
+                        ? Colors.redAccent
+                        : Colors.white,
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
                   ),
@@ -389,7 +394,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              '${isDealer ? '딜러' : '플레이어'} · ${_getStatusText(status)}',
+              _getStatusText(status),
               style: GoogleFonts.notoSans(color: Colors.white60, fontSize: 12),
             ),
             const SizedBox(height: 16),
@@ -400,13 +405,20 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
                 for (int i = 0; i < hand.length; i++)
                   _buildCardWidget(
                     hand[i] as Map<String, dynamic>,
-                    hidden: isDealer && !revealDealer && i == 1,
+                    hidden: !isMine && !revealAll,
                   ),
               ],
             ),
           ],
         ),
       );
+    }
+
+    if (players.length < 2) return const SizedBox.shrink();
+
+    List<dynamic> handFor(String userId) {
+      final hand = hands[userId];
+      return hand is List ? hand : const [];
     }
 
     return Column(
@@ -422,11 +434,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
             ),
           ),
           child: Text(
-            '라운드 ${state['round'] ?? 1}/2 · ${phase == 'player_turn'
-                ? '플레이어 턴'
-                : phase == 'dealer_turn'
-                ? '딜러 턴'
-                : '라운드 결과'}',
+            '라운드 ${state['round'] ?? 1}/2 · ${phase == 'player_turn' ? (state['currentTurn'] == myId ? '내 턴' : '상대 턴') : '라운드 결과'}',
             textAlign: TextAlign.center,
             style: GoogleFonts.notoSans(
               color: Colors.amberAccent,
@@ -436,21 +444,19 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
         ),
         const SizedBox(height: 16),
         handPanel(
-          userId: dealerId,
-          role: '딜러',
-          hand: dealerHand,
-          isDealer: true,
+          userId: players[0],
+          hand: handFor(players[0]),
+          isMine: players[0] == myId,
           accent: Colors.amberAccent,
-          status: state['dealerStatus']?.toString() ?? 'playing',
+          status: statuses[players[0]]?.toString() ?? 'playing',
         ),
         const SizedBox(height: 16),
         handPanel(
-          userId: playerId,
-          role: '플레이어',
-          hand: playerHand,
-          isDealer: false,
+          userId: players[1],
+          hand: handFor(players[1]),
+          isMine: players[1] == myId,
           accent: Colors.lightBlueAccent,
-          status: state['playerStatus']?.toString() ?? 'playing',
+          status: statuses[players[1]]?.toString() ?? 'playing',
         ),
       ],
     );
@@ -458,6 +464,8 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
 
   String _getStatusText(String status) {
     switch (status) {
+      case 'hidden':
+        return '상대 상태 비공개';
       case 'bust':
         return '버스트 (Bust)';
       case 'stand':
@@ -572,14 +580,11 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
 
   Widget _buildControls(Map<String, dynamic> state, String myId) {
     final phase = state['phase']?.toString();
-    final isPlayerTurn = phase == 'player_turn' && state['playerId'] == myId;
-    final isDealerTurn = phase == 'dealer_turn' && state['dealerId'] == myId;
-    final dealerHand = (state['dealerHand'] as List<dynamic>?) ?? const [];
-    final dealerCanHit = isDealerTurn && _calculateScore(dealerHand) < 17;
-    if (!isPlayerTurn && !isDealerTurn) {
+    final isMyTurn = phase == 'player_turn' && state['currentTurn'] == myId;
+    if (!isMyTurn) {
       final waitingText = phase == 'player_turn'
-          ? '플레이어가 손패를 고르는 중입니다...'
-          : '딜러가 손패를 정리하는 중입니다...';
+          ? '상대가 손패를 고르는 중입니다...'
+          : '라운드 결과를 정리하는 중입니다...';
       return _waitingPanel(waitingText);
     }
 
@@ -587,11 +592,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
       children: [
         Expanded(
           child: ElevatedButton.icon(
-            onPressed: isPlayerTurn
-                ? _socket.hitBlackjack
-                : dealerCanHit
-                ? _socket.dealerHitBlackjack
-                : null,
+            onPressed: _socket.hitBlackjack,
             icon: const Icon(Icons.add_card_rounded, color: Colors.white),
             label: Text(
               '히트 (Hit)',
@@ -614,9 +615,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
         const SizedBox(width: 12),
         Expanded(
           child: ElevatedButton.icon(
-            onPressed: isPlayerTurn
-                ? _socket.standBlackjack
-                : _socket.dealerStandBlackjack,
+            onPressed: _socket.standBlackjack,
             icon: const Icon(Icons.front_hand_rounded, color: Colors.white),
             label: Text(
               '스탠드 (Stand)',
@@ -676,12 +675,24 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
     final round = state['lastRoundResult'] as Map<String, dynamic>?;
     if (round == null) return const SizedBox.shrink();
     final winner = round['winner']?.toString();
-    final outcome = round['outcome']?.toString();
-    final text = outcome == 'win'
-        ? '이번 라운드: 플레이어 승리'
-        : outcome == 'loss'
-        ? '이번 라운드: 딜러 승리'
-        : '이번 라운드: 무승부';
+    final myId = _socket.userId ?? '';
+    final players =
+        (round['players'] as List?)
+            ?.map((player) => player.toString())
+            .toList() ??
+        const <String>[];
+    final scores = round['scores'] is Map
+        ? Map<String, dynamic>.from(round['scores'] as Map)
+        : const <String, dynamic>{};
+    final opponentId = players.firstWhere(
+      (playerId) => playerId != myId,
+      orElse: () => '',
+    );
+    final text = winner == 'tie'
+        ? '이번 라운드: 무승부'
+        : winner == myId
+        ? '이번 라운드: 승리'
+        : '이번 라운드: 패배';
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -701,7 +712,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            '플레이어 ${round['playerScore']}점 · 딜러 ${round['dealerScore']}점',
+            '나 ${scores[myId] ?? '?'}점 · 상대 ${scores[opponentId] ?? '?'}점',
             style: GoogleFonts.notoSans(color: Colors.white70, fontSize: 14),
           ),
           if (state['round'] == 1) ...[
@@ -712,7 +723,7 @@ class _BlackjackScreenState extends State<BlackjackScreen> {
                 backgroundColor: Colors.amberAccent,
                 foregroundColor: Colors.black,
               ),
-              child: const Text('역할 바꾸고 2라운드 시작'),
+              child: const Text('2라운드 시작'),
             ),
           ] else if (winner != null) ...[
             const SizedBox(height: 8),

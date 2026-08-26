@@ -34,6 +34,9 @@ class _GostopScreenState extends State<GostopScreen> {
   void initState() {
     super.initState();
     _socket.addListener(_onSocket);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _socket.requestGostopState();
+    });
   }
 
   @override

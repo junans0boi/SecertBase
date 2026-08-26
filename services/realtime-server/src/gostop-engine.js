@@ -394,12 +394,55 @@ function _resolveDeckFlip(state, playerId, context = {}) {
 }
 
 // ── 내부: 덱 처리 후 공통 ────────────────────────────────────────
+function _allHandsEmpty(state) {
+  return state.players.every(playerId => (state.hands[playerId] ?? []).length === 0);
+}
+
+function _finishWhenHandsExhausted(state, scores, events) {
+  const [firstId, secondId] = state.players;
+  const firstScore = scores[firstId]?.total ?? 0;
+  const secondScore = scores[secondId]?.total ?? 0;
+  const hasWinningScore = Math.max(firstScore, secondScore) >= 7;
+
+  if (!hasWinningScore || firstScore === secondScore) {
+    return _checkNageori({ ...state, scores });
+  }
+
+  const winnerId = firstScore > secondScore ? firstId : secondId;
+  return _settleWin(
+    { ...state, scores },
+    winnerId,
+    [...events, 'hand_exhausted'],
+  );
+}
+
+// Redis에 남아 있는 구버전 상태도 조회 시 종료 상태로 승격한다.
+// 배포 전에 이미 양쪽 손패가 비어 버린 게임을 복구하기 위한 공개 seam이다.
+export function resolveGostopTerminalState(state) {
+  state = normalizeGostopGameState(state);
+  if (state.phase !== 'playing' || !_allHandsEmpty(state)) return state;
+
+  const scores = Object.fromEntries(
+    state.players.map(playerId => [
+      playerId,
+      calculateScore(state.captures[playerId] ?? []),
+    ]),
+  );
+  return _finishWhenHandsExhausted(state, scores, state.lastEvents ?? []);
+}
+
 function _afterDeckResolved(state, playerId, events) {
   const scores = {
     ...state.scores,
     [playerId]: calculateScore(state.captures[playerId]),
   };
   const st = { ...state, scores, lastEvents: events };
+
+  // 폭탄이나 정상적인 마지막 턴으로 양쪽 손패가 먼저 소진될 수 있다.
+  // 덱이 남아 있어도 더 이상 낼 카드가 없으므로 즉시 점수를 비교한다.
+  if (_allHandsEmpty(st)) {
+    return _finishWhenHandsExhausted(st, scores, events);
+  }
 
   // 덱 소진 체크
   if (st.deck.length === 0 && scores[playerId].total < 7) {
