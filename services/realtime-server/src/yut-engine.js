@@ -234,7 +234,30 @@ export function createYutGameState(player1, player2, options = {}) {
     caughtOpponentThisTurn: false,
     winner: null,
     lastThrow: null,
+    // Throws made by the current player before the turn settles. This is
+    // intentionally kept separate from lastThrow so 윷/모 bonus throws are
+    // visible as one accumulated turn history on both clients.
+    turnThrows: [],
   };
+}
+
+/**
+ * Record a throw without losing the earlier results from the same turn.
+ * The socket layer calls this after adding the nak flag to the result.
+ */
+export function recordYutThrow(gameState, throwResult) {
+  gameState.lastThrow = throwResult;
+  gameState.turnThrows = [
+    ...(Array.isArray(gameState.turnThrows) ? gameState.turnThrows : []),
+    throwResult,
+  ];
+  return gameState.turnThrows;
+}
+
+/** Clear the accumulated results when control moves to the other player. */
+export function resetYutTurnThrows(gameState) {
+  gameState.turnThrows = [];
+  return gameState.turnThrows;
 }
 
 /**
@@ -392,6 +415,7 @@ export function serializeYutGame(gameState) {
     pendingMoves: gameState.pendingMoves,
     hasBonusThrow: gameState.hasBonusThrow ?? false,
     lastThrow: gameState.lastThrow,
+    turnThrows: Array.isArray(gameState.turnThrows) ? gameState.turnThrows : [],
     winner: gameState.winner,
     pieces: Object.fromEntries(
       Object.entries(gameState.players).map(([player, state]) => [

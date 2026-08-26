@@ -19,6 +19,8 @@ import {
   hasBackdoMove,
   getNextPlayer as getNextYutPlayer,
   settleTurnAfterMove,
+  recordYutThrow,
+  resetYutTurnThrows,
   serializeYutGame,
 } from "./yut-engine.js";
 import {
@@ -1619,7 +1621,6 @@ export const registerSocketHandlers = (io) => {
         yutOverturnPct: stats.yut_overturn_pct ?? 0,
         isLosing,
       });
-      gameState.lastThrow = throwResult;
 
       // yut_win_coin_pct: 윷(4)/모(5) 투척 시 스테이크 % 보너스 코인 누적
       if (throwResult.result === 4 || throwResult.result === 5) {
@@ -1635,6 +1636,7 @@ export const registerSocketHandlers = (io) => {
       const isNak = throwResult.result === -1 &&
         !hasBackdoMove(gameState.players[userId].pieces);
       throwResult.nak = isNak;
+      recordYutThrow(gameState, throwResult);
 
       if (!isNak) {
         gameState.pendingMoves.push(throwResult.result);
@@ -1649,6 +1651,7 @@ export const registerSocketHandlers = (io) => {
         gameState.hasBonusThrow = false;
         gameState.currentTurn = getNextYutPlayer(gameState, userId);
         gameState.phase = "throwing";
+        resetYutTurnThrows(gameState);
       } else {
         gameState.phase = "moving";
       }
@@ -1754,6 +1757,9 @@ export const registerSocketHandlers = (io) => {
         gameState.winner = userId;
       } else {
         settleTurnAfterMove(gameState, userId);
+        if (gameState.currentTurn !== userId) {
+          resetYutTurnThrows(gameState);
+        }
       }
 
       await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);

@@ -292,6 +292,7 @@ class _YutScreenState extends State<YutScreen> {
                 onMoveNewPiece: () => sock.moveYut(0),
                 currentUser: currentUser,
                 lastResultName: sock.yutLastThrow,
+                turnThrows: sock.yutTurnThrows,
                 lastThrowAt: sock.yutLastThrowAt,
                 lastThrowNak: sock.yutLastNak,
                 lastCapturedCount: sock.yutLastCapturedCount,

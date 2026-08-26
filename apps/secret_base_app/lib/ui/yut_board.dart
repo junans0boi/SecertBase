@@ -129,6 +129,7 @@ class YutBoard extends StatefulWidget {
   final VoidCallback onMoveNewPiece;
   final String currentUser;
   final String? lastResultName; // Added to show the recent throw
+  final List<Map<String, dynamic>>? turnThrows;
   final int? lastThrowAt;
   final bool lastThrowNak;
   final int lastCapturedCount;
@@ -163,6 +164,7 @@ class YutBoard extends StatefulWidget {
     required this.onMoveNewPiece,
     required this.currentUser,
     this.lastResultName,
+    this.turnThrows,
     this.lastThrowAt,
     this.lastThrowNak = false,
     this.lastCapturedCount = 0,
@@ -684,6 +686,21 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     return _hasMoveOptionFor(pieces[pieceId]);
   }
 
+  void _submitMoveGuide(_MoveGuideOption option) {
+    final pieceId = _selectedPieceId;
+    if (pieceId == null || _moveInFlight) return;
+
+    setState(() {
+      _selectedPieceId = null;
+      _moveInFlight = true;
+    });
+    _moveUnlockTimer?.cancel();
+    _moveUnlockTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _moveInFlight = false);
+    });
+    widget.onMovePiece(pieceId, option.index, backdoDir: option.backdoDir);
+  }
+
   Widget _buildGuideMarker(Size boardSize, _MoveGuideOption option) {
     if (_selectedPieceId == null) {
       return const SizedBox.shrink();
@@ -694,29 +711,17 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
         ? '${_moveLabel(option.steps)}${_optionOrdinal(option)}'
         : _moveLabel(option.steps);
     return AnimatedPositioned(
+      key: ValueKey(
+        'yut_move_guide_${option.index}_${option.targetPos}_${option.backdoDir ?? ''}',
+      ),
       duration: const Duration(milliseconds: 250),
       left: targetOffset.dx - (_cGuideSize / 2),
       top: targetOffset.dy - (_cGuideSize / 2),
       width: _cGuideSize,
       height: _cGuideSize,
       child: GestureDetector(
-        onTap: () {
-          final pieceId = _selectedPieceId;
-          if (pieceId == null) return;
-          setState(() {
-            _selectedPieceId = null;
-            _moveInFlight = true;
-          });
-          _moveUnlockTimer?.cancel();
-          _moveUnlockTimer = Timer(const Duration(seconds: 2), () {
-            if (mounted) setState(() => _moveInFlight = false);
-          });
-          widget.onMovePiece(
-            pieceId,
-            option.index,
-            backdoDir: option.backdoDir,
-          );
-        },
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _submitMoveGuide(option),
         child: Container(
           decoration: BoxDecoration(
             color: Colors.amber.withValues(alpha: 0.35),
@@ -830,6 +835,18 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     final moves = widget.pendingMoves;
     if (moves == null || moves.isEmpty) return '-';
     return moves.map(_moveLabel).join(' · ');
+  }
+
+  String _turnThrowText() {
+    final throws = widget.turnThrows ?? const <Map<String, dynamic>>[];
+    return throws
+        .map((throwResult) {
+          final resultName = throwResult['resultName'];
+          return resultName is String
+              ? resultName
+              : _moveLabel(throwResult['result']);
+        })
+        .join(' · ');
   }
 
   Widget _buildRollOrderView() {
@@ -1834,14 +1851,34 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Expanded(
-                child: Text(
-                  _actionPrompt(canThrow: canThrow),
-                  maxLines: 2,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.84),
-                    fontSize: _compact ? 12 : 14,
-                    fontWeight: FontWeight.w700,
-                  ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_turnThrowText().isNotEmpty) ...[
+                      Text(
+                        '이번 턴 결과  ${_turnThrowText()}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: const Color(0xFFFFD54F),
+                          fontSize: _compact ? 10 : 11,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                    ],
+                    Text(
+                      _actionPrompt(canThrow: canThrow),
+                      maxLines: _turnThrowText().isNotEmpty ? 1 : 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.84),
+                        fontSize: _compact ? 12 : 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(width: 10),

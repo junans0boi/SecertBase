@@ -12,6 +12,10 @@ import {
   resolveCapture,
   resolveYutMove,
   recordCapture,
+  createYutGameState,
+  recordYutThrow,
+  resetYutTurnThrows,
+  serializeYutGame,
   settleTurnAfterMove,
 } from '../src/yut-engine.js';
 
@@ -47,6 +51,22 @@ test('throwYut returns mo, yut, and backdo distinctly', () => {
     assert.equal(result.resultName, '백도');
     assert.equal(result.bonusThrow, false);
   });
+});
+
+test('turn throw history accumulates bonus throws and resets for the next turn', () => {
+  const gameState = createYutGameState('A', 'B');
+  const doResult = { result: YUT_RESULTS.DO, resultName: '도', nak: false };
+  const yutResult = { result: YUT_RESULTS.YUT, resultName: '윷', nak: false };
+
+  recordYutThrow(gameState, doResult);
+  recordYutThrow(gameState, yutResult);
+
+  assert.deepEqual(gameState.turnThrows, [doResult, yutResult]);
+  assert.equal(gameState.lastThrow, yutResult);
+  assert.deepEqual(serializeYutGame(gameState).turnThrows, [doResult, yutResult]);
+
+  resetYutTurnThrows(gameState);
+  assert.deepEqual(gameState.turnThrows, []);
 });
 
 test('movePiece follows shortcut and backdo routes', () => {

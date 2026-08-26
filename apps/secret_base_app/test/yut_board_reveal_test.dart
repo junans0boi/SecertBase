@@ -7,6 +7,7 @@ Widget _board({
   int? throwAt,
   int capturedCount = 0,
   int captureBlockedCount = 0,
+  List<Map<String, dynamic>> turnThrows = const [],
 }) {
   return MaterialApp(
     home: Scaffold(
@@ -26,6 +27,7 @@ Widget _board({
         onMoveNewPiece: () {},
         currentUser: 'me',
         lastResultName: result,
+        turnThrows: turnThrows,
         lastThrowAt: throwAt,
         lastCapturedCount: capturedCount,
         lastCaptureBlockedCount: captureBlockedCount,
@@ -56,5 +58,18 @@ void main() {
     await tester.pumpWidget(_board(capturedCount: 1, captureBlockedCount: 1));
 
     expect(find.text('상대 방어 효과로 1개가 살아남았습니다'), findsOneWidget);
+  });
+
+  testWidgets('윷과 모의 추가 던지기 결과를 이번 턴 누적으로 표시한다', (tester) async {
+    await tester.pumpWidget(
+      _board(
+        turnThrows: const [
+          {'result': 1, 'resultName': '도'},
+          {'result': 4, 'resultName': '윷'},
+        ],
+      ),
+    );
+
+    expect(find.text('이번 턴 결과  도 · 윷'), findsOneWidget);
   });
 }

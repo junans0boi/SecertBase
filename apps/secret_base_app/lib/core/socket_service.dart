@@ -122,6 +122,7 @@ class SocketService extends ChangeNotifier {
   Map<String, Map<String, dynamic>> yutEquippedItems = {};
   List<dynamic> yutPendingMoves = [];
   bool yutHasBonusThrow = false;
+  List<Map<String, dynamic>> yutTurnThrows = [];
   Map<String, dynamic> yutStartRolls = {};
   List<String> yutPlayers = [];
   Map<String, List<int>> yutPieces = {}; // userId -> piece positions (0-20)
@@ -304,6 +305,7 @@ class SocketService extends ChangeNotifier {
     yutEquippedItems = {};
     yutPendingMoves = [];
     yutHasBonusThrow = false;
+    yutTurnThrows = [];
     yutStartRolls = {};
     yutPlayers = [];
     yutPieces = {};
@@ -747,20 +749,7 @@ class SocketService extends ChangeNotifier {
     });
 
     socket.on('game:yut:move_result', (data) {
-      final map = _m(data);
-      _applyYutState(map);
-      yutLastMoveBy = map['by'] as String?;
-      yutLastMoveAt =
-          (map['at'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch;
-      yutLastCapturedCount = (map['capturedCount'] as num?)?.toInt() ?? 0;
-      yutLastCaptureBlockedCount =
-          (map['captureBlockedCount'] as num?)?.toInt() ?? 0;
-      yutLastCarriedCount = (map['carriedCount'] as num?)?.toInt() ?? 0;
-      yutLastStackedCount = (map['stackedCount'] as num?)?.toInt() ?? 0;
-      if (map['winner'] != null) {
-        yutWinner = map['winner'] as String?;
-        yutActive = false;
-      }
+      _applyYutMoveResult(_m(data));
       notifyListeners();
     });
 
@@ -1417,6 +1406,7 @@ class SocketService extends ChangeNotifier {
     yutLastCaptureBlockedCount = 0;
     yutLastCarriedCount = 0;
     yutLastStackedCount = 0;
+    yutTurnThrows = [];
     unoActive = false;
     unoEquippedItems = {};
     unoPendingCall = false;
@@ -2031,7 +2021,23 @@ class SocketService extends ChangeNotifier {
       'moveIndex': moveIndex,
     };
     if (backdoDir != null) payload['backdoDir'] = backdoDir;
-    _socket?.emit('game:yut:move', payload);
+    _socket?.emitWithAck(
+      'game:yut:move',
+      payload,
+      ack: (r) {
+        final map = _m(r);
+        if (map['ok'] == true) {
+          // The room broadcast normally updates this state first. Applying
+          // the ACK as well prevents the mover's board from staying stale
+          // when a room event is delayed or missed during a reconnect.
+          final event = _m(map['event'] ?? map['gameState']);
+          if (event.isNotEmpty) _applyYutMoveResult(event);
+        } else {
+          _log('윷 말 이동 실패: ${map['reason'] ?? map['error']}');
+        }
+        notifyListeners();
+      },
+    );
   }
 
   void sendYutChat(String message) {
@@ -2228,6 +2234,15 @@ class SocketService extends ChangeNotifier {
     yutStartRolls = _m(map['startRolls'] ?? yutStartRolls);
     final pending = map['pendingMoves'];
     yutPendingMoves = pending is List ? List<dynamic>.from(pending) : [];
+    final turnThrows = map['turnThrows'];
+    if (turnThrows is List) {
+      yutTurnThrows = turnThrows
+          .whereType<Map>()
+          .map((throwResult) => Map<String, dynamic>.from(throwResult))
+          .toList();
+    } else if (map.containsKey('turnThrows')) {
+      yutTurnThrows = [];
+    }
     final lastThrow = _m(map['lastThrow']);
     if (lastThrow.isNotEmpty) {
       yutLastThrow = lastThrow['resultName'] as String?;
@@ -2261,6 +2276,22 @@ class SocketService extends ChangeNotifier {
               .cast<int>(),
         ),
       );
+    }
+  }
+
+  void _applyYutMoveResult(Map<String, dynamic> map) {
+    _applyYutState(map);
+    yutLastMoveBy = map['by'] as String?;
+    yutLastMoveAt =
+        (map['at'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch;
+    yutLastCapturedCount = (map['capturedCount'] as num?)?.toInt() ?? 0;
+    yutLastCaptureBlockedCount =
+        (map['captureBlockedCount'] as num?)?.toInt() ?? 0;
+    yutLastCarriedCount = (map['carriedCount'] as num?)?.toInt() ?? 0;
+    yutLastStackedCount = (map['stackedCount'] as num?)?.toInt() ?? 0;
+    if (map['winner'] != null) {
+      yutWinner = map['winner'] as String?;
+      yutActive = false;
     }
   }
 
