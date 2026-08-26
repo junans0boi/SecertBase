@@ -30,13 +30,21 @@ class _OldMaidScreenState extends State<OldMaidScreen> {
   }
 
   void _startGame() {
-    if (_socket.presenceUsers.length < 2) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('상대방이 접속해야 시작할 수 있어요')));
-      return;
-    }
-    _socket.startOldMaid();
+    // 서버가 최신 room presence를 기준으로 판단한다. 클라이언트의
+    // presenceUsers가 화면 전환 중 아직 갱신되지 않아도 시작 요청을 막지 않는다.
+    _socket.startOldMaid(
+      onError: (reason) {
+        if (!mounted) return;
+        final message = switch (reason) {
+          'need_two_players' => '상대방이 접속해야 시작할 수 있어요',
+          'not_connected' => '서버 연결을 확인해주세요',
+          _ => '게임을 시작하지 못했어요. 잠시 후 다시 눌러주세요',
+        };
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+      },
+    );
   }
 
   void _showGuideDialog() {

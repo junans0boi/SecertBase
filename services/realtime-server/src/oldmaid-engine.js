@@ -96,6 +96,19 @@ export function initGame(player1Id, player2Id) {
   return checkGameEnd(game);
 }
 
+// 로비 전환 직후 시작 이벤트를 놓친 클라이언트가 다시 요청해도
+// 이미 진행 중인 게임을 새로 만들지 않고 현재 상태를 재전달할 수 있게 한다.
+export function startGame(existingGame, player1Id, player2Id) {
+  if (existingGame?.status === 'playing') {
+    return { game: existingGame, resumed: true };
+  }
+
+  return {
+    game: initGame(player1Id, player2Id),
+    resumed: false,
+  };
+}
+
 function getOpponentId(game, playerId) {
   const playerIds = Object.keys(game.players);
   return playerIds.find((id) => id !== playerId);

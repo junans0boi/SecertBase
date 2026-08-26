@@ -4,6 +4,7 @@ import {
   createDeck,
   removePairs,
   initGame,
+  startGame,
   drawCard,
   determineWinner,
 } from '../src/oldmaid-engine.js';
@@ -47,6 +48,14 @@ test('initGame distributes cards to 2 players and auto-removes initial pairs', (
   const totalCards = p1Hand.length + p2Hand.length;
   assert.ok(totalCards <= 53);
   assert.ok(totalCards % 2 === 1); // 53 minus even number of pairs is always odd
+});
+
+test('startGame returns an already-playing game so late clients can resync', () => {
+  const current = initGame('userA', 'userB');
+  const result = startGame(current, 'userA', 'userB');
+
+  assert.equal(result.resumed, true);
+  assert.strictEqual(result.game, current);
 });
 
 test('drawCard moves selected card from opponent, discards pair if match, and switches turn', () => {

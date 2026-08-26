@@ -1807,8 +1807,24 @@ class SocketService extends ChangeNotifier {
 
   // ── oldmaid (도둑잡기) ──────────────────────────────────────────────────
 
-  void startOldMaid() {
-    _socket?.emit('game:oldmaid:start', {});
+  void startOldMaid({void Function(String reason)? onError}) {
+    final socket = _socket;
+    if (socket == null) {
+      onError?.call('not_connected');
+      return;
+    }
+    socket.emitWithAck(
+      'game:oldmaid:start',
+      {},
+      ack: (r) {
+        final map = _m(r);
+        if (map['ok'] != true) {
+          final reason = map['reason']?.toString() ?? 'unknown';
+          _log('도둑잡기 시작 실패: $reason');
+          onError?.call(reason);
+        }
+      },
+    );
   }
 
   void drawOldMaidCard(String cardId) {

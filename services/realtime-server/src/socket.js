@@ -72,7 +72,7 @@ import {
 } from "./blackjack-engine.js";
 
 import {
-  initGame as initOldMaidGame,
+  startGame as startOldMaidGame,
   drawCard as drawOldMaidCard,
 } from "./oldmaid-engine.js";
 import { resolveHanabagiRound } from "./rps-engine.js";
@@ -98,6 +98,7 @@ import {
   declareShake,
   playBomb,
   declareGoStop,
+  resolveGostopTerminalState,
   serializeFor as serializeGostopFor,
 } from "./gostop-engine.js";
 
@@ -2443,14 +2444,15 @@ export const registerSocketHandlers = (io) => {
           return;
         }
         const existing = await redis.get(`game:${roomCode}:oldmaid`);
-        if (existing && JSON.parse(existing).status === 'playing') {
-          ack({ ok: false, reason: "game_in_progress" });
-          return;
-        }
-        const gameState = initOldMaidGame(orderedPlayers[0], orderedPlayers[1]);
+        const existingState = existing ? JSON.parse(existing) : null;
+        const { game: gameState, resumed } = startOldMaidGame(
+          existingState,
+          orderedPlayers[0],
+          orderedPlayers[1],
+        );
         await redis.set(`game:${roomCode}:oldmaid`, JSON.stringify(gameState), "EX", 3600);
         await emitOldMaidState(io, roomCode, gameState);
-        ack({ ok: true });
+        ack({ ok: true, resumed });
       });
     });
 
