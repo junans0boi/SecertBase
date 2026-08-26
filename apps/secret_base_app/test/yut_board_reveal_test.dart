@@ -5,6 +5,7 @@ import 'package:secret_base_app/ui/yut_board.dart';
 Widget _board({
   String? result,
   int? throwAt,
+  String turn = 'me',
   int capturedCount = 0,
   int captureBlockedCount = 0,
   List<Map<String, dynamic>> turnThrows = const [],
@@ -14,7 +15,7 @@ Widget _board({
       body: YutBoard(
         gameId: 'g1',
         phase: 'throwing',
-        turn: 'me',
+        turn: turn,
         p1Pieces: const [],
         p2Pieces: const [],
         pendingMoves: const [],
@@ -57,7 +58,19 @@ void main() {
   testWidgets('잡기 성공과 방어 효과를 액션 안내에 구분해서 표시한다', (tester) async {
     await tester.pumpWidget(_board(capturedCount: 1, captureBlockedCount: 1));
 
-    expect(find.text('상대 방어 효과로 1개가 살아남았습니다'), findsOneWidget);
+    expect(find.text('💥 1개를 잡았습니다 · 🛡️ 상대 방어로 1개 생존'), findsOneWidget);
+  });
+
+  testWidgets('잡힌 상대 화면에도 잡기 결과를 표시한다', (tester) async {
+    await tester.pumpWidget(_board(turn: 'opponent', capturedCount: 1));
+
+    expect(find.text('💥 상대가 1개를 잡았습니다'), findsOneWidget);
+  });
+
+  testWidgets('방어 효과 발동 결과를 잡힌 상대 화면에도 표시한다', (tester) async {
+    await tester.pumpWidget(_board(turn: 'opponent', captureBlockedCount: 1));
+
+    expect(find.text('🛡️ 내 말 1개 방어 성공'), findsOneWidget);
   });
 
   testWidgets('윷과 모의 추가 던지기 결과를 이번 턴 누적으로 표시한다', (tester) async {

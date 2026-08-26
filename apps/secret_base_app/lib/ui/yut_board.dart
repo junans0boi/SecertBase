@@ -849,6 +849,25 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
         .join(' · ');
   }
 
+  String _captureResultPrompt({required bool isMyTurn}) {
+    final messages = <String>[];
+    if (widget.lastCapturedCount > 0) {
+      messages.add(
+        isMyTurn
+            ? '💥 ${widget.lastCapturedCount}개를 잡았습니다'
+            : '💥 상대가 ${widget.lastCapturedCount}개를 잡았습니다',
+      );
+    }
+    if (widget.lastCaptureBlockedCount > 0) {
+      messages.add(
+        isMyTurn
+            ? '🛡️ 상대 방어로 ${widget.lastCaptureBlockedCount}개 생존'
+            : '🛡️ 내 말 ${widget.lastCaptureBlockedCount}개 방어 성공',
+      );
+    }
+    return messages.join(' · ');
+  }
+
   Widget _buildRollOrderView() {
     final p1Roll = widget.startRolls?[widget.p1UserId];
     final p2Roll = widget.startRolls?[widget.p2UserId];
@@ -1832,6 +1851,8 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
   }
 
   Widget _buildActionBar({required bool canThrow}) {
+    final captureNotice =
+        widget.lastCapturedCount > 0 || widget.lastCaptureBlockedCount > 0;
     return Container(
       key: const ValueKey('yut_action_bar'),
       decoration: const BoxDecoration(
@@ -1873,9 +1894,13 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                       maxLines: _turnThrowText().isNotEmpty ? 1 : 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.84),
+                        color: captureNotice
+                            ? const Color(0xFFFFD54F)
+                            : Colors.white.withValues(alpha: 0.84),
                         fontSize: _compact ? 12 : 14,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: captureNotice
+                            ? FontWeight.w900
+                            : FontWeight.w700,
                       ),
                     ),
                   ],
@@ -1982,24 +2007,14 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
   String _actionPrompt({required bool canThrow}) {
     if (_showThrowAnim) return '윷을 던지는 중';
     final isMyTurn = widget.turn == widget.currentUser;
+    final capturePrompt = _captureResultPrompt(isMyTurn: isMyTurn);
+    if (capturePrompt.isNotEmpty) return capturePrompt;
     final hasMoves = widget.pendingMoves?.isNotEmpty ?? false;
     if (!isMyTurn) {
       return widget.phase == 'moving' ? '상대가 말을 이동하는 중' : '상대가 윷을 던지는 중';
     }
     if (hasMoves) {
-      if (widget.lastCaptureBlockedCount > 0) {
-        return '상대 방어 효과로 ${widget.lastCaptureBlockedCount}개가 살아남음 · 내 말 선택';
-      }
-      if (widget.lastCapturedCount > 0) {
-        return '${widget.lastCapturedCount}개를 잡았습니다 · 내 말 선택';
-      }
       return _selectedPieceId == null ? '내 말 선택' : '이동 칸 선택';
-    }
-    if (widget.lastCaptureBlockedCount > 0) {
-      return '상대 방어 효과로 ${widget.lastCaptureBlockedCount}개가 살아남았습니다';
-    }
-    if (widget.lastCapturedCount > 0) {
-      return '${widget.lastCapturedCount}개를 잡았습니다';
     }
     if (canThrow) return '윷을 던져주세요';
     return '상대방을 기다리는 중';

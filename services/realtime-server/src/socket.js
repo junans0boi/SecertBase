@@ -1794,6 +1794,16 @@ export const registerSocketHandlers = (io) => {
       };
 
       io.to(roomCode).emit("game:yut:move_result", event);
+      if (captureBlockedPieces.length > 0) {
+        // A defensive item affects both players' understanding of the move.
+        // Broadcast the effect instead of notifying only the defender so both
+        // clients can show why the landing piece was not reset.
+        io.to(roomCode).emit("game:item_effect", {
+          stat: "yut_capture_protection",
+          amount: captureBlockedPieces.length,
+          at: event.at,
+        });
+      }
       ack({ ok: true, event });
 
       if (gameState.winner) {

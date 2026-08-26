@@ -576,6 +576,7 @@ class _ItemEffectBadge extends StatelessWidget {
     'yut_win_coin_pct' => '💰 윷/모 보너스 +$amount 코인!',
     'piece_catch_coin_bonus' || 'yut_catch_bonus' => '⚡ 잡기 보너스 +$amount 코인!',
     'yut_backdo_bonus_pct' => '🎲 아이템 효과 — 백도 추가 던지기!',
+    'yut_capture_protection' => '🛡️ 잡기 방어 발동 — ${amount ?? 0}개 생존!',
     _ => '✨ 아이템 효과 발동!',
   };
 
