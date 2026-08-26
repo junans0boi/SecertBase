@@ -127,6 +127,52 @@ export function checkCatch(position, opponentPieces) {
   return opponentPieces.filter((p) => p.position === position && !p.finished);
 }
 
+/**
+ * Reset every opponent piece on the landing square. Keeping the mutation at
+ * the engine seam makes the server's catch result and persisted board state
+ * use the same rule for single pieces and stacked pieces.
+ */
+export function capturePieces(position, opponentPieces) {
+  const capturedPieces = checkCatch(position, opponentPieces);
+  for (const piece of capturedPieces) {
+    piece.position = 0;
+    piece.lastPos = 0;
+    piece.finished = false;
+  }
+  return capturedPieces;
+}
+
+/**
+ * Resolve a landing against the opponent's pieces.
+ *
+ * Protected pieces remain on the landing square, while every other eligible
+ * piece is reset to start. Keeping both outcomes lets the socket layer persist
+ * the authoritative state and explain an apparently missed capture to clients.
+ */
+export function resolveCapture(
+  position,
+  opponentPieces,
+  { resistPct = 0, safePct = 0, random = Math.random } = {},
+) {
+  const candidates = checkCatch(position, opponentPieces);
+  const blockedPieces = [];
+  const capturablePieces = [];
+  const resistChance = Math.max(0, Math.min(100, Number(resistPct) || 0));
+  const safeChance = Math.max(0, Math.min(100, Number(safePct) || 0));
+
+  for (const piece of candidates) {
+    const resisted = resistChance > 0 && random() * 100 < resistChance;
+    const safe = safeChance > 0 && random() * 100 < safeChance;
+    if (resisted || safe) blockedPieces.push(piece);
+    else capturablePieces.push(piece);
+  }
+
+  return {
+    capturedPieces: capturePieces(position, capturablePieces),
+    blockedPieces,
+  };
+}
+
 export function getCarriedPieces(selectedPiece, playerPieces) {
   if (selectedPiece.position === 0 || selectedPiece.finished) {
     return [selectedPiece];
@@ -225,6 +271,101 @@ export function settleTurnAfterMove(gameState, userId) {
     gameState.currentTurn = getNextPlayer(gameState, userId);
   }
   gameState.phase = "throwing";
+}
+
+/**
+ * Apply the authoritative move portion of a Yut turn.
+ *
+ * The socket layer is responsible for persistence, rewards, and bonus-item
+ * side effects. This function owns the board mutation so carrying and capture
+ * cannot diverge between callers or get accidentally omitted from an event.
+ */
+export function resolveYutMove(
+  gameState,
+  userId,
+  {
+    pieceId,
+    moveIndex = 0,
+    backdoDir,
+    moverStats = gameState.playerStats?.[userId] ?? {},
+    defenderStats,
+    random = Math.random,
+  } = {},
+) {
+  const playerState = gameState.players?.[userId];
+  if (!playerState || !Array.isArray(playerState.pieces)) {
+    return { ok: false, reason: "not_a_player" };
+  }
+  if (!Array.isArray(gameState.pendingMoves) || gameState.pendingMoves.length === 0) {
+    return { ok: false, reason: "no_pending_moves" };
+  }
+  if (gameState.currentTurn !== userId) {
+    return { ok: false, reason: "not_your_turn" };
+  }
+  if (!Number.isInteger(moveIndex) || moveIndex < 0 || moveIndex >= gameState.pendingMoves.length) {
+    return { ok: false, reason: "invalid_move_index" };
+  }
+
+  const piece = playerState.pieces[pieceId];
+  if (!piece || piece.finished) {
+    return { ok: false, reason: "invalid_piece" };
+  }
+
+  const steps = gameState.pendingMoves[moveIndex];
+  if (steps === YUT_RESULTS.BACKDO && piece.position === 0) {
+    return { ok: false, reason: "invalid_piece_for_move" };
+  }
+
+  const preMovePos = piece.position;
+  const moveResult = movePiece(piece, steps, { backdoDir });
+  if (moveResult === null) {
+    return { ok: false, reason: "invalid_move" };
+  }
+
+  const opponentId = getNextPlayer(gameState, userId);
+  const opponentState = gameState.players?.[opponentId];
+  if (!opponentState || !Array.isArray(opponentState.pieces)) {
+    return { ok: false, reason: "invalid_game_state" };
+  }
+
+  gameState.pendingMoves.splice(moveIndex, 1);
+  const carriedPieces = getCarriedPieces(piece, playerState.pieces);
+  const stackedPieces = moveResult.position > 0
+    ? playerState.pieces.filter(
+        (candidate) =>
+          candidate.id !== pieceId &&
+          !candidate.finished &&
+          candidate.position === moveResult.position,
+      )
+    : [];
+  applyMoveToPieces(carriedPieces, moveResult);
+
+  const resolvedDefenderStats = defenderStats ?? gameState.playerStats?.[opponentId] ?? {};
+  const captureResult = resolveCapture(
+    piece.position,
+    opponentState.pieces,
+    {
+      resistPct: Math.min(resolvedDefenderStats.piece_catch_resist_pct ?? 0, 15),
+      safePct: Math.min(resolvedDefenderStats.piece_safe_zone_pct ?? 0, 15),
+      random,
+    },
+  );
+  recordCapture(gameState, captureResult.capturedPieces.length);
+
+  return {
+    ok: true,
+    piece,
+    steps,
+    preMovePos,
+    moveResult,
+    carriedPieces,
+    stackedPieces,
+    capturedPieces: captureResult.capturedPieces,
+    captureBlockedPieces: captureResult.blockedPieces,
+    opponentId,
+    moverStats,
+    defenderStats: resolvedDefenderStats,
+  };
 }
 
 /**

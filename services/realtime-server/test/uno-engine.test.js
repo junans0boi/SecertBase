@@ -24,7 +24,7 @@ test('classic deck excludes discard_all cards', () => {
   assert.equal(deck.some((card) => card.value === 'discard_all'), false);
 });
 
-test('go wild requires a +2 response for a +2 draw stack', () => {
+test('go wild allows a +4 response for a +2 draw stack', () => {
   const topCard = { color: 'red', value: 'draw2', id: 'red-draw2-a' };
 
   assert.equal(
@@ -36,7 +36,7 @@ test('go wild requires a +2 response for a +2 draw stack', () => {
       'draw2',
       { mode: 'go_wild' },
     ),
-    false,
+    true,
   );
 
   assert.equal(

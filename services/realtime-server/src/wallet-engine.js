@@ -73,6 +73,36 @@ export async function transferGameReward(winnerCode, loserCode, amount, gameRef,
   return await transaction(async (conn) => {
     await _ensureWallet(conn, winnerId);
     await _ensureWallet(conn, loserId);
+
+    // 종료 이벤트가 재전송되거나 서버가 정산 직후 재시작돼도 같은 게임이
+    // 두 번 지급되지 않도록 게임 참조를 트랜잭션 안에서 확인한다.
+    if (gameRef) {
+      const [existing] = await conn.execute(
+        `SELECT id FROM wallet_transactions
+         WHERE ref_id = ? AND reason IN ('game_win', 'game_loss')
+         LIMIT 1 FOR UPDATE`,
+        [gameRef],
+      );
+      if (existing.length > 0) {
+        const [[currentLoser]] = await conn.execute(
+          'SELECT balance FROM wallets WHERE user_id = ?',
+          [loserId],
+        );
+        const [[currentWinner]] = await conn.execute(
+          'SELECT balance FROM wallets WHERE user_id = ?',
+          [winnerId],
+        );
+        return {
+          actual: 0,
+          winnerGain: 0,
+          winnerBalance: currentWinner.balance,
+          loserBalance: currentLoser.balance,
+          loserRefund: 0,
+          alreadySettled: true,
+        };
+      }
+    }
+
     const [[loser]] = await conn.execute(
       'SELECT balance FROM wallets WHERE user_id = ? FOR UPDATE',
       [loserId]

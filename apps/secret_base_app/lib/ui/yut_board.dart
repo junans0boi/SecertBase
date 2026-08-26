@@ -12,6 +12,76 @@ const _yutBoardTopRight = Offset(0.758, 0.171);
 const _yutBoardBottomLeft = Offset(0.190, 0.760);
 const _yutBoardBottomRight = Offset(0.806, 0.760);
 
+/// Returns the previous board position using the same backdo route as the
+/// realtime server. Position 20 is the goal checkpoint, not a finished piece.
+int yutPreviousPosition(int currentPos, int lastPos) {
+  switch (currentPos) {
+    case 0:
+      return 0;
+    case 1:
+      // Nal-backdo waits on the goal checkpoint instead of returning to start.
+      return 20;
+    case 2:
+      return 1;
+    case 3:
+      return 2;
+    case 4:
+      return 3;
+    case 5:
+      return 4;
+    case 6:
+      return 5;
+    case 7:
+      return 6;
+    case 8:
+      return 7;
+    case 9:
+      return 8;
+    case 10:
+      return 9;
+    case 11:
+      return 10;
+    case 12:
+      return 11;
+    case 13:
+      return 12;
+    case 14:
+      return 13;
+    case 15:
+      return lastPos == 29 ? 29 : 14;
+    case 16:
+      return 15;
+    case 17:
+      return 16;
+    case 18:
+      return 17;
+    case 19:
+      return 18;
+    case 20:
+      return lastPos == 27 ? 27 : 19;
+    case 21:
+      return 5;
+    case 22:
+      return 21;
+    case 23:
+      return (lastPos == 25 || lastPos == 24 || lastPos == 10) ? 25 : 22;
+    case 24:
+      return 10;
+    case 25:
+      return 24;
+    case 26:
+      return 23;
+    case 27:
+      return 26;
+    case 28:
+      return 23;
+    case 29:
+      return 28;
+    default:
+      return 0;
+  }
+}
+
 Offset _projectYutPoint(Rect rect, Offset normalized) {
   final depth = normalized.dy.clamp(0.0, 1.0);
   final across = normalized.dx.clamp(0.0, 1.0);
@@ -61,6 +131,8 @@ class YutBoard extends StatefulWidget {
   final String? lastResultName; // Added to show the recent throw
   final int? lastThrowAt;
   final bool lastThrowNak;
+  final int lastCapturedCount;
+  final int lastCaptureBlockedCount;
   final String p1Character;
   final String p2Character;
   final ValueChanged<int>? onThrowResultRevealed;
@@ -93,6 +165,8 @@ class YutBoard extends StatefulWidget {
     this.lastResultName,
     this.lastThrowAt,
     this.lastThrowNak = false,
+    this.lastCapturedCount = 0,
+    this.lastCaptureBlockedCount = 0,
     this.p1Character = 'honggilldong',
     this.p2Character = 'miho',
     this.onThrowResultRevealed,
@@ -545,70 +619,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
   }
 
   int _getPrevPos(int currentPos, int lastPos) {
-    switch (currentPos) {
-      case 0:
-        return 0;
-      case 1:
-        return 0;
-      case 2:
-        return 1;
-      case 3:
-        return 2;
-      case 4:
-        return 3;
-      case 5:
-        return 4;
-      case 6:
-        return 5;
-      case 7:
-        return 6;
-      case 8:
-        return 7;
-      case 9:
-        return 8;
-      case 10:
-        return 9;
-      case 11:
-        return 10;
-      case 12:
-        return 11;
-      case 13:
-        return 12;
-      case 14:
-        return 13;
-      case 15:
-        if (lastPos == 29) return 29;
-        return 14;
-      case 16:
-        return 15;
-      case 17:
-        return 16;
-      case 18:
-        return 17;
-      case 19:
-        return 18;
-      case 20:
-        return lastPos == 0 ? 19 : lastPos;
-      case 21:
-        return 5;
-      case 22:
-        return 21;
-      case 23:
-        return (lastPos == 25 || lastPos == 24 || lastPos == 10) ? 25 : 22;
-      case 24:
-        return 10;
-      case 25:
-        return 24;
-      case 26:
-        return 23;
-      case 27:
-        return 26;
-      case 28:
-        return 23;
-      case 29:
-        return 28;
-    }
-    return 0;
+    return yutPreviousPosition(currentPos, lastPos);
   }
 
   int _getLastPos(dynamic p) {
@@ -1236,6 +1247,40 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                   return Stack(
                     clipBehavior: Clip.none,
                     children: [
+                      if (_revealedResultName != null)
+                        Positioned(
+                          top: stageHeight * 0.46,
+                          left: 0,
+                          right: 0,
+                          child: IgnorePointer(
+                            child: Center(
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: const Color(0xDD17212B),
+                                  borderRadius: BorderRadius.circular(18),
+                                  border: Border.all(
+                                    color: const Color(0xFFFFC107),
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 18,
+                                    vertical: 6,
+                                  ),
+                                  child: Text(
+                                    _revealedResultName!,
+                                    style: const TextStyle(
+                                      color: Color(0xFFFFD54F),
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       // 보드는 가로를 넓게, 세로를 눌러 3/4 시점으로 보이게 한다.
                       Positioned(
                         top: boardTop,
@@ -1461,7 +1506,7 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     if (!showPieceControls) {
       final compactPieceSize = _compact ? 16.0 : 18.0;
       return SizedBox(
-        height: _compact ? 62 : 68,
+        height: 68,
         child: Container(
           key: key,
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -1838,9 +1883,16 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.08),
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.white.withValues(alpha: 0.14), width: 1),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.14),
+                width: 1,
+              ),
             ),
-            child: Icon(Icons.chat_bubble_outline, color: Colors.white70, size: size * 0.52),
+            child: Icon(
+              Icons.chat_bubble_outline,
+              color: Colors.white70,
+              size: size * 0.52,
+            ),
           ),
           if (_chatUnread > 0)
             Positioned(
@@ -1856,7 +1908,11 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
                 constraints: const BoxConstraints(minWidth: 16),
                 child: Text(
                   _chatUnread > 9 ? '9+' : '$_chatUnread',
-                  style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                  ),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -1894,7 +1950,19 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
       return widget.phase == 'moving' ? '상대가 말을 이동하는 중' : '상대가 윷을 던지는 중';
     }
     if (hasMoves) {
+      if (widget.lastCaptureBlockedCount > 0) {
+        return '상대 방어 효과로 ${widget.lastCaptureBlockedCount}개가 살아남음 · 내 말 선택';
+      }
+      if (widget.lastCapturedCount > 0) {
+        return '${widget.lastCapturedCount}개를 잡았습니다 · 내 말 선택';
+      }
       return _selectedPieceId == null ? '내 말 선택' : '이동 칸 선택';
+    }
+    if (widget.lastCaptureBlockedCount > 0) {
+      return '상대 방어 효과로 ${widget.lastCaptureBlockedCount}개가 살아남았습니다';
+    }
+    if (widget.lastCapturedCount > 0) {
+      return '${widget.lastCapturedCount}개를 잡았습니다';
     }
     if (canThrow) return '윷을 던져주세요';
     return '상대방을 기다리는 중';
@@ -2426,30 +2494,40 @@ class _YutThrowButton extends StatelessWidget {
             children: [
               _YutStickGlyph(enabled: enabled, compact: compact),
               SizedBox(width: compact ? 6 : 8),
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    loading ? '던지는 중' : '윷 던지기',
-                    style: TextStyle(
-                      fontSize: compact ? 15 : 17,
-                      fontWeight: FontWeight.w900,
-                      color: enabled ? const Color(0xFF4A2512) : Colors.white38,
-                      height: 1,
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      loading ? '던지는 중' : '윷 던지기',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: compact ? 15 : 17,
+                        fontWeight: FontWeight.w900,
+                        color: enabled
+                            ? const Color(0xFF4A2512)
+                            : Colors.white38,
+                        height: 1,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    loading ? '결과 확인 중' : '윷을 던져보세요',
-                    style: TextStyle(
-                      fontSize: compact ? 9 : 10,
-                      fontWeight: FontWeight.w700,
-                      color: enabled ? const Color(0xFF70401E) : Colors.white30,
-                      height: 1,
+                    const SizedBox(height: 3),
+                    Text(
+                      loading ? '결과 확인 중' : '윷을 던져보세요',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: compact ? 9 : 10,
+                        fontWeight: FontWeight.w700,
+                        color: enabled
+                            ? const Color(0xFF70401E)
+                            : Colors.white30,
+                        height: 1,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),
@@ -3350,11 +3428,21 @@ class _ChatPreviewBubbleState extends State<_ChatPreviewBubble>
             color: const Color(0xEE1E2530),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-            boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 10, offset: Offset(0, 3))],
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black45,
+                blurRadius: 10,
+                offset: Offset(0, 3),
+              ),
+            ],
           ),
           child: Row(
             children: [
-              const Icon(Icons.chat_bubble_rounded, color: Color(0xFF79C8C4), size: 16),
+              const Icon(
+                Icons.chat_bubble_rounded,
+                color: Color(0xFF79C8C4),
+                size: 16,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: RichText(
@@ -3372,7 +3460,10 @@ class _ChatPreviewBubbleState extends State<_ChatPreviewBubble>
                       ),
                       TextSpan(
                         text: text,
-                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
@@ -3381,7 +3472,11 @@ class _ChatPreviewBubbleState extends State<_ChatPreviewBubble>
               const SizedBox(width: 6),
               GestureDetector(
                 onTap: widget.onDismiss,
-                child: Icon(Icons.close_rounded, color: Colors.white.withValues(alpha: 0.5), size: 16),
+                child: Icon(
+                  Icons.close_rounded,
+                  color: Colors.white.withValues(alpha: 0.5),
+                  size: 16,
+                ),
               ),
             ],
           ),

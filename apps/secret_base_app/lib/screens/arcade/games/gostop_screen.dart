@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/gostop_coach.dart';
 import '../../../core/socket_service.dart';
 import '../../../ui/hwatu_card.dart';
 import '../../../widgets/game_scaffold.dart';
@@ -15,6 +16,9 @@ class GostopScreen extends StatefulWidget {
 class _GostopScreenState extends State<GostopScreen> {
   final _socket = SocketService();
   bool _settlementShown = false;
+  bool _showBeginnerGuide = true;
+  int _beginnerGuideStep = 0;
+  String _lastEventKey = '';
 
   static const _eventLabels = {
     'ssok': '쪽!',
@@ -22,6 +26,8 @@ class _GostopScreenState extends State<GostopScreen> {
     'ddadak': '따닥!',
     'pansseuri': '판쓸이!',
     'chongtong': '총통!',
+    'shake': '흔들기!',
+    'bomb': '폭탄!',
   };
 
   @override
@@ -54,15 +60,21 @@ class _GostopScreenState extends State<GostopScreen> {
 
     // 이벤트 토스트 (쪽/뻑/따닥/판쓸이)
     final events = (_socket.gostopState?['lastEvents'] as List?) ?? const [];
-    for (final e in events) {
-      final label = _eventLabels[e];
-      if (label != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(label, textAlign: TextAlign.center),
-            duration: const Duration(milliseconds: 900),
-          ),
-        );
+    final turn = _socket.gostopState?['turn'];
+    if (turn is num && turn.toInt() > 1) _showBeginnerGuide = false;
+    final eventKey = '$turn:${events.join(',')}';
+    if (events.isNotEmpty && eventKey != _lastEventKey) {
+      _lastEventKey = eventKey;
+      for (final e in events) {
+        final label = _eventLabels[e];
+        if (label != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(label, textAlign: TextAlign.center),
+              duration: const Duration(milliseconds: 900),
+            ),
+          );
+        }
       }
     }
 
@@ -104,13 +116,14 @@ class _GostopScreenState extends State<GostopScreen> {
       title: '고스톱',
       fullBleed: true,
       child: st == null
-          ? const Center(child: CircularProgressIndicator())
+          ? _buildStatus()
           : Container(
               color: const Color(0xFF14421F), // 화투판 초록
               child: SafeArea(
                 top: false,
                 child: Column(
                   children: [
+                    if (_socket.gostopError != null) _buildErrorBanner(),
                     _buildOpponentRow(st),
                     Expanded(child: _buildFieldArea(st)),
                     _buildMyArea(st),
@@ -118,6 +131,59 @@ class _GostopScreenState extends State<GostopScreen> {
                 ),
               ),
             ),
+    );
+  }
+
+  Widget _buildStatus() {
+    final error = _socket.gostopError;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              error == null ? Icons.hourglass_empty : Icons.error_outline,
+              color: error == null ? kHwatuGold : kHwatuRed,
+              size: 40,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              error ?? '게임 상태를 불러오는 중입니다.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 14),
+            ),
+            if (error != null) ...[
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: _socket.clearGostopError,
+                child: const Text('확인'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorBanner() {
+    return MaterialBanner(
+      backgroundColor: kHwatuRed.withValues(alpha: 0.92),
+      content: Text(
+        _socket.gostopError!,
+        style: const TextStyle(color: Colors.white, fontSize: 12),
+      ),
+      actions: [
+        if (_socket.gostopSettlementPending)
+          TextButton(
+            onPressed: _socket.retryGostopSettlement,
+            child: const Text('재시도', style: TextStyle(color: Colors.white)),
+          ),
+        TextButton(
+          onPressed: _socket.clearGostopError,
+          child: const Text('닫기', style: TextStyle(color: Colors.white)),
+        ),
+      ],
     );
   }
 
@@ -178,6 +244,7 @@ class _GostopScreenState extends State<GostopScreen> {
     final field = _cards(st['field']);
     final deckCount = ((st['deck'] as List?) ?? const []).length;
     final phase = st['phase'] as String? ?? 'playing';
+    final advice = buildGostopAdvice(st, _me);
     final pending = st['pending'] == null
         ? null
         : Map<String, dynamic>.from(st['pending'] as Map);
@@ -186,7 +253,8 @@ class _GostopScreenState extends State<GostopScreen> {
     final perPoint = (st['perPointBet'] as num?)?.toInt() ?? 100;
     final baseMul = (st['baseMultiplier'] as num?)?.toInt() ?? 1;
     final shakeMul = (st['shakeMultiplier'] as num?)?.toInt() ?? 1;
-    final totalMul = baseMul * shakeMul;
+    final bombMul = (st['bombMultiplier'] as num?)?.toInt() ?? 1;
+    final totalMul = baseMul * shakeMul * bombMul;
 
     final isDeckChoice = phase == 'deck_choice' && _isMyTurn && pending != null;
     final choiceIds = isDeckChoice
@@ -198,6 +266,8 @@ class _GostopScreenState extends State<GostopScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          if (_showBeginnerGuide) _buildBeginnerGuide(),
+          _buildCoachPanel(advice),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -236,6 +306,19 @@ class _GostopScreenState extends State<GostopScreen> {
                 ),
               ),
             ),
+          if (phase == 'shake_choice' && st['shakePlayerId'] == _me)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _buildShakeButtons(),
+            ),
+          if (phase == 'shake_choice' && st['shakePlayerId'] != _me)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                '상대가 흔들기 여부를 선택 중...',
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
+              ),
+            ),
           Wrap(
             spacing: 6,
             runSpacing: 6,
@@ -254,6 +337,7 @@ class _GostopScreenState extends State<GostopScreen> {
                   onTap: isDeckChoice && choiceIds.contains(c['id'])
                       ? () => _socket.pickGostopField(c['id'] as String)
                       : null,
+                  onLongPress: () => _showCardDetails(c),
                 ),
             ],
           ),
@@ -272,6 +356,159 @@ class _GostopScreenState extends State<GostopScreen> {
             ),
         ],
       ),
+    );
+  }
+
+  Widget _buildBeginnerGuide() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.24),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: kHwatuGold.withValues(alpha: 0.65)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.school_outlined, color: kHwatuGold, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '초보자 안내 ${_beginnerGuideStep + 1}/3\n$_beginnerGuideText',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                height: 1.35,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              if (_beginnerGuideStep >= 2) {
+                setState(() => _showBeginnerGuide = false);
+              } else {
+                setState(() => _beginnerGuideStep++);
+              }
+            },
+            child: Text(
+              _beginnerGuideStep >= 2 ? '닫기' : '다음',
+              style: const TextStyle(color: kHwatuGold, fontSize: 11),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String get _beginnerGuideText => switch (_beginnerGuideStep) {
+    0 => '같은 월 카드를 맞추면 바닥 카드와 함께 가져옵니다.',
+    1 => '손패를 낸 뒤 덱에서 한 장이 자동으로 뒤집힙니다.',
+    _ => '7점이 되면 고로 계속하거나 스톱으로 정산합니다.',
+  };
+
+  Widget _buildCoachPanel(GostopAdvice advice) {
+    final score = int.tryParse(advice.scoreProgress.split(' ').first) ?? 0;
+    final progress = (score / 7).clamp(0.0, 1.0).toDouble();
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.09),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.lightbulb_outline, color: kHwatuGold, size: 19),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  advice.headline,
+                  style: const TextStyle(
+                    color: kHwatuGold,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  advice.detail,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 10),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  advice.nextScoreHint,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.62),
+                    fontSize: 9,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 4,
+                    backgroundColor: Colors.white.withValues(alpha: 0.16),
+                    valueColor: const AlwaysStoppedAnimation(kHwatuGold),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            advice.scoreProgress,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildShakeButtons() {
+    return Column(
+      children: [
+        const Text(
+          '같은 월 3장 — 흔들까요?',
+          style: TextStyle(
+            color: kHwatuGold,
+            fontWeight: FontWeight.w800,
+            fontSize: 14,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ElevatedButton(
+              onPressed: () => _socket.declareGostopShake('shake'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kHwatuRed,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('흔들기 ×2'),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton(
+              onPressed: () => _socket.declareGostopShake('pass'),
+              style: OutlinedButton.styleFrom(foregroundColor: Colors.white),
+              child: const Text('패스'),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -296,7 +533,7 @@ class _GostopScreenState extends State<GostopScreen> {
                 backgroundColor: kHwatuRed,
                 foregroundColor: Colors.white,
               ),
-              onPressed: () => _socket.declareGostop('go'),
+              onPressed: () => _confirmGoStop('go'),
               child: const Text(
                 '고!',
                 style: TextStyle(fontWeight: FontWeight.w800),
@@ -308,7 +545,7 @@ class _GostopScreenState extends State<GostopScreen> {
                 backgroundColor: kHwatuBlue,
                 foregroundColor: Colors.white,
               ),
-              onPressed: () => _socket.declareGostop('stop'),
+              onPressed: () => _confirmGoStop('stop'),
               child: const Text(
                 '스톱',
                 style: TextStyle(fontWeight: FontWeight.w800),
@@ -327,6 +564,34 @@ class _GostopScreenState extends State<GostopScreen> {
     );
   }
 
+  Future<void> _confirmGoStop(String decision) async {
+    final state = _socket.gostopState;
+    final score = (state?['scores']?[_me]?['total'] as num?)?.toInt() ?? 0;
+    final isGo = decision == 'go';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isGo ? '고를까요?' : '스톱할까요?'),
+        content: Text(
+          isGo
+              ? '현재 $score점입니다. 고를 하면 계속 플레이하고 배수가 올라가지만, 상대가 먼저 점수를 만들면 역전될 수 있어요.'
+              : '현재 $score점으로 정산합니다. 지금 점수를 확정할까요?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(isGo ? '고 선언' : '스톱 확정'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) _socket.declareGostop(decision);
+  }
+
   // ── 내 영역 ────────────────────────────────────────────────────────────────
 
   Widget _buildMyArea(Map<String, dynamic> st) {
@@ -338,6 +603,8 @@ class _GostopScreenState extends State<GostopScreen> {
     final fieldMonths = field.map((c) => c['month']).toSet();
     final phase = st['phase'] as String? ?? 'playing';
     final canPlay = _isMyTurn && phase == 'playing';
+    final bombMonth = canPlay ? _availableBombMonth(myHand, field) : null;
+    final advice = buildGostopAdvice(st, _me);
 
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
@@ -353,6 +620,8 @@ class _GostopScreenState extends State<GostopScreen> {
               Text(
                 canPlay
                     ? '낼 카드를 선택하세요 (빛나는 카드 = 먹을 수 있음)'
+                    : phase == 'shake_choice' && st['shakePlayerId'] == _me
+                    ? '흔들기 여부를 선택하세요'
                     : phase == 'deck_choice' && _isMyTurn
                     ? '바닥에서 가져올 카드를 고르세요'
                     : '상대 턴',
@@ -374,6 +643,19 @@ class _GostopScreenState extends State<GostopScreen> {
             ],
           ),
           const SizedBox(height: 4),
+          if (bombMonth != null)
+            Align(
+              alignment: Alignment.centerRight,
+              child: OutlinedButton.icon(
+                onPressed: () => _socket.playGostopBomb(bombMonth),
+                icon: const Icon(Icons.flash_on, size: 16),
+                label: Text('$bombMonth월 폭탄'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: kHwatuGold,
+                  side: const BorderSide(color: kHwatuGold),
+                ),
+              ),
+            ),
           SizedBox(
             height: 84,
             child: ListView.separated(
@@ -385,14 +667,70 @@ class _GostopScreenState extends State<GostopScreen> {
                 return HwatuCard(
                   card: c,
                   width: 48,
-                  highlighted: canPlay && fieldMonths.contains(c['month']),
+                  highlighted:
+                      canPlay &&
+                      (fieldMonths.contains(c['month']) ||
+                          advice.recommendedCardId == c['id']),
+                  selected: canPlay && advice.recommendedCardId == c['id'],
                   onTap: canPlay
                       ? () => _socket.playGostopCard(c['id'] as String)
                       : null,
+                  onLongPress: () => _showCardDetails(c),
                 );
               },
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  int? _availableBombMonth(
+    List<Map<String, dynamic>> hand,
+    List<Map<String, dynamic>> field,
+  ) {
+    final handCounts = <int, int>{};
+    for (final card in hand) {
+      final month = (card['month'] as num?)?.toInt();
+      if (month != null) handCounts[month] = (handCounts[month] ?? 0) + 1;
+    }
+    for (final entry in handCounts.entries) {
+      final fieldCount = field
+          .where((card) => (card['month'] as num?)?.toInt() == entry.key)
+          .length;
+      if (entry.value >= 3 && fieldCount == 1) return entry.key;
+    }
+    return null;
+  }
+
+  void _showCardDetails(Map<String, dynamic> card) {
+    final info = describeGostopCard(card);
+    final state = _socket.gostopState;
+    final hand = _cards(state?['hands']?[_me]);
+    final phase = state?['phase']?.toString();
+    final canPlay =
+        _isMyTurn &&
+        phase == 'playing' &&
+        hand.any((candidate) => candidate['id'] == card['id']);
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(info.title),
+        content: Text(info.description),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('닫기'),
+          ),
+          if (canPlay)
+            FilledButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                _socket.playGostopCard(card['id'] as String);
+              },
+              child: const Text('이 카드 내기'),
+            ),
         ],
       ),
     );
@@ -411,6 +749,9 @@ class _GostopScreenState extends State<GostopScreen> {
     final ws = Map<String, dynamic>.from((st['winnerScore'] as Map?) ?? {});
     final pibak = st['pibak'] == true;
     final gwangbak = st['gwangbak'] == true;
+    final godori = st['godori'] == true || (ws['godoriScore'] as num? ?? 0) > 0;
+    final chongtong = st['chongtong'] == true;
+    final bombMul = (st['bombMultiplier'] as num?)?.toInt() ?? 1;
     final goWin = (st['goBonusWinner'] as num?)?.toInt() ?? 0;
 
     final lines = <String>[
@@ -418,6 +759,7 @@ class _GostopScreenState extends State<GostopScreen> {
         '광 ${ws['gwangCount']}장 → ${ws['gwangScore']}점',
       if ((ws['animScore'] as num? ?? 0) > 0)
         '열끗 ${ws['animCount']}장 → ${ws['animScore']}점',
+      if (godori) '고도리(2·4·8월 새) +5점',
       if ((ws['ribScore'] as num? ?? 0) > 0)
         '단 ${ws['ribCount']}장 → ${ws['ribScore']}점',
       if ((ws['hongdanBonus'] as num? ?? 0) > 0) '홍단 세트 +3점',
@@ -427,6 +769,8 @@ class _GostopScreenState extends State<GostopScreen> {
       if (goWin > 0) '고 $goWin회 → ×${1 << goWin}',
       if (pibak) '피박 ×2',
       if (gwangbak) '광박 ×2',
+      if (bombMul > 1) '폭탄 ×$bombMul',
+      if (chongtong) '총통 고정 5점',
     ];
 
     showDialog<void>(
@@ -450,7 +794,7 @@ class _GostopScreenState extends State<GostopScreen> {
               ),
             const Divider(),
             Text(
-              '$points점 × $perPoint × ×$mul = $amount코인',
+              '$points점 × $perPoint × $mul = $amount코인',
               style: const TextStyle(fontWeight: FontWeight.w800),
             ),
           ],
@@ -486,15 +830,16 @@ class _GostopScreenState extends State<GostopScreen> {
             Text('''
 1. 내 턴에 손패 1장을 냅니다. 바닥에 같은 월(月) 카드가 있으면 함께 가져와요.
 2. 이어서 덱에서 1장이 자동으로 뒤집힙니다. 이것도 월이 맞으면 가져옵니다.
+   · 손패나 바닥 카드를 길게 누르면 카드 설명을 볼 수 있어요.
 3. 카드를 모아 점수를 만듭니다:
    · 광(光) 3장 = 3점 (비광 포함 시 2점), 4장 = 4점, 5장 = 15점
-   · 열끗 5장부터 1점씩
+   · 열끗 5장부터 1점씩 / 고도리(2·4·8월 새) +5점
    · 단(띠) 5장부터 1점씩 / 홍단·청단 세트 = +3점
    · 피 10장부터 1점씩 (쌍피는 2장 취급)
 4. 7점이 되면 "고" 또는 "스톱"을 선택합니다.
    · 고: 판을 이어가고 이기면 ×2 (단, 역전당하면 상대에게 배수가!)
    · 스톱: 지금 점수로 정산
-5. 특수 상황: 쪽/뻑/따닥/판쓸이, 흔들기(같은 월 2장 이상 = ×2), 총통(같은 월 4장 = 즉시 승리)
+5. 특수 상황: 쪽/뻑/따닥/판쓸이, 흔들기(같은 월 3장 이상을 선언하면 ×2), 폭탄(같은 월 손패 3장 + 바닥 1장 = ×2), 총통(같은 월 4장 = 즉시 승리)
 6. 정산 = 점수 × 점당 금액 × 배수 (피박·광박·고박 시 ×2씩 추가)
 ''', style: TextStyle(fontSize: 13, height: 1.6)),
           ],

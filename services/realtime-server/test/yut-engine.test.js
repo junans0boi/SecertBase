@@ -8,6 +8,9 @@ import {
   applyMoveToPieces,
   hasBackdoMove,
   checkCatch,
+  capturePieces,
+  resolveCapture,
+  resolveYutMove,
   recordCapture,
   settleTurnAfterMove,
 } from '../src/yut-engine.js';
@@ -258,4 +261,78 @@ test('checkCatch ignores start; goal piece only safe when finished', () => {
   assert.equal(checkCatch(20, opponentPieces).filter((p) => p.finished).length, 0, 'finished pieces are not caught');
   assert.deepEqual(checkCatch(20, opponentPieces).map((p) => p.id), [3], 'pre-finish piece at pos 20 can be caught');
   assert.deepEqual(checkCatch(3, opponentPieces).map((piece) => piece.id), [1]);
+});
+
+test('a landing move resets every opponent piece on the landing square', () => {
+  const mover = { id: 0, position: 2, lastPos: 1, finished: false };
+  const opponentPieces = [
+    { id: 0, position: 3, lastPos: 2, finished: false },
+    { id: 1, position: 3, lastPos: 2, finished: false },
+    { id: 2, position: 3, lastPos: 2, finished: true },
+  ];
+  const moveResult = movePiece(mover, YUT_RESULTS.DO);
+  applyMoveToPieces([mover], moveResult);
+  const captured = capturePieces(mover.position, opponentPieces);
+
+  assert.deepEqual(captured.map((piece) => piece.id), [0, 1]);
+  assert.deepEqual(opponentPieces, [
+    { id: 0, position: 0, lastPos: 0, finished: false },
+    { id: 1, position: 0, lastPos: 0, finished: false },
+    { id: 2, position: 3, lastPos: 2, finished: true },
+  ]);
+});
+
+test('resolveCapture reports blocked pieces without resetting them', () => {
+  const opponentPieces = [
+    { id: 0, position: 3, lastPos: 2, finished: false },
+    { id: 1, position: 3, lastPos: 2, finished: false },
+  ];
+  let randomCalls = 0;
+
+  const result = resolveCapture(3, opponentPieces, {
+    resistPct: 100,
+    random: () => {
+      randomCalls += 1;
+      return 0;
+    },
+  });
+
+  assert.equal(randomCalls, 2);
+  assert.deepEqual(result.capturedPieces, []);
+  assert.deepEqual(result.blockedPieces.map((piece) => piece.id), [0, 1]);
+  assert.deepEqual(opponentPieces.map((piece) => piece.position), [3, 3]);
+});
+
+test('resolveYutMove applies carried movement and capture to the game state', () => {
+  const gameState = {
+    playersOrder: ['A', 'B'],
+    currentTurn: 'A',
+    phase: 'moving',
+    pendingMoves: [1],
+    caughtOpponentThisTurn: false,
+    players: {
+      A: {
+        pieces: [
+          { id: 0, position: 2, lastPos: 1, finished: false },
+          { id: 1, position: 2, lastPos: 1, finished: false },
+        ],
+      },
+      B: {
+        pieces: [
+          { id: 0, position: 3, lastPos: 2, finished: false },
+          { id: 1, position: 3, lastPos: 2, finished: false },
+        ],
+      },
+    },
+  };
+
+  const result = resolveYutMove(gameState, 'A', { pieceId: 0 });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.carriedPieces.map((piece) => piece.id), [0, 1]);
+  assert.deepEqual(result.capturedPieces.map((piece) => piece.id), [0, 1]);
+  assert.deepEqual(gameState.players.A.pieces.map((piece) => piece.position), [3, 3]);
+  assert.deepEqual(gameState.players.B.pieces.map((piece) => piece.position), [0, 0]);
+  assert.equal(gameState.pendingMoves.length, 0);
+  assert.equal(gameState.caughtOpponentThisTurn, true);
 });

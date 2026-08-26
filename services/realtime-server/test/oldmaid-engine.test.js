@@ -85,3 +85,24 @@ test('drawCard moves selected card from opponent, discards pair if match, and sw
   assert.equal(game.result.winner, p1Id);
   assert.equal(game.result.loser, p2Id);
 });
+
+test('drawCard inserts a drawn card at a random position instead of always appending', () => {
+  const originalRandom = Math.random;
+  Math.random = () => 0;
+  try {
+    const game = drawCard({
+      status: 'playing',
+      turn: 'A',
+      players: {
+        A: { hand: [{ id: 'a1', rank: '3', suit: '♠', isJoker: false }] },
+        B: { hand: [{ id: 'b1', rank: '7', suit: '♠', isJoker: false }] },
+      },
+      discardedPairsCount: 0,
+      lastDrawnCard: null,
+      result: null,
+    }, 'A', 'b1');
+    assert.deepEqual(game.players.A.hand.map((card) => card.id), ['b1', 'a1']);
+  } finally {
+    Math.random = originalRandom;
+  }
+});

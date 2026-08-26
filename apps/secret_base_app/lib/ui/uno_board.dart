@@ -359,10 +359,14 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
       return card['id'] == widget.drawChoiceCard!['id'];
     }
     final val = card['value'] as String?;
-    // In draw stack mode, only matching defense cards are playable
+    // In go_wild draw stack mode, +4 can defend +2; +4 still requires +4.
     if (widget.drawStack > 0 && widget.drawStackType != null) {
       if (widget.mode == 'classic') return false;
-      return val == widget.drawStackType;
+      if (widget.drawStackType == 'wild_draw4') return val == 'wild_draw4';
+      if (widget.drawStackType == 'draw2') {
+        return val == 'draw2' || val == 'wild_draw4';
+      }
+      return false;
     }
     if (widget.mode == 'classic' && val == 'discard_all') return false;
     // Normal playability check (mirrors server canPlayCard)
@@ -796,7 +800,7 @@ class _UnoBoardState extends State<UnoBoard> with TickerProviderStateMixin {
                                         const SizedBox(width: 8),
                                         Text(
                                           widget.drawStackType == 'draw2'
-                                              ? '+2로 방어 가능'
+                                              ? '+2 또는 +4로 방어 가능'
                                               : '+4로 방어 또는 도전',
                                           style: const TextStyle(
                                             color: Colors.orangeAccent,

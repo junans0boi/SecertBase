@@ -317,7 +317,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       type: 'blackjack',
       icon: Icons.style,
       title: '블랙잭',
-      description: '각자 딜러 상대로 21점 대결 후 승패 결정',
+      description: '한 라운드씩 딜러 역할을 바꿔 21점 대결',
       color: kMainRose,
       background: kMainRoseSoft,
     ),
@@ -340,8 +340,8 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     _GameInfo(
       type: 'marble',
       icon: Icons.castle_rounded,
-      title: '마블윷',
-      description: '윷판 29칸을 영지로 점령하는 전략 영토 난투 보드게임',
+      title: '마블 작전',
+      description: '주사위를 굴려 도시를 사고 상대를 파산시키는 2인 전략 보드게임',
       color: kMainLilac,
       background: kMainLilacSoft,
     ),
@@ -456,7 +456,10 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       _ => const RpsScreen(),
     };
     // Wrap resumable game types so the server tracks which socket is viewing them.
-    if (type == 'yut' || type == 'marble' || type == 'uno') {
+    if (type == 'yut' ||
+        type == 'marble' ||
+        type == 'uno' ||
+        type == 'gostop') {
       screen = GameSessionPresence(gameType: type, child: screen);
     }
     return screen;

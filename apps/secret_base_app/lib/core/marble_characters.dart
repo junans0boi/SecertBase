@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 마블 작전 & 윷놀이 공용 캐릭터 정의 — Single Source of Truth
+// 마블 작전 캐릭터 정의 — Single Source of Truth
 //
 // 캐릭터는 직접 그린 Canvas 2D 초상화로 표현됩니다.
 // 이모지/이미지 에셋 사용 금지 — 모든 렌더링은 CustomPainter로 구현.

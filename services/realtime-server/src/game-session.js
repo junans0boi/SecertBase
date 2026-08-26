@@ -4,16 +4,20 @@
 
 import { DEFAULT_UNO_MODE } from './uno-engine.js';
 import { serializeYutGame } from './yut-engine.js';
+import { serializeFor as serializeGostopGameFor } from './gostop-engine.js';
+import { serializeMarbleGame } from './marble-engine.js';
 
 export const viewerRoomKey = (roomCode, gameType) =>
   `game-view:${roomCode}:${gameType}`;
 
 // Games with durable Redis state and per-user serialization that can be resumed.
-export const RESUMABLE_GAME_TYPES = new Set(['yut', 'uno']);
+export const RESUMABLE_GAME_TYPES = new Set(['yut', 'marble', 'uno', 'gostop']);
 
 export const activeGameKey = (roomCode, gameType) => {
   if (gameType === 'yut') return `yut:${roomCode}:game`;
   if (gameType === 'uno') return `uno:${roomCode}:game`;
+  if (gameType === 'gostop') return `gostop:${roomCode}:game`;
+  if (gameType === 'marble') return `marble:${roomCode}:game`;
   return null;
 };
 
@@ -58,8 +62,11 @@ export const resolveLobbyJoinForResume = async (socket, io, redis, { roomCode, g
   if (!rawState) return null;
 
   const viewerCount = getViewerCount(io, roomCode, gameType);
+  const game = JSON.parse(rawState);
+  const keepPendingSettlement = gameType === 'gostop' &&
+    game.settlementStatus === 'pending';
 
-  if (viewerCount === 0) {
+  if (viewerCount === 0 && !keepPendingSettlement) {
     // Active state exists but nobody is viewing — stale. Delete it so normal lobby proceeds.
     await redis.del(key).catch(() => {});
     return null;
@@ -69,12 +76,15 @@ export const resolveLobbyJoinForResume = async (socket, io, redis, { roomCode, g
   await socket.join(viewerRoomKey(roomCode, gameType));
   socket.data.viewingGame = gameType;
 
-  const game = JSON.parse(rawState);
   let state = null;
   if (gameType === 'yut') {
     state = serializeYutGame(game);
   } else if (gameType === 'uno') {
     state = serializeUnoGameFor(game, userId);
+  } else if (gameType === 'gostop') {
+    state = serializeGostopGameFor(game, userId);
+  } else if (gameType === 'marble') {
+    state = serializeMarbleGame(game);
   }
 
   return { status: 'resumed', gameType, state };
@@ -119,5 +129,16 @@ export const cleanupGameSessionOnDisconnect = async (socket, io, redis) => {
 const _maybeCleanupGame = async (io, redis, roomCode, gameType) => {
   if (getViewerCount(io, roomCode, gameType) > 0) return;
   const key = activeGameKey(roomCode, gameType);
-  if (key) await redis.del(key).catch(() => {});
+  if (!key) return;
+  if (gameType === 'gostop') {
+    const raw = await redis.get(key).catch(() => null);
+    if (raw) {
+      try {
+        if (JSON.parse(raw).settlementStatus === 'pending') return;
+      } catch (_) {
+        // Malformed state is safe to clean up below.
+      }
+    }
+  }
+  await redis.del(key).catch(() => {});
 };

@@ -483,22 +483,21 @@ class CharacterInfo {
 | 총자산 | `totalAssets` |
 | 보유마블머니 | `cash` |
 
-### 파일명 마이그레이션
+### 파일명 및 이벤트 상태
 
-| 현재 | 변경 후 |
-|------|--------|
-| `marble_yut_screen.dart` | `marble_screen.dart` |
-| `marble_yut_board.dart` | `marble_board.dart` |
-| `marble-yut-engine.js` | `marble-engine.js` |
-| 클래스 `MarbleYut*` | `Marble*` |
-| 소켓 이벤트 `marble_yut_*` | `marble_*` |
+| 영역 | 현재 이름 |
+|------|----------|
+| Flutter 화면 | `marble_screen.dart` |
+| Flutter 보드 | `marble_board.dart` |
+| 서버 엔진 | `marble-engine.js` |
+| 서버 이벤트 | `game:marble:*` |
 
 ---
 
 ## 15. 구현 우선순위
 
 ### Phase 1 — 플레이 가능한 상태
-- [ ] 네이밍 마이그레이션 (`yut` 제거)
+- [x] 마블 전용 네이밍 정리
 - [ ] 24칸 보드 데이터 (`marble_map_data.dart` 업데이트)
 - [ ] 건물 3단계 로직 (집/빌딩/랜드마크)
 - [ ] 통행료 계산 (건물 단계 + 컬러 독점 2배)

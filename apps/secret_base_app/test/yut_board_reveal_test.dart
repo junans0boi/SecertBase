@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secret_base_app/ui/yut_board.dart';
 
-Widget _board({String? result, int? throwAt}) {
+Widget _board({
+  String? result,
+  int? throwAt,
+  int capturedCount = 0,
+  int captureBlockedCount = 0,
+}) {
   return MaterialApp(
     home: Scaffold(
       body: YutBoard(
@@ -22,6 +27,8 @@ Widget _board({String? result, int? throwAt}) {
         currentUser: 'me',
         lastResultName: result,
         lastThrowAt: throwAt,
+        lastCapturedCount: capturedCount,
+        lastCaptureBlockedCount: captureBlockedCount,
       ),
     ),
   );
@@ -43,5 +50,11 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1800));
     await tester.pumpAndSettle();
     expect(find.text('모'), findsOneWidget);
+  });
+
+  testWidgets('잡기 성공과 방어 효과를 액션 안내에 구분해서 표시한다', (tester) async {
+    await tester.pumpWidget(_board(capturedCount: 1, captureBlockedCount: 1));
+
+    expect(find.text('상대 방어 효과로 1개가 살아남았습니다'), findsOneWidget);
   });
 }

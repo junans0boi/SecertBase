@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -16,9 +15,9 @@ String fmm(int n) {
   final sign = n < 0 ? '-' : '';
   final man = abs ~/ 10000;
   final rem = abs % 10000;
-  if (man == 0) return '$sign${rem}원';
-  if (rem == 0) return '$sign${man}만원';
-  return '$sign${man}만${rem}원'; // 예: 3000020 → '300만20원'
+  if (man == 0) return '$sign$rem원';
+  if (rem == 0) return '$sign$man만원';
+  return '$sign$man만$rem원'; // 예: 3000020 → '300만20원'
 }
 
 int _landValueOf(String userId, Map<String, dynamic> landData) {
@@ -155,42 +154,8 @@ class _MarbleScreenState extends State<MarbleScreen> {
   void _rebuild() {
     if (!mounted) return;
     _handleLandPrompt();
-    _handleCatchBonus();
     _showWinnerIfNeeded();
     setState(() {});
-  }
-
-  // ─── Catch Bonus 프롬프트 ───────────────────────────────────────────────
-  bool _catchBonusShowing = false;
-
-  void _handleCatchBonus() {
-    if (!_socket.marbleCatchBonusPending ||
-        _socket.marbleCatchBonusBy != _socket.userId ||
-        _catchBonusShowing) {
-      return;
-    }
-    final targetId = _socket.marbleCatchBonusTarget;
-    if (targetId == null) return;
-    final lands = _socket.marbleLands.entries
-        .where((e) => e.value['owner'] == targetId && (e.value['level'] as int? ?? 1) < 4)
-        .toList();
-    if (lands.isEmpty) return;
-
-    _catchBonusShowing = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => _CatchBonusDialog(
-          lands: lands,
-          myCoins: _socket.marbleCoins[_socket.userId] ?? 0,
-          onAct: (pos) { _socket.actMarbleLand('catch_acquire', pos); _catchBonusShowing = false; },
-          onSkip: () { _socket.actMarbleLand('catch_skip', 0); _catchBonusShowing = false; },
-          until: _socket.marbleCatchBonusUntil,
-        ),
-      ).whenComplete(() => _catchBonusShowing = false);
-    });
   }
 
   // ─── 영지 프롬프트 팝업 ───────────────────────────────────────────────────
@@ -272,7 +237,7 @@ class _MarbleScreenState extends State<MarbleScreen> {
     final opCoins     = sock.marbleCoins[opponentId] ?? 1500;
 
     return GameScaffold(
-      title: '🎲 마블',
+      title: '🏰 마블 작전',
       fullBleed: true,
       showAppBar: false,
       child: GameMenuListener(
@@ -788,7 +753,6 @@ class _LandPromptDialog extends StatelessWidget {
     final pos     = prompt['pos']  as int? ?? 0;
     final cost    = prompt['cost'] as int? ?? 0;
     final level   = prompt['level'] as int? ?? 1;
-    final stacked = prompt['stacked'] as bool? ?? false;
     final canAfford = myCoins >= cost;
 
     final isClaim   = type == 'claim';
@@ -805,7 +769,7 @@ class _LandPromptDialog extends StatelessWidget {
       actionLabel = '인수 💴 ${fmm(cost)}';
       bannerColors = [const Color(0xFFB91C1C), const Color(0xFF991B1B)];
     } else if (isClaim) {
-      title = stacked ? '영지 점령 (업기)' : '영지 점령';
+      title = '영지 점령';
       icon  = '🏴';
       actionLabel = '점령 💴 ${fmm(cost)}';
       bannerColors = [const Color(0xFF5B21B6), const Color(0xFF4C1D95)];
@@ -871,8 +835,8 @@ class _LandPromptDialog extends StatelessWidget {
                   if (type == 'upgrade') _InfoRow(label: '레벨', value: 'Lv$level → Lv${level + 1}'),
                   if (isAcquire)        _InfoRow(label: '레벨', value: 'Lv$level'),
                   _InfoRow(
-                    label: '인수비용',
-                    value: fmm(cost) + (stacked && isClaim ? ' (x2, Lv2)' : stacked && isAcquire ? ' (50% 할인)' : ''),
+                    label: isClaim ? '구매비용' : '인수비용',
+                    value: fmm(cost),
                   ),
                   _InfoRow(label: '보유 마블', value: fmm(myCoins)),
                   if (canAfford)
@@ -1033,217 +997,6 @@ class _InfoRow extends StatelessWidget {
         ),
         Divider(color: Colors.white.withValues(alpha: 0.1), height: 1),
       ],
-    );
-  }
-}
-
-// ─── 잡기 보너스 다이얼로그 ─────────────────────────────────────────────────
-
-class _CatchBonusDialog extends StatefulWidget {
-  final List<MapEntry<String, dynamic>> lands;
-  final int myCoins;
-  final void Function(int pos) onAct;
-  final VoidCallback onSkip;
-  final int? until;
-
-  const _CatchBonusDialog({
-    required this.lands,
-    required this.myCoins,
-    required this.onAct,
-    required this.onSkip,
-    required this.until,
-  });
-
-  @override
-  State<_CatchBonusDialog> createState() => _CatchBonusDialogState();
-}
-
-class _CatchBonusDialogState extends State<_CatchBonusDialog> {
-  int? _selectedPos;
-  Timer? _timer;
-  int _remainingMs = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _updateTime();
-    _timer = Timer.periodic(const Duration(milliseconds: 100), (_) => _updateTime());
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  void _updateTime() {
-    if (widget.until == null) return;
-    final remain = widget.until! - DateTime.now().millisecondsSinceEpoch;
-    if (remain <= 0) {
-      _timer?.cancel();
-      if (mounted) Navigator.of(context).pop();
-    } else {
-      setState(() => _remainingMs = remain);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final remainSec = (_remainingMs / 1000).ceil();
-
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF1A1230), Color(0xFF0D1117)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0x44FFD700), width: 1.5),
-          boxShadow: const [BoxShadow(color: Color(0x99000000), blurRadius: 24)],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF7C4DFF), Color(0xFF5B21B6)],
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                ),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-              ),
-              child: Row(
-                children: [
-                  const Text('🎯', style: TextStyle(fontSize: 22)),
-                  const SizedBox(width: 10),
-                  Text(
-                    '잡기 보너스! ($remainSec초)',
-                    style: GoogleFonts.notoSans(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '상대방을 잡았습니다! 15초 내에 상대의 영지 하나를 인수할 수 있습니다.',
-                    style: GoogleFonts.notoSans(color: Colors.white60, fontSize: 12),
-                  ),
-                  const SizedBox(height: 10),
-                  _InfoRow(label: '내 자금', value: fmm(widget.myCoins)),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 200,
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: widget.lands.length,
-                      itemBuilder: (context, index) {
-                        final entry = widget.lands[index];
-                        final pos   = int.tryParse(entry.key) ?? 0;
-                        final level = entry.value['level'] as int? ?? 1;
-                        int baseVal = 100;
-                        if ([5, 10, 15].contains(pos)) baseVal = 300;
-                        else if (pos == 23) baseVal = 200;
-                        else if ([21, 22, 24, 25, 26, 27, 28, 29].contains(pos)) baseVal = 150;
-                        final cost       = (baseVal * 1.3).floor();
-                        final canAfford  = widget.myCoins >= cost;
-                        final isSelected = _selectedPos == pos;
-                        final tile = kTileByPos[pos];
-                        final posLabel = tile != null
-                            ? '${tile.emoji} ${tile.name} (Lv$level)'
-                            : 'Pos $pos (Lv$level)';
-
-                        return InkWell(
-                          onTap: canAfford ? () => setState(() => _selectedPos = pos) : null,
-                          borderRadius: BorderRadius.circular(12),
-                          child: Container(
-                            margin: const EdgeInsets.symmetric(vertical: 4),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: isSelected ? const Color(0x33E91E63) : const Color(0x11FFFFFF),
-                              border: Border.all(
-                                color: isSelected ? const Color(0xFFE91E63)
-                                    : (canAfford ? const Color(0x22FFFFFF) : const Color(0x11FFFFFF)),
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(posLabel, style: GoogleFonts.notoSans(
-                                    color: canAfford ? Colors.white : Colors.white30,
-                                    fontWeight: FontWeight.w700)),
-                                Text(fmm(cost), style: GoogleFonts.notoSans(
-                                    color: canAfford ? const Color(0xFFE91E63) : Colors.white30,
-                                    fontWeight: FontWeight.w700)),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextButton(
-                          onPressed: () { Navigator.of(context).pop(); widget.onSkip(); },
-                          style: TextButton.styleFrom(
-                            backgroundColor: Colors.white.withValues(alpha: 0.08),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          child: Text('건너뛰기',
-                              style: GoogleFonts.notoSans(color: Colors.white60, fontWeight: FontWeight.w700)),
-                        ),
-                      ),
-                      if (_selectedPos != null) ...[
-                        const SizedBox(width: 10),
-                        Expanded(
-                          flex: 2,
-                          child: GestureDetector(
-                            onTap: () { Navigator.of(context).pop(); widget.onAct(_selectedPos!); },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                ),
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              alignment: Alignment.center,
-                              child: Text('인수하기',
-                                  style: GoogleFonts.notoSans(
-                                      color: Colors.black87, fontWeight: FontWeight.w900)),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -1613,7 +1366,7 @@ class _TileEventOverlayState extends State<_TileEventOverlay>
 
     return AnimatedBuilder(
       animation: _ctrl,
-      builder: (_, __) => GestureDetector(
+      builder: (_, _) => GestureDetector(
         onTap: widget.onDismiss,
         child: Stack(
           children: [
@@ -1814,7 +1567,7 @@ class _ConfettiLayerState extends State<_ConfettiLayer>
     return IgnorePointer(
       child: AnimatedBuilder(
         animation: _ctrl,
-        builder: (_, __) => CustomPaint(
+        builder: (_, _) => CustomPaint(
           size: size,
           painter: _ConfettiPainter(_particles, _ctrl.value),
         ),

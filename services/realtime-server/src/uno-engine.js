@@ -5,7 +5,7 @@
  * - Each player starts with 7 cards
  * - Match card by color or number
  * - Special cards: Skip, Reverse, Draw2, Discard All, Wild, Wild Draw4
- * - Draw stack chaining: +2 defends against +2, +4 defends against +4
+ * - Draw stack chaining: +2 can be defended by +2 or +4; +4 can be defended by +4
  * - +4 challenge: challenger can call bluff
  * - Shout "UNO" when down to 1 card
  * - Win: Empty hand first
@@ -66,7 +66,7 @@ export function shuffle(array) {
 
 /**
  * Check if a card can be played on top card.
- * When drawStack > 0, only matching defense cards are allowed.
+ * When drawStack > 0, only valid defense cards are allowed.
  */
 export function canPlayCard(
   card,
@@ -76,10 +76,15 @@ export function canPlayCard(
   drawStackType = null,
   { mode = DEFAULT_UNO_MODE } = {},
 ) {
-  // Draw stack restriction: must defend with matching type or accept
+  // Draw stack restriction: in go_wild mode, +4 can defend against +2,
+  // while a pending +4 can only be defended by another +4.
   if (drawStack > 0 && drawStackType) {
     if (mode === 'classic') return false;
-    return card.value === drawStackType;
+    if (drawStackType === 'wild_draw4') return card.value === 'wild_draw4';
+    if (drawStackType === 'draw2') {
+      return card.value === 'draw2' || card.value === 'wild_draw4';
+    }
+    return false;
   }
 
   if (mode === 'classic' && card.value === 'discard_all') {

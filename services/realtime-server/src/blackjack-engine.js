@@ -16,7 +16,7 @@ export function createDeck() {
 
 function shuffle(array) {
   const deck = [...array];
-  for (let i = deck.length - 1; i > 0; i--) {
+  for (let i = deck.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1));
     [deck[i], deck[j]] = [deck[j], deck[i]];
   }
@@ -51,194 +51,205 @@ export function isBlackjack(hand) {
   return hand.length === 2 && calculateScore(hand) === 21;
 }
 
-export function initGame(player1Id, player2Id) {
-  const deck = createDeck();
+function dealRound(deck, dealerId, playerId, round) {
+  const nextDeck = [...deck];
+  const playerHand = [nextDeck.pop(), nextDeck.pop()];
+  const dealerHand = [nextDeck.pop(), nextDeck.pop()];
+  const playerStatus = isBlackjack(playerHand) ? 'blackjack' : 'playing';
 
-  const p1Hand = [deck.pop(), deck.pop()];
-  const d1Hand = [deck.pop(), deck.pop()];
-  const p2Hand = [deck.pop(), deck.pop()];
-  const d2Hand = [deck.pop(), deck.pop()];
-
-  const game = {
-    status: 'playing',
-    deck,
-    players: {
-      [player1Id]: {
-        hand: p1Hand,
-        status: isBlackjack(p1Hand) ? 'blackjack' : 'playing',
-      },
-      [player2Id]: {
-        hand: p2Hand,
-        status: isBlackjack(p2Hand) ? 'blackjack' : 'playing',
-      },
-    },
-    dealers: {
-      [player1Id]: { hand: d1Hand },
-      [player2Id]: { hand: d2Hand },
-    },
-    result: null,
+  return {
+    deck: nextDeck,
+    round,
+    dealerId,
+    playerId,
+    playerHand,
+    dealerHand,
+    playerStatus,
+    dealerStatus: 'playing',
+    phase: playerStatus === 'blackjack' ? 'dealer_turn' : 'player_turn',
   };
-
-  return checkAutoFinish(game);
 }
 
-function checkAutoFinish(game) {
-  const playerIds = Object.keys(game.players);
-  const p1Status = game.players[playerIds[0]].status;
-  const p2Status = game.players[playerIds[1]].status;
+export function initGame(player1Id, player2Id) {
+  const round = dealRound(createDeck(), player1Id, player2Id, 1);
+  return {
+    status: 'playing',
+    players: [player1Id, player2Id],
+    ...round,
+    rounds: [],
+    lastRoundResult: null,
+    result: null,
+  };
+}
 
-  const p1Done = p1Status !== 'playing';
-  const p2Done = p2Status !== 'playing';
+function sameGame(game, changes = {}) {
+  return { ...game, ...changes };
+}
 
-  if (p1Done && p2Done) {
-    return playDealersAndSettle(game);
+function draw(game, handKey) {
+  if (game.deck.length === 0) return { game, hand: game[handKey] };
+  const deck = [...game.deck];
+  const card = deck.pop();
+  return {
+    game: { ...game, deck },
+    hand: [...game[handKey], card],
+  };
+}
+
+function finishRound(game, forcedOutcome = null) {
+  const playerScore = calculateScore(game.playerHand);
+  const dealerScore = calculateScore(game.dealerHand);
+  const playerBust = isBust(game.playerHand);
+  const dealerBust = isBust(game.dealerHand);
+  const playerBlackjack = isBlackjack(game.playerHand);
+  const dealerBlackjack = isBlackjack(game.dealerHand);
+
+  let outcome = forcedOutcome;
+  if (!outcome) {
+    if (playerBust) outcome = 'loss';
+    else if (dealerBust) outcome = 'win';
+    else if (playerBlackjack && !dealerBlackjack) outcome = 'win';
+    else if (!playerBlackjack && dealerBlackjack) outcome = 'loss';
+    else if (playerScore > dealerScore) outcome = 'win';
+    else if (playerScore < dealerScore) outcome = 'loss';
+    else outcome = 'tie';
   }
-  return game;
+
+  const roundResult = {
+    round: game.round,
+    dealerId: game.dealerId,
+    playerId: game.playerId,
+    playerHand: game.playerHand,
+    dealerHand: game.dealerHand,
+    playerScore,
+    dealerScore,
+    playerBust,
+    dealerBust,
+    isPlayerBJ: playerBlackjack,
+    isDealerBJ: dealerBlackjack,
+    outcome,
+    winner: outcome === 'win' ? game.playerId : outcome === 'loss' ? game.dealerId : 'tie',
+  };
+
+  return sameGame(game, {
+    phase: 'round_result',
+    playerStatus: playerBust ? 'bust' : game.playerStatus,
+    dealerStatus: dealerBust ? 'bust' : game.dealerStatus,
+    rounds: [...(game.rounds ?? []), roundResult],
+    lastRoundResult: roundResult,
+  });
 }
 
 export function playerHit(game, playerId) {
-  if (game.status !== 'playing') return game;
-  const player = game.players[playerId];
-  if (!player || player.status !== 'playing') return game;
+  if (
+    game.status !== 'playing' ||
+    game.phase !== 'player_turn' ||
+    game.playerId !== playerId ||
+    game.playerStatus !== 'playing'
+  ) return game;
 
-  const nextDeck = [...game.deck];
-  const card = nextDeck.pop();
-  const nextHand = [...player.hand, card];
+  const drawn = draw(game, 'playerHand');
+  const playerHand = drawn.hand;
+  const nextGame = sameGame(drawn.game, { playerHand });
+  const score = calculateScore(playerHand);
 
-  let nextStatus = 'playing';
-  if (isBust(nextHand)) {
-    nextStatus = 'bust';
-  } else if (calculateScore(nextHand) === 21) {
-    nextStatus = 'stand';
+  if (score > 21) return finishRound(nextGame, 'loss');
+  if (score === 21) {
+    return sameGame(nextGame, {
+      playerStatus: 'stand',
+      phase: 'dealer_turn',
+    });
   }
-
-  const updatedGame = {
-    ...game,
-    deck: nextDeck,
-    players: {
-      ...game.players,
-      [playerId]: {
-        ...player,
-        hand: nextHand,
-        status: nextStatus,
-      },
-    },
-  };
-
-  return checkAutoFinish(updatedGame);
+  return nextGame;
 }
 
 export function playerStand(game, playerId) {
-  if (game.status !== 'playing') return game;
-  const player = game.players[playerId];
-  if (!player || player.status !== 'playing') return game;
+  if (
+    game.status !== 'playing' ||
+    game.phase !== 'player_turn' ||
+    game.playerId !== playerId ||
+    game.playerStatus !== 'playing'
+  ) return game;
 
-  const updatedGame = {
-    ...game,
-    players: {
-      ...game.players,
-      [playerId]: {
-        ...player,
-        status: 'stand',
-      },
-    },
-  };
-
-  return checkAutoFinish(updatedGame);
+  return sameGame(game, {
+    playerStatus: 'stand',
+    phase: 'dealer_turn',
+  });
 }
 
-function playDealersAndSettle(game) {
-  const nextDeck = [...game.deck];
-  const nextDealers = { ...game.dealers };
-  const playerIds = Object.keys(game.players);
+export function dealerHit(game, dealerId) {
+  if (
+    game.status !== 'playing' ||
+    game.phase !== 'dealer_turn' ||
+    game.dealerId !== dealerId ||
+    game.dealerStatus !== 'playing'
+  ) return game;
 
-  for (const pid of playerIds) {
-    let dHand = [...nextDealers[pid].hand];
-    while (calculateScore(dHand) < 17 && !isBust(dHand)) {
-      if (nextDeck.length > 0) {
-        dHand.push(nextDeck.pop());
-      } else {
-        break;
-      }
-    }
-    nextDealers[pid] = { hand: dHand };
+  // Standard blackjack dealer rule: a dealer must stand on 17 or higher.
+  if (calculateScore(game.dealerHand) >= 17) return game;
+
+  const drawn = draw(game, 'dealerHand');
+  const dealerHand = drawn.hand;
+  const nextGame = sameGame(drawn.game, { dealerHand });
+  const score = calculateScore(dealerHand);
+
+  if (score > 21) return finishRound(nextGame, 'win');
+  if (score >= 17) {
+    return finishRound(sameGame(nextGame, { dealerStatus: 'stand' }));
+  }
+  return nextGame;
+}
+
+export function dealerStand(game, dealerId) {
+  if (
+    game.status !== 'playing' ||
+    game.phase !== 'dealer_turn' ||
+    game.dealerId !== dealerId ||
+    game.dealerStatus !== 'playing'
+  ) return game;
+
+  return finishRound(sameGame(game, { dealerStatus: 'stand' }));
+}
+
+function countRoundWins(rounds) {
+  const wins = {};
+  for (const round of rounds) {
+    if (round.winner !== 'tie') wins[round.winner] = (wins[round.winner] ?? 0) + 1;
+  }
+  return wins;
+}
+
+export function nextRound(game, userId) {
+  if (
+    game.status !== 'playing' ||
+    game.phase !== 'round_result' ||
+    !game.players.includes(userId)
+  ) return game;
+
+  if (game.round >= 2) {
+    const wins = countRoundWins(game.rounds ?? []);
+    const [p1, p2] = game.players;
+    const winner = (wins[p1] ?? 0) > (wins[p2] ?? 0)
+      ? p1
+      : (wins[p2] ?? 0) > (wins[p1] ?? 0) ? p2 : 'tie';
+    return sameGame(game, {
+      status: 'finished',
+      phase: 'finished',
+      result: { winner, rounds: game.rounds },
+    });
   }
 
-  const evalPlayer = (pid) => {
-    const pHand = game.players[pid].hand;
-    const dHand = nextDealers[pid].hand;
-    const pScore = calculateScore(pHand);
-    const dScore = calculateScore(dHand);
-    const pBust = isBust(pHand);
-    const dBust = isBust(dHand);
-    const pBJ = isBlackjack(pHand);
-    const dBJ = isBlackjack(dHand);
-
-    let outcome = 'tie';
-    let scoreMargin = 0;
-
-    if (pBust) {
-      outcome = 'loss';
-      scoreMargin = -1;
-    } else if (dBust) {
-      outcome = 'win';
-      scoreMargin = pBJ ? 2 : 1;
-    } else if (pBJ && !dBJ) {
-      outcome = 'win';
-      scoreMargin = 2;
-    } else if (!pBJ && dBJ) {
-      outcome = 'loss';
-      scoreMargin = -2;
-    } else if (pScore > dScore) {
-      outcome = 'win';
-      scoreMargin = 1;
-    } else if (pScore < dScore) {
-      outcome = 'loss';
-      scoreMargin = -1;
-    } else {
-      outcome = 'tie';
-      scoreMargin = 0;
-    }
-
-    return {
-      playerId: pid,
-      playerHand: pHand,
-      dealerHand: dHand,
-      playerScore: pScore,
-      dealerScore: dScore,
-      playerBust: pBust,
-      dealerBust: dBust,
-      isPlayerBJ: pBJ,
-      isDealerBJ: dBJ,
-      outcome,
-      scoreMargin,
-    };
-  };
-
-  const p1Id = playerIds[0];
-  const p2Id = playerIds[1];
-  const res1 = evalPlayer(p1Id);
-  const res2 = evalPlayer(p2Id);
-
-  const overallWinner = determineWinner(res1, res2, p1Id, p2Id);
-
-  return {
-    ...game,
-    status: 'finished',
-    deck: nextDeck,
-    dealers: nextDealers,
-    result: {
-      outcomes: {
-        [p1Id]: res1,
-        [p2Id]: res2,
-      },
-      winner: overallWinner,
-    },
-  };
+  const round = dealRound(game.deck, game.playerId, game.dealerId, game.round + 1);
+  return sameGame(game, {
+    ...round,
+    lastRoundResult: game.lastRoundResult,
+  });
 }
 
-export function determineWinner(res1, res2, p1Id, p2Id) {
-  if (res1.scoreMargin > res2.scoreMargin) return p1Id;
-  if (res2.scoreMargin > res1.scoreMargin) return p2Id;
+// Kept as an explicit helper for callers/tests that need to compare a completed match.
+export function determineWinner(rounds, player1Id, player2Id) {
+  const wins = countRoundWins(rounds);
+  if ((wins[player1Id] ?? 0) > (wins[player2Id] ?? 0)) return player1Id;
+  if ((wins[player2Id] ?? 0) > (wins[player1Id] ?? 0)) return player2Id;
   return 'tie';
 }

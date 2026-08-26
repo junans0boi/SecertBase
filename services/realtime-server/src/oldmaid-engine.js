@@ -115,7 +115,11 @@ export function drawCard(game, playerId, targetCardId) {
   }
 
   const drawnCard = opponentHand.splice(targetCardIndex, 1)[0];
-  const myHand = [...game.players[playerId].hand, drawnCard];
+  const myHand = [...game.players[playerId].hand];
+  // A drawn card must not always occupy the last slot. In the real game the
+  // receiver shuffles/holds the card so its position cannot reveal the Joker.
+  const insertAt = Math.floor(Math.random() * (myHand.length + 1));
+  myHand.splice(insertAt, 0, drawnCard);
 
   const { updatedHand: newMyHand, removedCount } = removePairs(myHand);
 

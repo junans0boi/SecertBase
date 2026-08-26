@@ -5,6 +5,7 @@ import '../../core/socket_service.dart';
 import '../../core/yut_audio.dart';
 
 const _kStakeOptions = [0, 500, 1000, 3000];
+const _kGostopStakeOptions = [0, 100, 500, 1000];
 
 class GameLobbyScreen extends StatefulWidget {
   final String gameType;
@@ -147,9 +148,7 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
             _socket.startTank(stake: _socket.lobbyStartedStake);
             break;
           case 'gostop':
-            _socket.startGostop(
-              perPointBet: _socket.lobbyStake > 0 ? _socket.lobbyStake : 100,
-            );
+            _socket.startGostop(perPointBet: _socket.lobbyStartedStake);
             break;
         }
       });
@@ -493,6 +492,9 @@ class _StakeSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final socket = SocketService();
+    final options = gameType == 'gostop'
+        ? _kGostopStakeOptions
+        : _kStakeOptions;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -518,14 +520,12 @@ class _StakeSelector extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         Row(
-          children: _kStakeOptions.map((option) {
+          children: options.map((option) {
             final selected = stake == option;
             final label = option == 0 ? '무료' : '$option코인';
             return Expanded(
               child: Padding(
-                padding: EdgeInsets.only(
-                  right: option == _kStakeOptions.last ? 0 : 8,
-                ),
+                padding: EdgeInsets.only(right: option == options.last ? 0 : 8),
                 child: GestureDetector(
                   onTap: isHost
                       ? () => socket.setLobbyStake(gameType, option)

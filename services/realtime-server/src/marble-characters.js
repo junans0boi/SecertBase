@@ -1,5 +1,5 @@
 /**
- * 마블 작전 & 윷놀이 공용 캐릭터 정의 — Single Source of Truth (Node.js 버전)
+ * 마블 작전 캐릭터 정의 — Single Source of Truth (Node.js 버전)
  *
  * Flutter 버전: apps/secret_base_app/lib/core/marble_characters.dart
  * 두 파일의 id, itemId, slot, grade, isFree 는 항상 동일하게 유지할 것.

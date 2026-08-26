@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/socket_service.dart';
-import '../core/yut_audio.dart';
 import '../core/marble_characters.dart';
 import 'marble_map_data.dart';
 
@@ -16,9 +15,9 @@ String fmm(int n) {
   final sign = n < 0 ? '-' : '';
   final man = abs ~/ 10000;
   final rem = abs % 10000;
-  if (man == 0) return '$sign${rem}원';
-  if (rem == 0) return '${sign}${man}만원';
-  return '${sign}${man}만${rem}원';
+  if (man == 0) return '$sign$rem원';
+  if (rem == 0) return '$sign$man만원';
+  return '$sign$man만$rem원';
 }
 
 class MarbleBoard extends StatefulWidget {
@@ -624,7 +623,7 @@ class _MarbleBoardState extends State<MarbleBoard> with TickerProviderStateMixin
             ),
             const SizedBox(height: 16),
             const Text(
-              '숫자가 높은 사람이 먼저 윷을 던집니다.\n동점이면 다시 굴려요.',
+              '숫자가 높은 사람이 먼저 주사위를 굴립니다.\n동점이면 다시 굴려요.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Color(0xFF90A4AE), fontSize: 13),
             ),
@@ -847,11 +846,10 @@ class _MarbleBoardState extends State<MarbleBoard> with TickerProviderStateMixin
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Image.asset(
-              'assets/images/yut/yut_logo.png',
-              width: 120,
-              errorBuilder: (_, _, _) =>
-                  const Text('🎲', style: TextStyle(fontSize: 80)),
+            const Icon(
+              Icons.castle_rounded,
+              color: Color(0xFFFFC107),
+              size: 96,
             ),
             const SizedBox(height: 28),
             GestureDetector(
@@ -891,7 +889,7 @@ class _MarbleBoardState extends State<MarbleBoard> with TickerProviderStateMixin
                     ),
                     SizedBox(width: 10),
                     Text(
-                      '실전형 윷놀이 시작',
+                      '마블 작전 시작',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w900,
@@ -1084,7 +1082,7 @@ class _MarbleBoardState extends State<MarbleBoard> with TickerProviderStateMixin
     final d2 = (roll?['dice2'] as num?)?.toInt() ?? 0;
     final isDouble = roll?['isDouble'] == true;
     return Container(
-      key: const ValueKey('yut_action_bar'),
+      key: const ValueKey('marble_action_bar'),
       decoration: const BoxDecoration(
         color: Color(0xF00D1117),
         border: Border(top: BorderSide(color: Color(0x33FFD700), width: 0.5)),
@@ -1122,12 +1120,10 @@ class _MarbleBoardState extends State<MarbleBoard> with TickerProviderStateMixin
                 onTap: _handleRoll,
               ),
               const SizedBox(width: 8),
-              // ─ 오른쪽: 설정 + 채팅 ─
+              // ─ 오른쪽: 채팅 ─
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _buildActionBtn(Icons.settings_outlined, () => _showSettings(context)),
-                  const SizedBox(width: 4),
                   _buildChatBtn(context),
                 ],
               ),
@@ -1225,26 +1221,6 @@ class _MarbleBoardState extends State<MarbleBoard> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildActionBtn(IconData icon, VoidCallback onTap) {
-    final size = _compact ? 36.0 : 40.0;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.08),
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.14),
-            width: 1,
-          ),
-        ),
-        child: Icon(icon, color: Colors.white70, size: size * 0.52),
-      ),
-    );
-  }
-
   String _actionPrompt({required bool canThrow}) {
     if (_showDiceAnim) return '주사위 굴리는 중';
     final isMyTurn = widget.turn == widget.currentUser;
@@ -1262,14 +1238,6 @@ class _MarbleBoardState extends State<MarbleBoard> with TickerProviderStateMixin
     return '상대방을 기다리는 중';
   }
 
-  void _showSettings(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const _YutSettingsSheet(),
-    );
-  }
-
   void _showChat(BuildContext context) {
     setState(() {
       _chatUnread = 0;
@@ -1280,99 +1248,19 @@ class _MarbleBoardState extends State<MarbleBoard> with TickerProviderStateMixin
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const _YutChatSheet(),
+      builder: (_) => const _MarbleChatSheet(),
     );
   }
 }
 
-class _YutSettingsSheet extends StatefulWidget {
-  const _YutSettingsSheet();
+class _MarbleChatSheet extends StatefulWidget {
+  const _MarbleChatSheet();
 
   @override
-  State<_YutSettingsSheet> createState() => _YutSettingsSheetState();
+  State<_MarbleChatSheet> createState() => _MarbleChatSheetState();
 }
 
-class _YutSettingsSheetState extends State<_YutSettingsSheet> {
-  final _audio = YutAudio.instance;
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Container(
-        margin: const EdgeInsets.all(12),
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-        decoration: BoxDecoration(
-          color: const Color(0xE62B3440),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                '게임 설정',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('효과음', style: TextStyle(color: Colors.white)),
-              subtitle: Text(
-                '던지기와 게임 결과 효과음',
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
-              ),
-              value: _audio.effectsEnabled,
-              activeTrackColor: const Color(0xFF79B8B1),
-              onChanged: (value) async {
-                await _audio.setEffectsEnabled(value);
-                if (mounted) setState(() {});
-              },
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('배경음악', style: TextStyle(color: Colors.white)),
-              subtitle: Text(
-                '게임 중 반복 재생되는 음악',
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
-              ),
-              value: _audio.backgroundMusicEnabled,
-              activeTrackColor: const Color(0xFF79B8B1),
-              onChanged: (value) async {
-                await _audio.setBackgroundMusicEnabled(value);
-                if (mounted) setState(() {});
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _YutChatSheet extends StatefulWidget {
-  const _YutChatSheet();
-
-  @override
-  State<_YutChatSheet> createState() => _YutChatSheetState();
-}
-
-class _YutChatSheetState extends State<_YutChatSheet> {
+class _MarbleChatSheetState extends State<_MarbleChatSheet> {
   final _socket = SocketService();
   final _messageController = TextEditingController();
 
@@ -1458,11 +1346,11 @@ class _YutChatSheetState extends State<_YutChatSheet> {
                         final isMine = message['by'] == _socket.userId;
                         final senderId = message['by'] as String;
                         final isFirstPlayer =
-                            _socket.yutPlayers.isNotEmpty &&
-                            _socket.yutPlayers.first == senderId;
+                            _socket.marblePlayers.isNotEmpty &&
+                            _socket.marblePlayers.first == senderId;
                         final character =
-                            _socket.yutCharacters[senderId] ??
-                            (isFirstPlayer ? 'honggilldong' : 'miho');
+                            _socket.marbleCharacters[senderId] ??
+                            (isFirstPlayer ? 'k' : 'ria');
                         final tokenColor = isFirstPlayer
                             ? const Color(0xFFE45858)
                             : const Color(0xFF4B8DD8);

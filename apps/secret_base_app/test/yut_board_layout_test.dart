@@ -93,12 +93,13 @@ void main() {
     );
     expect(find.byKey(const ValueKey('yut_board_nodes')), findsOneWidget);
     expect(opponentCard.width, lessThanOrEqualTo(176));
-    expect(myCard.width, lessThanOrEqualTo(176));
-    expect(opponentCard.height, lessThanOrEqualTo(88));
-    expect(myCard.height, lessThanOrEqualTo(88));
+    // 내 카드는 4개 말 조작 슬롯을 포함하므로 상대 프로필보다 넓다.
+    expect(myCard.width, lessThanOrEqualTo(280));
+    expect(opponentCard.height, lessThanOrEqualTo(96));
+    expect(myCard.height, lessThanOrEqualTo(96));
     expect(opponentCard.top, lessThan(board.height * 0.42));
     expect(myCard.bottom, lessThanOrEqualTo(actionBar.top));
-    expect(actionBar.height, inInclusiveRange(118, 175));
+    expect(actionBar.height, inInclusiveRange(70, 90));
 
     final remaining = tester.getRect(
       find.byKey(const ValueKey('yut_my_profile_remaining')),

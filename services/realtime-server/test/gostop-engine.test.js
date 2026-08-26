@@ -8,8 +8,11 @@ import {
   normalizeGostopGameState,
   playHandCard,
   selectDeckCapture,
+  declareShake,
+  playBomb,
   declareGoStop,
   currentPlayer,
+  serializeFor,
   serializeGostopGame,
 } from '../src/gostop-engine.js';
 
@@ -134,6 +137,18 @@ test('열끗 5장=1점, 6장=2점', () => {
   assert.equal(calculateScore(make(4)).animScore, 0);
   assert.equal(calculateScore(make(5)).animScore, 1);
   assert.equal(calculateScore(make(6)).animScore, 2);
+});
+
+test('고도리: 2·4·8월 열끗 세 장은 5점', () => {
+  const birds = [2, 4, 8].map((month) => ({
+    id: `bird${month}`,
+    month,
+    type: 'animal',
+    subtype: null,
+  }));
+  const score = calculateScore(birds);
+  assert.equal(score.godoriScore, 5);
+  assert.equal(score.total, 5);
 });
 
 test('단 5장=1점, 홍단 세트 보너스 +3', () => {
@@ -265,6 +280,40 @@ test('playing a non-matching card places it on field', () => {
   // m7 not captured; may be on field or deckcard captured/placed
   assert.ok(!s2.captures[P1].some(c => c.id === 'm7_junk_1'),
     'm7 should not be in captures immediately');
+});
+
+test('쪽: 빈 바닥에 낸 카드와 뒤집은 같은 월 카드를 함께 가져온다', () => {
+  const s = makeState({
+    deck: [{ id: 'm2_animal', month: 2, type: 'animal', subtype: null }],
+    field: [{ id: 'm3_junk_1', month: 3, type: 'junk', subtype: null }],
+    hands: {
+      [P1]: [{ id: 'm2_ribbon', month: 2, type: 'ribbon', subtype: 'red' }],
+      [P2]: [],
+    },
+  });
+
+  const result = playHandCard(s, P1, 'm2_ribbon');
+  assert.ok(result.lastEvents.includes('ssok'));
+  assert.deepEqual(
+    result.captures[P1].map((card) => card.id).sort(),
+    ['m2_animal', 'm2_ribbon'],
+  );
+});
+
+test('뻑: 한 장 매칭 뒤 같은 월을 뒤집으면 세 장이 바닥에 남는다', () => {
+  const s = makeState({
+    deck: [{ id: 'm2_animal', month: 2, type: 'animal', subtype: null }],
+    field: [{ id: 'm2_junk_1', month: 2, type: 'junk', subtype: null }],
+    hands: {
+      [P1]: [{ id: 'm2_ribbon', month: 2, type: 'ribbon', subtype: 'red' }],
+      [P2]: [],
+    },
+  });
+
+  const result = playHandCard(s, P1, 'm2_ribbon');
+  assert.ok(result.lastEvents.includes('ppeok'));
+  assert.equal(result.captures[P1].length, 0);
+  assert.equal(result.field.filter((card) => card.month === 2).length, 3);
 });
 
 test('wrong player cannot play', () => {
@@ -405,12 +454,128 @@ test('settlement: 피박 ×2', () => {
   assert.equal(s2.settlement.amount, 1400); // 7 × 100 × 2
 });
 
+test('settlement: 광박은 승자가 광 3장 이상일 때만 적용', () => {
+  const captures = [
+    { id: 'm1_bright', month: 1, type: 'bright', subtype: null },
+    ...Array.from({ length: 6 }, (_, i) => ({
+      id: `animal${i}`,
+      month: i + 2,
+      type: 'animal',
+      subtype: null,
+    })),
+    { id: 'm1_animal', month: 1, type: 'ribbon', subtype: 'red' },
+    { id: 'm2_ribbon', month: 2, type: 'ribbon', subtype: 'red' },
+    { id: 'm3_ribbon', month: 3, type: 'ribbon', subtype: 'red' },
+    { id: 'm4_ribbon', month: 4, type: 'ribbon', subtype: null },
+    { id: 'm5_ribbon', month: 5, type: 'ribbon', subtype: null },
+    ...Array.from({ length: 10 }, (_, i) => ({
+      id: `junk${i}`,
+      month: (i % 12) + 1,
+      type: 'junk',
+      subtype: null,
+    })),
+  ];
+  const winnerScore = calculateScore(captures);
+  assert.equal(winnerScore.total, 7);
+  assert.equal(winnerScore.gwangCount, 1);
+
+  const s = makeState({
+    phase: 'go_stop_choice',
+    captures: { [P1]: captures, [P2]: [] },
+    scores: { [P1]: winnerScore, [P2]: calculateScore([]) },
+  });
+  const result = declareGoStop(s, P1, 'stop');
+  assert.equal(result.settlement.gwangbak, false);
+});
+
+test('총통: 네 장 같은 월은 고정 점수로 정산된다', () => {
+  const source = createHwatuDeck();
+  const monthCards = source.filter((card) => card.month === 1);
+  const rest = source
+    .filter((card) => card.month !== 1)
+    .sort((a, b) => a.month - b.month || a.id.localeCompare(b.id));
+  const popped = [
+    monthCards[0], monthCards[1], rest.shift(), rest.shift(),
+    ...rest.splice(0, 4),
+    monthCards[2], monthCards[3], rest.shift(), rest.shift(),
+    ...rest.splice(0, 4),
+    ...rest,
+  ];
+  const result = createGostopGameState(P1, P2, {
+    deck: [...popped].reverse(),
+    perPointBet: 100,
+  });
+  assert.equal(result.phase, 'finished');
+  assert.equal(result.settlement.reasonEvents[0], 'chongtong');
+  assert.equal(result.settlement.points, 5);
+  assert.equal(result.settlement.amount, 500);
+});
+
+test('흔들기: 시작 손패의 같은 월 세 장은 선언 후에만 배수가 붙는다', () => {
+  const source = createHwatuDeck();
+  const monthCards = source.filter((card) => card.month === 1);
+  const rest = source
+    .filter((card) => card.month !== 1)
+    .sort((a, b) => a.month - b.month || a.id.localeCompare(b.id));
+  const popped = [
+    monthCards[0], monthCards[1], rest.shift(), rest.shift(),
+    ...rest.splice(0, 4),
+    monthCards[2], rest.shift(), rest.shift(), rest.shift(),
+    ...rest.splice(0, 4),
+    ...rest,
+  ];
+  const initial = createGostopGameState(P1, P2, {
+    deck: [...popped].reverse(),
+  });
+  assert.equal(initial.phase, 'shake_choice');
+  assert.equal(initial.shakePlayerId, P1);
+  assert.equal(initial.shakeMultiplier, 1);
+
+  const result = declareShake(initial, P1, 'shake');
+  assert.equal(result.phase, 'playing');
+  assert.equal(result.shakeMultiplier, 2);
+  assert.deepEqual(result.shakers, [P1]);
+});
+
+test('폭탄: 같은 월 세 장을 한 번에 내고 네 장을 가져온다', () => {
+  const s = makeState({
+    deck: [{ id: 'm9_animal', month: 9, type: 'animal', subtype: null }],
+    field: [{ id: 'm2_junk_1', month: 2, type: 'junk', subtype: null }],
+    hands: {
+      [P1]: [
+        { id: 'm2_ribbon', month: 2, type: 'ribbon', subtype: 'red' },
+        { id: 'm2_junk_1', month: 2, type: 'junk', subtype: null },
+        { id: 'm2_junk_2', month: 2, type: 'junk', subtype: null },
+      ],
+      [P2]: [],
+    },
+  });
+
+  const result = playBomb(s, P1, 2);
+  assert.ok(result.lastEvents.includes('bomb'));
+  assert.equal(result.bombMultiplier, 2);
+  assert.equal(result.captures[P1].filter((card) => card.month === 2).length, 4);
+});
+
 // ── 직렬화 ────────────────────────────────────────────────────────
 test('serializeGostopGame hides deck card faces', () => {
   const s = createGostopGameState(P1, P2);
   if (s.phase === 'finished') return;
   const serialized = serializeGostopGame(s);
   assert.ok(serialized.deck.every(c => c.id === 'back'));
+});
+
+test('serializeFor hides the opponent hand and private shake queue', () => {
+  const s = makeState({
+    shakeQueue: [P1],
+    shakePlayerId: P1,
+    phase: 'shake_choice',
+  });
+  const serialized = serializeFor(s, P2);
+  assert.ok(serialized.hands[P2]);
+  assert.ok(serialized.hands[P2].every((card) => card.id === 'back'));
+  assert.equal(serialized.shakeQueue, undefined);
+  assert.equal(serialized.shakePlayerId, null);
 });
 
 test('nageori when deck runs out with no winner', () => {
@@ -434,4 +599,39 @@ test('nageori when deck runs out with no winner', () => {
   // after deck flip deck is now empty; neither player at 7 pts → nageori
   assert.equal(s2.phase, 'nageori');
   assert.equal(s2.baseMultiplier, 2); // 이월 ×2
+});
+
+test('last deck card can still trigger the go/stop choice', () => {
+  const captures = [
+    ...Array.from({ length: 9 }, (_, i) => ({
+      id: `animal${i}`,
+      month: (i % 12) + 1,
+      type: 'animal',
+      subtype: null,
+    })),
+    ...Array.from({ length: 5 }, (_, i) => ({
+      id: `ribbon${i}`,
+      month: (i % 12) + 1,
+      type: 'ribbon',
+      subtype: null,
+    })),
+    ...Array.from({ length: 10 }, (_, i) => ({
+      id: `junk${i}`,
+      month: (i % 12) + 1,
+      type: 'junk',
+      subtype: null,
+    })),
+  ];
+  const s = makeState({
+    deck: [],
+    field: [{ id: 'm2_junk_1', month: 2, type: 'junk', subtype: null }],
+    hands: {
+      [P1]: [{ id: 'm2_ribbon', month: 2, type: 'ribbon', subtype: 'red' }],
+      [P2]: [],
+    },
+    captures: { [P1]: captures, [P2]: [] },
+    scores: { [P1]: calculateScore(captures), [P2]: calculateScore([]) },
+  });
+  const result = playHandCard(s, P1, 'm2_ribbon');
+  assert.equal(result.phase, 'go_stop_choice');
 });

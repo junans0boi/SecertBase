@@ -13,15 +13,11 @@ import { transferGameReward, getBalance, getEquippedStats, getEquippedItemsInfo 
 import { grantXp, updateMissionProgress } from "./level-engine.js";
 import {
   throwYut,
-  movePiece,
   createYutGameState,
   checkWin,
-  checkCatch,
-  getCarriedPieces,
-  applyMoveToPieces,
+  resolveYutMove,
   hasBackdoMove,
   getNextPlayer as getNextYutPlayer,
-  recordCapture,
   settleTurnAfterMove,
   serializeYutGame,
 } from "./yut-engine.js";
@@ -29,15 +25,14 @@ import {
   createMarbleGameState,
   rollDice as rollMarbleDice,
   movePiece as moveMarblePiece,
-  checkCatch as checkMarbleCatch,
-  getCarriedPieces as getMarbleCarriedPieces,
-  recordCapture as recordMarbleCapture,
   settleTurnAfterMove as settleMarbleTurn,
   serializeMarbleGame,
   checkMarbleWin,
   calcToll,
   calcUpgradeCost,
   calcAcquireCost,
+  calcPurchaseCost,
+  hasColorMonopoly,
   getLandValue,
   getMarbleSpecialType,
   getNextPlayer as getNextMarblePlayer,
@@ -71,12 +66,16 @@ import {
   initGame as initBlackjackGame,
   playerHit as hitBlackjack,
   playerStand as standBlackjack,
+  dealerHit as hitBlackjackDealer,
+  dealerStand as standBlackjackDealer,
+  nextRound as nextBlackjackRound,
 } from "./blackjack-engine.js";
 
 import {
   initGame as initOldMaidGame,
   drawCard as drawOldMaidCard,
 } from "./oldmaid-engine.js";
+import { resolveHanabagiRound } from "./rps-engine.js";
 
 import {
   initBowlingGame,
@@ -96,6 +95,8 @@ import {
   createGostopGameState,
   playHandCard,
   selectDeckCapture,
+  declareShake,
+  playBomb,
   declareGoStop,
   serializeFor as serializeGostopFor,
 } from "./gostop-engine.js";
@@ -125,6 +126,43 @@ function withBowlingFrames(gameState) {
     frames[pid] = buildFrameDisplayData(rolls);
   }
   return { ...gameState, frames };
+}
+
+// Old Maid cards are private information. The drawing player sees their own
+// hand, while the other player receives only stable card ids so they can be
+// selected without leaking rank/suit/Joker state.
+function serializeOldMaidGame(gameState, viewerId) {
+  const players = Object.fromEntries(
+    Object.entries(gameState.players ?? {}).map(([playerId, player]) => [
+      playerId,
+      {
+        ...player,
+        hand: (player.hand ?? []).map((card) =>
+          playerId === viewerId ? card : { id: card.id },
+        ),
+      },
+    ]),
+  );
+  const lastDrawnCard = gameState.lastDrawnCard
+    ? {
+        ...gameState.lastDrawnCard,
+        card: gameState.lastDrawnCard.by === viewerId
+          ? gameState.lastDrawnCard.card
+          : { id: gameState.lastDrawnCard.card?.id },
+      }
+    : null;
+  return { ...gameState, players, lastDrawnCard };
+}
+
+function emitOldMaidState(io, roomCode, gameState) {
+  return io.in(roomCode).fetchSockets().then((sockets) => {
+    for (const roomSocket of sockets) {
+      roomSocket.emit(
+        "game:oldmaid:updated",
+        serializeOldMaidGame(gameState, roomSocket.data.userId),
+      );
+    }
+  });
 }
 
 const joinSchema = z.object({
@@ -164,6 +202,7 @@ const lobbyStakeSchema = z.object({
   gameType: z.enum(gameTypes),
   stake: z.number().int().min(0).max(10000),
 });
+const GOSTOP_STAKES = new Set([0, 100, 500, 1000]);
 
 const yutCharacters = ["honggilldong", "nolbu", "miho"];
 const marbleCharacterIds = MARBLE_CHARACTER_IDS;
@@ -233,7 +272,7 @@ const yutMoveSchema = z.object({
   backdoDir: z.number().int().optional(),
 });
 
-const yutChatSchema = z.object({
+const chatMessageSchema = z.object({
   message: z.string().trim().min(1).max(200),
 });
 
@@ -319,7 +358,7 @@ async function _getWinStreak(roomCode, winnerCode) {
 
 // preStreak: 이미 계산된 이전 연승 수 (saveGameResult와 race condition 방지를 위해 Promise.all 이전에 계산)
 async function settleAndEmitWallet(io, roomCode, winnerId, loserId, stake, gameRef, winnerNumericId = null, catchBonus = 0, loserNumericId = null, preStreak = 0) {
-  if (!stake || stake <= 0) return;
+  if (!stake || stake <= 0) return { ok: true, skipped: true };
   try {
     let winnerBonusPct = 0;
     let totalCatchBonus = catchBonus;
@@ -344,8 +383,10 @@ async function settleAndEmitWallet(io, roomCode, winnerId, loserId, stake, gameR
       [winnerId]: result.winnerBalance,
       [loserId]: result.loserBalance,
     });
+    return { ok: true, result };
   } catch (err) {
     console.error("[wallet] settle error:", err.message);
+    return { ok: false, reason: err.message };
   }
 }
 
@@ -362,6 +403,7 @@ const withLobbyLock = (key, fn) => {
 const roomKey = (roomCode) => `room:${roomCode}:state`;
 const yutGameKey = (roomCode) => `yut:${roomCode}:game`;
 const unoGameKey = (roomCode) => `uno:${roomCode}:game`;
+const gostopGameKey = (roomCode) => `gostop:${roomCode}:game`;
 const bombGameKey = (roomCode) => `bomb:${roomCode}:game`;
 const gameLobbyKey = (roomCode, gameType) => `lobby:${roomCode}:${gameType}`;
 const rpsGameKey = (roomCode) => `rps:${roomCode}:game`;
@@ -648,6 +690,10 @@ export const registerSocketHandlers = (io) => {
       const parsed = lobbyStakeSchema.safeParse(payload);
       if (!parsed.success) { ack({ ok: false, reason: "invalid_payload" }); return; }
       const { gameType, stake } = parsed.data;
+      if (gameType === 'gostop' && !GOSTOP_STAKES.has(stake)) {
+        ack({ ok: false, reason: "invalid_stake" });
+        return;
+      }
       const key = gameLobbyKey(roomCode, gameType);
       const lobbyText = await redis.get(key);
       if (!lobbyText) { ack({ ok: false, reason: "lobby_not_found" }); return; }
@@ -759,6 +805,10 @@ export const registerSocketHandlers = (io) => {
         ack({ ok: false, reason: "need_two_players" });
         return;
       }
+      if (gameType === 'gostop' && !GOSTOP_STAKES.has(lobby.stake ?? 0)) {
+        ack({ ok: false, reason: "invalid_stake" });
+        return;
+      }
       const metadata = gameType === "yut"
         ? {
             yutBgm: randomYutBgm(),
@@ -791,12 +841,14 @@ export const registerSocketHandlers = (io) => {
         // 활성 게임 세션 확인
         const yutKey = `yut:${roomCode}:game`;
         const unoKey = `uno:${roomCode}:game`;
+        const gostopKey = gostopGameKey(roomCode);
         const bombKey = `bomb:${roomCode}:game`;
         const marbleKey = marbleGameKey(roomCode);
 
-        const [yutGame, unoGame, bombGame, marbleGame] = await Promise.all([
+        const [yutGame, unoGame, gostopGame, bombGame, marbleGame] = await Promise.all([
           redis.get(yutKey),
           redis.get(unoKey),
+          redis.get(gostopKey),
           redis.get(bombKey),
           redis.get(marbleKey),
         ]);
@@ -831,6 +883,13 @@ export const registerSocketHandlers = (io) => {
           }
         }
 
+        if (gostopGame) {
+          const game = JSON.parse(gostopGame);
+          if (game.players?.includes(socket.data.userId)) {
+            activeGames.gostop = serializeGostopFor(game, socket.data.userId);
+          }
+        }
+
         if (bombGame) {
           const game = JSON.parse(bombGame);
           const elapsed = Math.floor((Date.now() - game.startTime) / 1000);
@@ -844,12 +903,22 @@ export const registerSocketHandlers = (io) => {
           };
         }
 
-        // M3: 마블윷 게임 세션 복원
+        // 마블 게임 세션 복원
         if (marbleGame) {
           const game = JSON.parse(marbleGame);
           if (game.playersOrder && !game.winner) {
             activeGames.marble = serializeMarbleGame(game);
           }
+        }
+
+        // session:restore itself must reserve the viewer room. Otherwise a
+        // reconnecting socket can render the game but the old viewer's
+        // disconnect immediately deletes the last active Redis state.
+        const restoredGameType = ['yut', 'marble', 'uno', 'gostop']
+          .find((type) => activeGames[type]);
+        if (restoredGameType) {
+          await socket.join(`game-view:${roomCode}:${restoredGameType}`);
+          socket.data.viewingGame = restoredGameType;
         }
 
         ack({ ok: true, activeGames });
@@ -877,16 +946,18 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const value = Math.floor(Math.random() * 6) + 1;
-      const event = { value, by: userId, at: Date.now() };
+      await withRoomLock(roomCode, async () => {
+        const value = Math.floor(Math.random() * 6) + 1;
+        const event = { value, by: userId, at: Date.now() };
 
-      const stateText = await redis.get(roomKey(roomCode));
-      const state = stateText ? JSON.parse(stateText) : defaultState;
-      const nextState = { ...state, lastDice: event, updatedAt: Date.now() };
-      await redis.set(roomKey(roomCode), JSON.stringify(nextState));
+        const stateText = await redis.get(roomKey(roomCode));
+        const state = stateText ? JSON.parse(stateText) : defaultState;
+        const nextState = { ...state, lastDice: event, updatedAt: Date.now() };
+        await redis.set(roomKey(roomCode), JSON.stringify(nextState));
 
-      io.to(roomCode).emit("game:dice:result", event);
-      ack({ ok: true, event });
+        io.to(roomCode).emit("game:dice:result", event);
+        ack({ ok: true, event });
+      });
     });
 
     socket.on("game:roulette:spin", async (payload, ackRaw) => {
@@ -904,23 +975,25 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const { options } = parsed.data;
-      const index = Math.floor(Math.random() * options.length);
-      const event = {
-        index,
-        selected: options[index],
-        options,
-        by: userId,
-        at: Date.now(),
-      };
+      await withRoomLock(roomCode, async () => {
+        const { options } = parsed.data;
+        const index = Math.floor(Math.random() * options.length);
+        const event = {
+          index,
+          selected: options[index],
+          options,
+          by: userId,
+          at: Date.now(),
+        };
 
-      const stateText = await redis.get(roomKey(roomCode));
-      const state = stateText ? JSON.parse(stateText) : defaultState;
-      const nextState = { ...state, lastRoulette: event, updatedAt: Date.now() };
-      await redis.set(roomKey(roomCode), JSON.stringify(nextState));
+        const stateText = await redis.get(roomKey(roomCode));
+        const state = stateText ? JSON.parse(stateText) : defaultState;
+        const nextState = { ...state, lastRoulette: event, updatedAt: Date.now() };
+        await redis.set(roomKey(roomCode), JSON.stringify(nextState));
 
-      io.to(roomCode).emit("game:roulette:result", event);
-      ack({ ok: true, event });
+        io.to(roomCode).emit("game:roulette:result", event);
+        ack({ ok: true, event });
+      });
     });
 
     // ── RPS legacy (kept for safety) ─────────────────────────────────────────
@@ -931,25 +1004,27 @@ export const registerSocketHandlers = (io) => {
       if (!roomCode || !userId) { ack({ ok: false, reason: "not_joined" }); return; }
       const parsed = rpsSchema.safeParse(payload);
       if (!parsed.success) { ack({ ok: false, reason: "invalid_payload" }); return; }
-      const { choice } = parsed.data;
-      const sessionKey = `rps:${roomCode}:session`;
-      const existing = await redis.get(sessionKey);
-      const session = existing ? JSON.parse(existing) : { choices: {}, revealed: false };
-      session.choices[userId] = choice;
-      const presence = getPresence(io, roomCode);
-      if (Object.keys(session.choices).length === presence.length && presence.length === 2) {
-        const [u1, u2] = Object.keys(session.choices);
-        const c1 = session.choices[u1], c2 = session.choices[u2];
-        let winner = c1 === c2 ? "draw"
-          : ((c1==="rock"&&c2==="scissors")||(c1==="scissors"&&c2==="paper")||(c1==="paper"&&c2==="rock")) ? u1 : u2;
-        await redis.del(sessionKey);
-        const event = { choices: session.choices, winner, at: Date.now() };
-        io.to(roomCode).emit("game:rps:result", event);
-        ack({ ok: true, result: event });
-      } else {
-        await redis.set(sessionKey, JSON.stringify(session), "EX", 60);
-        ack({ ok: true, waiting: true });
-      }
+      await withRoomLock(roomCode, async () => {
+        const { choice } = parsed.data;
+        const sessionKey = `rps:${roomCode}:session`;
+        const existing = await redis.get(sessionKey);
+        const session = existing ? JSON.parse(existing) : { choices: {}, revealed: false };
+        session.choices[userId] = choice;
+        const presence = getPresence(io, roomCode);
+        if (Object.keys(session.choices).length === presence.length && presence.length === 2) {
+          const [u1, u2] = Object.keys(session.choices);
+          const c1 = session.choices[u1], c2 = session.choices[u2];
+          const winner = c1 === c2 ? "draw"
+            : ((c1==="rock"&&c2==="scissors")||(c1==="scissors"&&c2==="paper")||(c1==="paper"&&c2==="rock")) ? u1 : u2;
+          await redis.del(sessionKey);
+          const event = { choices: session.choices, winner, at: Date.now() };
+          io.to(roomCode).emit("game:rps:result", event);
+          ack({ ok: true, result: event });
+        } else {
+          await redis.set(sessionKey, JSON.stringify(session), "EX", 60);
+          ack({ ok: true, waiting: true });
+        }
+      });
     });
 
     // ── RPS multi-mode ────────────────────────────────────────────────────────
@@ -966,24 +1041,32 @@ export const registerSocketHandlers = (io) => {
       const parsed = rpsStartSchema.safeParse(payload);
       if (!parsed.success) { ack({ ok: false, reason: "invalid_payload" }); return; }
       const { mode } = parsed.data;
-      const presence = getPresence(io, roomCode);
-      if (presence.length < 2) { ack({ ok: false, reason: "need_two_players" }); return; }
-      const players = await getOrderedPlayers(roomCode, presence);
-      const game = {
-        mode,
-        players,
-        scores: { [players[0]]: 0, [players[1]]: 0 },
-        round: 1,
-        picks: {},
-        history: [],
-        // mukjippa specific
-        phase: mode === "mukjippa" ? "determine" : "play",
-        attacker: null,
-        gameWinner: null,
-      };
-      await redis.set(rpsGameKey(roomCode), JSON.stringify(game), "EX", 600);
-      io.to(roomCode).emit("game:rps:started", { mode, players, scores: game.scores, phase: game.phase });
-      ack({ ok: true });
+      await withRoomLock(roomCode, async () => {
+        const presence = getPresence(io, roomCode);
+        if (presence.length < 2) { ack({ ok: false, reason: "need_two_players" }); return; }
+        const players = await getOrderedPlayers(roomCode, presence);
+        if (players.length !== 2) { ack({ ok: false, reason: "need_two_players" }); return; }
+        const existing = await redis.get(rpsGameKey(roomCode));
+        if (existing && !JSON.parse(existing).gameWinner) {
+          ack({ ok: false, reason: "game_in_progress" });
+          return;
+        }
+        const game = {
+          mode,
+          players,
+          scores: { [players[0]]: 0, [players[1]]: 0 },
+          round: 1,
+          picks: {},
+          history: [],
+          // mukjippa specific
+          phase: mode === "mukjippa" ? "determine" : "play",
+          attacker: null,
+          gameWinner: null,
+        };
+        await redis.set(rpsGameKey(roomCode), JSON.stringify(game), "EX", 600);
+        io.to(roomCode).emit("game:rps:started", { mode, players, scores: game.scores, phase: game.phase });
+        ack({ ok: true });
+      });
     });
 
     socket.on("game:rps:pick", async (payload, ackRaw) => {
@@ -994,32 +1077,34 @@ export const registerSocketHandlers = (io) => {
       const parsed = rpsPickSchema.safeParse(payload);
       if (!parsed.success) { ack({ ok: false, reason: "invalid_payload" }); return; }
 
-      const raw = await redis.get(rpsGameKey(roomCode));
-      if (!raw) { ack({ ok: false, reason: "no_game" }); return; }
-      const game = JSON.parse(raw);
-      if (game.gameWinner) { ack({ ok: false, reason: "game_over" }); return; }
-      if (game.picks[userId] !== undefined) { ack({ ok: true, waiting: true }); return; }
+      await withRoomLock(roomCode, async () => {
+        const raw = await redis.get(rpsGameKey(roomCode));
+        if (!raw) { ack({ ok: false, reason: "no_game" }); return; }
+        const game = JSON.parse(raw);
+        if (!game.players?.includes(userId)) { ack({ ok: false, reason: "not_a_player" }); return; }
+        if (game.gameWinner) { ack({ ok: false, reason: "game_over" }); return; }
+        if (game.picks[userId] !== undefined) { ack({ ok: true, waiting: true }); return; }
 
-      // Record pick
-      if (game.mode === "hanabagi") {
-        const { fingers, guess } = parsed.data;
-        if (fingers === undefined || guess === undefined) { ack({ ok: false, reason: "need_fingers_and_guess" }); return; }
-        game.picks[userId] = { fingers, guess };
-      } else {
-        const { choice } = parsed.data;
-        if (!choice) { ack({ ok: false, reason: "need_choice" }); return; }
-        game.picks[userId] = choice;
-      }
+        // Record pick
+        if (game.mode === "hanabagi") {
+          const { fingers, guess } = parsed.data;
+          if (fingers === undefined || guess === undefined) { ack({ ok: false, reason: "need_fingers_and_guess" }); return; }
+          game.picks[userId] = { fingers, guess };
+        } else {
+          const { choice } = parsed.data;
+          if (!choice) { ack({ ok: false, reason: "need_choice" }); return; }
+          game.picks[userId] = choice;
+        }
 
-      const [p1, p2] = game.players;
-      if (game.picks[p1] === undefined || game.picks[p2] === undefined) {
-        await redis.set(rpsGameKey(roomCode), JSON.stringify(game), "EX", 600);
-        ack({ ok: true, waiting: true });
-        return;
-      }
+        const [p1, p2] = game.players;
+        if (game.picks[p1] === undefined || game.picks[p2] === undefined) {
+          await redis.set(rpsGameKey(roomCode), JSON.stringify(game), "EX", 600);
+          ack({ ok: true, waiting: true });
+          return;
+        }
 
-      // Both picked — resolve round
-      let roundWinner = null; // userId or "draw"
+        // Both picked — resolve round
+        let roundWinner = null; // userId or "draw"
 
       if (game.mode === "single") {
         const c1 = game.picks[p1], c2 = game.picks[p2];
@@ -1111,13 +1196,12 @@ export const registerSocketHandlers = (io) => {
 
       } else if (game.mode === "hanabagi") {
         const pick1 = game.picks[p1], pick2 = game.picks[p2];
-        const total = pick1.fingers + pick2.fingers;
-        const p1Hit = pick1.guess === total;
-        const p2Hit = pick2.guess === total;
-        if (p1Hit && !p2Hit) {
+        const result = resolveHanabagiRound(pick1, pick2);
+        const total = result.total;
+        if (result.roundWinner === 'p1') {
           roundWinner = p1;
           game.scores[p1] = (game.scores[p1] || 0) + 1;
-        } else if (p2Hit && !p1Hit) {
+        } else if (result.roundWinner === 'p2') {
           roundWinner = p2;
           game.scores[p2] = (game.scores[p2] || 0) + 1;
         } else {
@@ -1150,15 +1234,18 @@ export const registerSocketHandlers = (io) => {
       }
 
       ack({ ok: true });
+      });
     });
 
     socket.on("game:rps:reset", async (payload, ackRaw) => {
       const ack = normalizeAck(ackRaw);
       const roomCode = socket.data.roomCode;
       if (!roomCode) { ack({ ok: false, reason: "not_joined" }); return; }
-      await redis.del(rpsGameKey(roomCode));
-      io.to(roomCode).emit("game:rps:reset_done");
-      ack({ ok: true });
+      await withRoomLock(roomCode, async () => {
+        await redis.del(rpsGameKey(roomCode));
+        io.to(roomCode).emit("game:rps:reset_done");
+        ack({ ok: true });
+      });
     });
 
     socket.on("game:telepathy:select", async (payload, ackRaw) => {
@@ -1176,10 +1263,11 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const { choice, options } = parsed.data;
-      const sessionKey = `telepathy:${roomCode}:session`;
-      const existing = await redis.get(sessionKey);
-      const session = existing ? JSON.parse(existing) : { choices: {}, options, revealed: false };
+      await withRoomLock(roomCode, async () => {
+        const { choice, options } = parsed.data;
+        const sessionKey = `telepathy:${roomCode}:session`;
+        const existing = await redis.get(sessionKey);
+        const session = existing ? JSON.parse(existing) : { choices: {}, options, revealed: false };
 
       session.choices[userId] = choice;
       session.updatedAt = Date.now();
@@ -1206,10 +1294,11 @@ export const registerSocketHandlers = (io) => {
 
         io.to(roomCode).emit("game:telepathy:result", event);
         ack({ ok: true, result: event });
-      } else {
-        await redis.set(sessionKey, JSON.stringify(session), "EX", 60);
-        ack({ ok: true, waiting: true });
-      }
+        } else {
+          await redis.set(sessionKey, JSON.stringify(session), "EX", 60);
+          ack({ ok: true, waiting: true });
+        }
+      });
     });
 
     socket.on("game:pirate:start", async (payload, ackRaw) => {
@@ -1221,6 +1310,7 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
+      await withRoomLock(roomCode, async () => {
       const presence = getPresence(io, roomCode);
       if (presence.length !== 2) {
         ack({ ok: false, reason: "need_two_players" });
@@ -1233,27 +1323,33 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const { slots } = parsed.data;
-      const players = await getOrderedPlayers(roomCode, presence);
-      const bombSlot = Math.floor(Math.random() * slots);
-      const gameState = {
-        slots,
-        bombSlot,
-        pickedSlots: [],
-        players,
-        currentTurn: players[0],
-        startedAt: Date.now(),
-      };
+        const existing = await redis.get(pirateKey(roomCode));
+        if (existing) {
+          ack({ ok: false, reason: "game_in_progress" });
+          return;
+        }
+        const { slots } = parsed.data;
+        const players = await getOrderedPlayers(roomCode, presence);
+        const bombSlot = Math.floor(Math.random() * slots);
+        const gameState = {
+          slots,
+          bombSlot,
+          pickedSlots: [],
+          players,
+          currentTurn: players[0],
+          startedAt: Date.now(),
+        };
 
-      await redis.set(pirateKey(roomCode), JSON.stringify(gameState), "EX", 1800);
-      io.to(roomCode).emit("game:pirate:started", {
-        slots,
-        players,
-        currentTurn: players[0],
-        pickedSlots: [],
-        at: Date.now(),
-      });
-      ack({ ok: true });
+        await redis.set(pirateKey(roomCode), JSON.stringify(gameState), "EX", 1800);
+        io.to(roomCode).emit("game:pirate:started", {
+          slots,
+          players,
+          currentTurn: players[0],
+          pickedSlots: [],
+          at: Date.now(),
+        });
+        ack({ ok: true });
+      }); // withRoomLock
     });
 
     socket.on("game:pirate:pick", async (payload, ackRaw) => {
@@ -1271,29 +1367,30 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const gameText = await redis.get(pirateKey(roomCode));
-      if (!gameText) {
-        ack({ ok: false, reason: "no_game" });
-        return;
-      }
+      await withRoomLock(roomCode, async () => {
+        const gameText = await redis.get(pirateKey(roomCode));
+        if (!gameText) {
+          ack({ ok: false, reason: "no_game" });
+          return;
+        }
 
-      const gameState = JSON.parse(gameText);
-      if (gameState.currentTurn !== userId) {
-        ack({ ok: false, reason: "not_your_turn" });
-        return;
-      }
+        const gameState = JSON.parse(gameText);
+        if (gameState.currentTurn !== userId) {
+          ack({ ok: false, reason: "not_your_turn" });
+          return;
+        }
 
-      const { slot } = parsed.data;
-      if (slot < 0 || slot >= gameState.slots) {
-        ack({ ok: false, reason: "invalid_slot" });
-        return;
-      }
-      if (gameState.pickedSlots.includes(slot)) {
-        ack({ ok: false, reason: "slot_taken" });
-        return;
-      }
+        const { slot } = parsed.data;
+        if (slot < 0 || slot >= gameState.slots) {
+          ack({ ok: false, reason: "invalid_slot" });
+          return;
+        }
+        if (gameState.pickedSlots.includes(slot)) {
+          ack({ ok: false, reason: "slot_taken" });
+          return;
+        }
 
-      if (slot === gameState.bombSlot) {
+        if (slot === gameState.bombSlot) {
         await redis.del(pirateKey(roomCode));
         io.to(roomCode).emit("game:pirate:exploded", {
           loser: userId,
@@ -1307,7 +1404,7 @@ export const registerSocketHandlers = (io) => {
           grantGameXpAndMissions(pirateWinner, userId, 'pirate').catch(() => {});
         }
         ack({ ok: true, exploded: true });
-      } else {
+        } else {
         gameState.pickedSlots.push(slot);
         const nextIdx = (gameState.players.indexOf(userId) + 1) % gameState.players.length;
         gameState.currentTurn = gameState.players[nextIdx];
@@ -1320,7 +1417,8 @@ export const registerSocketHandlers = (io) => {
           at: Date.now(),
         });
         ack({ ok: true, exploded: false });
-      }
+        }
+      });
     });
 
     socket.on("game:pirate:reset", async (_, ackRaw) => {
@@ -1331,9 +1429,11 @@ export const registerSocketHandlers = (io) => {
         ack({ ok: false, reason: "not_joined" });
         return;
       }
-      await redis.del(pirateKey(roomCode));
-      io.to(roomCode).emit("game:pirate:reset_done", { by: userId, at: Date.now() });
-      ack({ ok: true });
+      await withRoomLock(roomCode, async () => {
+        await redis.del(pirateKey(roomCode));
+        io.to(roomCode).emit("game:pirate:reset_done", { by: userId, at: Date.now() });
+        ack({ ok: true });
+      });
     });
 
     socket.on("game:yut:new", async (payload, ackRaw) => {
@@ -1345,46 +1445,54 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const presence = getPresence(io, roomCode);
-      if (presence.length !== 2) {
-        ack({ ok: false, reason: "need_two_players" });
-        return;
-      }
+      await withRoomLock(roomCode, async () => {
+        const presence = getPresence(io, roomCode);
+        if (presence.length !== 2) {
+          ack({ ok: false, reason: "need_two_players" });
+          return;
+        }
 
-      const [player1, player2] = await getOrderedPlayers(roomCode, presence);
-      if (!player1 || !player2) {
-        ack({ ok: false, reason: "need_two_players" });
-        return;
-      }
+        const existing = await redis.get(yutGameKey(roomCode));
+        if (existing) {
+          ack({ ok: false, reason: "game_in_progress" });
+          return;
+        }
 
-      const parsed = yutNewSchema.safeParse(payload);
-      if (!parsed.success) {
-        ack({ ok: false, reason: "invalid_payload" });
-        return;
-      }
-      const gameState = createYutGameState(player1, player2);
-      gameState.characters = parsed.data.characters ?? {};
-      gameState.bgm = parsed.data.bgm ?? null;
-      gameState.stake = parsed.data.stake ?? 0;
+        const [player1, player2] = await getOrderedPlayers(roomCode, presence);
+        if (!player1 || !player2) {
+          ack({ ok: false, reason: "need_two_players" });
+          return;
+        }
 
-      // 양 플레이어의 장착 아이템 정보 포함 (상대방 표시용)
-      const { rows: p1Rows } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [player1]);
-      const { rows: p2Rows } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [player2]);
-      const [p1Info, p2Info, p1Stats, p2Stats] = await Promise.all([
-        p1Rows[0]?.UserId ? getEquippedItemsInfo(p1Rows[0].UserId) : Promise.resolve({}),
-        p2Rows[0]?.UserId ? getEquippedItemsInfo(p2Rows[0].UserId) : Promise.resolve({}),
-        p1Rows[0]?.UserId ? getEquippedStats(p1Rows[0].UserId) : Promise.resolve({}),
-        p2Rows[0]?.UserId ? getEquippedStats(p2Rows[0].UserId) : Promise.resolve({}),
-      ]);
-      gameState.equippedItems = { [player1]: p1Info, [player2]: p2Info };
-      gameState.playerStats = { [player1]: p1Stats, [player2]: p2Stats };
-      gameState.catchCoinBonus = {};
-      gameState.winCoinBonus = {};
+        const parsed = yutNewSchema.safeParse(payload);
+        if (!parsed.success) {
+          ack({ ok: false, reason: "invalid_payload" });
+          return;
+        }
+        const gameState = createYutGameState(player1, player2);
+        gameState.characters = parsed.data.characters ?? {};
+        gameState.bgm = parsed.data.bgm ?? null;
+        gameState.stake = parsed.data.stake ?? 0;
 
-      await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
+        // 양 플레이어의 장착 아이템 정보 포함 (상대방 표시용)
+        const { rows: p1Rows } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [player1]);
+        const { rows: p2Rows } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [player2]);
+        const [p1Info, p2Info, p1Stats, p2Stats] = await Promise.all([
+          p1Rows[0]?.UserId ? getEquippedItemsInfo(p1Rows[0].UserId) : Promise.resolve({}),
+          p2Rows[0]?.UserId ? getEquippedItemsInfo(p2Rows[0].UserId) : Promise.resolve({}),
+          p1Rows[0]?.UserId ? getEquippedStats(p1Rows[0].UserId) : Promise.resolve({}),
+          p2Rows[0]?.UserId ? getEquippedStats(p2Rows[0].UserId) : Promise.resolve({}),
+        ]);
+        gameState.equippedItems = { [player1]: p1Info, [player2]: p2Info };
+        gameState.playerStats = { [player1]: p1Stats, [player2]: p2Stats };
+        gameState.catchCoinBonus = {};
+        gameState.winCoinBonus = {};
 
-      emitYutState(io, roomCode, "game:yut:started", gameState);
-      ack({ ok: true, gameState: serializeYutGame(gameState) });
+        await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
+
+        emitYutState(io, roomCode, "game:yut:started", gameState);
+        ack({ ok: true, gameState: serializeYutGame(gameState) });
+      });
     });
 
     socket.on("game:yut:roll_start", async (_, ackRaw) => {
@@ -1441,15 +1549,17 @@ export const registerSocketHandlers = (io) => {
       if (doCountdown) {
         setTimeout(async () => {
           try {
-            const latestText = await redis.get(yutGameKey(roomCode));
-            if (!latestText) return;
-            const latestState = JSON.parse(latestText);
-            if (latestState.phase !== "order_countdown") return;
-            latestState.phase = "throwing";
-            latestState.orderCountdownUntil = null;
-            await redis.set(yutGameKey(roomCode), JSON.stringify(latestState), "EX", 3600);
-            emitYutState(io, roomCode, "game:yut:started", latestState, {
-              orderReady: true,
+            await withRoomLock(roomCode, async () => {
+              const latestText = await redis.get(yutGameKey(roomCode));
+              if (!latestText) return;
+              const latestState = JSON.parse(latestText);
+              if (latestState.phase !== "order_countdown") return;
+              latestState.phase = "throwing";
+              latestState.orderCountdownUntil = null;
+              await redis.set(yutGameKey(roomCode), JSON.stringify(latestState), "EX", 3600);
+              emitYutState(io, roomCode, "game:yut:started", latestState, {
+                orderReady: true,
+              });
             });
           } catch (err) {
             console.error(`yut order countdown error: ${err.message}`);
@@ -1577,95 +1687,50 @@ export const registerSocketHandlers = (io) => {
       }
 
       const gameState = JSON.parse(gameText);
-      if (gameState.pendingMoves.length === 0) {
-        ack({ ok: false, reason: "no_pending_moves" });
-        return;
-      }
-      if (gameState.currentTurn !== userId) {
-        ack({ ok: false, reason: "not_your_turn" });
-        return;
-      }
-
       const { pieceId, moveIndex, backdoDir } = parsed.data;
-      if (moveIndex >= gameState.pendingMoves.length) {
-        ack({ ok: false, reason: "invalid_move_index" });
-        return;
-      }
-
-      const piece = gameState.players[userId].pieces[pieceId];
-      if (!piece || piece.finished) {
-        ack({ ok: false, reason: "invalid_piece" });
-        return;
-      }
-
-      const steps = gameState.pendingMoves[moveIndex];
-      if (steps === -1 && piece.position === 0) {
-        ack({ ok: false, reason: "invalid_piece_for_move" });
-        return;
-      }
-
-      const preMovePos = piece.position; // 백도 보너스 체크용 원래 위치 기록
-      const moveResult = movePiece(piece, steps, { backdoDir });
-
-      if (moveResult === null) {
-        ack({ ok: false, reason: "invalid_move" });
-        return;
-      }
-      gameState.pendingMoves.splice(moveIndex, 1);
-
-      const carriedPieces = getCarriedPieces(piece, gameState.players[userId].pieces);
-      const stackedPieces = moveResult.position > 0
-        ? gameState.players[userId].pieces.filter(
-            (candidate) =>
-              candidate.id !== pieceId &&
-              !candidate.finished &&
-              candidate.position === moveResult.position,
-          )
-        : [];
-      let capturedPieces = [];
       const moverStats = gameState.playerStats?.[userId] ?? {};
       const opponentId = getNextYutPlayer(gameState, userId);
       const defenderStats = gameState.playerStats?.[opponentId] ?? {};
+      const moveResolution = resolveYutMove(gameState, userId, {
+        pieceId,
+        moveIndex,
+        backdoDir,
+        moverStats,
+        defenderStats,
+      });
+      if (!moveResolution.ok) {
+        ack({ ok: false, reason: moveResolution.reason });
+        return;
+      }
 
-      // Only pieces already on the selected piece move together. A separate
-      // piece is never pulled in by chance; landing on an occupied own square
-      // is handled by the normal same-position grouping below.
-      {
-        applyMoveToPieces(carriedPieces, moveResult);
+      const {
+        piece,
+        steps,
+        preMovePos,
+        carriedPieces,
+        stackedPieces,
+        capturedPieces,
+        captureBlockedPieces,
+      } = moveResolution;
 
-        const rawCaptured = checkCatch(piece.position, gameState.players[opponentId].pieces);
+      // A protected piece is intentionally left on the landing square. The
+      // count is included in move_result so a failed capture is not ambiguous.
+      // piece_catch_resist_pct + piece_safe_zone_pct are applied in the engine.
 
-        // piece_catch_resist_pct + piece_safe_zone_pct (defender): each piece independently resists
-        const resistPct = Math.min((defenderStats.piece_catch_resist_pct ?? 0), 15);
-        const safePct = Math.min((defenderStats.piece_safe_zone_pct ?? 0), 15);
-        capturedPieces = rawCaptured.filter(() => {
-          const survivedResist = resistPct > 0 && Math.random() * 100 < resistPct;
-          const survivedSafe = safePct > 0 && Math.random() * 100 < safePct;
-          return !survivedResist && !survivedSafe;
-        });
+      // piece_catch_coin_bonus: 잡은 말 1개당 플랫 코인 (최대 25)
+      const catchCoinPer = Math.min(Math.floor(moverStats.piece_catch_coin_bonus ?? 0), 25);
+      if (catchCoinPer > 0 && capturedPieces.length > 0) {
+        gameState.catchCoinBonus = gameState.catchCoinBonus ?? {};
+        gameState.catchCoinBonus[userId] = (gameState.catchCoinBonus[userId] ?? 0) + catchCoinPer * capturedPieces.length;
+        socket.emit("game:item_effect", { stat: "piece_catch_coin_bonus", amount: catchCoinPer * capturedPieces.length });
+      }
 
-        for (const capturedPiece of capturedPieces) {
-          capturedPiece.position = 0;
-          capturedPiece.lastPos = 0;
-          capturedPiece.finished = false;
-        }
-        recordCapture(gameState, capturedPieces.length);
-
-        // piece_catch_coin_bonus: 잡은 말 1개당 플랫 코인 (최대 25)
-        const catchCoinPer = Math.min(Math.floor(moverStats.piece_catch_coin_bonus ?? 0), 25);
-        if (catchCoinPer > 0 && capturedPieces.length > 0) {
-          gameState.catchCoinBonus = gameState.catchCoinBonus ?? {};
-          gameState.catchCoinBonus[userId] = (gameState.catchCoinBonus[userId] ?? 0) + catchCoinPer * capturedPieces.length;
-          socket.emit("game:item_effect", { stat: "piece_catch_coin_bonus", amount: catchCoinPer * capturedPieces.length });
-        }
-
-        // yut_catch_bonus: 잡기 이벤트당 플랫 코인, 잡은 말 수 무관 (최대 300)
-        const catchFlatBonus = Math.min(Math.floor(moverStats.yut_catch_bonus ?? 0), 300);
-        if (catchFlatBonus > 0 && capturedPieces.length > 0) {
-          gameState.catchCoinBonus = gameState.catchCoinBonus ?? {};
-          gameState.catchCoinBonus[userId] = (gameState.catchCoinBonus[userId] ?? 0) + catchFlatBonus;
-          socket.emit("game:item_effect", { stat: "yut_catch_bonus", amount: catchFlatBonus });
-        }
+      // yut_catch_bonus: 잡기 이벤트당 플랫 코인, 잡은 말 수 무관 (최대 300)
+      const catchFlatBonus = Math.min(Math.floor(moverStats.yut_catch_bonus ?? 0), 300);
+      if (catchFlatBonus > 0 && capturedPieces.length > 0) {
+        gameState.catchCoinBonus = gameState.catchCoinBonus ?? {};
+        gameState.catchCoinBonus[userId] = (gameState.catchCoinBonus[userId] ?? 0) + catchFlatBonus;
+        socket.emit("game:item_effect", { stat: "yut_catch_bonus", amount: catchFlatBonus });
       }
 
       // yut_backdo_bonus_pct: 유리한 백도 위치에서 추가 던지기 확률
@@ -1701,6 +1766,7 @@ export const registerSocketHandlers = (io) => {
         movedPieceIds: carriedPieces.map((carriedPiece) => carriedPiece.id),
         capturedPieceIds: capturedPieces.map((capturedPiece) => capturedPiece.id),
         capturedCount: capturedPieces.length,
+        captureBlockedCount: captureBlockedPieces.length,
         carriedCount: carriedPieces.length,
         stackedCount: stackedPieces.length,
         winner: gameState.winner,
@@ -1731,7 +1797,7 @@ export const registerSocketHandlers = (io) => {
       }); // withRoomLock
     });
 
-    // ─── 마블윷 핸들러 ──────────────────────────────────────────────────────────
+    // ─── 마블 게임 핸들러 ────────────────────────────────────────────────────────
 
     socket.on("game:marble:new", async (payload, ackRaw) => {
       const ack = normalizeAck(ackRaw);
@@ -1742,35 +1808,42 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const presence = getPresence(io, roomCode);
-      if (presence.length !== 2) {
-        ack({ ok: false, reason: "need_two_players" });
-        return;
-      }
+      await withRoomLock(roomCode, async () => {
+        const presence = getPresence(io, roomCode);
+        if (presence.length !== 2) {
+          ack({ ok: false, reason: "need_two_players" });
+          return;
+        }
 
-      const [player1, player2] = await getOrderedPlayers(roomCode, presence);
-      if (!player1 || !player2) {
-        ack({ ok: false, reason: "need_two_players" });
-        return;
-      }
+        const existing = await redis.get(marbleGameKey(roomCode));
+        if (existing) {
+          ack({ ok: false, reason: "game_in_progress" });
+          return;
+        }
 
-      const gameState = createMarbleGameState(player1, player2, {
-        characters: payload?.characters ?? {},
-        bgm: payload?.bgm ?? randomYutBgm(),
+        const [player1, player2] = await getOrderedPlayers(roomCode, presence);
+        if (!player1 || !player2) {
+          ack({ ok: false, reason: "need_two_players" });
+          return;
+        }
+
+        const gameState = createMarbleGameState(player1, player2, {
+          characters: payload?.characters ?? {},
+        });
+
+        // 장착 아이템 정보 포함
+        const { rows: p1Rows } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [player1]);
+        const { rows: p2Rows } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [player2]);
+        const [p1Info, p2Info] = await Promise.all([
+          p1Rows[0]?.UserId ? getEquippedItemsInfo(p1Rows[0].UserId) : Promise.resolve({}),
+          p2Rows[0]?.UserId ? getEquippedItemsInfo(p2Rows[0].UserId) : Promise.resolve({}),
+        ]);
+        gameState.equippedItems = { [player1]: p1Info, [player2]: p2Info };
+
+        await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
+        emitMarbleState(io, roomCode, "game:marble:state", gameState);
+        ack({ ok: true, gameState: serializeMarbleGame(gameState) });
       });
-
-      // 장착 아이템 정보 포함
-      const { rows: p1Rows } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [player1]);
-      const { rows: p2Rows } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [player2]);
-      const [p1Info, p2Info] = await Promise.all([
-        p1Rows[0]?.UserId ? getEquippedItemsInfo(p1Rows[0].UserId) : Promise.resolve({}),
-        p2Rows[0]?.UserId ? getEquippedItemsInfo(p2Rows[0].UserId) : Promise.resolve({}),
-      ]);
-      gameState.equippedItems = { [player1]: p1Info, [player2]: p2Info };
-
-      await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
-      emitMarbleState(io, roomCode, "game:marble:state", gameState);
-      ack({ ok: true, gameState: serializeMarbleGame(gameState) });
     });
 
     socket.on("game:marble:roll_start", async (_, ackRaw) => {
@@ -1782,47 +1855,52 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const gameText = await redis.get(marbleGameKey(roomCode));
-      if (!gameText) { ack({ ok: false, reason: "no_game" }); return; }
-      const gameState = JSON.parse(gameText);
-      if (gameState.phase !== "roll_order") { ack({ ok: false, reason: "invalid_phase" }); return; }
-      if (gameState.startRolls?.[userId] != null) { ack({ ok: false, reason: "already_rolled" }); return; }
+      await withRoomLock(roomCode, async () => {
+        const gameText = await redis.get(marbleGameKey(roomCode));
+        if (!gameText) { ack({ ok: false, reason: "no_game" }); return; }
+        const gameState = JSON.parse(gameText);
+        if (gameState.phase !== "roll_order") { ack({ ok: false, reason: "invalid_phase" }); return; }
+        if (!gameState.playersOrder?.includes(userId)) { ack({ ok: false, reason: "not_a_player" }); return; }
+        if (gameState.startRolls?.[userId] != null) { ack({ ok: false, reason: "already_rolled" }); return; }
 
-      gameState.startRolls = { ...(gameState.startRolls ?? {}), [userId]: Math.floor(Math.random() * 6) + 1 };
+        gameState.startRolls = { ...(gameState.startRolls ?? {}), [userId]: Math.floor(Math.random() * 6) + 1 };
 
-      const [player1, player2] = gameState.playersOrder;
-      const p1Roll = gameState.startRolls[player1];
-      const p2Roll = gameState.startRolls[player2];
-      if (p1Roll != null && p2Roll != null) {
-        if (p1Roll === p2Roll) {
-          gameState.startRolls = {};
-        } else {
-          gameState.currentTurn = p1Roll > p2Roll ? player1 : player2;
-          gameState.phase = "order_countdown";
-          gameState.orderCountdownUntil = Date.now() + 3000;
-        }
-      }
-
-      await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
-      emitMarbleState(io, roomCode, "game:marble:state", gameState, { by: userId });
-      ack({ ok: true, gameState: serializeMarbleGame(gameState) });
-
-      if (gameState.phase === "order_countdown") {
-        setTimeout(async () => {
-          try {
-            const latestText = await redis.get(marbleGameKey(roomCode));
-            if (!latestText) return;
-            const latestState = JSON.parse(latestText);
-            if (latestState.id !== gameState.id || latestState.phase !== "order_countdown") return;
-            latestState.phase = "throwing";
-            latestState.orderCountdownUntil = null;
-            await redis.set(marbleGameKey(roomCode), JSON.stringify(latestState), "EX", 7200);
-            emitMarbleState(io, roomCode, "game:marble:state", latestState, { orderReady: true });
-          } catch (err) {
-            console.error(`marble order countdown error: ${err.message}`);
+        const [player1, player2] = gameState.playersOrder;
+        const p1Roll = gameState.startRolls[player1];
+        const p2Roll = gameState.startRolls[player2];
+        if (p1Roll != null && p2Roll != null) {
+          if (p1Roll === p2Roll) {
+            gameState.startRolls = {};
+          } else {
+            gameState.currentTurn = p1Roll > p2Roll ? player1 : player2;
+            gameState.phase = "order_countdown";
+            gameState.orderCountdownUntil = Date.now() + 3000;
           }
-        }, 3000);
-      }
+        }
+
+        await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
+        emitMarbleState(io, roomCode, "game:marble:state", gameState, { by: userId });
+        ack({ ok: true, gameState: serializeMarbleGame(gameState) });
+
+        if (gameState.phase === "order_countdown") {
+          setTimeout(async () => {
+            try {
+              await withRoomLock(roomCode, async () => {
+                const latestText = await redis.get(marbleGameKey(roomCode));
+                if (!latestText) return;
+                const latestState = JSON.parse(latestText);
+                if (latestState.id !== gameState.id || latestState.phase !== "order_countdown") return;
+                latestState.phase = "throwing";
+                latestState.orderCountdownUntil = null;
+                await redis.set(marbleGameKey(roomCode), JSON.stringify(latestState), "EX", 7200);
+                emitMarbleState(io, roomCode, "game:marble:state", latestState, { orderReady: true });
+              });
+            } catch (err) {
+              console.error(`marble order countdown error: ${err.message}`);
+            }
+          }, 3000);
+        }
+      });
     });
 
     socket.on("game:marble:roll", async (_, ackRaw) => {
@@ -1831,11 +1909,13 @@ export const registerSocketHandlers = (io) => {
       const userId = socket.data.userId;
       if (!roomCode || !userId) { ack({ ok: false, reason: "not_joined" }); return; }
 
+      await withRoomLock(roomCode, async () => {
       const gameText = await redis.get(marbleGameKey(roomCode));
       if (!gameText) { ack({ ok: false, reason: "no_game" }); return; }
       const gameState = JSON.parse(gameText);
       if (gameState.currentTurn !== userId) { ack({ ok: false, reason: "not_your_turn" }); return; }
       if (gameState.phase !== "throwing") { ack({ ok: false, reason: "must_move_first" }); return; }
+      if (gameState.pendingLandAction) { ack({ ok: false, reason: "land_action_pending" }); return; }
 
       const rollResult = rollMarbleDice();
       gameState.lastRoll = rollResult;
@@ -1871,6 +1951,7 @@ export const registerSocketHandlers = (io) => {
         by: userId, rollResult, at: Date.now(),
       });
       ack({ ok: true, rollResult, gameState: serializeMarbleGame(gameState) });
+      }); // withRoomLock
     });
 
     socket.on("game:marble:move", async (payload, ackRaw) => {
@@ -1882,126 +1963,53 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
+      await withRoomLock(roomCode, async () => {
       const gameText = await redis.get(marbleGameKey(roomCode));
       if (!gameText) { ack({ ok: false, reason: "no_game" }); return; }
       const gameState = JSON.parse(gameText);
       if (gameState.currentTurn !== userId) { ack({ ok: false, reason: "not_your_turn" }); return; }
-      if (gameState.pendingMoves.length === 0) { ack({ ok: false, reason: "no_pending_moves" }); return; }
+      if (gameState.phase !== "moving") { ack({ ok: false, reason: "no_pending_moves" }); return; }
+      if (gameState.pendingLandAction) { ack({ ok: false, reason: "land_action_pending" }); return; }
+      if (!Array.isArray(gameState.pendingMoves) || gameState.pendingMoves.length === 0) {
+        ack({ ok: false, reason: "no_pending_moves" });
+        return;
+      }
 
-      const { pieceId = 0, moveIndex = 0, backdoDir } = payload ?? {};
-      if (moveIndex >= gameState.pendingMoves.length) { ack({ ok: false, reason: "invalid_move_index" }); return; }
+      const pieceId = Number(payload?.pieceId ?? 0);
+      const moveIndex = Number(payload?.moveIndex ?? 0);
+      if (!Number.isInteger(pieceId) || !Number.isInteger(moveIndex) || moveIndex < 0 ||
+          moveIndex >= gameState.pendingMoves.length) {
+        ack({ ok: false, reason: "invalid_move" });
+        return;
+      }
 
-      const piece = gameState.players[userId].pieces[pieceId];
+      const piece = gameState.players[userId]?.pieces?.[pieceId];
       if (!piece) { ack({ ok: false, reason: "invalid_piece" }); return; }
 
       const steps = gameState.pendingMoves[moveIndex];
-      if (steps === -1 && piece.position === 0) { ack({ ok: false, reason: "invalid_piece_for_backdo" }); return; }
-
-      const prevPos = piece.position;
-      const moveResult = moveMarblePiece(piece, steps, { backdoDir });
+      const moveResult = moveMarblePiece(piece, steps);
       if (moveResult === null) { ack({ ok: false, reason: "invalid_move" }); return; }
 
+      piece.lastPos = moveResult.lastPos;
+      piece.position = moveResult.position;
+      piece.finished = false;
       gameState.pendingMoves.splice(moveIndex, 1);
 
-      const carriedPieces = getMarbleCarriedPieces(piece, gameState.players[userId].pieces);
-      const stackedPieces = [...carriedPieces];
-
-      const moverStats = gameState.equippedItems?.[userId]?.stats ?? {};
       const opponentId = getNextMarblePlayer(gameState, userId);
       const defenderStats = gameState.equippedItems?.[opponentId]?.stats ?? {};
 
-      for (const cp of carriedPieces) {
-        cp.lastPos = moveResult.lastPos;
-        cp.position = moveResult.position;
-        // 마블윷: finished=false, 완주는 출발지 재도착으로 처리 (월급만)
-        cp.finished = false;
-      }
-
-      // piece_group_pct: chance to auto-pull one lonely friendly piece to current position
-      const groupPct = Math.min(moverStats.piece_group_pct ?? 0, 15);
-      if (groupPct > 0 && moveResult.position > 0) {
-        const loner = gameState.players[userId].pieces.find(
-          (p) => p.id !== pieceId && !p.finished && p.position > 0 && p.position !== moveResult.position,
-        );
-        if (loner && Math.random() * 100 < groupPct) {
-          loner.position = moveResult.position;
-          loner.lastPos = moveResult.lastPos;
-          stackedPieces.push(loner);
-        }
-      }
-
-      let capturedPieces = [];
-      if (moveResult.position !== 0) {
-        const rawCaptured = checkMarbleCatch(moveResult.position, gameState.players[opponentId].pieces);
-        
-        // piece_catch_resist_pct + piece_safe_zone_pct (defender): each piece independently resists
-        const resistPct = Math.min((defenderStats.piece_catch_resist_pct ?? 0), 15);
-        const safePct = Math.min((defenderStats.piece_safe_zone_pct ?? 0), 15);
-        capturedPieces = rawCaptured.filter(() => {
-          const survivedResist = resistPct > 0 && Math.random() * 100 < resistPct;
-          const survivedSafe = safePct > 0 && Math.random() * 100 < safePct;
-          return !survivedResist && !survivedSafe;
-        });
-
-        for (const cp of capturedPieces) {
-          cp.position = 0;
-          cp.lastPos = 0;
-        }
-        recordMarbleCapture(gameState, capturedPieces.length);
-        
-        // piece_catch_coin_bonus: 잡은 말 1개당 플랫 코인 (최대 25)
-        const catchCoinPer = Math.min(Math.floor(moverStats.piece_catch_coin_bonus ?? 0), 25);
-        if (catchCoinPer > 0 && capturedPieces.length > 0) {
-          gameState.players[userId].coins += catchCoinPer * capturedPieces.length;
-        }
-
-        // yut_catch_bonus: 잡기 이벤트당 플랫 코인, 잡은 말 수 무관 (최대 300)
-        const catchFlatBonus = Math.min(Math.floor(moverStats.yut_catch_bonus ?? 0), 300);
-        if (catchFlatBonus > 0 && capturedPieces.length > 0) {
-          gameState.players[userId].coins += catchFlatBonus;
-        }
-      }
-
-      // yut_backdo_bonus_pct: 유리한 백도 위치에서 추가 던지기 확률
-      if (steps === -1) {
-        const backdoBonus = Math.min(moverStats.yut_backdo_bonus_pct ?? 0, 25);
-        if (backdoBonus > 0) {
-          let triggerPct = 0;
-          if (prevPos === 1) triggerPct = Math.min(backdoBonus * 2, 50); // 날백도
-          else if (prevPos === 23) triggerPct = backdoBonus;              // 대각선
-          if (triggerPct > 0 && Math.random() * 100 < triggerPct) {
-            gameState.hasBonusThrow = true;
-          }
-        }
-      }
-
-      // C1: 출발지(pos 0) 통과 시 월급 지급
+      // 출발지를 통과하면 급여를 지급한다.
       const passedStart = moveResult.passedStart === true;
       if (passedStart) {
         gameState.players[userId].coins += MARBLE_SALARY;
       }
 
-      // 잡기 보너스 설정
-      if (capturedPieces.length > 0) {
-        gameState.catchBonusPending = true;
-        gameState.catchBonusUntil = Date.now() + 15000;
-        gameState.catchBonusTarget = opponentId;
-        // H2: 잡은 플레이어를 명시 — 턴 전환이 일어나도 팔업 트리거 정확
-        gameState.catchBonusBy = userId;
-        // M1: 잡기 성공 시 추가 던지기 부여
-        gameState.hasBonusThrow = true;
-      }
-
-      // C2: 라운드 진행 — 잡기 여부와 무관하게 카운트, 보너스 던지기/pendingMoves가 남아있을 때만 지연
-      if (gameState.pendingMoves.length === 0 && !gameState.hasBonusThrow) {
-        // 잡기/기타 사유로 턴이 유지되면 roundTurns 카운트 안 함 (진짜 턴 넘겨줄 때만)
-        const turnWillPass = !gameState.caughtOpponentThisTurn;
-        if (turnWillPass) {
-          gameState.roundTurns = (gameState.roundTurns ?? 0) + 1;
-          if (gameState.roundTurns >= 2) {
-            gameState.roundTurns = 0;
-            gameState.round = (gameState.round ?? 1) + 1;
-          }
+      const hadExtraRoll = gameState.hasDoubleRoll === true;
+      if (gameState.pendingMoves.length === 0 && !hadExtraRoll) {
+        gameState.roundTurns = (gameState.roundTurns ?? 0) + 1;
+        if (gameState.roundTurns >= 2) {
+          gameState.roundTurns = 0;
+          gameState.round = (gameState.round ?? 1) + 1;
         }
       }
 
@@ -2035,11 +2043,6 @@ export const registerSocketHandlers = (io) => {
       const targetPos = moveResult.position;
       const landData = gameState.lands[targetPos];
       let landPrompt = null;
-      // M8: stacked = 이동 후 같은 칸에 있는 내 말 수 (업기 후 기준)
-      const stackedAfterMove = gameState.players[userId].pieces.filter(
-        (p) => !p.finished && p.position === moveResult.position
-      ).length;
-      const stacked = stackedAfterMove > 1;
 
       let specialEvent = null;
       const specialType = getMarbleSpecialType(targetPos);
@@ -2071,30 +2074,38 @@ export const registerSocketHandlers = (io) => {
         io.to(roomCode).emit("game:marble:special_tile", specialEvent);
       }
 
+      const specialWin = !gameState.winner && checkMarbleWin(gameState);
+      if (specialWin) {
+        gameState.winner = specialWin.winner;
+        gameState.winReason = specialWin.reason;
+      }
+
       if (!gameState.winner && !MARBLE_START_POSITIONS.has(targetPos) && getLandValue(targetPos) > 0) {
         if (!landData) {
           // 빈 칸: 점령 프롬프트
-          landPrompt = { type: 'claim', pos: targetPos, cost: calcAcquireCost(targetPos, stacked), stacked };
+          landPrompt = { type: 'claim', pos: targetPos, cost: calcPurchaseCost(targetPos) };
         } else if (landData.owner === userId && landData.level < 4) {
           // 내 영지 재방문: 강화 프롬프트
           const upgradeCost = calcUpgradeCost(targetPos, landData.level);
           landPrompt = { type: 'upgrade', pos: targetPos, cost: upgradeCost, level: landData.level };
         } else if (landData.owner !== userId) {
           // 상대 영지: 통행료 자동 징수
-          // M4: 방어자의 toll_reduce_pct 스탯 적용 (land_toll_reduce_pct 또는 piece_catch_resist_pct로 대체)
-          const rawToll = calcToll(targetPos, landData.level);
+          // M4: 방어자의 통행료 감소 스탯 적용
+          const rawToll = calcToll(targetPos, landData.level) *
+            (hasColorMonopoly(gameState, opponentId, targetPos) ? 2 : 1);
           const tollReducePct = Math.min(defenderStats.land_toll_reduce_pct ?? 0, 30);
           const toll = tollReducePct > 0
             ? Math.max(1, Math.floor(rawToll * (1 - tollReducePct / 100)))
             : rawToll;
-          gameState.players[userId].coins = Math.max(0, gameState.players[userId].coins - toll);
-          gameState.players[opponentId].coins += toll;
+          const paidToll = Math.min(gameState.players[userId].coins, toll);
+          gameState.players[userId].coins -= paidToll;
+          gameState.players[opponentId].coins += paidToll;
           await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
           io.to(roomCode).emit("game:marble:toll_paid", {
             payer: userId,
             receiver: opponentId,
             pos: targetPos,
-            toll,
+            toll: paidToll,
             level: landData.level,
             coins: { [userId]: gameState.players[userId].coins, [opponentId]: gameState.players[opponentId].coins },
           });
@@ -2104,23 +2115,30 @@ export const registerSocketHandlers = (io) => {
             gameState.winner = tollWin.winner;
             gameState.winReason = tollWin.reason;
             await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
-          } else if (landData.level < 4) {
+          } else if (landData.level < 4 && calcAcquireCost(targetPos, landData.level) > 0) {
             // 인수 프롬프트
-            const acquireCost = calcAcquireCost(targetPos, stacked);
-            landPrompt = { type: 'acquire', pos: targetPos, cost: acquireCost, level: landData.level, stacked };
+            const acquireCost = calcAcquireCost(targetPos, landData.level);
+            landPrompt = { type: 'acquire', pos: targetPos, cost: acquireCost, level: landData.level };
           }
         }
       }
+
+      gameState.pendingLandAction = landPrompt
+        ? {
+            userId,
+            pos: targetPos,
+            type: landPrompt.type,
+            cost: landPrompt.cost,
+            level: landPrompt.level,
+          }
+        : null;
+      await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
 
       const moveEvent = {
         by: userId,
         pieceId,
         newPosition: piece.position,
-        movedPieceIds: carriedPieces.map((cp) => cp.id),
-        // M6: stackedPieces(piece_group_pct로 합류된 말) 포함
-        stackedPieceIds: stackedPieces.map((cp) => cp.id),
-        capturedPieceIds: capturedPieces.map((cp) => cp.id),
-        capturedCount: capturedPieces.length,
+        movedPieceIds: [piece.id],
         passedStart,
         landPrompt,
         specialEvent,
@@ -2153,23 +2171,8 @@ export const registerSocketHandlers = (io) => {
           await saveGameResult(roomCode, gameState.winner, opponentId, 'marble', 0).catch(() => {});
           await grantGameXpAndMissions(gameState.winner, opponentId, 'marble').catch(() => {});
         }
-      } else if (gameState.catchBonusPending) {
-        setTimeout(async () => {
-          try {
-            const latestText = await redis.get(marbleGameKey(roomCode));
-            if (!latestText) return;
-            const latestState = JSON.parse(latestText);
-            if (latestState.id !== gameState.id || !latestState.catchBonusPending) return;
-            latestState.catchBonusPending = false;
-            latestState.catchBonusUntil = null;
-            latestState.catchBonusTarget = null;
-            await redis.set(marbleGameKey(roomCode), JSON.stringify(latestState), "EX", 7200);
-            emitMarbleState(io, roomCode, "game:marble:state", latestState);
-          } catch (err) {
-            console.error(`marble catch bonus timeout error: ${err.message}`);
-          }
-        }, 15000);
       }
+      }); // withRoomLock
     });
 
     socket.on("game:marble:land_act", async (payload, ackRaw) => {
@@ -2181,30 +2184,41 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
+      await withRoomLock(roomCode, async () => {
       const gameText = await redis.get(marbleGameKey(roomCode));
       if (!gameText) { ack({ ok: false, reason: "no_game" }); return; }
       const gameState = JSON.parse(gameText);
 
       const { action, pos } = payload ?? {};
-      if (!['claim', 'upgrade', 'acquire', 'skip', 'catch_acquire', 'catch_skip'].includes(action) || pos == null) {
+      if (!['claim', 'upgrade', 'acquire', 'skip'].includes(action) || pos == null) {
         ack({ ok: false, reason: "invalid_payload" });
         return;
       }
 
       const posNum = Number(pos);
+      if (!Number.isInteger(posNum) || posNum < 0 || posNum >= 24) {
+        ack({ ok: false, reason: "invalid_payload" });
+        return;
+      }
+      const pendingAction = gameState.pendingLandAction;
+      if (!pendingAction || pendingAction.userId !== userId || pendingAction.pos !== posNum) {
+        ack({ ok: false, reason: "no_pending_land_action" });
+        return;
+      }
+      if (action !== 'skip' && action !== pendingAction.type) {
+        ack({ ok: false, reason: "invalid_land_action" });
+        return;
+      }
       const playerState = gameState.players[userId];
       if (!playerState) { ack({ ok: false, reason: "invalid_player" }); return; }
 
-      const stacked = playerState.pieces.filter(p => !p.finished && p.position === posNum).length > 1;
-
-      let landChanged = false;
       if (action === 'claim') {
-        const cost = calcAcquireCost(posNum, stacked);
+        const cost = calcPurchaseCost(posNum);
+        if (cost <= 0) { ack({ ok: false, reason: "invalid_land" }); return; }
         if (playerState.coins < cost) { ack({ ok: false, reason: "insufficient_coins" }); return; }
         if (gameState.lands[posNum]) { ack({ ok: false, reason: "already_claimed" }); return; }
         playerState.coins -= cost;
-        gameState.lands[posNum] = { owner: userId, level: stacked ? 2 : 1 };
-        landChanged = true;
+        gameState.lands[posNum] = { owner: userId, level: 1 };
       } else if (action === 'upgrade') {
         const land = gameState.lands[posNum];
         if (!land || land.owner !== userId) { ack({ ok: false, reason: "not_your_land" }); return; }
@@ -2213,48 +2227,25 @@ export const registerSocketHandlers = (io) => {
         if (playerState.coins < upgradeCost) { ack({ ok: false, reason: "insufficient_coins" }); return; }
         playerState.coins -= upgradeCost;
         land.level += 1;
-        landChanged = true;
       } else if (action === 'acquire') {
         const land = gameState.lands[posNum];
         if (!land || land.owner === userId) { ack({ ok: false, reason: "invalid_acquire" }); return; }
         if (land.level >= 4) { ack({ ok: false, reason: "max_level" }); return; }
-        const cost = calcAcquireCost(posNum, stacked);
+        const cost = calcAcquireCost(posNum, land.level);
+        if (cost <= 0) { ack({ ok: false, reason: "invalid_acquire" }); return; }
         if (playerState.coins < cost) { ack({ ok: false, reason: "insufficient_coins" }); return; }
         const prevOwnerId = land.owner;
         playerState.coins -= cost;
         gameState.players[prevOwnerId].coins += cost;
         land.owner = userId;
-        landChanged = true;
-      } else if (action === 'catch_acquire') {
-        if (!gameState.catchBonusPending) { ack({ ok: false, reason: "no_catch_bonus" }); return; }
-        const land = gameState.lands[posNum];
-        if (!land || land.owner === userId) { ack({ ok: false, reason: "invalid_acquire" }); return; }
-        if (land.level >= 4) { ack({ ok: false, reason: "max_level" }); return; }
-        const cost = calcAcquireCost(posNum, false); // 업기 아님
-        if (playerState.coins < cost) { ack({ ok: false, reason: "insufficient_coins" }); return; }
-        const prevOwnerId = land.owner;
-        playerState.coins -= cost;
-        gameState.players[prevOwnerId].coins += cost;
-        land.owner = userId;
-        landChanged = true;
-        gameState.catchBonusPending = false;
-        gameState.catchBonusUntil = null;
-        gameState.catchBonusTarget = null;
-      } else if (action === 'catch_skip') {
-        if (!gameState.catchBonusPending) { ack({ ok: false, reason: "no_catch_bonus" }); return; }
-        gameState.catchBonusPending = false;
-        gameState.catchBonusUntil = null;
-        gameState.catchBonusTarget = null;
       }
-      // 'skip' → 아무 변경 없음
+      gameState.pendingLandAction = null;
 
       // 승리 조건 재체크 (bankrupt 포함 — checkMarbleWin이 모두 체크)
-      if (landChanged) {
-        const winResult = checkMarbleWin(gameState);
-        if (winResult) {
-          gameState.winner = winResult.winner;
-          gameState.winReason = winResult.reason;
-        }
+      const winResult = checkMarbleWin(gameState);
+      if (winResult) {
+        gameState.winner = winResult.winner;
+        gameState.winReason = winResult.reason;
       }
 
       await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
@@ -2275,6 +2266,7 @@ export const registerSocketHandlers = (io) => {
         await saveGameResult(roomCode, gameState.winner, landActOpponentId, 'marble', 0).catch(() => {});
         await grantGameXpAndMissions(gameState.winner, landActOpponentId, 'marble').catch(() => {});
       }
+      }); // withRoomLock
     });
 
     socket.on("game:yut:chat", async (payload, ackRaw) => {
@@ -2286,7 +2278,7 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
-      const parsed = yutChatSchema.safeParse(payload);
+      const parsed = chatMessageSchema.safeParse(payload);
       if (!parsed.success) {
         ack({ ok: false, reason: "invalid_message" });
         return;
@@ -2318,7 +2310,7 @@ export const registerSocketHandlers = (io) => {
       const userId = socket.data.userId;
       if (!roomCode || !userId) { ack({ ok: false, reason: "not_joined" }); return; }
 
-      const parsed = yutChatSchema.safeParse(payload);
+      const parsed = chatMessageSchema.safeParse(payload);
       if (!parsed.success) { ack({ ok: false, reason: "invalid_message" }); return; }
 
       const gameText = await redis.get(marbleGameKey(roomCode));
@@ -2339,70 +2331,96 @@ export const registerSocketHandlers = (io) => {
         ack({ ok: false, reason: "not_joined" });
         return;
       }
-      const presence = getPresence(io, roomCode);
-      if (presence.length !== 2) {
-        ack({ ok: false, reason: "need_two_players" });
-        return;
-      }
-      const orderedPlayers = await getOrderedPlayers(roomCode, presence);
-      if (orderedPlayers.length !== 2) {
-        ack({ ok: false, reason: "need_two_players" });
-        return;
-      }
-      const gameState = initBlackjackGame(orderedPlayers[0], orderedPlayers[1]);
-      await redis.set(`game:${roomCode}:blackjack`, JSON.stringify(gameState), "EX", 3600);
-      io.to(roomCode).emit("game:blackjack:updated", gameState);
-      ack({ ok: true });
+      await withRoomLock(roomCode, async () => {
+        const presence = getPresence(io, roomCode);
+        if (presence.length !== 2) {
+          ack({ ok: false, reason: "need_two_players" });
+          return;
+        }
+        const orderedPlayers = await getOrderedPlayers(roomCode, presence);
+        if (orderedPlayers.length !== 2) {
+          ack({ ok: false, reason: "need_two_players" });
+          return;
+        }
+        const existing = await redis.get(`game:${roomCode}:blackjack`);
+        if (existing && JSON.parse(existing).status === 'playing') {
+          ack({ ok: false, reason: "game_in_progress" });
+          return;
+        }
+        const gameState = initBlackjackGame(orderedPlayers[0], orderedPlayers[1]);
+        await redis.set(`game:${roomCode}:blackjack`, JSON.stringify(gameState), "EX", 3600);
+        io.to(roomCode).emit("game:blackjack:updated", gameState);
+        ack({ ok: true });
+      });
     });
+
+    const runBlackjackAction = async (userId, roomCode, action, ack) => {
+      await withRoomLock(roomCode, async () => {
+        const raw = await redis.get(`game:${roomCode}:blackjack`);
+        if (!raw) {
+          ack({ ok: false, reason: "no_game" });
+          return;
+        }
+        const previousState = JSON.parse(raw);
+        const gameState = action(previousState, String(userId));
+        if (gameState === previousState) {
+          ack({ ok: false, reason: "invalid_action" });
+          return;
+        }
+        await redis.set(`game:${roomCode}:blackjack`, JSON.stringify(gameState), "EX", 3600);
+        io.to(roomCode).emit("game:blackjack:updated", gameState);
+        if (
+          previousState.status !== 'finished' &&
+          gameState.status === 'finished' &&
+          gameState.result?.winner &&
+          gameState.result.winner !== 'tie'
+        ) {
+          const loser = gameState.players.find((player) => player !== gameState.result.winner);
+          await saveGameResult(roomCode, gameState.result.winner, loser, 'blackjack', 0).catch(() => {});
+          grantGameXpAndMissions(gameState.result.winner, loser, 'blackjack').catch(() => {});
+        }
+        ack({ ok: true });
+      });
+    };
 
     socket.on("game:blackjack:hit", async (payload, ackRaw) => {
       const ack = normalizeAck(ackRaw);
       const roomCode = socket.data.roomCode;
       const userId = socket.data.userId;
-      if (!roomCode || !userId) {
-        ack({ ok: false, reason: "not_joined" });
-        return;
-      }
-      const raw = await redis.get(`game:${roomCode}:blackjack`);
-      if (!raw) {
-        ack({ ok: false, reason: "no_game" });
-        return;
-      }
-      let gameState = JSON.parse(raw);
-      gameState = hitBlackjack(gameState, String(userId));
-      await redis.set(`game:${roomCode}:blackjack`, JSON.stringify(gameState), "EX", 3600);
-      io.to(roomCode).emit("game:blackjack:updated", gameState);
-      if (gameState.status === 'finished' && gameState.result?.winner && gameState.result.winner !== 'draw') {
-        const loser = Object.keys(gameState.players).find(p => p !== gameState.result.winner);
-        await saveGameResult(roomCode, gameState.result.winner, loser, 'blackjack', 0).catch(() => {});
-        grantGameXpAndMissions(gameState.result.winner, loser, 'blackjack').catch(() => {});
-      }
-      ack({ ok: true });
+      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+      return runBlackjackAction(userId, roomCode, hitBlackjack, ack);
     });
 
     socket.on("game:blackjack:stand", async (payload, ackRaw) => {
       const ack = normalizeAck(ackRaw);
       const roomCode = socket.data.roomCode;
       const userId = socket.data.userId;
-      if (!roomCode || !userId) {
-        ack({ ok: false, reason: "not_joined" });
-        return;
-      }
-      const raw = await redis.get(`game:${roomCode}:blackjack`);
-      if (!raw) {
-        ack({ ok: false, reason: "no_game" });
-        return;
-      }
-      let gameState = JSON.parse(raw);
-      gameState = standBlackjack(gameState, String(userId));
-      await redis.set(`game:${roomCode}:blackjack`, JSON.stringify(gameState), "EX", 3600);
-      io.to(roomCode).emit("game:blackjack:updated", gameState);
-      if (gameState.status === 'finished' && gameState.result?.winner && gameState.result.winner !== 'draw') {
-        const loser = Object.keys(gameState.players).find(p => p !== gameState.result.winner);
-        await saveGameResult(roomCode, gameState.result.winner, loser, 'blackjack', 0).catch(() => {});
-        grantGameXpAndMissions(gameState.result.winner, loser, 'blackjack').catch(() => {});
-      }
-      ack({ ok: true });
+      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+      return runBlackjackAction(userId, roomCode, standBlackjack, ack);
+    });
+
+    socket.on("game:blackjack:dealer_hit", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+      return runBlackjackAction(userId, roomCode, hitBlackjackDealer, ack);
+    });
+
+    socket.on("game:blackjack:dealer_stand", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+      return runBlackjackAction(userId, roomCode, standBlackjackDealer, ack);
+    });
+
+    socket.on("game:blackjack:next_round", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+      return runBlackjackAction(userId, roomCode, nextBlackjackRound, ack);
     });
 
     socket.on("game:oldmaid:start", async (payload, ackRaw) => {
@@ -2413,20 +2431,27 @@ export const registerSocketHandlers = (io) => {
         ack({ ok: false, reason: "not_joined" });
         return;
       }
-      const presence = getPresence(io, roomCode);
-      if (presence.length !== 2) {
-        ack({ ok: false, reason: "need_two_players" });
-        return;
-      }
-      const orderedPlayers = await getOrderedPlayers(roomCode, presence);
-      if (orderedPlayers.length !== 2) {
-        ack({ ok: false, reason: "need_two_players" });
-        return;
-      }
-      const gameState = initOldMaidGame(orderedPlayers[0], orderedPlayers[1]);
-      await redis.set(`game:${roomCode}:oldmaid`, JSON.stringify(gameState), "EX", 3600);
-      io.to(roomCode).emit("game:oldmaid:updated", gameState);
-      ack({ ok: true });
+      await withRoomLock(roomCode, async () => {
+        const presence = getPresence(io, roomCode);
+        if (presence.length !== 2) {
+          ack({ ok: false, reason: "need_two_players" });
+          return;
+        }
+        const orderedPlayers = await getOrderedPlayers(roomCode, presence);
+        if (orderedPlayers.length !== 2) {
+          ack({ ok: false, reason: "need_two_players" });
+          return;
+        }
+        const existing = await redis.get(`game:${roomCode}:oldmaid`);
+        if (existing && JSON.parse(existing).status === 'playing') {
+          ack({ ok: false, reason: "game_in_progress" });
+          return;
+        }
+        const gameState = initOldMaidGame(orderedPlayers[0], orderedPlayers[1]);
+        await redis.set(`game:${roomCode}:oldmaid`, JSON.stringify(gameState), "EX", 3600);
+        await emitOldMaidState(io, roomCode, gameState);
+        ack({ ok: true });
+      });
     });
 
     socket.on("game:oldmaid:draw", async (payload, ackRaw) => {
@@ -2437,25 +2462,35 @@ export const registerSocketHandlers = (io) => {
         ack({ ok: false, reason: "not_joined" });
         return;
       }
-      const raw = await redis.get(`game:${roomCode}:oldmaid`);
-      if (!raw) {
-        ack({ ok: false, reason: "no_game" });
-        return;
-      }
       const cardId = payload?.cardId;
       if (!cardId) {
         ack({ ok: false, reason: "invalid_payload" });
         return;
       }
-      let gameState = JSON.parse(raw);
-      gameState = drawOldMaidCard(gameState, String(userId), String(cardId));
-      await redis.set(`game:${roomCode}:oldmaid`, JSON.stringify(gameState), "EX", 3600);
-      io.to(roomCode).emit("game:oldmaid:updated", gameState);
-      if (gameState.status === 'finished' && gameState.result?.winner) {
-        await saveGameResult(roomCode, gameState.result.winner, gameState.result.loser, 'oldmaid', 0).catch(() => {});
-        grantGameXpAndMissions(gameState.result.winner, gameState.result.loser, 'oldmaid').catch(() => {});
-      }
-      ack({ ok: true });
+      await withRoomLock(roomCode, async () => {
+        const raw = await redis.get(`game:${roomCode}:oldmaid`);
+        if (!raw) {
+          ack({ ok: false, reason: "no_game" });
+          return;
+        }
+        const previousState = JSON.parse(raw);
+        if (!previousState.players?.[String(userId)]) {
+          ack({ ok: false, reason: "not_a_player" });
+          return;
+        }
+        const gameState = drawOldMaidCard(previousState, String(userId), String(cardId));
+        if (gameState === previousState) {
+          ack({ ok: false, reason: "invalid_action" });
+          return;
+        }
+        await redis.set(`game:${roomCode}:oldmaid`, JSON.stringify(gameState), "EX", 3600);
+        await emitOldMaidState(io, roomCode, gameState);
+        if (previousState.status !== 'finished' && gameState.status === 'finished' && gameState.result?.winner) {
+          await saveGameResult(roomCode, gameState.result.winner, gameState.result.loser, 'oldmaid', 0).catch(() => {});
+          grantGameXpAndMissions(gameState.result.winner, gameState.result.loser, 'oldmaid').catch(() => {});
+        }
+        ack({ ok: true });
+      });
     });
 
     // ── Penalty Shootout ──────────────────────────────────────────────────
@@ -2464,10 +2499,15 @@ export const registerSocketHandlers = (io) => {
       const roomCode = socket.data.roomCode;
       const userId = socket.data.userId;
       if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+      await withRoomLock(roomCode, async () => {
       const presence = getPresence(io, roomCode);
       if (presence.length !== 2) return ack({ ok: false, reason: "need_two_players" });
       const orderedPlayers = await getOrderedPlayers(roomCode, presence);
       if (orderedPlayers.length !== 2) return ack({ ok: false, reason: "need_two_players" });
+      const existing = await redis.get(`game:${roomCode}:penalty`);
+      if (existing && JSON.parse(existing).status === 'playing') {
+        return ack({ ok: false, reason: "game_in_progress" });
+      }
 
       const gameState = {
         status: "playing",
@@ -2482,6 +2522,7 @@ export const registerSocketHandlers = (io) => {
       await redis.set(`game:${roomCode}:penalty`, JSON.stringify(gameState), "EX", 3600);
       io.to(roomCode).emit("game:penalty:updated", gameState);
       ack({ ok: true });
+      });
     });
 
     socket.on("game:penalty:submit", async (payload, ackRaw) => {
@@ -2489,14 +2530,20 @@ export const registerSocketHandlers = (io) => {
       const roomCode = socket.data.roomCode;
       const userId = socket.data.userId;
       if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+      await withRoomLock(roomCode, async () => {
       const raw = await redis.get(`game:${roomCode}:penalty`);
       if (!raw) return ack({ ok: false, reason: "no_game" });
 
-      let gameState = JSON.parse(raw);
+      const gameState = JSON.parse(raw);
       if (gameState.status !== "playing") return ack({ ok: false, reason: "finished" });
+      if (!Object.prototype.hasOwnProperty.call(gameState.scores ?? {}, String(userId))) {
+        return ack({ ok: false, reason: "not_a_player" });
+      }
 
       const choice = Number(payload?.choice);
-      if (!Number.isInteger(choice)) return ack({ ok: false, reason: "invalid_choice" });
+      if (!Number.isInteger(choice) || choice < 0 || choice > 8) {
+        return ack({ ok: false, reason: "invalid_choice" });
+      }
 
       gameState.submissions[String(userId)] = choice;
 
@@ -2552,6 +2599,7 @@ export const registerSocketHandlers = (io) => {
         await saveGameResult(roomCode, gameState.result.winner, loser, 'penalty', 0).catch(() => {});
       }
       ack({ ok: true });
+      });
     });
 
     // ── Bowling ───────────────────────────────────────────────────────────
@@ -2560,15 +2608,21 @@ export const registerSocketHandlers = (io) => {
       const roomCode = socket.data.roomCode;
       const userId = socket.data.userId;
       if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+      await withRoomLock(roomCode, async () => {
       const presence = getPresence(io, roomCode);
       if (presence.length !== 2) return ack({ ok: false, reason: "need_two_players" });
       const orderedPlayers = await getOrderedPlayers(roomCode, presence);
       if (orderedPlayers.length !== 2) return ack({ ok: false, reason: "need_two_players" });
+      const existing = await redis.get(`game:${roomCode}:bowling`);
+      if (existing && JSON.parse(existing).status === 'playing') {
+        return ack({ ok: false, reason: "game_in_progress" });
+      }
 
       const gameState = initBowlingGame(orderedPlayers[0], orderedPlayers[1]);
       await redis.set(`game:${roomCode}:bowling`, JSON.stringify(gameState), "EX", 3600);
       io.to(roomCode).emit("game:bowling:updated", withBowlingFrames(gameState));
       ack({ ok: true });
+      });
     });
 
     socket.on("game:bowling:roll", async (payload, ackRaw) => {
@@ -2576,16 +2630,21 @@ export const registerSocketHandlers = (io) => {
       const roomCode = socket.data.roomCode;
       const userId = socket.data.userId;
       if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+      await withRoomLock(roomCode, async () => {
       const raw = await redis.get(`game:${roomCode}:bowling`);
       if (!raw) return ack({ ok: false, reason: "no_game" });
 
-      let gameState = JSON.parse(raw);
+      const previousState = JSON.parse(raw);
+      if (!Object.prototype.hasOwnProperty.call(previousState.scores ?? {}, String(userId))) {
+        return ack({ ok: false, reason: "not_a_player" });
+      }
       const pins = Math.min(10, Math.max(0, Number(payload?.pins) || 0));
       const clampUnit = (v) => Math.min(1, Math.max(-1, Number(v) || 0));
-      gameState = rollBowlingFrame(gameState, String(userId), pins, {
+      const gameState = rollBowlingFrame(previousState, String(userId), pins, {
         aim: clampUnit(payload?.aim),
         curve: clampUnit(payload?.curve),
       });
+      if (gameState === previousState) return ack({ ok: false, reason: "invalid_action" });
 
       await redis.set(`game:${roomCode}:bowling`, JSON.stringify(gameState), "EX", 3600);
       io.to(roomCode).emit("game:bowling:updated", withBowlingFrames(gameState));
@@ -2594,6 +2653,7 @@ export const registerSocketHandlers = (io) => {
         await saveGameResult(roomCode, gameState.result.winner, loser, 'bowling', 0).catch(() => {});
       }
       ack({ ok: true });
+      });
     });
 
     socket.on("game:uno:new", async (payload, ackRaw) => {
@@ -2605,6 +2665,7 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
+      await withRoomLock(roomCode, async () => {
       const presence = getPresence(io, roomCode);
       if (presence.length !== 2) {
         ack({ ok: false, reason: "need_two_players" });
@@ -2621,6 +2682,12 @@ export const registerSocketHandlers = (io) => {
       const orderedPlayers = await getOrderedPlayers(roomCode, presence);
       if (orderedPlayers.length !== 2) {
         ack({ ok: false, reason: "need_two_players" });
+        return;
+      }
+
+      const existing = await redis.get(unoGameKey(roomCode));
+      if (existing) {
+        ack({ ok: false, reason: "game_in_progress" });
         return;
       }
 
@@ -2663,6 +2730,7 @@ export const registerSocketHandlers = (io) => {
       }
 
       ack({ ok: true });
+      }); // withRoomLock
     });
 
     socket.on("game:uno:play", async (payload, ackRaw) => {
@@ -3211,6 +3279,7 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
+      await withRoomLock(roomCode, async () => {
       const parsed = bombNewSchema.safeParse(payload || {});
       if (!parsed.success) {
         ack({ ok: false, reason: "invalid_payload" });
@@ -3229,6 +3298,12 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
+      const existing = await redis.get(bombGameKey(roomCode));
+      if (existing) {
+        ack({ ok: false, reason: "game_in_progress" });
+        return;
+      }
+
       const gameState = createBombGameState(orderedPlayers, parsed.data.duration);
       await redis.set(bombGameKey(roomCode), JSON.stringify(gameState), "EX", 300);
 
@@ -3242,6 +3317,7 @@ export const registerSocketHandlers = (io) => {
         },
       });
       ack({ ok: true, gameState });
+      }); // withRoomLock
     });
 
     socket.on("game:bomb:answer", async (payload, ackRaw) => {
@@ -3253,6 +3329,7 @@ export const registerSocketHandlers = (io) => {
         return;
       }
 
+      await withRoomLock(roomCode, async () => {
       const parsed = bombAnswerSchema.safeParse(payload);
       if (!parsed.success) {
         ack({ ok: false, reason: "invalid_payload" });
@@ -3312,6 +3389,7 @@ export const registerSocketHandlers = (io) => {
         passCount: gameState.passCount,
       });
       ack({ ok: true, nextPlayer: gameState.currentPlayer });
+      }); // withRoomLock
     });
 
     socket.on("game:restart:request", async (_, ackRaw) => {
@@ -3442,9 +3520,12 @@ export const registerSocketHandlers = (io) => {
         const { roomCode, userId } = socket.data;
         if (!roomCode) return ack({ error: "not_in_room" });
 
+        await withRoomLock(roomCode, async () => {
         // 로비 키는 game:lobby:start 처리 시 삭제되므로 presence에서 직접 players를 가져옴
         const players = await getOrderedPlayers(roomCode, getPresence(io, roomCode));
         if (players.length < 2) return ack({ error: "need_two_players" });
+        const existing = await redis.get(`game:${roomCode}:catch`);
+        if (existing) return ack({ error: "game_in_progress" });
 
         const maxRounds = Number.isInteger(payload?.maxRounds) && payload.maxRounds >= 2 && payload.maxRounds <= 20
           ? payload.maxRounds : 6;
@@ -3490,6 +3571,7 @@ export const registerSocketHandlers = (io) => {
         drawerSocket?.emit("game:catch:word", { word });
 
         ack({ ok: true });
+        });
       } catch (err) {
         console.error("game:catch:start error", err);
         ack({ error: "server_error" });
@@ -3515,6 +3597,8 @@ export const registerSocketHandlers = (io) => {
       try {
         const { roomCode, userId } = socket.data;
         if (!roomCode) return ack({ ok: false });
+
+        await withRoomLock(roomCode, async () => {
 
         const text = String(payload?.text || "").trim();
         if (!text) return ack({ ok: false });
@@ -3545,6 +3629,7 @@ export const registerSocketHandlers = (io) => {
         }
 
         ack({ ok: true });
+        });
       } catch (err) {
         console.error("game:catch:guess error", err);
         ack({ ok: false });
@@ -3556,6 +3641,8 @@ export const registerSocketHandlers = (io) => {
       try {
         const { roomCode, userId } = socket.data;
         if (!roomCode) return ack({ ok: false });
+
+        await withRoomLock(roomCode, async () => {
 
         const raw = await redis.get(`game:${roomCode}:catch`);
         if (!raw) return ack({ ok: false });
@@ -3576,6 +3663,7 @@ export const registerSocketHandlers = (io) => {
         // guesser(본인)에게만 전송
         socket.emit("game:catch:hint", { hint });
         ack({ ok: true });
+        });
       } catch (err) {
         console.error("game:catch:hint_req error", err);
         ack({ ok: false });
@@ -3588,6 +3676,8 @@ export const registerSocketHandlers = (io) => {
         const { roomCode, userId } = socket.data;
         if (!roomCode) return ack({ ok: false });
 
+        await withRoomLock(roomCode, async () => {
+
         const raw = await redis.get(`game:${roomCode}:catch`);
         if (!raw) return ack({ ok: false });
         const state = JSON.parse(raw);
@@ -3598,6 +3688,7 @@ export const registerSocketHandlers = (io) => {
 
         io.to(roomCode).emit("game:catch:timeout_result", { word: state.word });
         ack({ ok: true });
+        });
       } catch (err) {
         console.error("game:catch:timeout error", err);
         ack({ ok: false });
@@ -3610,9 +3701,14 @@ export const registerSocketHandlers = (io) => {
         const { roomCode, userId } = socket.data;
         if (!roomCode) return ack({ ok: false });
 
+        await withRoomLock(roomCode, async () => {
+
         const raw = await redis.get(`game:${roomCode}:catch`);
         if (!raw) return ack({ ok: false });
         const state = JSON.parse(raw);
+        if (state.phase !== "guessed" && state.phase !== "timeout") {
+          return ack({ ok: false, reason: "round_not_finished" });
+        }
 
         const nextRound = state.round + 1;
 
@@ -3672,6 +3768,7 @@ export const registerSocketHandlers = (io) => {
         drawerSocket?.emit("game:catch:word", { word });
 
         ack({ ok: true });
+        });
       } catch (err) {
         console.error("game:catch:next error", err);
         ack({ ok: false });
@@ -3684,9 +3781,11 @@ export const registerSocketHandlers = (io) => {
         const { roomCode, userId } = socket.data;
         if (!roomCode) return ack({ ok: false });
 
+        await withRoomLock(roomCode, async () => {
         await redis.del(`game:${roomCode}:catch`);
         io.to(roomCode).emit("game:catch:reset_done");
         ack({ ok: true });
+        });
       } catch (err) {
         console.error("game:catch:reset error", err);
         ack({ ok: false });
@@ -3705,6 +3804,7 @@ export const registerSocketHandlers = (io) => {
       const { roomCode, userId } = socket.data;
       if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
 
+      await withRoomLock(roomCode, async () => {
       const presence = getPresence(io, roomCode);
       if (presence.length !== 2) return ack({ ok: false, reason: "need_two_players" });
 
@@ -3716,10 +3816,13 @@ export const registerSocketHandlers = (io) => {
 
       const [p1, p2] = orderedPlayers;
       const stake = parsed.data?.stake ?? 0;
+      const existing = await redis.get(tankGameKey(roomCode));
+      if (existing) return ack({ ok: false, reason: "game_in_progress" });
       const state = createFortressState(p1, p2, { stake });
       await redis.set(tankGameKey(roomCode), JSON.stringify(state), "EX", 7200);
       io.to(roomCode).emit("game:tank:started", state);
       ack({ ok: true });
+      });
     });
 
     socket.on("game:tank:move", async (payload, ackRaw) => {
@@ -3731,6 +3834,7 @@ export const registerSocketHandlers = (io) => {
       const parsed = schema.safeParse(payload);
       if (!parsed.success) return ack({ ok: false, reason: "invalid_payload" });
 
+      await withRoomLock(roomCode, async () => {
       const raw = await redis.get(tankGameKey(roomCode));
       if (!raw) return ack({ ok: false, reason: "no_game" });
       const state = JSON.parse(raw);
@@ -3741,6 +3845,7 @@ export const registerSocketHandlers = (io) => {
       await redis.set(tankGameKey(roomCode), JSON.stringify(result.state), "EX", 7200);
       io.to(roomCode).emit("game:tank:updated", result.state);
       ack({ ok: true });
+      });
     });
 
     socket.on("game:tank:aim", async (payload, ackRaw) => {
@@ -3755,6 +3860,7 @@ export const registerSocketHandlers = (io) => {
       const parsed = schema.safeParse(payload);
       if (!parsed.success) return ack({ ok: false, reason: "invalid_payload" });
 
+      await withRoomLock(roomCode, async () => {
       const raw = await redis.get(tankGameKey(roomCode));
       if (!raw) return ack({ ok: false, reason: "no_game" });
       const state = JSON.parse(raw);
@@ -3766,6 +3872,7 @@ export const registerSocketHandlers = (io) => {
       // Aim updates go only to the shooter (others see on fire)
       socket.emit("game:tank:updated", result.state);
       ack({ ok: true });
+      });
     });
 
     socket.on("game:tank:weapon", async (payload, ackRaw) => {
@@ -3777,6 +3884,7 @@ export const registerSocketHandlers = (io) => {
       const parsed = schema.safeParse(payload);
       if (!parsed.success) return ack({ ok: false, reason: "invalid_payload" });
 
+      await withRoomLock(roomCode, async () => {
       const raw = await redis.get(tankGameKey(roomCode));
       if (!raw) return ack({ ok: false, reason: "no_game" });
       const state = JSON.parse(raw);
@@ -3787,6 +3895,7 @@ export const registerSocketHandlers = (io) => {
       await redis.set(tankGameKey(roomCode), JSON.stringify(result.state), "EX", 7200);
       io.to(roomCode).emit("game:tank:updated", result.state);
       ack({ ok: true });
+      });
     });
 
     socket.on("game:tank:fire", async (payload, ackRaw) => {
@@ -3794,6 +3903,7 @@ export const registerSocketHandlers = (io) => {
       const { roomCode, userId } = socket.data;
       if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
 
+      await withRoomLock(roomCode, async () => {
       const raw = await redis.get(tankGameKey(roomCode));
       if (!raw) return ack({ ok: false, reason: "no_game" });
       const state = JSON.parse(raw);
@@ -3821,12 +3931,11 @@ export const registerSocketHandlers = (io) => {
         io.to(roomCode).emit("game:tank:updated", result.state);
       }
       ack({ ok: true });
+      });
     });
 
     // ── 고스톱 (2인 맞고) ──────────────────────────────────────────────
     // 상대 손패 숨김이 필요하므로 per-viewer 직렬화로 개별 emit
-    const gostopGameKey = (rc) => `gostop:${rc}:game`;
-
     const emitGostop = (eventName, state) => {
       const roomCode = socket.data.roomCode;
       const room = io.sockets.adapter.rooms.get(roomCode);
@@ -3839,18 +3948,35 @@ export const registerSocketHandlers = (io) => {
       }
     };
 
-    // 종료 처리: 정산(올인 캡 내장) + 전적 저장 + ended emit
+    // 종료 처리: 지갑 정산이 성공한 뒤에만 게임 상태를 지운다.
+    // 실패하면 Redis에 pending 상태를 남겨 재시도할 수 있게 한다.
     const finishGostop = async (roomCode, state) => {
-      await redis.del(gostopGameKey(roomCode));
-      emitGostop("game:gostop:ended", state);
       const st = state.settlement;
       if (st && st.amount > 0) {
+        const gameRef = state.gameId ?? `gostop:${roomCode}:legacy:${state.turn ?? 0}`;
+        const wallet = await settleAndEmitWallet(
+          io, roomCode, st.winnerId, st.loserId, st.amount, gameRef,
+        );
+        if (!wallet.ok) {
+          const pending = {
+            ...state,
+            settlementStatus: 'pending',
+            settlementError: wallet.reason ?? 'wallet_settlement_failed',
+          };
+          await redis.set(gostopGameKey(roomCode), JSON.stringify(pending), "EX", 7200);
+          emitGostop("game:gostop:settlement_pending", pending);
+          return false;
+        }
+      }
+      if (st) {
         await Promise.all([
-          settleAndEmitWallet(io, roomCode, st.winnerId, st.loserId, st.amount, `gostop:${roomCode}:${Date.now()}`),
-          saveGameResult(roomCode, st.winnerId, st.loserId, 'gostop', st.amount),
+          saveGameResult(roomCode, st.winnerId, st.loserId, 'gostop', st.amount ?? 0),
           grantGameXpAndMissions(st.winnerId, st.loserId, 'gostop'),
         ]);
       }
+      await redis.del(gostopGameKey(roomCode));
+      emitGostop("game:gostop:ended", { ...state, settlementStatus: 'settled' });
+      return true;
     };
 
     // 나가리: 배수 이월 + 선 유지로 자동 재배분
@@ -3867,8 +3993,8 @@ export const registerSocketHandlers = (io) => {
           perPointBet: state.perPointBet,
           baseMultiplier: state.baseMultiplier,
           firstPlayerIdx: state.firstPlayerIdx,
+          gameId: state.gameId,
         });
-        next.firstPlayerIdx = state.firstPlayerIdx;
         if (next.phase === 'finished') {
           emitGostop("game:gostop:started", next);
           await finishGostop(roomCode, next);
@@ -3887,32 +4013,41 @@ export const registerSocketHandlers = (io) => {
       const { roomCode, userId } = socket.data;
       if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
 
-      const presence = getPresence(io, roomCode);
-      if (presence.length !== 2) return ack({ ok: false, reason: "need_two_players" });
+      await withRoomLock(roomCode, async () => {
+        const presence = getPresence(io, roomCode);
+        if (presence.length !== 2) return ack({ ok: false, reason: "need_two_players" });
 
-      const schema = z.object({
-        perPointBet: z.union([z.literal(100), z.literal(500), z.literal(1000)]).optional().default(100),
-      });
-      const parsed = schema.safeParse(payload ?? {});
-      if (!parsed.success) return ack({ ok: false, reason: "invalid_payload" });
+        const schema = z.object({
+          perPointBet: z.union([
+            z.literal(0), z.literal(100), z.literal(500), z.literal(1000),
+          ]).optional().default(100),
+        });
+        const parsed = schema.safeParse(payload ?? {});
+        if (!parsed.success) return ack({ ok: false, reason: "invalid_payload" });
 
-      const orderedPlayers = await getOrderedPlayers(roomCode, presence);
-      if (orderedPlayers.length !== 2) return ack({ ok: false, reason: "need_two_players" });
+        const existing = await redis.get(gostopGameKey(roomCode));
+        if (existing) return ack({ ok: false, reason: "game_in_progress" });
 
-      const [p1, p2] = orderedPlayers;
-      const state = createGostopGameState(p1, p2, { perPointBet: parsed.data.perPointBet });
-      state.firstPlayerIdx = state.currentPlayerIdx; // 나가리 선 유지용
+        const orderedPlayers = await getOrderedPlayers(roomCode, presence);
+        if (orderedPlayers.length !== 2) return ack({ ok: false, reason: "need_two_players" });
 
-      if (state.phase === 'finished') {
-        // 총통 즉시 승리
+        const [p1, p2] = orderedPlayers;
+        const state = createGostopGameState(p1, p2, {
+          perPointBet: parsed.data.perPointBet,
+          gameId: `gostop:${roomCode}:${Date.now()}:${Math.random().toString(36).slice(2)}`,
+        });
+
+        if (state.phase === 'finished') {
+          // 총통 즉시 승리
+          emitGostop("game:gostop:started", state);
+          await finishGostop(roomCode, state);
+          return ack({ ok: true });
+        }
+
+        await redis.set(gostopGameKey(roomCode), JSON.stringify(state), "EX", 7200);
         emitGostop("game:gostop:started", state);
-        await finishGostop(roomCode, state);
-        return ack({ ok: true });
-      }
-
-      await redis.set(gostopGameKey(roomCode), JSON.stringify(state), "EX", 7200);
-      emitGostop("game:gostop:started", state);
-      ack({ ok: true });
+        ack({ ok: true });
+      });
     });
 
     socket.on("game:gostop:play", async (payload, ackRaw) => {
@@ -3924,17 +4059,63 @@ export const registerSocketHandlers = (io) => {
       const parsed = schema.safeParse(payload);
       if (!parsed.success) return ack({ ok: false, reason: "invalid_payload" });
 
-      const raw = await redis.get(gostopGameKey(roomCode));
-      if (!raw) return ack({ ok: false, reason: "no_game" });
+      await withRoomLock(roomCode, async () => {
+        const raw = await redis.get(gostopGameKey(roomCode));
+        if (!raw) return ack({ ok: false, reason: "no_game" });
 
-      let result;
-      try {
-        result = playHandCard(JSON.parse(raw), userId, parsed.data.cardId);
-      } catch (err) {
-        return ack({ ok: false, reason: err.message });
-      }
-      await handleGostopResult(roomCode, result);
-      ack({ ok: true });
+        let result;
+        try {
+          result = playHandCard(JSON.parse(raw), userId, parsed.data.cardId);
+        } catch (err) {
+          return ack({ ok: false, reason: err.message });
+        }
+        await handleGostopResult(roomCode, result);
+        ack({ ok: true });
+      });
+    });
+
+    socket.on("game:gostop:shake", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const { roomCode, userId } = socket.data;
+      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+
+      const parsed = z.object({ decision: z.enum(["shake", "pass"]) }).safeParse(payload);
+      if (!parsed.success) return ack({ ok: false, reason: "invalid_payload" });
+
+      await withRoomLock(roomCode, async () => {
+        const raw = await redis.get(gostopGameKey(roomCode));
+        if (!raw) return ack({ ok: false, reason: "no_game" });
+        let result;
+        try {
+          result = declareShake(JSON.parse(raw), userId, parsed.data.decision);
+        } catch (err) {
+          return ack({ ok: false, reason: err.message });
+        }
+        await handleGostopResult(roomCode, result);
+        ack({ ok: true });
+      });
+    });
+
+    socket.on("game:gostop:bomb", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const { roomCode, userId } = socket.data;
+      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+
+      const parsed = z.object({ month: z.number().int().min(1).max(12) }).safeParse(payload);
+      if (!parsed.success) return ack({ ok: false, reason: "invalid_payload" });
+
+      await withRoomLock(roomCode, async () => {
+        const raw = await redis.get(gostopGameKey(roomCode));
+        if (!raw) return ack({ ok: false, reason: "no_game" });
+        let result;
+        try {
+          result = playBomb(JSON.parse(raw), userId, parsed.data.month);
+        } catch (err) {
+          return ack({ ok: false, reason: err.message });
+        }
+        await handleGostopResult(roomCode, result);
+        ack({ ok: true });
+      });
     });
 
     socket.on("game:gostop:pick", async (payload, ackRaw) => {
@@ -3946,17 +4127,19 @@ export const registerSocketHandlers = (io) => {
       const parsed = schema.safeParse(payload);
       if (!parsed.success) return ack({ ok: false, reason: "invalid_payload" });
 
-      const raw = await redis.get(gostopGameKey(roomCode));
-      if (!raw) return ack({ ok: false, reason: "no_game" });
+      await withRoomLock(roomCode, async () => {
+        const raw = await redis.get(gostopGameKey(roomCode));
+        if (!raw) return ack({ ok: false, reason: "no_game" });
 
-      let result;
-      try {
-        result = selectDeckCapture(JSON.parse(raw), userId, parsed.data.fieldCardId);
-      } catch (err) {
-        return ack({ ok: false, reason: err.message });
-      }
-      await handleGostopResult(roomCode, result);
-      ack({ ok: true });
+        let result;
+        try {
+          result = selectDeckCapture(JSON.parse(raw), userId, parsed.data.fieldCardId);
+        } catch (err) {
+          return ack({ ok: false, reason: err.message });
+        }
+        await handleGostopResult(roomCode, result);
+        ack({ ok: true });
+      });
     });
 
     socket.on("game:gostop:gostop", async (payload, ackRaw) => {
@@ -3968,17 +4151,38 @@ export const registerSocketHandlers = (io) => {
       const parsed = schema.safeParse(payload);
       if (!parsed.success) return ack({ ok: false, reason: "invalid_payload" });
 
-      const raw = await redis.get(gostopGameKey(roomCode));
-      if (!raw) return ack({ ok: false, reason: "no_game" });
+      await withRoomLock(roomCode, async () => {
+        const raw = await redis.get(gostopGameKey(roomCode));
+        if (!raw) return ack({ ok: false, reason: "no_game" });
 
-      let result;
-      try {
-        result = declareGoStop(JSON.parse(raw), userId, parsed.data.decision);
-      } catch (err) {
-        return ack({ ok: false, reason: err.message });
-      }
-      await handleGostopResult(roomCode, result);
-      ack({ ok: true });
+        let result;
+        try {
+          result = declareGoStop(JSON.parse(raw), userId, parsed.data.decision);
+        } catch (err) {
+          return ack({ ok: false, reason: err.message });
+        }
+        await handleGostopResult(roomCode, result);
+        ack({ ok: true });
+      });
+    });
+
+    socket.on("game:gostop:settlement_retry", async (_, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const { roomCode, userId } = socket.data;
+      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+
+      await withRoomLock(roomCode, async () => {
+        const raw = await redis.get(gostopGameKey(roomCode));
+        if (!raw) return ack({ ok: false, reason: "no_pending_settlement" });
+        const state = JSON.parse(raw);
+        if (state.phase !== 'finished' || state.settlementStatus !== 'pending') {
+          return ack({ ok: false, reason: "no_pending_settlement" });
+        }
+        const completed = await finishGostop(roomCode, state);
+        ack(completed
+          ? { ok: true }
+          : { ok: false, reason: 'wallet_settlement_failed' });
+      });
     });
 
     // 재접속 복원용 현재 상태 조회

@@ -200,4 +200,26 @@ void main() {
     expect(find.byType(Image), findsNothing);
     expect(find.byType(CustomPaint), findsWidgets);
   });
+
+  testWidgets('앞면을 길게 누르면 카드 상세 동작을 호출할 수 있다', (tester) async {
+    var longPresses = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: HwatuCard(
+            card: const {
+              'id': 'm8_animal',
+              'month': 8,
+              'type': 'animal',
+              'subtype': null,
+            },
+            onLongPress: () => longPresses++,
+          ),
+        ),
+      ),
+    );
+
+    await tester.longPress(find.byType(HwatuCard));
+    expect(longPresses, 1);
+  });
 }

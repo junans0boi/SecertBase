@@ -43,6 +43,7 @@ class HwatuCard extends StatelessWidget {
   final bool highlighted;
   final bool selected;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
 
   const HwatuCard({
     super.key,
@@ -51,6 +52,7 @@ class HwatuCard extends StatelessWidget {
     this.highlighted = false,
     this.selected = false,
     this.onTap,
+    this.onLongPress,
   });
 
   bool get _isBack => card == null || card!['id'] == 'back';
@@ -59,10 +61,11 @@ class HwatuCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final height = width * kHwatuCardHeightRatio;
     return Semantics(
-      button: onTap != null,
+      button: onTap != null || onLongPress != null,
       label: _semanticLabel(card),
       child: GestureDetector(
         onTap: onTap,
+        onLongPress: onLongPress,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 140),
           width: width,

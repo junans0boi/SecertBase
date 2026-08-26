@@ -110,22 +110,6 @@ export function movePiece(piece, steps) {
   return { position, lastPos: piece.position, passedStart, finished: false };
 }
 
-export function checkCatch(position, opponentPieces) {
-  if (position === 0) return [];
-  return opponentPieces.filter((p) => p.position === position && !p.finished);
-}
-
-export function getCarriedPieces(selectedPiece, playerPieces) {
-  if (selectedPiece.position === 0) return [selectedPiece];
-  return playerPieces.filter(
-    (piece) => !piece.finished && piece.position === selectedPiece.position,
-  );
-}
-
-export function recordCapture(gameState, capturedCount) {
-  if (capturedCount > 0) gameState.caughtOpponentThisTurn = true;
-}
-
 export function settleTurnAfterMove(gameState, userId) {
   if (gameState.pendingMoves.length > 0) {
     gameState.phase = 'moving';
@@ -133,17 +117,11 @@ export function settleTurnAfterMove(gameState, userId) {
   }
   if (gameState.hasDoubleRoll) {
     gameState.hasDoubleRoll = false;
-    gameState.caughtOpponentThisTurn = false;
     gameState.currentTurn = userId;
     gameState.phase = 'throwing';
     return;
   }
-  if (gameState.caughtOpponentThisTurn) {
-    gameState.caughtOpponentThisTurn = false;
-    gameState.currentTurn = userId;
-  } else {
-    gameState.currentTurn = getNextPlayer(gameState, userId);
-  }
+  gameState.currentTurn = getNextPlayer(gameState, userId);
   gameState.phase = 'throwing';
 }
 
@@ -152,6 +130,10 @@ export function calcToll(pos, level) {
   const data = CITY_DATA[pos];
   if (!data) return 0;
   return data.tolls[Math.min(level, data.tolls.length - 1)] ?? 0;
+}
+
+export function calcPurchaseCost(pos) {
+  return CITY_DATA[pos]?.price ?? 0;
 }
 
 // Acquisition cost = (price + sum of all buildCosts up to current level) × 2
@@ -170,6 +152,13 @@ export function calcUpgradeCost(pos, targetLevel) {
   const data = CITY_DATA[pos];
   if (!data || targetLevel < 1 || targetLevel > 3) return 0;
   return data.buildCosts[targetLevel - 1] ?? 0;
+}
+
+export function hasColorMonopoly(gameState, uid, pos) {
+  const data = CITY_DATA[pos];
+  if (!data || data.color === 'tourist') return false;
+  const group = COLOR_GROUPS[data.color];
+  return Boolean(group?.every((groupPos) => gameState.lands[groupPos]?.owner === uid));
 }
 
 // Total asset score for a player (coins + all invested land value)
@@ -253,16 +242,12 @@ export function createMarbleGameState(player1, player2, options = {}) {
     phase: 'roll_order',
     currentTurn: null,
     characters: options.characters ?? {},
-    bgm: options.bgm ?? null,
     startRolls: {},
     orderCountdownUntil: null,
     pendingMoves: [],
     hasDoubleRoll: false,
     consecutiveDoubles: 0,
-    caughtOpponentThisTurn: false,
-    catchBonusPending: false,
-    catchBonusBy: null,
-    catchBonusUntil: null,
+    pendingLandAction: null,
     gateActivated: null,  // uid with pending gate move
     oddEvenItems: { [player1]: 0, [player2]: 0 },
     winner: null,
@@ -278,16 +263,12 @@ export function serializeMarbleGame(gameState) {
     phase: gameState.phase,
     currentTurn: gameState.currentTurn,
     characters: gameState.characters ?? {},
-    bgm: gameState.bgm ?? null,
     startRolls: gameState.startRolls ?? {},
     orderCountdownUntil: gameState.orderCountdownUntil ?? null,
     pendingMoves: gameState.pendingMoves,
     hasDoubleRoll: gameState.hasDoubleRoll ?? false,
     consecutiveDoubles: gameState.consecutiveDoubles ?? 0,
-    catchBonusPending: gameState.catchBonusPending,
-    catchBonusBy: gameState.catchBonusBy ?? null,
-    catchBonusUntil: gameState.catchBonusUntil ?? null,
-    catchBonusTarget: gameState.catchBonusTarget ?? null,
+    pendingLandAction: gameState.pendingLandAction ?? null,
     lastRoll: gameState.lastRoll ?? null,
     winner: gameState.winner,
     winReason: gameState.winReason ?? null,

@@ -69,6 +69,48 @@ const UNO_STATE = JSON.stringify({
   drawStack: 0,
 });
 
+const MARBLE_STATE = JSON.stringify({
+  id: 'marble-1',
+  playersOrder: ['user1', 'user2'],
+  phase: 'throwing',
+  currentTurn: 'user1',
+  players: {
+    user1: { pieces: [{ id: 0, position: 3, finished: false }], coins: 4_500_000 },
+    user2: { pieces: [{ id: 0, position: 12, finished: false }], coins: 5_000_000 },
+  },
+  lands: {},
+});
+
+const GOSTOP_STATE = JSON.stringify({
+  gameId: 'gostop-test-1',
+  phase: 'playing',
+  players: ['user1', 'user2'],
+  currentPlayerIdx: 0,
+  firstPlayerIdx: 0,
+  deck: [{ id: 'm9_junk_1', month: 9, type: 'junk', subtype: null }],
+  field: [{ id: 'm3_junk_1', month: 3, type: 'junk', subtype: null }],
+  hands: {
+    user1: [{ id: 'm2_ribbon', month: 2, type: 'ribbon', subtype: 'red' }],
+    user2: [{ id: 'm4_animal', month: 4, type: 'animal', subtype: null }],
+  },
+  captures: { user1: [], user2: [] },
+  goCount: { user1: 0, user2: 0 },
+  baseMultiplier: 1,
+  shakeMultiplier: 1,
+  bombMultiplier: 1,
+  shakers: [],
+  shakeQueue: [],
+  shakePlayerId: null,
+  lastEvents: [],
+  pending: null,
+  scores: { user1: { total: 0 }, user2: { total: 0 } },
+  winner: null,
+  loser: null,
+  settlement: null,
+  turn: 1,
+  perPointBet: 100,
+});
+
 function buildServer(redis) {
   const httpServer = createServer();
   const io = new Server(httpServer, { transports: ['websocket'] });
@@ -276,6 +318,60 @@ test('UNO resume exposes only the joining user hand, not partner hand', async ()
     assert.ok(s.handCount, 'handCount must be present');
     assert.equal(s.handCount.user1, 2, 'user1 hand count must be correct');
     assert.equal(s.handCount.user2, 1, 'user2 hand count must be correct');
+  } finally {
+    cA.disconnect(); cB.disconnect();
+    await io.close(); await new Promise((r) => httpServer.close(r));
+  }
+});
+
+test('active marble with viewer A → B lobby join returns resumed', async () => {
+  const redis = new FakeRedis({ [`marble:${roomCode}:game`]: MARBLE_STATE });
+  const { httpServer, io } = buildServer(redis);
+  await listen(httpServer);
+  const url = `http://127.0.0.1:${httpServer.address().port}`;
+  const cA = await connect(url, 1);
+  const cB = await connect(url, 2);
+  try {
+    await sessionJoin(cA);
+    await sessionJoin(cB);
+    await sessionEnter(cA, 'marble');
+
+    const result = await lobbyJoin(cB, 'marble');
+    assert.equal(result.ok, true);
+    assert.equal(result.status, 'resumed', `expected resumed, got ${result.status}`);
+    assert.equal(result.gameType, 'marble');
+    assert.equal(result.state.phase, 'throwing');
+    assert.deepEqual(result.state.players, ['user1', 'user2']);
+    assert.ok(await redis.get(`marble:${roomCode}:game`), 'game state must be preserved');
+  } finally {
+    cA.disconnect(); cB.disconnect();
+    await io.close(); await new Promise((r) => httpServer.close(r));
+  }
+});
+
+test('GoStop resume exposes only the joining user hand and keeps the game state', async () => {
+  const redis = new FakeRedis({ [`gostop:${roomCode}:game`]: GOSTOP_STATE });
+  const { httpServer, io } = buildServer(redis);
+  await listen(httpServer);
+  const url = `http://127.0.0.1:${httpServer.address().port}`;
+  const cA = await connect(url, 1);
+  const cB = await connect(url, 2);
+  try {
+    await sessionJoin(cA);
+    await sessionJoin(cB);
+    await sessionEnter(cA, 'gostop');
+
+    const result = await lobbyJoin(cB, 'gostop');
+    assert.equal(result.status, 'resumed');
+    assert.equal(result.gameType, 'gostop');
+    assert.deepEqual(result.state.hands.user1, [
+      { id: 'back' },
+    ]);
+    assert.deepEqual(result.state.hands.user2, [
+      { id: 'm4_animal', month: 4, type: 'animal', subtype: null },
+    ]);
+    assert.equal(result.state.shakeQueue, undefined);
+    assert.ok(await redis.get(`gostop:${roomCode}:game`));
   } finally {
     cA.disconnect(); cB.disconnect();
     await io.close(); await new Promise((r) => httpServer.close(r));

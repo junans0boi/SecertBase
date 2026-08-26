@@ -294,6 +294,8 @@ class _YutScreenState extends State<YutScreen> {
                 lastResultName: sock.yutLastThrow,
                 lastThrowAt: sock.yutLastThrowAt,
                 lastThrowNak: sock.yutLastNak,
+                lastCapturedCount: sock.yutLastCapturedCount,
+                lastCaptureBlockedCount: sock.yutLastCaptureBlockedCount,
                 p1Character: _characterFor(p1),
                 p2Character: _characterFor(p2),
                 onThrowResultRevealed: _playThrowResultAudio,
@@ -360,19 +362,22 @@ class _YutScreenState extends State<YutScreen> {
                   ],
                 ),
               ),
-          if (_itemEffects.isNotEmpty)
-            Positioned(
-              top: 70,
-              left: 0,
-              right: 0,
-              child: IgnorePointer(
-                child: Column(
-                  children: _itemEffects
-                      .map((e) => _ItemEffectBadge(stat: e.stat, amount: e.amount))
-                      .toList(),
+            if (_itemEffects.isNotEmpty)
+              Positioned(
+                top: 70,
+                left: 0,
+                right: 0,
+                child: IgnorePointer(
+                  child: Column(
+                    children: _itemEffects
+                        .map(
+                          (e) =>
+                              _ItemEffectBadge(stat: e.stat, amount: e.amount),
+                        )
+                        .toList(),
+                  ),
                 ),
               ),
-            ),
           ],
         ),
       ),
@@ -582,7 +587,9 @@ class _ItemEffectBadge extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.78),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFFFFBE32).withValues(alpha: 0.6)),
+          border: Border.all(
+            color: const Color(0xFFFFBE32).withValues(alpha: 0.6),
+          ),
         ),
         child: Text(
           _message(stat, amount),

@@ -114,6 +114,7 @@ class SocketService extends ChangeNotifier {
   String? yutLastMoveBy;
   int? yutLastMoveAt;
   int yutLastCapturedCount = 0;
+  int yutLastCaptureBlockedCount = 0;
   int yutLastCarriedCount = 0;
   int yutLastStackedCount = 0;
   int? yutOrderCountdownUntil;
@@ -136,10 +137,6 @@ class SocketService extends ChangeNotifier {
   String? marbleWinner;
   String? marbleWinReason;
   bool marbleHasDoubleRoll = false;
-  bool marbleCatchBonusPending = false;
-
-  /// H2: 잡기를 수행한 플레이어 uid (턴 전환에 독립적)
-  String? marbleCatchBonusBy;
   List<dynamic> marblePendingMoves = [];
   Map<String, dynamic> marbleStartRolls = {};
   int? marbleOrderCountdownUntil;
@@ -155,8 +152,6 @@ class SocketService extends ChangeNotifier {
   Map<String, String> marbleCharacters = {};
   Map<String, dynamic>? marbleLastRoll; // {dice1, dice2, total, isDouble}
   int? marbleLastRollAt;
-  int? marbleCatchBonusUntil;
-  String? marbleCatchBonusTarget;
   Map<String, Map<String, dynamic>> marbleEquippedItems = {};
 
   // uno
@@ -250,6 +245,8 @@ class SocketService extends ChangeNotifier {
   Map<String, dynamic>? gostopState; // 내 시점 직렬화 (상대 손패 숨김)
   Map<String, dynamic>? gostopSettlement; // 정산 결과 (finished 시)
   int? gostopNageoriMultiplier; // 나가리 발생 시 이월 배수 알림
+  String? gostopError;
+  bool gostopSettlementPending = false;
 
   // 드로잉 데이터는 콜백으로 직접 처리 (ChangeNotifier 우회 → 성능)
   Function(Map<String, dynamic>)? _onCatchDraw;
@@ -259,7 +256,144 @@ class SocketService extends ChangeNotifier {
   final List<String> _logs = [];
   List<String> get logs => List.unmodifiable(_logs);
 
+  void _resetGameState() {
+    lastDice = null;
+    lastRoulette = null;
+    rpsResult = null;
+    rpsChoices = null;
+    telepathySuccess = null;
+    telepathySelected = null;
+    telepathyChoices = null;
+    rpsMode = null;
+    rpsActive = false;
+    rpsPlayers = [];
+    rpsScores = {};
+    rpsRound = 0;
+    rpsMukjippaPhase = null;
+    rpsMukjippaAttacker = null;
+    rpsLastChoices = null;
+    rpsLastFingers = null;
+    rpsLastGuesses = null;
+    rpsLastTotal = null;
+    rpsRoundWinner = null;
+    rpsGameWinner = null;
+    rpsRoundHistory = [];
+    pirateActive = false;
+    pirateCurrentTurn = null;
+    piratePickedSlots = [];
+    pirateLoser = null;
+    pirateBombSlot = null;
+    piratePlayers = [];
+    yutActive = false;
+    yutGameId = null;
+    yutPhase = null;
+    yutCurrentTurn = null;
+    yutLastThrow = null;
+    yutLastNak = false;
+    yutWinner = null;
+    yutCharacters = {};
+    yutBgm = null;
+    yutLastThrowBy = null;
+    yutLastThrowAt = null;
+    yutLastMoveBy = null;
+    yutLastMoveAt = null;
+    yutLastCapturedCount = 0;
+    yutLastCarriedCount = 0;
+    yutLastStackedCount = 0;
+    yutOrderCountdownUntil = null;
+    yutEquippedItems = {};
+    yutPendingMoves = [];
+    yutHasBonusThrow = false;
+    yutStartRolls = {};
+    yutPlayers = [];
+    yutPieces = {};
+    yutPieceDetails = {};
+    yutChatMessages = [];
+    marbleActive = false;
+    marbleGameId = null;
+    marblePhase = null;
+    marbleCurrentTurn = null;
+    marbleWinner = null;
+    marbleWinReason = null;
+    marbleHasDoubleRoll = false;
+    marblePendingMoves = [];
+    marbleStartRolls = {};
+    marbleOrderCountdownUntil = null;
+    marblePlayers = [];
+    marblePieceDetails = {};
+    marbleLands = {};
+    marbleCoins = {};
+    marbleRound = 1;
+    marbleLandPrompt = null;
+    marbleCharacters = {};
+    marbleLastRoll = null;
+    marbleLastRollAt = null;
+    marbleEquippedItems = {};
+    unoActive = false;
+    unoCurrentPlayer = null;
+    unoTopCard = null;
+    unoTopCardMap = null;
+    unoDeclaredColor = null;
+    unoP1Count = null;
+    unoP2Count = null;
+    unoPlayers = [];
+    unoHand = [];
+    unoWinner = null;
+    unoEquippedItems = {};
+    unoPendingCall = false;
+    unoCatchable = false;
+    unoDrawChoiceCard = null;
+    unoCanPlayDrawn = false;
+    unoDrawStack = 0;
+    unoDrawStackType = null;
+    unoLastSpecialCard = null;
+    unoLastSpecialBy = null;
+    unoLastSpecialAt = null;
+    unoReactionType = null;
+    unoReactionBy = null;
+    unoReactionAt = null;
+    bombActive = false;
+    bombCurrentPlayer = null;
+    bombQuestion = null;
+    bombCategory = null;
+    bombDuration = null;
+    bombStartTime = null;
+    bombLoser = null;
+    bombLastAnswerCorrect = null;
+    bombPassCount = 0;
+    catchActive = false;
+    catchDrawer = null;
+    catchWord = null;
+    catchWordLen = 0;
+    catchRound = 0;
+    catchMaxRounds = 6;
+    catchScores = {};
+    catchPhase = null;
+    catchGameWinner = null;
+    catchHint = null;
+    catchGuessLog = [];
+    blackjackActive = false;
+    blackjackState = null;
+    oldmaidActive = false;
+    oldmaidState = null;
+    penaltyActive = false;
+    penaltyState = null;
+    bowlingActive = false;
+    bowlingState = null;
+    tankActive = false;
+    tankState = null;
+    tankLastShot = null;
+    tankWinner = null;
+    gostopActive = false;
+    gostopState = null;
+    gostopSettlement = null;
+    gostopNageoriMultiplier = null;
+    gostopError = null;
+    gostopSettlementPending = false;
+  }
+
   void connect(String url, String token) {
+    _resetGameState();
     _socket?.dispose();
     _socket = null;
     isConnected = false;
@@ -582,6 +716,10 @@ class SocketService extends ChangeNotifier {
     socket.on('game:yut:started', (data) {
       _applyYutState(_m(data));
       yutWinner = null;
+      yutLastCapturedCount = 0;
+      yutLastCaptureBlockedCount = 0;
+      yutLastCarriedCount = 0;
+      yutLastStackedCount = 0;
       restartWaiting = false;
       _log('윷놀이 시작 - 턴: $yutCurrentTurn');
       notifyListeners();
@@ -602,6 +740,8 @@ class SocketService extends ChangeNotifier {
       yutLastThrowBy = map['by'] as String?;
       yutLastThrowAt =
           (map['at'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch;
+      yutLastCapturedCount = 0;
+      yutLastCaptureBlockedCount = 0;
       _log('윷 결과: $yutLastThrow - 다음 턴: $yutCurrentTurn');
       notifyListeners();
     });
@@ -613,6 +753,8 @@ class SocketService extends ChangeNotifier {
       yutLastMoveAt =
           (map['at'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch;
       yutLastCapturedCount = (map['capturedCount'] as num?)?.toInt() ?? 0;
+      yutLastCaptureBlockedCount =
+          (map['captureBlockedCount'] as num?)?.toInt() ?? 0;
       yutLastCarriedCount = (map['carriedCount'] as num?)?.toInt() ?? 0;
       yutLastStackedCount = (map['stackedCount'] as num?)?.toInt() ?? 0;
       if (map['winner'] != null) {
@@ -1031,6 +1173,8 @@ class SocketService extends ChangeNotifier {
       gostopState = _m(data);
       gostopSettlement = null;
       gostopNageoriMultiplier = null;
+      gostopError = null;
+      gostopSettlementPending = false;
       gostopActive = true;
       _log('고스톱 시작');
       notifyListeners();
@@ -1038,7 +1182,18 @@ class SocketService extends ChangeNotifier {
 
     socket.on('game:gostop:updated', (data) {
       gostopState = _m(data);
+      gostopSettlementPending = gostopState?['settlementStatus'] == 'pending';
       _log('고스톱 상태 업데이트');
+      notifyListeners();
+    });
+
+    socket.on('game:gostop:settlement_pending', (data) {
+      gostopState = _m(data);
+      gostopSettlement = _m(gostopState?['settlement']);
+      gostopSettlementPending = true;
+      gostopActive = true;
+      gostopError = '코인 정산이 완료되지 않았습니다. 다시 시도해 주세요.';
+      _log('고스톱 지갑 정산 대기');
       notifyListeners();
     });
 
@@ -1046,6 +1201,8 @@ class SocketService extends ChangeNotifier {
       gostopState = _m(data);
       gostopSettlement = _m(gostopState?['settlement']);
       gostopActive = false;
+      gostopSettlementPending = false;
+      gostopError = null;
       _log('고스톱 종료: 승자 ${gostopState?['winner']}');
       notifyListeners();
     });
@@ -1222,6 +1379,7 @@ class SocketService extends ChangeNotifier {
   }
 
   void disconnect() {
+    _resetGameState();
     _socket?.dispose();
     _socket = null;
     isConnected = false;
@@ -1256,6 +1414,7 @@ class SocketService extends ChangeNotifier {
     yutLastMoveBy = null;
     yutLastMoveAt = null;
     yutLastCapturedCount = 0;
+    yutLastCaptureBlockedCount = 0;
     yutLastCarriedCount = 0;
     yutLastStackedCount = 0;
     unoActive = false;
@@ -1634,6 +1793,18 @@ class SocketService extends ChangeNotifier {
     _socket?.emit('game:blackjack:stand', {});
   }
 
+  void dealerHitBlackjack() {
+    _socket?.emit('game:blackjack:dealer_hit', {});
+  }
+
+  void dealerStandBlackjack() {
+    _socket?.emit('game:blackjack:dealer_stand', {});
+  }
+
+  void nextBlackjackRound() {
+    _socket?.emit('game:blackjack:next_round', {});
+  }
+
   // ── oldmaid (도둑잡기) ──────────────────────────────────────────────────
 
   void startOldMaid() {
@@ -1708,8 +1879,15 @@ class SocketService extends ChangeNotifier {
       ack: (r) {
         final map = _m(r);
         if (map['ok'] != true) {
+          gostopError =
+              map['reason']?.toString() ??
+              map['error']?.toString() ??
+              '요청 처리에 실패했습니다.';
           _log('$event 실패: ${map['reason'] ?? map['error']}');
+        } else {
+          gostopError = null;
         }
+        notifyListeners();
       },
     );
   }
@@ -1725,6 +1903,20 @@ class SocketService extends ChangeNotifier {
 
   void declareGostop(String decision) =>
       _gostopEmit('game:gostop:gostop', {'decision': decision});
+
+  void declareGostopShake(String decision) =>
+      _gostopEmit('game:gostop:shake', {'decision': decision});
+
+  void playGostopBomb(int month) =>
+      _gostopEmit('game:gostop:bomb', {'month': month});
+
+  void retryGostopSettlement() =>
+      _gostopEmit('game:gostop:settlement_retry', null);
+
+  void clearGostopError() {
+    gostopError = null;
+    notifyListeners();
+  }
 
   void clearGostopNageori() {
     gostopNageoriMultiplier = null;
@@ -1840,24 +2032,22 @@ class SocketService extends ChangeNotifier {
 
   // ─── marble emit ─────────────────────────────────────────────────────────────
 
-  void newMarbleGame({Map<String, String>? characters, String? bgm}) {
+  void newMarbleGame({Map<String, String>? characters}) {
     final payload = <String, dynamic>{};
     if (characters != null && characters.isNotEmpty) {
       payload['characters'] = characters;
     }
-    if (bgm != null) payload['bgm'] = bgm;
     _socket?.emit('game:marble:new', payload);
   }
 
   void rollMarbleStartDice() => _socket?.emit('game:marble:roll_start');
   void rollMarble() => _socket?.emit('game:marble:roll');
 
-  void moveMarble(int pieceId, {int moveIndex = 0, int? backdoDir}) {
+  void moveMarble(int pieceId, {int moveIndex = 0}) {
     final payload = <String, dynamic>{
       'pieceId': pieceId,
       'moveIndex': moveIndex,
     };
-    if (backdoDir != null) payload['backdoDir'] = backdoDir;
     _socket?.emit('game:marble:move', payload);
   }
 
@@ -1957,6 +2147,10 @@ class SocketService extends ChangeNotifier {
         unoCanPlayDrawn = unoDrawChoiceCard != null;
         _log('UNO 복원');
       }
+      if (games.containsKey('gostop')) {
+        _applyGostopState(_m(games['gostop']));
+        _log('고스톱 복원');
+      }
       if (games.containsKey('bomb')) {
         final bomb = _m(games['bomb']);
         bombActive = true;
@@ -1964,18 +2158,24 @@ class SocketService extends ChangeNotifier {
         bombDuration = (bomb['timer'] as num?)?.toInt();
         _log('폭탄 복원');
       }
-      // M3: 마블윷 게임 복원
+      // 마블 게임 복원
       if (games.containsKey('marble')) {
-        final myt = _m(games['marble']);
-        _applyMarbleState(myt);
-        // H3: 재접속 시 이미 처리된 landPrompt가 재팝업되지 않도록 초기화
-        marbleLandPrompt = null;
-        _log('마블윷 복원');
+        _applyMarbleState(_m(games['marble']));
+        _log('마블 작전 복원');
       }
     } catch (e, stack) {
       _log('게임 복원 중 에러 발생: $e\n$stack');
     }
     notifyListeners();
+  }
+
+  void _applyGostopState(Map<String, dynamic> map) {
+    gostopState = map;
+    gostopSettlement = map['settlement'] is Map
+        ? Map<String, dynamic>.from(map['settlement'] as Map)
+        : null;
+    gostopSettlementPending = map['settlementStatus'] == 'pending';
+    gostopActive = map['phase'] != 'finished' || gostopSettlementPending;
   }
 
   void _log(String msg) {
@@ -2059,16 +2259,18 @@ class SocketService extends ChangeNotifier {
     marbleCurrentTurn = map['currentTurn'] as String?;
     marbleCharacters = _stringMap(map['characters']);
     marbleHasDoubleRoll = map['hasDoubleRoll'] == true;
-    marbleCatchBonusPending = map['catchBonusPending'] == true;
-    marbleCatchBonusUntil = (map['catchBonusUntil'] as num?)?.toInt();
-    marbleCatchBonusTarget = map['catchBonusTarget'] as String?;
-    // H2: 잡기 수행자 저장 — 턴 전환이 일어나독 팔업 트리거 가능
-    marbleCatchBonusBy = map['catchBonusBy'] as String?;
     marbleOrderCountdownUntil = (map['orderCountdownUntil'] as num?)?.toInt();
     marbleStartRolls = _m(map['startRolls'] ?? marbleStartRolls);
     final pending = map['pendingMoves'];
     marblePendingMoves = pending is List ? List<dynamic>.from(pending) : [];
     marbleRound = (map['round'] as num?)?.toInt() ?? marbleRound;
+    final pendingLand = _m(map['pendingLandAction']);
+    if (pendingLand['userId'] == userId) {
+      marbleLandPrompt = Map<String, dynamic>.from(pendingLand)
+        ..remove('userId');
+    } else if (map.containsKey('pendingLandAction') && pendingLand.isEmpty) {
+      marbleLandPrompt = null;
+    }
     if (map['winner'] != null) {
       marbleWinner = map['winner'] as String?;
       marbleWinReason = map['winReason'] as String?;
