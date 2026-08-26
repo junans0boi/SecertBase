@@ -1,5 +1,9 @@
--- 동일 사용자의 같은 거래 재시도가 한 번만 기록되도록 보장한다.
--- shop/gacha ref_id는 여러 사용자가 공유하므로 user_id를 함께 사용해야 한다.
--- ref_id가 NULL인 일일 보너스 등 기존 거래는 MariaDB UNIQUE 규칙상 제약의 대상이 아니다.
-CREATE UNIQUE INDEX IF NOT EXISTS uq_wallet_user_ref_reason
-  ON wallet_transactions (user_id, ref_id, reason);
+-- 게임 정산 재시도만 한 번 기록되도록 보장한다.
+-- shop/gacha ref_id는 여러 사용자가 반복해서 공유하므로 전체 거래에는 적용하지 않는다.
+-- 게임 거래가 아니면 generated column이 NULL이 되어 UNIQUE 제약에서 제외된다.
+ALTER TABLE wallet_transactions
+  ADD COLUMN IF NOT EXISTS game_ref_id VARCHAR(100)
+    AS (IF(reason IN ('game_win', 'game_loss'), ref_id, NULL)) VIRTUAL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_wallet_game_ref_reason
+  ON wallet_transactions (game_ref_id, reason);
