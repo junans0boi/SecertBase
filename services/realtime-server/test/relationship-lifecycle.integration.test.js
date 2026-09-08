@@ -114,6 +114,13 @@ test(
       assert.equal(beforeSeparation.status, 200, JSON.stringify(beforeSeparationBody));
       assert.equal(beforeSeparationBody.status, 'ready');
 
+      const staleAttemptResponse = await server.request(
+        '/relationship/couple-assessments/conflict_repair/attempt',
+        { token: one.token, method: 'POST' },
+      );
+      const staleAttemptBody = await staleAttemptResponse.json();
+      assert.equal(staleAttemptResponse.status, 201, JSON.stringify(staleAttemptBody));
+
       const separated = await server.request('/user/partner', {
         token: one.token,
         method: 'DELETE',
@@ -126,6 +133,13 @@ test(
       );
       assert.equal(personalAfterSeparation.status, 200);
       assert.ok((await personalAfterSeparation.json()).result);
+
+      const staleAnswer = await server.request(
+        `/relationship/assessment-attempts/${staleAttemptBody.attempt.id}/answers/q01`,
+        { token: one.token, method: 'PATCH', body: { value: 4 } },
+      );
+      assert.equal(staleAnswer.status, 409, await staleAnswer.text());
+      assert.equal((await staleAnswer.json()).reason, 'active_couple_required');
 
       for (const path of [
         '/relationship/couple-assessment-results/conflict_repair/current',

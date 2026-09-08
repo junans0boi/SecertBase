@@ -117,9 +117,18 @@ class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
         return;
       }
       final result = await widget.api.submit(attempt.id);
+      ExplanationState? explanation;
+      try {
+        explanation = await widget.api.fetchPersonalExplanation(
+          widget.assessment.code,
+        );
+      } catch (_) {
+        // The deterministic result remains usable when explanation status cannot load.
+      }
       if (!mounted) return;
       setState(() {
         _result = result;
+        _explanationState = explanation;
         _submitting = false;
       });
     } catch (error) {

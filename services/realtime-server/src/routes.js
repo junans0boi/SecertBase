@@ -1009,7 +1009,7 @@ router.patch('/relationship/birth-profile', async (req, res) => {
 
 router.get('/relationship/assessments', async (req, res) => {
   try {
-    const [catalogResult, dimensionResult, questionResult] = await Promise.all([
+    const [catalogResult, dimensionResult, questionResult, statusResult] = await Promise.all([
       query(
         `SELECT a.code, a.audience, a.title, a.description,
                 v.version_label, v.candidate_question_count, v.active_question_count
@@ -1360,6 +1360,15 @@ router.patch('/relationship/assessment-attempts/:attemptId/answers/:questionKey'
     const attempt = attemptResult.rows[0];
     if (!attempt) {
       return res.status(404).json({ ok: false, reason: 'attempt_not_found' });
+    }
+    if (attempt.audience === 'couple') {
+      const activeCoupleId = await getCoupleIdForUser(req.auth.userId);
+      if (
+        activeCoupleId == null ||
+        Number(activeCoupleId) !== Number(attempt.couple_id)
+      ) {
+        return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+      }
     }
 
     const questionResult = await query(

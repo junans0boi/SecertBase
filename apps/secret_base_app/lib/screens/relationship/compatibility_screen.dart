@@ -239,9 +239,18 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
           : widget.analysisCode == 'attachment-conflict'
           ? await widget.api.fetchAttachmentConflict()
           : await widget.api.fetchPersonal(widget.analysisCode);
+      CompatibilityExplanationState? explanation;
+      if (state.result != null) {
+        try {
+          explanation = await widget.api.fetchExplanation(widget.analysisCode);
+        } catch (_) {
+          // The deterministic compatibility result remains usable on explanation errors.
+        }
+      }
       if (!mounted) return;
       setState(() {
         _state = state;
+        _explanationState = explanation;
         _loading = false;
       });
     } catch (error) {

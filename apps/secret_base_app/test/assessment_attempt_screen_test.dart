@@ -100,20 +100,22 @@ void main() {
             utf8.encode(
               jsonEncode({
                 'ok': true,
-                'status': 'fallback',
-                'generation': {
-                  'id': 9,
-                  'status': 'fallback',
-                  'provider': 'disabled',
-                  'model': null,
-                  'promptVersion': 'v1',
-                  'contextVersion': 'v1',
-                  'explanation': '점수와 경향을 바탕으로 한 고정 설명이에요.',
-                  'errorCode': 'provider_disabled',
-                },
+                'status': request.method == 'POST' ? 'fallback' : 'idle',
+                'generation': request.method == 'POST'
+                    ? {
+                        'id': 9,
+                        'status': 'fallback',
+                        'provider': 'disabled',
+                        'model': null,
+                        'promptVersion': 'v1',
+                        'contextVersion': 'v1',
+                        'explanation': '점수와 경향을 바탕으로 한 고정 설명이에요.',
+                        'errorCode': 'provider_disabled',
+                      }
+                    : null,
               }),
             ),
-            201,
+            request.method == 'POST' ? 201 : 200,
             headers: {'content-type': 'application/json; charset=utf-8'},
           );
         }
