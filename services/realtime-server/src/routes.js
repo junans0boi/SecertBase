@@ -490,6 +490,43 @@ const dateOnly = (value) => {
   return String(value).split('T')[0];
 };
 
+const normalizeBirthTime = (value) => {
+  if (value == null || String(value).trim() === '') return null;
+  const time = String(value).trim();
+  if (!/^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(time)) {
+    return undefined;
+  }
+  return time.length === 5 ? `${time}:00` : time;
+};
+
+const isValidIsoDate = (value) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day;
+};
+
+const isFutureDate = (value) => value > new Date().toISOString().slice(0, 10);
+
+const isValidTimezone = (value) => {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value }).format();
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const birthProfileFromRow = (user) => ({
+  calendarType: user.BirthCalendarType,
+  birthDate: dateOnly(user.BirthDate),
+  birthTime: user.BirthTime == null ? null : String(user.BirthTime),
+  timezone: user.BirthTimezone,
+  birthPlace: user.BirthPlace ?? null,
+});
+
 const normalizeAuthUser = (user) => ({
   id: user.UserId,
   UserId: user.UserId,
@@ -882,6 +919,82 @@ router.post(
 
 router.use(requireAuth(config.JWT_SECRET));
 router.use(mvpRestFeatureGate(config.PUBLIC_FEATURE_SET));
+
+router.get('/relationship/birth-profile', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT BirthDate, BirthCalendarType, BirthTime, BirthTimezone, BirthPlace
+       FROM Users WHERE UserId = ?`,
+      [req.auth.userId],
+    );
+    const user = result.rows[0];
+    if (!user) {
+      return res.status(404).json({ ok: false, reason: 'user_not_found' });
+    }
+    return res.json({ ok: true, birthProfile: birthProfileFromRow(user) });
+  } catch (error) {
+    console.error('[API] /relationship/birth-profile GET error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.patch('/relationship/birth-profile', async (req, res) => {
+  try {
+    const calendarType = String(req.body?.calendarType ?? '').trim();
+    const birthDate = String(req.body?.birthDate ?? '').trim();
+    const timezone = String(req.body?.timezone ?? '').trim();
+    const birthTime = normalizeBirthTime(req.body?.birthTime);
+    const birthPlaceValue = req.body?.birthPlace;
+    const birthPlace = birthPlaceValue == null || String(birthPlaceValue).trim() === ''
+      ? null
+      : String(birthPlaceValue).trim();
+
+    if (!calendarType || !birthDate || !timezone) {
+      return res.status(400).json({ ok: false, reason: 'missing_fields' });
+    }
+    if (!['solar', 'lunar'].includes(calendarType)) {
+      return res.status(400).json({ ok: false, reason: 'invalid_calendar_type' });
+    }
+    if (!isValidIsoDate(birthDate)) {
+      return res.status(400).json({ ok: false, reason: 'invalid_birth_date' });
+    }
+    if (isFutureDate(birthDate)) {
+      return res.status(400).json({ ok: false, reason: 'future_birth_date' });
+    }
+    if (birthTime === undefined) {
+      return res.status(400).json({ ok: false, reason: 'invalid_birth_time' });
+    }
+    if (timezone.length > 64 || !isValidTimezone(timezone)) {
+      return res.status(400).json({ ok: false, reason: 'invalid_timezone' });
+    }
+    if (birthPlace !== null && birthPlace.length > 255) {
+      return res.status(400).json({ ok: false, reason: 'invalid_birth_place' });
+    }
+
+    await query(
+      `UPDATE Users
+       SET BirthCalendarType = ?, BirthDate = ?, BirthTime = ?,
+           BirthTimezone = ?, BirthPlace = ?
+       WHERE UserId = ?`,
+      [calendarType, birthDate, birthTime, timezone, birthPlace, req.auth.userId],
+    );
+    const updated = await query(
+      `SELECT BirthDate, BirthCalendarType, BirthTime, BirthTimezone, BirthPlace
+       FROM Users WHERE UserId = ?`,
+      [req.auth.userId],
+    );
+    if (!updated.rows[0]) {
+      return res.status(404).json({ ok: false, reason: 'user_not_found' });
+    }
+    return res.json({
+      ok: true,
+      birthProfile: birthProfileFromRow(updated.rows[0]),
+    });
+  } catch (error) {
+    console.error('[API] /relationship/birth-profile PATCH error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
 
 const expirePairingRequests = () =>
   query(
@@ -5553,4 +5666,3 @@ router.get('/shop/catalog', async (req, res) => {
 });
 
 export default router;
-

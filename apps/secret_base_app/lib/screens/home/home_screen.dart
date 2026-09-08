@@ -10,6 +10,7 @@ import 'memory_list_screen.dart';
 import 'today_card.dart';
 import 'today_loop_viewer.dart';
 import '../secret_base/secret_base_screen.dart';
+import '../relationship/relationship_understanding_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final ValueChanged<int> onNavigate;
@@ -189,6 +190,8 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             if (_loading || _todayState != null) const SizedBox(height: 18),
             _coupleCard(),
+            const SizedBox(height: 18),
+            _relationshipCard(),
             if (_memoryCard != null) ...[
               const SizedBox(height: 18),
               _MemoryCardWidget(
@@ -281,6 +284,50 @@ class _HomeScreenState extends State<HomeScreen> {
               style: mainBody(size: 13, color: Colors.white),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _relationshipCard() {
+    return MainCard(
+      padding: EdgeInsets.zero,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: () => Navigator.of(context).push<void>(
+          MaterialPageRoute(
+            builder: (_) => const RelationshipUnderstandingScreen(),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: kMainLilacSoft,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(Icons.psychology_outlined, color: kMainLilac),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('관계 이해 시작하기', style: mainBody(weight: FontWeight.w800)),
+                    const SizedBox(height: 4),
+                    Text(
+                      '출생 프로필을 바탕으로 우리를 알아가요',
+                      style: mainBody(size: 12, color: kMainSub),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: kMainMuted),
+            ],
+          ),
+        ),
       ),
     );
   }
