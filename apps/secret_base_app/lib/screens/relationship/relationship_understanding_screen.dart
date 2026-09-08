@@ -357,7 +357,7 @@ class _RelationshipUnderstandingScreenState
     final auth = AuthService();
     Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) => CompatibilityScreen(
+        builder: (_) => CompatibilityDashboardScreen(
           api: CompatibilityApi(baseUrl: auth.baseUrl, token: auth.token ?? ''),
         ),
       ),

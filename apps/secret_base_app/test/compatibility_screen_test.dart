@@ -129,6 +129,71 @@ void main() {
     expect(state.result, isNull);
   });
 
+  testWidgets('dashboard separates ready and pending cards', (tester) async {
+    final dashboardPayload = {
+      'ok': true,
+      'cards': [
+        {
+          'code': 'emotional-regulation',
+          'title': '감정 해소 궁합',
+          'description': '설명',
+          'status': 'ready',
+          'dependencyStatus': {'emotional_regulation': 2},
+          'result': {
+            'analysisCode': 'emotional-regulation_compatibility',
+            'analysisVersion': 'v1',
+            'dimensions': [],
+            'complementaryPatternKey': 'shared_context',
+            'complementaryPattern': '준비된 결과예요.',
+            'cautionInteractions': [],
+            'conversationPrompts': [],
+            'conflictPatternKey': null,
+            'disclaimer': '참고 정보',
+          },
+        },
+        {
+          'code': 'affection-alignment',
+          'title': '애정 표현과 기대 궁합',
+          'description': '설명',
+          'status': 'pending',
+          'dependencyStatus': {'affection_alignment': 1},
+          'result': null,
+        },
+      ],
+    };
+    final api = CompatibilityApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient(
+        (_) async => http.Response.bytes(
+          utf8.encode(jsonEncode(dashboardPayload)),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: CompatibilityDashboardScreen(api: api)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('compatibility_card_emotional-regulation')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('compatibility_card_affection-alignment')),
+      findsOneWidget,
+    );
+    expect(find.text('결과 준비됨'), findsOneWidget);
+    expect(find.text('검사 완료를 기다리는 중'), findsOneWidget);
+    expect(
+      find.byKey(const Key('compatibility_pending_affection-alignment')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('shows pending dependency state', (tester) async {
     final api = CompatibilityApi(
       baseUrl: 'https://secretbase.example',

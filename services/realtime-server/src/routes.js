@@ -2332,6 +2332,80 @@ const getCoupleCompatibilityState = async (userId, code) => {
   };
 };
 
+const compatibilityDashboardDefinitions = [
+  {
+    code: 'attachment-conflict',
+    title: '애착과 갈등의 상호작용',
+    description: '애착 요약과 갈등·회복 결과를 함께 살펴봅니다.',
+  },
+  {
+    code: 'conflict-repair',
+    title: '갈등과 회복 궁합',
+    description: '갈등 촉발과 회복 접근의 조합을 살펴봅니다.',
+  },
+  {
+    code: 'social-bonding',
+    title: '사회적 유대 궁합',
+    description: '두 사람의 연결 깊이와 관계 자원을 비교합니다.',
+  },
+  {
+    code: 'emotional-regulation',
+    title: '감정 해소 궁합',
+    description: '감정을 처리하고 회복하는 방식의 차이를 살펴봅니다.',
+  },
+  {
+    code: 'relationship-deficiency',
+    title: '관계 결핍 인식 궁합',
+    description: '관계의 필요와 대안 자원을 함께 이름 붙입니다.',
+  },
+  {
+    code: 'togetherness-personal-time',
+    title: '함께 있음과 개인 시간 궁합',
+    description: '함께 보내는 시간과 자율성의 조율을 살펴봅니다.',
+  },
+  {
+    code: 'affection-alignment',
+    title: '애정 표현과 기대 궁합',
+    description: '표현 방식과 기대를 서로의 언어로 번역합니다.',
+  },
+];
+
+const getCompatibilityState = async (userId, code) => {
+  if (code === 'attachment-conflict') return getAttachmentConflictCompatibilityState(userId);
+  if (code === 'conflict-repair') return getConflictRepairCompatibilityState(userId);
+  if (personalCompatibilityDefinitions.has(code)) {
+    return getPersonalCompatibilityState(userId, code);
+  }
+  return getCoupleCompatibilityState(userId, code);
+};
+
+router.get('/relationship/compatibility/current', async (req, res) => {
+  try {
+    const coupleId = await getCoupleIdForUser(req.auth.userId);
+    if (coupleId == null) {
+      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+    }
+    const cards = await Promise.all(
+      compatibilityDashboardDefinitions.map(async (definition) => {
+        const state = await getCompatibilityState(req.auth.userId, definition.code);
+        if (state.error) {
+          return {
+            ...definition,
+            status: 'unavailable',
+            dependencyStatus: {},
+            result: null,
+          };
+        }
+        return { ...definition, ...state };
+      }),
+    );
+    return res.json({ ok: true, cards });
+  } catch (error) {
+    console.error('[API] /relationship/compatibility/current error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
 router.get('/relationship/compatibility/:code/current', async (req, res) => {
   try {
     const code = String(req.params.code ?? '').trim();

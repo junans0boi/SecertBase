@@ -3,6 +3,198 @@ import 'package:flutter/material.dart';
 import '../../core/compatibility_api.dart';
 import '../../core/main_design.dart';
 
+class CompatibilityDashboardScreen extends StatefulWidget {
+  final CompatibilityApi api;
+
+  const CompatibilityDashboardScreen({super.key, required this.api});
+
+  @override
+  State<CompatibilityDashboardScreen> createState() =>
+      _CompatibilityDashboardScreenState();
+}
+
+class _CompatibilityDashboardScreenState
+    extends State<CompatibilityDashboardScreen> {
+  CompatibilityDashboard? _dashboard;
+  String? _errorMessage;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    widget.api.close();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _errorMessage = null;
+    });
+    try {
+      final dashboard = await widget.api.fetchDashboard();
+      if (!mounted) return;
+      setState(() {
+        _dashboard = dashboard;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _errorMessage =
+            error is CompatibilityApiException &&
+                error.reason == 'network_error'
+            ? '네트워크 연결을 확인하고 다시 시도해주세요.'
+            : '궁합 dashboard를 불러오지 못했어요.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: kMainBg,
+      appBar: AppBar(
+        backgroundColor: kMainBg,
+        title: Text('우리의 궁합 dashboard', style: mainTitle(size: 22)),
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator(color: kMainRose))
+          : _errorMessage != null
+          ? _errorState()
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
+              children: [
+                Text('검사별 관계 카드', style: mainTitle(size: 25)),
+                const SizedBox(height: 6),
+                Text(
+                  '각 분석은 필요한 검사만 준비되면 독립적으로 열려요.',
+                  style: mainBody(size: 13, color: kMainSub, height: 1.5),
+                ),
+                const SizedBox(height: 16),
+                ...?_dashboard?.cards.map(_card),
+              ],
+            ),
+    );
+  }
+
+  Widget _card(CompatibilityDashboardCard card) {
+    final statusLabel = switch (card.state.status) {
+      'ready' => '결과 준비됨',
+      'pending' => '검사 완료를 기다리는 중',
+      _ => '현재 이용할 수 없음',
+    };
+    final cardContent = MainCard(
+      key: Key('compatibility_card_${card.code}'),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  card.title,
+                  style: mainBody(weight: FontWeight.w800),
+                ),
+              ),
+              Text(
+                statusLabel,
+                style: mainBody(
+                  size: 12,
+                  color: _statusColor(card.state.status),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(card.description, style: mainBody(size: 13, color: kMainSub)),
+          const SizedBox(height: 10),
+          if (card.state.status == 'ready' && card.state.result != null)
+            Text(
+              card.state.result!.complementaryPattern,
+              style: mainBody(size: 13, height: 1.45),
+            )
+          else if (card.state.status == 'pending')
+            Text(
+              _pendingDescription(card.state),
+              key: Key('compatibility_pending_${card.code}'),
+              style: mainBody(size: 13, color: kMainSub, height: 1.45),
+            )
+          else
+            Text(
+              '필요한 결과를 확인한 뒤 다시 준비할 수 있어요.',
+              style: mainBody(size: 13, color: kMainSub),
+            ),
+          if (card.state.status == 'ready') ...[
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => _openDetail(card.code),
+              child: const Text('상세 보기'),
+            ),
+          ],
+        ],
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: cardContent,
+    );
+  }
+
+  String _pendingDescription(CompatibilityState state) {
+    if (state.dependencyStatus.isEmpty) return '필요한 검사가 아직 완료되지 않았어요.';
+    return state.dependencyStatus.entries
+        .map((entry) => '${entry.key} ${entry.value}/2명 완료')
+        .join(' · ');
+  }
+
+  Color _statusColor(String status) => switch (status) {
+    'ready' => kMainLilac,
+    'pending' => kMainRose,
+    _ => kMainMuted,
+  };
+
+  void _openDetail(String code) {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => CompatibilityScreen(
+          analysisCode: code,
+          api: CompatibilityApi(
+            baseUrl: widget.api.baseUrl,
+            token: widget.api.token,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _errorState() => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: MainCard(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('궁합 dashboard를 불러오지 못했어요', style: mainTitle(size: 20)),
+            const SizedBox(height: 8),
+            Text(_errorMessage!, textAlign: TextAlign.center),
+            const SizedBox(height: 14),
+            OutlinedButton(onPressed: _load, child: const Text('다시 시도')),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 class CompatibilityScreen extends StatefulWidget {
   final CompatibilityApi api;
   final String analysisCode;

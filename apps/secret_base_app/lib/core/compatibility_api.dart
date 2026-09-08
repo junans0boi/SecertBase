@@ -116,6 +116,49 @@ class CompatibilityState {
   }
 }
 
+class CompatibilityDashboardCard {
+  final String code;
+  final String title;
+  final String description;
+  final CompatibilityState state;
+
+  const CompatibilityDashboardCard({
+    required this.code,
+    required this.title,
+    required this.description,
+    required this.state,
+  });
+
+  factory CompatibilityDashboardCard.fromJson(Map<String, dynamic> json) {
+    return CompatibilityDashboardCard(
+      code: '${json['code'] ?? ''}',
+      title: '${json['title'] ?? ''}',
+      description: '${json['description'] ?? ''}',
+      state: CompatibilityState.fromJson(json),
+    );
+  }
+}
+
+class CompatibilityDashboard {
+  final List<CompatibilityDashboardCard> cards;
+
+  const CompatibilityDashboard({required this.cards});
+
+  factory CompatibilityDashboard.fromJson(Map<String, dynamic> json) {
+    final rawCards = json['cards'];
+    if (rawCards is! List) throw const FormatException('Missing cards');
+    return CompatibilityDashboard(
+      cards: rawCards
+          .map(
+            (card) => CompatibilityDashboardCard.fromJson(
+              Map<String, dynamic>.from(card as Map),
+            ),
+          )
+          .toList(growable: false),
+    );
+  }
+}
+
 class CompatibilityApiException implements Exception {
   final String reason;
 
@@ -152,6 +195,20 @@ class CompatibilityApi {
 
   Future<CompatibilityState> fetchCouple(String code) async {
     return _fetch(code);
+  }
+
+  Future<CompatibilityDashboard> fetchDashboard() async {
+    try {
+      final response = await _client.get(
+        Uri.parse('$baseUrl/api/relationship/compatibility/current'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      return CompatibilityDashboard.fromJson(_successfulBody(response));
+    } on http.ClientException {
+      throw const CompatibilityApiException('network_error');
+    } on FormatException {
+      throw const CompatibilityApiException('invalid_response');
+    }
   }
 
   Future<CompatibilityState> _fetch(String code) async {
