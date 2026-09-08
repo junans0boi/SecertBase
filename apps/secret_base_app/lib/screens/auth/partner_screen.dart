@@ -159,6 +159,12 @@ class _PartnerScreenState extends State<PartnerScreen> {
                       style: mainBody(size: 14, color: kMainSub),
                       textAlign: TextAlign.center,
                     ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '개인 검사는 연결이 끊겨도 유지돼요.\n궁합과 커플 검사는 현재 연결된 두 사람에게만 보여요.',
+                      style: mainBody(size: 12, color: kMainMuted, height: 1.5),
+                      textAlign: TextAlign.center,
+                    ),
                     TextButton.icon(
                       onPressed: _editProfile,
                       icon: const Icon(Icons.edit_outlined),

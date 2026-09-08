@@ -303,7 +303,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (ok) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('애인 연결을 해제했어요', style: mainBody(color: Colors.white)),
+          content: Text(
+            '애인 연결을 해제했어요. 개인 검사는 유지되고 궁합 결과는 숨겨져요.',
+            style: mainBody(color: Colors.white),
+          ),
         ),
       );
     } else {
