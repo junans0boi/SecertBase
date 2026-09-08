@@ -36,6 +36,44 @@ Map<String, dynamic> _state({required String status}) => {
 };
 
 void main() {
+  test('parses conflict repair compatibility fields', () async {
+    String? requestedPath;
+    final payload = _state(status: 'ready');
+    payload['result'] = {
+      ...Map<String, dynamic>.from(payload['result'] as Map),
+      'analysisCode': 'conflict_repair',
+      'dimensions': [
+        {'key': 'conflict_trigger', 'title': '갈등 촉발 신호', 'scoreDifference': 30},
+      ],
+      'conflictTrigger': '갈등 신호를 먼저 알아차려보세요.',
+      'repairApproach': '다시 대화할 시점을 정해보세요.',
+      'conversationStarters': ['첫 문장을 정해볼까요?'],
+    };
+    final api = CompatibilityApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient((request) async {
+        requestedPath = request.url.path;
+        return http.Response.bytes(
+          utf8.encode(jsonEncode(payload)),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      }),
+    );
+
+    final state = await api.fetchConflictRepair();
+
+    expect(
+      requestedPath,
+      '/api/relationship/compatibility/conflict-repair/current',
+    );
+    expect(state.result?.analysisCode, 'conflict_repair');
+    expect(state.result?.conflictTrigger, contains('갈등 신호'));
+    expect(state.result?.repairApproach, contains('대화할'));
+    expect(state.result?.conversationStarters.single, contains('첫 문장'));
+  });
+
   testWidgets('shows pending dependency state', (tester) async {
     final api = CompatibilityApi(
       baseUrl: 'https://secretbase.example',

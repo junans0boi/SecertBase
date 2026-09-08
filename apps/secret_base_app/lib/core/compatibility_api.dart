@@ -27,8 +27,11 @@ class CompatibilityAnalysis {
   final List<CompatibilityDimension> dimensions;
   final String complementaryPatternKey;
   final String complementaryPattern;
+  final String? conflictTrigger;
+  final String? repairApproach;
   final List<String> cautionInteractions;
   final List<String> conversationPrompts;
+  final List<String> conversationStarters;
   final String? conflictPatternKey;
   final String disclaimer;
 
@@ -38,8 +41,11 @@ class CompatibilityAnalysis {
     required this.dimensions,
     required this.complementaryPatternKey,
     required this.complementaryPattern,
+    required this.conflictTrigger,
+    required this.repairApproach,
     required this.cautionInteractions,
     required this.conversationPrompts,
+    required this.conversationStarters,
     required this.conflictPatternKey,
     required this.disclaimer,
   });
@@ -57,12 +63,22 @@ class CompatibilityAnalysis {
             .toList(growable: false),
         complementaryPatternKey: '${json['complementaryPatternKey'] ?? ''}',
         complementaryPattern: '${json['complementaryPattern'] ?? ''}',
+        conflictTrigger: json['conflictTrigger'] == null
+            ? null
+            : '${json['conflictTrigger']}',
+        repairApproach: json['repairApproach'] == null
+            ? null
+            : '${json['repairApproach']}',
         cautionInteractions: (json['cautionInteractions'] as List? ?? const [])
             .map((item) => '$item')
             .toList(growable: false),
         conversationPrompts: (json['conversationPrompts'] as List? ?? const [])
             .map((item) => '$item')
             .toList(growable: false),
+        conversationStarters:
+            (json['conversationStarters'] as List? ?? const [])
+                .map((item) => '$item')
+                .toList(growable: false),
         conflictPatternKey: json['conflictPatternKey'] == null
             ? null
             : '${json['conflictPatternKey']}',
@@ -123,11 +139,17 @@ class CompatibilityApi {
   void close() => _client.close();
 
   Future<CompatibilityState> fetchAttachmentConflict() async {
+    return _fetch('attachment-conflict');
+  }
+
+  Future<CompatibilityState> fetchConflictRepair() async {
+    return _fetch('conflict-repair');
+  }
+
+  Future<CompatibilityState> _fetch(String code) async {
     try {
       final response = await _client.get(
-        Uri.parse(
-          '$baseUrl/api/relationship/compatibility/attachment-conflict/current',
-        ),
+        Uri.parse('$baseUrl/api/relationship/compatibility/$code/current'),
         headers: {'Authorization': 'Bearer $token'},
       );
       return CompatibilityState.fromJson(_successfulBody(response));

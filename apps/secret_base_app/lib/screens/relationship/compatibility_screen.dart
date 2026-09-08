@@ -5,8 +5,13 @@ import '../../core/main_design.dart';
 
 class CompatibilityScreen extends StatefulWidget {
   final CompatibilityApi api;
+  final String analysisCode;
 
-  const CompatibilityScreen({super.key, required this.api});
+  const CompatibilityScreen({
+    super.key,
+    required this.api,
+    this.analysisCode = 'attachment-conflict',
+  });
 
   @override
   State<CompatibilityScreen> createState() => _CompatibilityScreenState();
@@ -35,7 +40,9 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
       _errorMessage = null;
     });
     try {
-      final state = await widget.api.fetchAttachmentConflict();
+      final state = widget.analysisCode == 'conflict-repair'
+          ? await widget.api.fetchConflictRepair()
+          : await widget.api.fetchAttachmentConflict();
       if (!mounted) return;
       setState(() {
         _state = state;
@@ -133,6 +140,44 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
         ),
       ),
       const SizedBox(height: 4),
+      if (result.conflictTrigger != null || result.repairApproach != null) ...[
+        Text('갈등을 이해하는 단서', style: mainTitle(size: 19)),
+        const SizedBox(height: 8),
+        if (result.conflictTrigger != null)
+          MainCard(
+            padding: const EdgeInsets.all(14),
+            child: Text(
+              result.conflictTrigger!,
+              key: const Key('compatibility_conflict_trigger'),
+              style: mainBody(size: 13, height: 1.45),
+            ),
+          ),
+        if (result.repairApproach != null) ...[
+          const SizedBox(height: 8),
+          MainCard(
+            padding: const EdgeInsets.all(14),
+            child: Text(
+              result.repairApproach!,
+              key: const Key('compatibility_repair_approach'),
+              style: mainBody(size: 13, height: 1.45),
+            ),
+          ),
+        ],
+      ],
+      if (result.conversationStarters.isNotEmpty) ...[
+        const SizedBox(height: 4),
+        Text('대화 시작점', style: mainTitle(size: 19)),
+        const SizedBox(height: 8),
+        ...result.conversationStarters.map(
+          (item) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: MainCard(
+              padding: const EdgeInsets.all(14),
+              child: Text(item, style: mainBody(size: 13, height: 1.45)),
+            ),
+          ),
+        ),
+      ],
       Text('주의해서 살펴볼 상호작용', style: mainTitle(size: 19)),
       const SizedBox(height: 8),
       ...result.cautionInteractions.map(
