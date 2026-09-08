@@ -527,6 +527,14 @@ const birthProfileFromRow = (user) => ({
   birthPlace: user.BirthPlace ?? null,
 });
 
+const relationshipLikertScale = [
+  { value: 1, label: '전혀 그렇지 않다' },
+  { value: 2, label: '그렇지 않다' },
+  { value: 3, label: '보통이다' },
+  { value: 4, label: '그렇다' },
+  { value: 5, label: '매우 그렇다' },
+];
+
 const normalizeAuthUser = (user) => ({
   id: user.UserId,
   UserId: user.UserId,
@@ -992,6 +1000,88 @@ router.patch('/relationship/birth-profile', async (req, res) => {
     });
   } catch (error) {
     console.error('[API] /relationship/birth-profile PATCH error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.get('/relationship/assessments', async (req, res) => {
+  try {
+    const [catalogResult, dimensionResult, questionResult] = await Promise.all([
+      query(
+        `SELECT a.code, a.audience, a.title, a.description,
+                v.version_label, v.candidate_question_count, v.active_question_count
+         FROM relationship_assessment_catalog a
+         JOIN relationship_assessment_versions v
+           ON v.assessment_id = a.assessment_id AND v.is_active = 1
+         WHERE a.is_active = 1
+         ORDER BY a.sort_order, a.assessment_id`,
+      ),
+      query(
+        `SELECT a.code, d.dimension_key, d.display_name, d.sort_order
+         FROM relationship_assessment_catalog a
+         JOIN relationship_assessment_versions v
+           ON v.assessment_id = a.assessment_id AND v.is_active = 1
+         JOIN relationship_assessment_dimensions d ON d.version_id = v.version_id
+         WHERE a.is_active = 1
+         ORDER BY a.sort_order, d.sort_order`,
+      ),
+      query(
+        `SELECT a.code, q.question_key, q.prompt, d.dimension_key,
+                q.reverse_scored, q.question_order
+         FROM relationship_assessment_catalog a
+         JOIN relationship_assessment_versions v
+           ON v.assessment_id = a.assessment_id AND v.is_active = 1
+         JOIN relationship_assessment_questions q
+           ON q.version_id = v.version_id AND q.is_active = 1
+         JOIN relationship_assessment_dimensions d ON d.dimension_id = q.dimension_id
+         WHERE a.is_active = 1
+         ORDER BY a.sort_order, q.question_order`,
+      ),
+    ]);
+
+    const assessments = catalogResult.rows.map((row) => ({
+      code: row.code,
+      audience: row.audience,
+      title: row.title,
+      description: row.description,
+      version: row.version_label,
+      candidateQuestionCount: Number(row.candidate_question_count),
+      activeQuestionCount: Number(row.active_question_count),
+      completionStatus: 'not_started',
+      dimensions: [],
+      questions: [],
+    }));
+    const byCode = new Map(assessments.map((assessment) => [assessment.code, assessment]));
+
+    for (const row of dimensionResult.rows) {
+      const assessment = byCode.get(row.code);
+      if (!assessment) continue;
+      assessment.dimensions.push({
+        key: row.dimension_key,
+        title: row.display_name,
+        order: Number(row.sort_order),
+      });
+    }
+    for (const row of questionResult.rows) {
+      const assessment = byCode.get(row.code);
+      if (!assessment) continue;
+      assessment.questions.push({
+        key: row.question_key,
+        prompt: row.prompt,
+        dimensionKey: row.dimension_key,
+        reverseScored: Boolean(row.reverse_scored),
+        order: Number(row.question_order),
+        likertScale: relationshipLikertScale,
+      });
+    }
+
+    return res.json({
+      ok: true,
+      likertScale: relationshipLikertScale,
+      assessments,
+    });
+  } catch (error) {
+    console.error('[API] /relationship/assessments error:', error);
     return res.status(500).json({ ok: false, reason: 'internal_error' });
   }
 });

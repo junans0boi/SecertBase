@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../core/auth_service.dart';
 import '../../core/app_theme.dart';
+import '../../core/assessment_catalog_api.dart';
 import '../../core/birth_profile_api.dart';
 import '../../core/main_design.dart';
+import 'assessment_catalog_screen.dart';
 
 enum RelationshipAssessmentStatus {
   profileIncomplete,
@@ -324,7 +326,27 @@ class _RelationshipUnderstandingScreenState
             '파트너가 없어도 내 감정과 관계 패턴을 먼저 살펴볼 수 있어요.',
             style: mainBody(size: 13, color: kMainSub, height: 1.5),
           ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed: _openCatalog,
+            child: const Text('검사 목록 보기'),
+          ),
         ],
+      ),
+    );
+  }
+
+  void _openCatalog() {
+    final auth = AuthService();
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => AssessmentCatalogScreen(
+          api: AssessmentCatalogApi(
+            baseUrl: auth.baseUrl,
+            token: auth.token ?? '',
+          ),
+          hasActiveCouple: widget.hasActiveCouple,
+        ),
       ),
     );
   }
