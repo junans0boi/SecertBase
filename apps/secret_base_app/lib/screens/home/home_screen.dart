@@ -10,11 +10,19 @@ import 'memory_list_screen.dart';
 import 'today_card.dart';
 import 'today_loop_viewer.dart';
 import '../secret_base/secret_base_screen.dart';
+import '../relationship/relationship_understanding_screen.dart';
+import '../../core/fortune_api.dart';
+import '../relationship/fortune_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final ValueChanged<int> onNavigate;
+  final RelationshipAssessmentStatus? relationshipStatus;
 
-  const HomeScreen({super.key, required this.onNavigate});
+  const HomeScreen({
+    super.key,
+    required this.onNavigate,
+    this.relationshipStatus,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -189,6 +197,10 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             if (_loading || _todayState != null) const SizedBox(height: 18),
             _coupleCard(),
+            const SizedBox(height: 18),
+            _fortuneCard(),
+            const SizedBox(height: 18),
+            _relationshipCard(),
             if (_memoryCard != null) ...[
               const SizedBox(height: 18),
               _MemoryCardWidget(
@@ -283,6 +295,82 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
+  }
+
+  Widget _relationshipCard() {
+    final status = widget.relationshipStatus ?? _defaultRelationshipStatus;
+    return RelationshipEntryCard(
+      status: status,
+      onTap: () => Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => RelationshipUnderstandingScreen(
+            assessmentStatus: status,
+            hasActiveCouple: _coupleInfo != null,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _fortuneCard() {
+    return MainCard(
+      padding: EdgeInsets.zero,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: () => Navigator.of(context).push<void>(
+          MaterialPageRoute(
+            builder: (_) => RelationshipFortuneScreen(
+              api: FortuneApi(baseUrl: _auth.baseUrl, token: _auth.token ?? ''),
+            ),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: kMainRoseSoft,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(
+                  Icons.auto_awesome_outlined,
+                  color: kMainRose,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('오늘의 운세', style: mainBody(weight: FontWeight.w800)),
+                    const SizedBox(height: 4),
+                    Text(
+                      '오늘의 감정 흐름과 우리 사이의 신호를 확인해보세요',
+                      style: mainBody(size: 12, color: kMainSub),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 16,
+                color: kMainMuted,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  RelationshipAssessmentStatus get _defaultRelationshipStatus {
+    final birthDate = _auth.user?['BirthDate'] ?? _auth.user?['birthDate'];
+    if (birthDate == null || '$birthDate'.trim().isEmpty) {
+      return RelationshipAssessmentStatus.profileIncomplete;
+    }
+    return RelationshipAssessmentStatus.notStarted;
   }
 
   Widget _sectionTitle(String title, VoidCallback? onTap) {

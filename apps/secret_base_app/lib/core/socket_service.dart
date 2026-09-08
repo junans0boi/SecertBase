@@ -1611,8 +1611,7 @@ class SocketService extends ChangeNotifier {
 
   Future<void> fetchAndSelectMarbleCharacter() async {
     // 캐릭터 우선순위: 장착 아이템 → 반대 성별 기본값 → 나머지 목록 순
-    Future<bool> _trySelect(String charId) =>
-        selectMarbleLobbyCharacter(charId);
+    Future<bool> trySelect(String charId) => selectMarbleLobbyCharacter(charId);
 
     String preferredChar = 'k';
     String fallbackChar = 'ria';
@@ -1642,11 +1641,11 @@ class SocketService extends ChangeNotifier {
     } catch (_) {}
 
     // 선호 캐릭터 시도 → 충돌 시 폴백 → 그래도 실패하면 목록 순차 탐색
-    if (await _trySelect(preferredChar)) return;
-    if (await _trySelect(fallbackChar)) return;
+    if (await trySelect(preferredChar)) return;
+    if (await trySelect(fallbackChar)) return;
     for (final id in marbleCharacterIds) {
       if (id == preferredChar || id == fallbackChar) continue;
-      if (await _trySelect(id)) return;
+      if (await trySelect(id)) return;
     }
   }
 

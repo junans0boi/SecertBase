@@ -56,7 +56,7 @@ class _MarbleScreenState extends State<MarbleScreen> {
   void initState() {
     super.initState();
     _socket.addListener(_rebuild);
-    _socket.onMarbleTollPaid    = _showTollPaidSnackbar;
+    _socket.onMarbleTollPaid = _showTollPaidSnackbar;
     _socket.onMarbleSpecialTile = _showSpecialTileOverlay;
     _socket.onMarblePassedStart = _triggerConfetti;
   }
@@ -64,9 +64,15 @@ class _MarbleScreenState extends State<MarbleScreen> {
   @override
   void dispose() {
     _socket.removeListener(_rebuild);
-    if (_socket.onMarbleTollPaid    == _showTollPaidSnackbar)  _socket.onMarbleTollPaid    = null;
-    if (_socket.onMarbleSpecialTile == _showSpecialTileOverlay) _socket.onMarbleSpecialTile = null;
-    if (_socket.onMarblePassedStart == _triggerConfetti)        _socket.onMarblePassedStart = null;
+    if (_socket.onMarbleTollPaid == _showTollPaidSnackbar) {
+      _socket.onMarbleTollPaid = null;
+    }
+    if (_socket.onMarbleSpecialTile == _showSpecialTileOverlay) {
+      _socket.onMarbleSpecialTile = null;
+    }
+    if (_socket.onMarblePassedStart == _triggerConfetti) {
+      _socket.onMarblePassedStart = null;
+    }
     super.dispose();
   }
 
@@ -102,7 +108,10 @@ class _MarbleScreenState extends State<MarbleScreen> {
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(text, style: GoogleFonts.notoSans(fontWeight: FontWeight.w700)),
+        content: Text(
+          text,
+          style: GoogleFonts.notoSans(fontWeight: FontWeight.w700),
+        ),
         backgroundColor: bgColor,
         duration: const Duration(seconds: 4),
         behavior: SnackBarBehavior.floating,
@@ -118,12 +127,12 @@ class _MarbleScreenState extends State<MarbleScreen> {
 
   void _showTollPaidSnackbar(Map<String, dynamic> data) {
     if (!mounted) return;
-    final payer    = data['payer']    as String?;
+    final payer = data['payer'] as String?;
     final receiver = data['receiver'] as String?;
-    final toll     = data['toll']     as int? ?? 0;
+    final toll = data['toll'] as int? ?? 0;
     if (payer == null || receiver == null || toll == 0) return;
 
-    final isMePayer    = payer    == _socket.userId;
+    final isMePayer = payer == _socket.userId;
     final isMeReceiver = receiver == _socket.userId;
     if (!isMePayer && !isMeReceiver) return;
 
@@ -144,7 +153,9 @@ class _MarbleScreenState extends State<MarbleScreen> {
             ),
           ],
         ),
-        backgroundColor: isMePayer ? const Color(0xFFD32F2F) : const Color(0xFF388E3C),
+        backgroundColor: isMePayer
+            ? const Color(0xFFD32F2F)
+            : const Color(0xFF388E3C),
         duration: const Duration(seconds: 3),
         behavior: SnackBarBehavior.floating,
       ),
@@ -188,11 +199,11 @@ class _MarbleScreenState extends State<MarbleScreen> {
 
   // ─── 승리 다이얼로그 ─────────────────────────────────────────────────────
   void _showWinnerIfNeeded() {
-    final winner    = _socket.marbleWinner;
+    final winner = _socket.marbleWinner;
     final winReason = _socket.marbleWinReason;
-    final isDraw    = winner == null && winReason == 'timeout_draw';
+    final isDraw = winner == null && winReason == 'timeout_draw';
     if (!isDraw && winner == null) return;
-    final shownKey  = isDraw ? '__draw__' : winner!;
+    final shownKey = isDraw ? '__draw__' : winner!;
     if (shownKey == _lastShownWinner) return;
     _lastShownWinner = shownKey;
 
@@ -202,19 +213,23 @@ class _MarbleScreenState extends State<MarbleScreen> {
         context: context,
         barrierDismissible: true,
         builder: (_) => _MarbleResultDialog(
-          winner:    winner,
+          winner: winner,
           winReason: winReason,
-          userId:    _socket.userId,
-          myCoins:   _socket.marbleCoins[_socket.userId] ?? 0,
-          opCoins:   _socket.marbleCoins.entries
-              .where((e) => e.key != _socket.userId)
-              .map((e) => e.value)
-              .firstOrNull ?? 0,
+          userId: _socket.userId,
+          myCoins: _socket.marbleCoins[_socket.userId] ?? 0,
+          opCoins:
+              _socket.marbleCoins.entries
+                  .where((e) => e.key != _socket.userId)
+                  .map((e) => e.value)
+                  .firstOrNull ??
+              0,
           myCharacter: _socket.marbleCharacters[_socket.userId] ?? 'k',
-          opCharacter: _socket.marbleCharacters.entries
-              .where((e) => e.key != _socket.userId)
-              .map((e) => e.value)
-              .firstOrNull ?? 'ria',
+          opCharacter:
+              _socket.marbleCharacters.entries
+                  .where((e) => e.key != _socket.userId)
+                  .map((e) => e.value)
+                  .firstOrNull ??
+              'ria',
           onExit: () {
             Navigator.of(context).pop();
             Navigator.of(context).pop();
@@ -226,15 +241,15 @@ class _MarbleScreenState extends State<MarbleScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final sock        = _socket;
+    final sock = _socket;
     final currentUser = sock.userId ?? '';
     final p1 = sock.marblePlayers.isNotEmpty ? sock.marblePlayers[0] : '';
-    final p2 = sock.marblePlayers.length > 1  ? sock.marblePlayers[1] : '';
+    final p2 = sock.marblePlayers.length > 1 ? sock.marblePlayers[1] : '';
     final p1Pieces = sock.marblePieceDetails[p1]?.take(1).toList();
     final p2Pieces = sock.marblePieceDetails[p2]?.take(1).toList();
-    final myCoins     = sock.marbleCoins[currentUser] ?? 1500;
-    final opponentId  = (currentUser == p1) ? p2 : p1;
-    final opCoins     = sock.marbleCoins[opponentId] ?? 1500;
+    final myCoins = sock.marbleCoins[currentUser] ?? 1500;
+    final opponentId = (currentUser == p1) ? p2 : p1;
+    final opCoins = sock.marbleCoins[opponentId] ?? 1500;
 
     return GameScaffold(
       title: '🏰 마블 작전',
@@ -249,55 +264,65 @@ class _MarbleScreenState extends State<MarbleScreen> {
             // ─── 보드 ─────────────────────────────────────────────────────
             Positioned.fill(
               child: MarbleBoard(
-                gameId:               sock.marbleActive ? (sock.marbleGameId ?? 'active') : null,
-                phase:                sock.marblePhase,
-                turn:                 sock.marbleCurrentTurn,
-                p1Pieces:             p1Pieces,
-                p2Pieces:             p2Pieces,
-                pendingMoves:         sock.marblePendingMoves,
-                startRolls:           sock.marbleStartRolls,
-                orderCountdownUntil:  sock.marbleOrderCountdownUntil,
-                hasDoubleRoll:        sock.marbleHasDoubleRoll,
-                landData:             sock.marbleLands,
-                onNewGame:            sock.newMarbleGame,
-                onRollStartDice:      sock.rollMarbleStartDice,
-                onRoll:               sock.rollMarble,
-                onMovePiece:          (pieceId, moveIndex) => sock.moveMarble(pieceId, moveIndex: moveIndex),
-                onMoveNewPiece:       () => sock.moveMarble(0),
-                currentUser:          currentUser,
-                lastRoll:             sock.marbleLastRoll,
-                lastRollAt:           sock.marbleLastRollAt,
-                p1UserId:             p1,
-                p2UserId:             p2,
-                displayName:          sock.nameOf,
-                p1Character:          sock.marbleCharacters[p1] ?? 'k',
-                p2Character:          sock.marbleCharacters[p2] ?? 'ria',
-                pieceSkin:            sock.marbleEquippedItems[currentUser]?['piece_skin'] ?? 'base',
-                opponentPieceSkin:    sock.marbleEquippedItems[opponentId]?['piece_skin'] ?? 'base',
-                coins:                myCoins,
+                gameId: sock.marbleActive
+                    ? (sock.marbleGameId ?? 'active')
+                    : null,
+                phase: sock.marblePhase,
+                turn: sock.marbleCurrentTurn,
+                p1Pieces: p1Pieces,
+                p2Pieces: p2Pieces,
+                pendingMoves: sock.marblePendingMoves,
+                startRolls: sock.marbleStartRolls,
+                orderCountdownUntil: sock.marbleOrderCountdownUntil,
+                hasDoubleRoll: sock.marbleHasDoubleRoll,
+                landData: sock.marbleLands,
+                onNewGame: sock.newMarbleGame,
+                onRollStartDice: sock.rollMarbleStartDice,
+                onRoll: sock.rollMarble,
+                onMovePiece: (pieceId, moveIndex) =>
+                    sock.moveMarble(pieceId, moveIndex: moveIndex),
+                onMoveNewPiece: () => sock.moveMarble(0),
+                currentUser: currentUser,
+                lastRoll: sock.marbleLastRoll,
+                lastRollAt: sock.marbleLastRollAt,
+                p1UserId: p1,
+                p2UserId: p2,
+                displayName: sock.nameOf,
+                p1Character: sock.marbleCharacters[p1] ?? 'k',
+                p2Character: sock.marbleCharacters[p2] ?? 'ria',
+                pieceSkin:
+                    sock.marbleEquippedItems[currentUser]?['piece_skin'] ??
+                    'base',
+                opponentPieceSkin:
+                    sock.marbleEquippedItems[opponentId]?['piece_skin'] ??
+                    'base',
+                coins: myCoins,
               ),
             ),
 
             // ─── 상단 HUD ─────────────────────────────────────────────────
             Positioned(
-              top: 0, left: 0, right: 0,
+              top: 0,
+              left: 0,
+              right: 0,
               child: _MarbleHud(
                 currentUser: currentUser,
-                p1:          p1,
-                p2:          p2,
-                myCoins:     myCoins,
-                opCoins:     opCoins,
-                round:       sock.marbleRound,
+                p1: p1,
+                p2: p2,
+                myCoins: myCoins,
+                opCoins: opCoins,
+                round: sock.marbleRound,
                 currentTurn: sock.marbleCurrentTurn,
                 displayName: sock.nameOf,
-                landData:    sock.marbleLands,
-                characters:  sock.marbleCharacters,
+                landData: sock.marbleLands,
+                characters: sock.marbleCharacters,
               ),
             ),
 
             // ─── 좌상단 나가기 버튼 ───────────────────────────────────────
             Positioned(
-              left: 10, top: 54,
+              left: 10,
+              top: 54,
               child: _ChromeButton(
                 icon: Icons.arrow_back_ios_new_rounded,
                 onPressed: () => Navigator.of(context).maybePop(),
@@ -306,7 +331,8 @@ class _MarbleScreenState extends State<MarbleScreen> {
 
             // ─── 우상단 메뉴 ─────────────────────────────────────────────
             Positioned(
-              right: 8, top: 50,
+              right: 8,
+              top: 50,
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   color: const Color(0x992B3440),
@@ -314,7 +340,7 @@ class _MarbleScreenState extends State<MarbleScreen> {
                   border: Border.all(color: const Color(0x33FFFFFF)),
                 ),
                 child: GameMenuButton(
-                  hasRestart:     sock.marbleActive,
+                  hasRestart: sock.marbleActive,
                   restartWaiting: sock.restartWaiting,
                   onRequestRestart: () => sock.requestRestart('marble'),
                 ),
@@ -327,8 +353,8 @@ class _MarbleScreenState extends State<MarbleScreen> {
                 child: _TileEventOverlay(
                   data: _tileEventData!,
                   onDismiss: () => setState(() {
-                    _showTileEvent  = false;
-                    _tileEventData  = null;
+                    _showTileEvent = false;
+                    _tileEventData = null;
                   }),
                 ),
               ),
@@ -377,17 +403,17 @@ class _MarbleHud extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final opponentId = (currentUser == p1) ? p2 : p1;
-    final isMyTurn   = currentTurn == currentUser;
+    final isMyTurn = currentTurn == currentUser;
 
     final myLandVal = _landValueOf(currentUser, landData);
     final opLandVal = _landValueOf(opponentId, landData);
-    final myTotal   = myCoins + myLandVal;
-    final opTotal   = opCoins + opLandVal;
-    final myRank    = myTotal >= opTotal ? 1 : 2;
-    final opRank    = 3 - myRank;
+    final myTotal = myCoins + myLandVal;
+    final opTotal = opCoins + opLandVal;
+    final myRank = myTotal >= opTotal ? 1 : 2;
+    final opRank = 3 - myRank;
 
     final myCharacter = characters[currentUser] ?? 'k';
-    final opCharacter = characters[opponentId]  ?? 'ria';
+    final opCharacter = characters[opponentId] ?? 'ria';
 
     return Container(
       decoration: BoxDecoration(
@@ -398,14 +424,16 @@ class _MarbleHud extends StatelessWidget {
         ),
         border: Border(
           bottom: BorderSide(
-            color: isMyTurn
-                ? const Color(0x55FFD700)
-                : const Color(0x22FFFFFF),
+            color: isMyTurn ? const Color(0x55FFD700) : const Color(0x22FFFFFF),
             width: 0.8,
           ),
         ),
         boxShadow: const [
-          BoxShadow(color: Colors.black54, blurRadius: 12, offset: Offset(0, 4)),
+          BoxShadow(
+            color: Colors.black54,
+            blurRadius: 12,
+            offset: Offset(0, 4),
+          ),
         ],
       ),
       child: SafeArea(
@@ -434,13 +462,13 @@ class _MarbleHud extends StatelessWidget {
                   children: [
                     // ─ 내 카드 ─
                     _ProfileCard(
-                      character:   myCharacter,
-                      nickname:    displayName(currentUser),
-                      coins:       myCoins,
+                      character: myCharacter,
+                      nickname: displayName(currentUser),
+                      coins: myCoins,
                       totalAssets: myTotal,
-                      rank:        myRank,
-                      isMyTurn:    isMyTurn,
-                      teamColor:   const Color(0xFF7C4DFF),
+                      rank: myRank,
+                      isMyTurn: isMyTurn,
+                      teamColor: const Color(0xFF7C4DFF),
                     ),
                     // ─ 가운데 라운드/턴 ─
                     Expanded(
@@ -448,11 +476,16 @@ class _MarbleHud extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: const Color(0x44FFFFFF),
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: const Color(0x33FFD700)),
+                              border: Border.all(
+                                color: const Color(0x33FFD700),
+                              ),
                             ),
                             child: Text(
                               'R $round',
@@ -493,14 +526,14 @@ class _MarbleHud extends StatelessWidget {
                     ),
                     // ─ 상대 카드 ─
                     _ProfileCard(
-                      character:   opCharacter,
-                      nickname:    displayName(opponentId),
-                      coins:       opCoins,
+                      character: opCharacter,
+                      nickname: displayName(opponentId),
+                      coins: opCoins,
                       totalAssets: opTotal,
-                      rank:        opRank,
-                      isMyTurn:    !isMyTurn && currentTurn != null,
-                      teamColor:   const Color(0xFFE91E63),
-                      reversed:    true,
+                      rank: opRank,
+                      isMyTurn: !isMyTurn && currentTurn != null,
+                      teamColor: const Color(0xFFE91E63),
+                      reversed: true,
                     ),
                   ],
                 ),
@@ -552,9 +585,10 @@ class _ProfileCardState extends State<_ProfileCard>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
-    _pulseAnim = Tween<double>(begin: 0.4, end: 1.0).animate(
-      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
-    );
+    _pulseAnim = Tween<double>(
+      begin: 0.4,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
     if (widget.isMyTurn) _pulseCtrl.repeat(reverse: true);
   }
 
@@ -577,12 +611,17 @@ class _ProfileCardState extends State<_ProfileCard>
 
   @override
   Widget build(BuildContext context) {
-    final bust = CharacterBust(character: widget.character, width: 44, height: 56);
+    final bust = CharacterBust(
+      character: widget.character,
+      width: 44,
+      height: 56,
+    );
 
     final infoCol = Column(
       mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment:
-          widget.reversed ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      crossAxisAlignment: widget.reversed
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
       children: [
         Text(
           widget.nickname.length > 7
@@ -601,9 +640,12 @@ class _ProfileCardState extends State<_ProfileCard>
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 6, height: 6,
+              width: 6,
+              height: 6,
               decoration: const BoxDecoration(
-                color: Color(0xFFFFD700), shape: BoxShape.circle),
+                color: Color(0xFFFFD700),
+                shape: BoxShape.circle,
+              ),
             ),
             const SizedBox(width: 3),
             Text(
@@ -622,9 +664,12 @@ class _ProfileCardState extends State<_ProfileCard>
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 6, height: 6,
+              width: 6,
+              height: 6,
               decoration: BoxDecoration(
-                color: Colors.white30, shape: BoxShape.circle),
+                color: Colors.white30,
+                shape: BoxShape.circle,
+              ),
             ),
             const SizedBox(width: 3),
             Text(
@@ -663,7 +708,9 @@ class _ProfileCardState extends State<_ProfileCard>
             boxShadow: [
               if (widget.isMyTurn)
                 BoxShadow(
-                  color: const Color(0xFFFFD700).withValues(alpha: glowStrength),
+                  color: const Color(
+                    0xFFFFD700,
+                  ).withValues(alpha: glowStrength),
                   blurRadius: 14,
                   spreadRadius: 2,
                 ),
@@ -683,7 +730,7 @@ class _ProfileCardState extends State<_ProfileCard>
           Positioned(
             top: -8,
             right: widget.reversed ? null : -8,
-            left:  widget.reversed ? -8  : null,
+            left: widget.reversed ? -8 : null,
             child: _RankBadge(rank: widget.rank),
           ),
         ],
@@ -701,7 +748,9 @@ class _RankBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isFirst = rank == 1;
-    final baseColor = isFirst ? const Color(0xFFFFD700) : const Color(0xFFB0BEC5);
+    final baseColor = isFirst
+        ? const Color(0xFFFFD700)
+        : const Color(0xFFB0BEC5);
     return Container(
       width: 30,
       height: 30,
@@ -714,9 +763,16 @@ class _RankBadge extends StatelessWidget {
           ],
         ),
         boxShadow: [
-          BoxShadow(color: baseColor.withValues(alpha: 0.55), blurRadius: 6, spreadRadius: 1),
+          BoxShadow(
+            color: baseColor.withValues(alpha: 0.55),
+            blurRadius: 6,
+            spreadRadius: 1,
+          ),
         ],
-        border: Border.all(color: Colors.white.withValues(alpha: 0.5), width: 1),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.5),
+          width: 1,
+        ),
       ),
       alignment: Alignment.center,
       child: Text(
@@ -749,13 +805,13 @@ class _LandPromptDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final type    = prompt['type'] as String? ?? 'claim';
-    final pos     = prompt['pos']  as int? ?? 0;
-    final cost    = prompt['cost'] as int? ?? 0;
-    final level   = prompt['level'] as int? ?? 1;
+    final type = prompt['type'] as String? ?? 'claim';
+    final pos = prompt['pos'] as int? ?? 0;
+    final cost = prompt['cost'] as int? ?? 0;
+    final level = prompt['level'] as int? ?? 1;
     final canAfford = myCoins >= cost;
 
-    final isClaim   = type == 'claim';
+    final isClaim = type == 'claim';
     final isAcquire = type == 'acquire';
 
     final String title;
@@ -765,24 +821,26 @@ class _LandPromptDialog extends StatelessWidget {
 
     if (isAcquire) {
       title = '도시 인수';
-      icon  = '🤝';
+      icon = '🤝';
       actionLabel = '인수 💴 ${fmm(cost)}';
       bannerColors = [const Color(0xFFB91C1C), const Color(0xFF991B1B)];
     } else if (isClaim) {
       title = '영지 점령';
-      icon  = '🏴';
+      icon = '🏴';
       actionLabel = '점령 💴 ${fmm(cost)}';
       bannerColors = [const Color(0xFF5B21B6), const Color(0xFF4C1D95)];
     } else {
       title = '건물 건설';
-      icon  = _levelIcon(level + 1);
+      icon = _levelIcon(level + 1);
       actionLabel = '건설 Lv${level + 1} 💴 ${fmm(cost)}';
       bannerColors = [const Color(0xFFC2410C), const Color(0xFF9A3412)];
     }
 
     final tile = kTileByPos[pos];
-    final locationStr = tile != null ? '${tile.emoji} ${tile.name} (${_groupLabel(pos)})' : 'Pos $pos';
-    final remaining   = myCoins - cost;
+    final locationStr = tile != null
+        ? '${tile.emoji} ${tile.name} (${_groupLabel(pos)})'
+        : 'Pos $pos';
+    final remaining = myCoins - cost;
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -796,7 +854,9 @@ class _LandPromptDialog extends StatelessWidget {
           ),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: const Color(0x44FFD700), width: 1.5),
-          boxShadow: const [BoxShadow(color: Color(0x99000000), blurRadius: 24)],
+          boxShadow: const [
+            BoxShadow(color: Color(0x99000000), blurRadius: 24),
+          ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -806,9 +866,14 @@ class _LandPromptDialog extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
               decoration: BoxDecoration(
-                gradient: LinearGradient(colors: bannerColors,
-                    begin: Alignment.centerLeft, end: Alignment.centerRight),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+                gradient: LinearGradient(
+                  colors: bannerColors,
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(18),
+                ),
               ),
               child: Row(
                 children: [
@@ -831,22 +896,28 @@ class _LandPromptDialog extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
               child: Column(
                 children: [
-                  _InfoRow(label: '위치',   value: locationStr),
-                  if (type == 'upgrade') _InfoRow(label: '레벨', value: 'Lv$level → Lv${level + 1}'),
-                  if (isAcquire)        _InfoRow(label: '레벨', value: 'Lv$level'),
-                  _InfoRow(
-                    label: isClaim ? '구매비용' : '인수비용',
-                    value: fmm(cost),
-                  ),
+                  _InfoRow(label: '위치', value: locationStr),
+                  if (type == 'upgrade')
+                    _InfoRow(label: '레벨', value: 'Lv$level → Lv${level + 1}'),
+                  if (isAcquire) _InfoRow(label: '레벨', value: 'Lv$level'),
+                  _InfoRow(label: isClaim ? '구매비용' : '인수비용', value: fmm(cost)),
                   _InfoRow(label: '보유 마블', value: fmm(myCoins)),
                   if (canAfford)
-                    _InfoRow(label: '인수 후 잔액', value: fmm(remaining),
-                        valueColor: remaining < 200000 ? const Color(0xFFFF3D00) : null),
+                    _InfoRow(
+                      label: '인수 후 잔액',
+                      value: fmm(remaining),
+                      valueColor: remaining < 200000
+                          ? const Color(0xFFFF3D00)
+                          : null,
+                    ),
                   if (!canAfford)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0x22FF3D00),
                           borderRadius: BorderRadius.circular(8),
@@ -873,15 +944,23 @@ class _LandPromptDialog extends StatelessWidget {
                 children: [
                   Expanded(
                     child: TextButton(
-                      onPressed: () { Navigator.of(context).pop(); onSkip(); },
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        onSkip();
+                      },
                       style: TextButton.styleFrom(
                         backgroundColor: Colors.white.withValues(alpha: 0.08),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                       child: Text(
                         '취소',
-                        style: GoogleFonts.notoSans(color: Colors.white60, fontWeight: FontWeight.w700),
+                        style: GoogleFonts.notoSans(
+                          color: Colors.white60,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ),
@@ -890,19 +969,27 @@ class _LandPromptDialog extends StatelessWidget {
                     flex: 2,
                     child: canAfford
                         ? GestureDetector(
-                            onTap: () { Navigator.of(context).pop(); onAct(type); },
+                            onTap: () {
+                              Navigator.of(context).pop();
+                              onAct(type);
+                            },
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               decoration: BoxDecoration(
                                 gradient: const LinearGradient(
-                                  colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                                  colors: [
+                                    Color(0xFFF59E0B),
+                                    Color(0xFFD97706),
+                                  ],
                                   begin: Alignment.topCenter,
                                   end: Alignment.bottomCenter,
                                 ),
                                 borderRadius: BorderRadius.circular(14),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: const Color(0xFFF59E0B).withValues(alpha: 0.35),
+                                    color: const Color(
+                                      0xFFF59E0B,
+                                    ).withValues(alpha: 0.35),
                                     blurRadius: 8,
                                   ),
                                 ],
@@ -945,8 +1032,8 @@ class _LandPromptDialog extends StatelessWidget {
   }
 
   static String _groupLabel(int pos) {
-    if (pos >= 1  && pos <= 5)  return '핑크';
-    if (pos >= 7  && pos <= 11) return '그린';
+    if (pos >= 1 && pos <= 5) return '핑크';
+    if (pos >= 7 && pos <= 11) return '그린';
     if (pos >= 13 && pos <= 17) return '블루';
     if (pos >= 19 && pos <= 23) return '골드';
     return '';
@@ -1037,24 +1124,41 @@ class _MarbleResultDialogState extends State<_MarbleResultDialog>
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))
-      ..forward();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..forward();
     _flash = Tween<double>(begin: 1.0, end: 0.0).animate(
-        CurvedAnimation(parent: _ctrl, curve: const Interval(0.0, 0.5, curve: Curves.easeOut)));
-    _scale = CurvedAnimation(parent: _ctrl, curve: const Interval(0.3, 1.0, curve: Curves.elasticOut));
+      CurvedAnimation(
+        parent: _ctrl,
+        curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
+      ),
+    );
+    _scale = CurvedAnimation(
+      parent: _ctrl,
+      curve: const Interval(0.3, 1.0, curve: Curves.elasticOut),
+    );
   }
 
   @override
-  void dispose() { _ctrl.dispose(); super.dispose(); }
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final isDraw = widget.winner == null || widget.winReason == 'timeout_draw';
-    final isMe   = widget.winner == widget.userId;
+    final isMe = widget.winner == widget.userId;
 
-    final (titleText, titleColor, titleIcon) = _buildTitle(isDraw, isMe, widget.winReason);
+    final (titleText, titleColor, titleIcon) = _buildTitle(
+      isDraw,
+      isMe,
+      widget.winReason,
+    );
     final isWin = isMe && !isDraw;
-    final isMonopoly = isWin && ['bankrupt', 'shrine', 'line'].contains(widget.winReason);
+    final isMonopoly =
+        isWin && ['bankrupt', 'shrine', 'line'].contains(widget.winReason);
 
     return AnimatedBuilder(
       animation: _ctrl,
@@ -1071,7 +1175,10 @@ class _MarbleResultDialogState extends State<_MarbleResultDialog>
             ),
           Dialog(
             backgroundColor: Colors.transparent,
-            insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 24,
+              vertical: 40,
+            ),
             child: Transform.scale(
               scale: _scale.value,
               child: Container(
@@ -1084,15 +1191,20 @@ class _MarbleResultDialogState extends State<_MarbleResultDialog>
                   ),
                   borderRadius: BorderRadius.circular(24),
                   border: Border.all(
-                    color: isDraw ? const Color(0x44FFFFFF) :
-                           isMe  ? const Color(0x88FFD700) : const Color(0x33FFFFFF),
+                    color: isDraw
+                        ? const Color(0x44FFFFFF)
+                        : isMe
+                        ? const Color(0x88FFD700)
+                        : const Color(0x33FFFFFF),
                     width: 1.5,
                   ),
                   boxShadow: [
-                    if (isWin) BoxShadow(
-                      color: const Color(0xFFFFD700).withValues(alpha: 0.2),
-                      blurRadius: 32, spreadRadius: 4,
-                    ),
+                    if (isWin)
+                      BoxShadow(
+                        color: const Color(0xFFFFD700).withValues(alpha: 0.2),
+                        blurRadius: 32,
+                        spreadRadius: 4,
+                      ),
                     const BoxShadow(color: Color(0xAA000000), blurRadius: 24),
                   ],
                 ),
@@ -1121,7 +1233,11 @@ class _MarbleResultDialogState extends State<_MarbleResultDialog>
                         children: [
                           if (!isDraw) ...[
                             // 내 캐릭터 (크게)
-                            CharacterBust(character: widget.myCharacter, width: 64, height: 80),
+                            CharacterBust(
+                              character: widget.myCharacter,
+                              width: 64,
+                              height: 80,
+                            ),
                             const SizedBox(width: 16),
                           ],
                           // vs or emoji
@@ -1138,7 +1254,11 @@ class _MarbleResultDialogState extends State<_MarbleResultDialog>
                             // 상대 캐릭터 (작게)
                             Opacity(
                               opacity: isMe ? 0.6 : 1.0,
-                              child: CharacterBust(character: widget.opCharacter, width: 48, height: 60),
+                              child: CharacterBust(
+                                character: widget.opCharacter,
+                                width: 48,
+                                height: 60,
+                              ),
                             ),
                           ],
                         ],
@@ -1193,12 +1313,23 @@ class _MarbleResultDialogState extends State<_MarbleResultDialog>
                             child: TextButton(
                               onPressed: () => Navigator.of(context).pop(),
                               style: TextButton.styleFrom(
-                                backgroundColor: Colors.white.withValues(alpha: 0.08),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                backgroundColor: Colors.white.withValues(
+                                  alpha: 0.08,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
                               ),
-                              child: Text('닫기',
-                                  style: GoogleFonts.notoSans(color: Colors.white54, fontWeight: FontWeight.w700)),
+                              child: Text(
+                                '닫기',
+                                style: GoogleFonts.notoSans(
+                                  color: Colors.white54,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -1207,14 +1338,25 @@ class _MarbleResultDialogState extends State<_MarbleResultDialog>
                             child: GestureDetector(
                               onTap: widget.onExit,
                               child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
                                     colors: isDraw
-                                        ? [const Color(0xFF546E7A), const Color(0xFF37474F)]
+                                        ? [
+                                            const Color(0xFF546E7A),
+                                            const Color(0xFF37474F),
+                                          ]
                                         : (isMe
-                                            ? [const Color(0xFFF59E0B), const Color(0xFFD97706)]
-                                            : [const Color(0xFF374151), const Color(0xFF1F2937)]),
+                                              ? [
+                                                  const Color(0xFFF59E0B),
+                                                  const Color(0xFFD97706),
+                                                ]
+                                              : [
+                                                  const Color(0xFF374151),
+                                                  const Color(0xFF1F2937),
+                                                ]),
                                   ),
                                   borderRadius: BorderRadius.circular(14),
                                 ),
@@ -1222,7 +1364,9 @@ class _MarbleResultDialogState extends State<_MarbleResultDialog>
                                 child: Text(
                                   '나가기',
                                   style: GoogleFonts.notoSans(
-                                    color: isMe ? Colors.black87 : Colors.white70,
+                                    color: isMe
+                                        ? Colors.black87
+                                        : Colors.white70,
                                     fontWeight: FontWeight.w900,
                                   ),
                                 ),
@@ -1242,26 +1386,30 @@ class _MarbleResultDialogState extends State<_MarbleResultDialog>
     );
   }
 
-  static (String, Color, String) _buildTitle(bool isDraw, bool isMe, String? reason) {
+  static (String, Color, String) _buildTitle(
+    bool isDraw,
+    bool isMe,
+    String? reason,
+  ) {
     if (isDraw) return ('무승부', Colors.white60, '🤝');
     if (!isMe) return ('패배', Colors.white38, '😢');
     return switch (reason) {
-      'bankrupt'  => ('파산 승리!',       const Color(0xFFFB923C), '💀'),
-      'shrine'    => ('독점 승리!',        const Color(0xFFFFD700), '🏆'),
-      'line'      => ('라인 독점 승리!',   const Color(0xFFFFD700), '🏆'),
-      'timeout'   => ('자산 승리!',        Colors.white,            '⏱️'),
-      _           => ('승리!',            const Color(0xFFFFD700), '🏆'),
+      'bankrupt' => ('파산 승리!', const Color(0xFFFB923C), '💀'),
+      'shrine' => ('독점 승리!', const Color(0xFFFFD700), '🏆'),
+      'line' => ('라인 독점 승리!', const Color(0xFFFFD700), '🏆'),
+      'timeout' => ('자산 승리!', Colors.white, '⏱️'),
+      _ => ('승리!', const Color(0xFFFFD700), '🏆'),
     };
   }
 
   static String _reasonLabel(String? reason, bool isMe) {
     return switch (reason) {
-      'bankrupt'     => isMe ? '상대방이 파산했습니다' : '파산했습니다',
-      'shrine'       => '독점을 달성했습니다',
-      'line'         => '한 라인을 완전히 점령했습니다',
-      'timeout'      => '20라운드 후 자산으로 결정됐습니다',
+      'bankrupt' => isMe ? '상대방이 파산했습니다' : '파산했습니다',
+      'shrine' => '독점을 달성했습니다',
+      'line' => '한 라인을 완전히 점령했습니다',
+      'timeout' => '20라운드 후 자산으로 결정됐습니다',
       'timeout_draw' => '20라운드 후 동점으로 무승부',
-      _              => '게임이 종료됐습니다',
+      _ => '게임이 종료됐습니다',
     };
   }
 }
@@ -1271,7 +1419,12 @@ class _AssetChip extends StatelessWidget {
   final int amount;
   final Color color;
   final bool big;
-  const _AssetChip({required this.label, required this.amount, required this.color, required this.big});
+  const _AssetChip({
+    required this.label,
+    required this.amount,
+    required this.color,
+    required this.big,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1280,11 +1433,17 @@ class _AssetChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: color.withValues(alpha: big ? 0.25 : 0.12),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: big ? 0.6 : 0.25), width: 1),
+        border: Border.all(
+          color: color.withValues(alpha: big ? 0.6 : 0.25),
+          width: 1,
+        ),
       ),
       child: Column(
         children: [
-          Text(label, style: GoogleFonts.notoSans(color: Colors.white54, fontSize: 10)),
+          Text(
+            label,
+            style: GoogleFonts.notoSans(color: Colors.white54, fontSize: 10),
+          ),
           const SizedBox(height: 2),
           Text(
             fmm(amount),
@@ -1322,22 +1481,29 @@ class _TileEventOverlayState extends State<_TileEventOverlay>
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2400),
-    )
-      ..addStatusListener((s) {
-        if (s == AnimationStatus.completed) widget.onDismiss();
-      })
-      ..forward();
+    _ctrl =
+        AnimationController(
+            vsync: this,
+            duration: const Duration(milliseconds: 2400),
+          )
+          ..addStatusListener((s) {
+            if (s == AnimationStatus.completed) widget.onDismiss();
+          })
+          ..forward();
 
     _scale = TweenSequence<double>([
       TweenSequenceItem(
-        tween: Tween(begin: 0.5, end: 1.05).chain(CurveTween(curve: Curves.elasticOut)),
+        tween: Tween(
+          begin: 0.5,
+          end: 1.05,
+        ).chain(CurveTween(curve: Curves.elasticOut)),
         weight: 350,
       ),
       TweenSequenceItem(
-        tween: Tween(begin: 1.05, end: 1.0).chain(CurveTween(curve: Curves.easeOut)),
+        tween: Tween(
+          begin: 1.05,
+          end: 1.0,
+        ).chain(CurveTween(curve: Curves.easeOut)),
         weight: 150,
       ),
       TweenSequenceItem(tween: ConstantTween(1.0), weight: 1700),
@@ -1362,7 +1528,10 @@ class _TileEventOverlayState extends State<_TileEventOverlay>
   @override
   Widget build(BuildContext context) {
     final type = widget.data['type'] as String? ?? '';
-    final (icon, name, description, accentColor) = _tileStyle(type, widget.data);
+    final (icon, name, description, accentColor) = _tileStyle(
+      type,
+      widget.data,
+    );
 
     return AnimatedBuilder(
       animation: _ctrl,
@@ -1372,12 +1541,15 @@ class _TileEventOverlayState extends State<_TileEventOverlay>
           children: [
             // 배경 오버레이
             Positioned.fill(
-              child: Container(color: Colors.black.withValues(alpha: _opacity.value * 0.78)),
+              child: Container(
+                color: Colors.black.withValues(alpha: _opacity.value * 0.78),
+              ),
             ),
             // 타입별 배경 글로우
             Center(
               child: Container(
-                width: 280, height: 280,
+                width: 280,
+                height: 280,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
@@ -1399,12 +1571,18 @@ class _TileEventOverlayState extends State<_TileEventOverlay>
                     width: 280,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [const Color(0xFF1A2235), const Color(0xFF0D1117)],
+                        colors: [
+                          const Color(0xFF1A2235),
+                          const Color(0xFF0D1117),
+                        ],
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                       ),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: accentColor.withValues(alpha: 0.6), width: 1.5),
+                      border: Border.all(
+                        color: accentColor.withValues(alpha: 0.6),
+                        width: 1.5,
+                      ),
                       boxShadow: [
                         BoxShadow(
                           color: accentColor.withValues(alpha: 0.3),
@@ -1429,7 +1607,9 @@ class _TileEventOverlayState extends State<_TileEventOverlay>
                                 accentColor.withValues(alpha: 0.3),
                               ],
                             ),
-                            borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(18),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 20),
@@ -1440,7 +1620,10 @@ class _TileEventOverlayState extends State<_TileEventOverlay>
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: accentColor.withValues(alpha: 0.15),
-                            border: Border.all(color: accentColor.withValues(alpha: 0.4), width: 1.5),
+                            border: Border.all(
+                              color: accentColor.withValues(alpha: 0.4),
+                              width: 1.5,
+                            ),
                           ),
                           child: Icon(icon, color: accentColor, size: 36),
                         ),
@@ -1484,7 +1667,9 @@ class _TileEventOverlayState extends State<_TileEventOverlay>
                             borderRadius: BorderRadius.circular(4),
                             child: LinearProgressIndicator(
                               value: 1.0 - _shimmer.value,
-                              backgroundColor: Colors.white.withValues(alpha: 0.1),
+                              backgroundColor: Colors.white.withValues(
+                                alpha: 0.1,
+                              ),
                               valueColor: AlwaysStoppedAnimation(accentColor),
                               minHeight: 3,
                             ),
@@ -1504,23 +1689,41 @@ class _TileEventOverlayState extends State<_TileEventOverlay>
   }
 
   static (IconData, String, String, Color) _tileStyle(
-      String type, Map<String, dynamic> data) {
+    String type,
+    Map<String, dynamic> data,
+  ) {
     switch (type) {
       case 'tax':
         final amount = data['amount'] as int? ?? 0;
-        return (Icons.account_balance_rounded, '운영본부', '세금 ${fmm(amount)} 납부',
-            const Color(0xFFEF4444));
+        return (
+          Icons.account_balance_rounded,
+          '운영본부',
+          '세금 ${fmm(amount)} 납부',
+          const Color(0xFFEF4444),
+        );
       case 'card':
         final card = data['card'] as Map<String, dynamic>?;
-        return (Icons.style_rounded, '황금열쇠',
-            card?['text'] as String? ?? '카드를 뽑습니다', const Color(0xFFFFD700));
+        return (
+          Icons.style_rounded,
+          '황금열쇠',
+          card?['text'] as String? ?? '카드를 뽑습니다',
+          const Color(0xFFFFD700),
+        );
       case 'event':
         final ev = data['event'] as Map<String, dynamic>?;
-        return (Icons.bolt_rounded, '이벤트',
-            ev?['text'] as String? ?? '이벤트가 발생했습니다', const Color(0xFF00D4FF));
+        return (
+          Icons.bolt_rounded,
+          '이벤트',
+          ev?['text'] as String? ?? '이벤트가 발생했습니다',
+          const Color(0xFF00D4FF),
+        );
       default:
-        return (Icons.casino_rounded, '이벤트', '이벤트가 발생했습니다',
-            const Color(0xFF7C4DFF));
+        return (
+          Icons.casino_rounded,
+          '이벤트',
+          '이벤트가 발생했습니다',
+          const Color(0xFF7C4DFF),
+        );
     }
   }
 }
@@ -1545,14 +1748,15 @@ class _ConfettiLayerState extends State<_ConfettiLayer>
   void initState() {
     super.initState();
     _particles = List.generate(44, (_) => _Particle(_rng));
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2400),
-    )
-      ..addStatusListener((s) {
-        if (s == AnimationStatus.completed && mounted) widget.onDone();
-      })
-      ..forward();
+    _ctrl =
+        AnimationController(
+            vsync: this,
+            duration: const Duration(milliseconds: 2400),
+          )
+          ..addStatusListener((s) {
+            if (s == AnimationStatus.completed && mounted) widget.onDone();
+          })
+          ..forward();
   }
 
   @override
@@ -1600,15 +1804,15 @@ class _Particle {
   ];
 
   _Particle(Random rng)
-      : x = rng.nextDouble(),
-        speed = 0.4 + rng.nextDouble() * 0.8,
-        phase = rng.nextDouble() * 2 * pi,
-        color = _colors[rng.nextInt(_colors.length)],
-        size = 4 + rng.nextDouble() * 8,
-        shape = _ParticleShape.values[rng.nextInt(3)],
-        rotation = rng.nextDouble() * pi * 2,
-        rotSpeed = (rng.nextDouble() - 0.5) * 6,
-        drift = (rng.nextDouble() - 0.5) * 0.08;
+    : x = rng.nextDouble(),
+      speed = 0.4 + rng.nextDouble() * 0.8,
+      phase = rng.nextDouble() * 2 * pi,
+      color = _colors[rng.nextInt(_colors.length)],
+      size = 4 + rng.nextDouble() * 8,
+      shape = _ParticleShape.values[rng.nextInt(3)],
+      rotation = rng.nextDouble() * pi * 2,
+      rotSpeed = (rng.nextDouble() - 0.5) * 6,
+      drift = (rng.nextDouble() - 0.5) * 0.08;
 }
 
 class _ConfettiPainter extends CustomPainter {
@@ -1624,7 +1828,9 @@ class _ConfettiPainter extends CustomPainter {
 
       final x = p.x + sin(t * 3 * pi + p.phase) * 0.05 + p.drift * t;
       final y = progress;
-      final opacity = t < 0.75 ? 1.0 : (1.0 - (t - 0.75) / 0.25).clamp(0.0, 1.0);
+      final opacity = t < 0.75
+          ? 1.0
+          : (1.0 - (t - 0.75) / 0.25).clamp(0.0, 1.0);
       final angle = p.rotation + p.rotSpeed * t;
       final pos = Offset(x * size.width, y * size.height);
 
@@ -1640,7 +1846,11 @@ class _ConfettiPainter extends CustomPainter {
         case _ParticleShape.rect:
           canvas.drawRRect(
             RRect.fromRectAndRadius(
-              Rect.fromCenter(center: Offset.zero, width: p.size * 1.4, height: p.size * 0.6),
+              Rect.fromCenter(
+                center: Offset.zero,
+                width: p.size * 1.4,
+                height: p.size * 0.6,
+              ),
               const Radius.circular(2),
             ),
             paint,

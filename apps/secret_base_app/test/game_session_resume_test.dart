@@ -46,7 +46,8 @@ void main() {
       expect(
         find.text('game-screen-sentinel'),
         findsOneWidget,
-        reason: 'game screen must appear immediately on resume without countdown',
+        reason:
+            'game screen must appear immediately on resume without countdown',
       );
       expect(
         find.text('게임 시작!'),
@@ -56,30 +57,35 @@ void main() {
     },
   );
 
-  testWidgets(
-    'GameLobbyScreen shows lobby UI when not resumed',
-    (tester) async {
-      // null onJoinLobby → defaults to SocketService.joinGameLobby (no-op without a real socket)
-      await tester.pumpWidget(
-        MaterialApp(
-          home: GameLobbyScreen(
-            gameType: 'yut',
-            title: '윷놀이',
-            description: '테스트',
-            emoji: '🎲',
-            color: Colors.orange,
-            backgroundColor: Colors.orange.shade50,
-            gameScreen: const Text('game-screen-sentinel'),
-          ),
+  testWidgets('GameLobbyScreen shows lobby UI when not resumed', (
+    tester,
+  ) async {
+    // null onJoinLobby → defaults to SocketService.joinGameLobby (no-op without a real socket)
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GameLobbyScreen(
+          gameType: 'yut',
+          title: '윷놀이',
+          description: '테스트',
+          emoji: '🎲',
+          color: Colors.orange,
+          backgroundColor: Colors.orange.shade50,
+          gameScreen: const Text('game-screen-sentinel'),
         ),
-      );
+      ),
+    );
 
-      await tester.pumpAndSettle();
+    await tester.pumpAndSettle();
 
-      expect(find.text('game-screen-sentinel'), findsNothing,
-          reason: 'game screen must not appear without a server resume signal');
-      expect(find.text('윷놀이'), findsOneWidget,
-          reason: 'lobby screen should be visible while waiting');
-    },
-  );
+    expect(
+      find.text('game-screen-sentinel'),
+      findsNothing,
+      reason: 'game screen must not appear without a server resume signal',
+    );
+    expect(
+      find.text('윷놀이'),
+      findsOneWidget,
+      reason: 'lobby screen should be visible while waiting',
+    );
+  });
 }
