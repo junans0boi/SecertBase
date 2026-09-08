@@ -1593,6 +1593,28 @@ const relationshipCouplePattern = (dimensions) => {
   };
 };
 
+const relationshipConversationPrompts = (assessmentCode) => {
+  if (assessmentCode === 'togetherness_personal_time') {
+    return [
+      '최근 함께하는 시간과 개인 시간이 엇갈렸던 장면에서 서로 무엇을 기대했는지 말해보세요.',
+      '각자에게 필요한 함께 있음과 개인 시간을 미리 확인하려면 어떤 약속이 편할까요?',
+      '시간의 양보다 두 사람이 만족했다고 느끼는 방식을 어떻게 만들 수 있을까요?',
+    ];
+  }
+  if (assessmentCode === 'affection_alignment') {
+    return [
+      '내가 사랑받는다고 느끼는 구체적인 행동을 서로 한 가지씩 설명해보세요.',
+      '상대의 표현을 내 방식과 다르게 번역해서 이해할 수 있는 장면은 무엇일까요?',
+      '부족함을 비난 대신 부탁으로 바꾸면 어떤 말이 될까요?',
+    ];
+  }
+  return [
+    '갈등이 커지기 전에 서로 알아차릴 수 있는 신호는 무엇인가요?',
+    '회복을 시작할 때 상대가 해주면 도움이 되는 행동은 무엇인가요?',
+    '안전하게 대화하기 위해 잠시 멈추거나 다시 시작하는 약속을 정해보세요.',
+  ];
+};
+
 const buildRelationshipCoupleResult = ({ assessmentCode, version, first, second }) => {
   const secondByKey = new Map(
     (second.dimensions ?? []).map((dimension) => [dimension.key, dimension]),
@@ -1631,6 +1653,7 @@ const buildRelationshipCoupleResult = ({ assessmentCode, version, first, second 
     overallAlignmentScore,
     relationshipPatternKey: pattern.key,
     relationshipPattern: pattern.text,
+    conversationPrompts: relationshipConversationPrompts(assessmentCode),
     disclaimer: '두 사람의 응답 조합을 관계 대화의 참고 정보로 정리한 결과이며, 의료적 진단이나 우열을 의미하지 않아요.',
   };
 };

@@ -191,6 +191,7 @@ class CoupleAssessmentResult {
   final int overallAlignmentScore;
   final String relationshipPatternKey;
   final String relationshipPattern;
+  final List<String> conversationPrompts;
   final String disclaimer;
 
   const CoupleAssessmentResult({
@@ -201,6 +202,7 @@ class CoupleAssessmentResult {
     required this.overallAlignmentScore,
     required this.relationshipPatternKey,
     required this.relationshipPattern,
+    required this.conversationPrompts,
     required this.disclaimer,
   });
 
@@ -220,6 +222,9 @@ class CoupleAssessmentResult {
             int.tryParse('${json['overallAlignmentScore']}') ?? 0,
         relationshipPatternKey: '${json['relationshipPatternKey'] ?? ''}',
         relationshipPattern: '${json['relationshipPattern'] ?? ''}',
+        conversationPrompts: (json['conversationPrompts'] as List? ?? const [])
+            .map((prompt) => '$prompt')
+            .toList(growable: false),
         disclaimer: '${json['disclaimer'] ?? ''}',
       );
 }

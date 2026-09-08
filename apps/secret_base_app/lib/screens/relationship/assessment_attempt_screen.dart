@@ -392,6 +392,20 @@ class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
             ),
           ),
         ),
+        if (result.conversationPrompts.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text('대화 질문', style: mainTitle(size: 19)),
+          const SizedBox(height: 8),
+          ...result.conversationPrompts.map(
+            (prompt) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: MainCard(
+                padding: const EdgeInsets.all(14),
+                child: Text(prompt, style: mainBody(size: 13, height: 1.45)),
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 8),
         Text(
           result.disclaimer,

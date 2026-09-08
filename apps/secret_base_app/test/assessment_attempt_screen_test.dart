@@ -317,6 +317,7 @@ void main() {
                   'overallAlignmentScore': 90,
                   'relationshipPatternKey': 'shared_rhythm',
                   'relationshipPattern': '두 사람의 관계 감각이 비슷한 편이에요.',
+                  'conversationPrompts': ['서로의 기대를 어떻게 확인할까요?'],
                   'disclaimer': '관계 대화용 결과예요.',
                 },
               }),
@@ -369,6 +370,8 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('조합 70 · 조율 90'), findsOneWidget);
+    expect(find.text('대화 질문'), findsOneWidget);
+    expect(find.text('서로의 기대를 어떻게 확인할까요?'), findsOneWidget);
     expect(
       find.byKey(const Key('couple_assessment_result_disclaimer')),
       findsOneWidget,

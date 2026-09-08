@@ -129,6 +129,7 @@ void main() {
                       'overallAlignmentScore': 90,
                       'relationshipPatternKey': 'shared_rhythm',
                       'relationshipPattern': '비슷한 리듬',
+                      'conversationPrompts': ['함께하는 시간과 개인 시간을 어떻게 조율할까요?'],
                       'disclaimer': '관계 대화용',
                     }
                   : null,
@@ -148,6 +149,7 @@ void main() {
     expect(pending.result, isNull);
     expect(ready.status, 'ready');
     expect(ready.result?.dimensions.single.alignmentScore, 90);
+    expect(ready.result?.conversationPrompts.single, contains('조율'));
   });
 
   test('maps server and network errors to public reasons', () async {
