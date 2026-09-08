@@ -42,6 +42,18 @@ const schema = z.object({
   NAVER_SEARCH_CLIENT_SECRET: z.string().optional().default(""),
   NAVER_MAPS_CLIENT_ID: z.string().optional().default(""),
   NAVER_MAPS_CLIENT_SECRET: z.string().optional().default(""),
+  LLM_ENABLED: z
+    .string()
+    .optional()
+    .default("false")
+    .transform((value) => value === "true"),
+  LLM_PROVIDER: z.enum(["disabled", "free_api", "fixture"]).default("disabled"),
+  LLM_BASE_URL: z.string().url().optional(),
+  LLM_API_KEY: z.string().optional().default(""),
+  LLM_MODEL: z.string().optional().default(""),
+  LLM_PROMPT_VERSION: z.string().optional().default("v1"),
+  LLM_CONTEXT_VERSION: z.string().optional().default("v1"),
+  LLM_TIMEOUT_MS: z.coerce.number().int().min(100).max(60000).default(10000),
   ROOM_SECRET: z.string().min(4),
   ALLOWED_USERS: z
     .string()
