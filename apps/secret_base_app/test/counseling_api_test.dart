@@ -20,33 +20,35 @@ void main() {
           );
           expect(request.headers['authorization'], 'Bearer jwt-token');
           expect(jsonDecode(request.body), {'content': '오늘 마음을 적어볼게'});
-        return http.Response.bytes(
-          utf8.encode(jsonEncode({
-              'ok': true,
-              'session': {
-                'id': 7,
-                'scope': 'private',
-                'title': '나만의 대화',
-                'status': 'active',
-              },
-              'messages': [
-                {
-                  'id': 1,
-                  'sequence': 1,
-                  'role': 'user',
-                  'content': '오늘 마음을 적어볼게',
+          return http.Response.bytes(
+            utf8.encode(
+              jsonEncode({
+                'ok': true,
+                'session': {
+                  'id': 7,
+                  'scope': 'private',
+                  'title': '나만의 대화',
+                  'status': 'active',
                 },
-                {
-                  'id': 2,
-                  'sequence': 2,
-                  'role': 'assistant',
-                  'content': '천천히 살펴봐요.',
-                  'generationStatus': 'fallback',
-                },
-              ],
-          })),
-          201,
-        );
+                'messages': [
+                  {
+                    'id': 1,
+                    'sequence': 1,
+                    'role': 'user',
+                    'content': '오늘 마음을 적어볼게',
+                  },
+                  {
+                    'id': 2,
+                    'sequence': 2,
+                    'role': 'assistant',
+                    'content': '천천히 살펴봐요.',
+                    'generationStatus': 'fallback',
+                  },
+                ],
+              }),
+            ),
+            201,
+          );
         }),
       );
 
