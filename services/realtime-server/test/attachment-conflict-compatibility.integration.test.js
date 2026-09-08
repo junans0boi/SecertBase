@@ -148,6 +148,42 @@ test(
       assert.equal('user2Score' in aliceBody.result, false);
       assert.equal(aliceBody.result.conversationPrompts.length, 3);
 
+      const explanationIdle = await server.request(
+        '/relationship/explanations/compatibility/attachment-conflict/current',
+        { token: alice.token },
+      );
+      const explanationIdleBody = await explanationIdle.json();
+      assert.equal(explanationIdle.status, 200, JSON.stringify(explanationIdleBody));
+      assert.equal(explanationIdleBody.status, 'idle');
+
+      const explanationRequested = await server.request(
+        '/relationship/explanations/compatibility/attachment-conflict',
+        { token: alice.token, method: 'POST' },
+      );
+      const explanationRequestedBody = await explanationRequested.json();
+      assert.equal(
+        explanationRequested.status,
+        201,
+        JSON.stringify(explanationRequestedBody),
+      );
+      assert.equal(explanationRequestedBody.status, 'fallback');
+      assert.equal(explanationRequestedBody.generation.provider, 'disabled');
+      assert.equal('input' in explanationRequestedBody.generation, false);
+      assert.equal('answers' in explanationRequestedBody.generation, false);
+      assert.equal('coupleId' in explanationRequestedBody.generation, false);
+
+      const explanationForPartner = await server.request(
+        '/relationship/explanations/compatibility/attachment-conflict/current',
+        { token: bob.token },
+      );
+      const explanationForPartnerBody = await explanationForPartner.json();
+      assert.equal(explanationForPartner.status, 200, JSON.stringify(explanationForPartnerBody));
+      assert.equal(explanationForPartnerBody.status, 'fallback');
+      assert.equal(
+        explanationForPartnerBody.generation.explanation,
+        explanationRequestedBody.generation.explanation,
+      );
+
       const repeated = await server.request(
         '/relationship/compatibility/attachment-conflict/current',
         { token: alice.token },

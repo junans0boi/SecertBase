@@ -211,8 +211,10 @@ class CompatibilityScreen extends StatefulWidget {
 
 class _CompatibilityScreenState extends State<CompatibilityScreen> {
   CompatibilityState? _state;
+  CompatibilityExplanationState? _explanationState;
   String? _errorMessage;
   bool _loading = true;
+  bool _loadingExplanation = false;
 
   @override
   void initState() {
@@ -251,6 +253,29 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
                 error.reason == 'network_error'
             ? '네트워크 연결을 확인하고 다시 시도해주세요.'
             : '궁합 분석을 불러오지 못했어요.';
+      });
+    }
+  }
+
+  Future<void> _requestExplanation() async {
+    if (_loadingExplanation) return;
+    setState(() => _loadingExplanation = true);
+    try {
+      final state = await widget.api.requestExplanation(widget.analysisCode);
+      if (!mounted) return;
+      setState(() {
+        _explanationState = state;
+        _loadingExplanation = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadingExplanation = false;
+        _errorMessage =
+            error is CompatibilityApiException &&
+                error.reason == 'network_error'
+            ? '네트워크 연결을 확인하고 다시 시도해주세요.'
+            : '궁합 설명을 생성하지 못했어요.';
       });
     }
   }
@@ -305,64 +330,78 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
     );
   }
 
-  Widget _readyState(CompatibilityAnalysis result) => ListView(
-    padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
-    children: [
-      Text('우리의 관계 패턴', style: mainTitle(size: 25)),
-      const SizedBox(height: 8),
-      Text(
-        result.complementaryPattern,
-        key: const Key('compatibility_ready'),
-        style: mainBody(size: 15, color: kMainSub, height: 1.55),
-      ),
-      const SizedBox(height: 16),
-      ...result.dimensions.map(
-        (dimension) => Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: MainCard(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Expanded(child: Text(dimension.title)),
-                Text(
-                  '차이 ${dimension.scoreDifference}점',
-                  style: mainBody(color: kMainLilac, weight: FontWeight.w800),
-                ),
-              ],
+  Widget _readyState(CompatibilityAnalysis result) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
+      children: [
+        Text('우리의 관계 패턴', style: mainTitle(size: 25)),
+        const SizedBox(height: 8),
+        Text(
+          result.complementaryPattern,
+          key: const Key('compatibility_ready'),
+          style: mainBody(size: 15, color: kMainSub, height: 1.55),
+        ),
+        const SizedBox(height: 16),
+        ...result.dimensions.map(
+          (dimension) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: MainCard(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(child: Text(dimension.title)),
+                  Text(
+                    '차이 ${dimension.scoreDifference}점',
+                    style: mainBody(color: kMainLilac, weight: FontWeight.w800),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-      ),
-      const SizedBox(height: 4),
-      if (result.conflictTrigger != null || result.repairApproach != null) ...[
-        Text('갈등을 이해하는 단서', style: mainTitle(size: 19)),
-        const SizedBox(height: 8),
-        if (result.conflictTrigger != null)
-          MainCard(
-            padding: const EdgeInsets.all(14),
-            child: Text(
-              result.conflictTrigger!,
-              key: const Key('compatibility_conflict_trigger'),
-              style: mainBody(size: 13, height: 1.45),
-            ),
-          ),
-        if (result.repairApproach != null) ...[
+        const SizedBox(height: 4),
+        if (result.conflictTrigger != null ||
+            result.repairApproach != null) ...[
+          Text('갈등을 이해하는 단서', style: mainTitle(size: 19)),
           const SizedBox(height: 8),
-          MainCard(
-            padding: const EdgeInsets.all(14),
-            child: Text(
-              result.repairApproach!,
-              key: const Key('compatibility_repair_approach'),
-              style: mainBody(size: 13, height: 1.45),
+          if (result.conflictTrigger != null)
+            MainCard(
+              padding: const EdgeInsets.all(14),
+              child: Text(
+                result.conflictTrigger!,
+                key: const Key('compatibility_conflict_trigger'),
+                style: mainBody(size: 13, height: 1.45),
+              ),
+            ),
+          if (result.repairApproach != null) ...[
+            const SizedBox(height: 8),
+            MainCard(
+              padding: const EdgeInsets.all(14),
+              child: Text(
+                result.repairApproach!,
+                key: const Key('compatibility_repair_approach'),
+                style: mainBody(size: 13, height: 1.45),
+              ),
+            ),
+          ],
+        ],
+        if (result.conversationStarters.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text('대화 시작점', style: mainTitle(size: 19)),
+          const SizedBox(height: 8),
+          ...result.conversationStarters.map(
+            (item) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: MainCard(
+                padding: const EdgeInsets.all(14),
+                child: Text(item, style: mainBody(size: 13, height: 1.45)),
+              ),
             ),
           ),
         ],
-      ],
-      if (result.conversationStarters.isNotEmpty) ...[
-        const SizedBox(height: 4),
-        Text('대화 시작점', style: mainTitle(size: 19)),
+        Text('주의해서 살펴볼 상호작용', style: mainTitle(size: 19)),
         const SizedBox(height: 8),
-        ...result.conversationStarters.map(
+        ...result.cautionInteractions.map(
           (item) => Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: MainCard(
@@ -371,37 +410,60 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
             ),
           ),
         ),
+        const SizedBox(height: 4),
+        Text('대화 질문', style: mainTitle(size: 19)),
+        const SizedBox(height: 8),
+        ...result.conversationPrompts.map(
+          (item) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: MainCard(
+              padding: const EdgeInsets.all(14),
+              child: Text(item, style: mainBody(size: 13, height: 1.45)),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          result.disclaimer,
+          style: mainBody(size: 12, color: kMainMuted, height: 1.5),
+        ),
+        const SizedBox(height: 16),
+        MainCard(
+          key: const Key('compatibility_explanation_card'),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('자연어 설명', style: mainBody(weight: FontWeight.w800)),
+              const SizedBox(height: 6),
+              Text(
+                _explanationState?.generation?.explanation ??
+                    '원할 때만 두 사람의 구조화된 패턴을 자연어로 풀어볼 수 있어요.',
+                style: mainBody(size: 13, color: kMainSub, height: 1.5),
+              ),
+              const SizedBox(height: 10),
+              if (_explanationState?.status == 'pending' || _loadingExplanation)
+                const Text('설명을 준비하고 있어요…')
+              else
+                OutlinedButton(
+                  key: const Key('request_compatibility_explanation'),
+                  onPressed: _requestExplanation,
+                  child: Text(
+                    _explanationState == null ? '설명 요청하기' : '다시 생성하기',
+                  ),
+                ),
+              if (_explanationState?.status == 'fallback')
+                Text(
+                  '고정 설명을 표시하고 있어요. 궁합 점수와 핵심 결과는 변하지 않아요.',
+                  key: const Key('compatibility_explanation_fallback'),
+                  style: mainBody(size: 11, color: kMainMuted),
+                ),
+            ],
+          ),
+        ),
       ],
-      Text('주의해서 살펴볼 상호작용', style: mainTitle(size: 19)),
-      const SizedBox(height: 8),
-      ...result.cautionInteractions.map(
-        (item) => Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: MainCard(
-            padding: const EdgeInsets.all(14),
-            child: Text(item, style: mainBody(size: 13, height: 1.45)),
-          ),
-        ),
-      ),
-      const SizedBox(height: 4),
-      Text('대화 질문', style: mainTitle(size: 19)),
-      const SizedBox(height: 8),
-      ...result.conversationPrompts.map(
-        (item) => Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: MainCard(
-            padding: const EdgeInsets.all(14),
-            child: Text(item, style: mainBody(size: 13, height: 1.45)),
-          ),
-        ),
-      ),
-      const SizedBox(height: 8),
-      Text(
-        result.disclaimer,
-        style: mainBody(size: 12, color: kMainMuted, height: 1.5),
-      ),
-    ],
-  );
+    );
+  }
 
   Widget _errorState() => Center(
     child: Padding(

@@ -7,6 +7,7 @@ import express from 'express';
 import multer from 'multer';
 import { ZipArchive } from 'archiver';
 import bcrypt from 'bcryptjs';
+import { createHash } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import { query, transaction } from './db.js';
@@ -2483,6 +2484,87 @@ const getCompatibilityState = async (userId, code) => {
   return getCoupleCompatibilityState(userId, code);
 };
 
+const compatibilityCodes = new Set([
+  'attachment-conflict',
+  'conflict-repair',
+  ...personalCompatibilityDefinitions.keys(),
+  ...coupleCompatibilityDefinitions.keys(),
+]);
+
+const compatibilityExplanationSourceKey = (code, result) => {
+  const digest = createHash('sha256')
+    .update(JSON.stringify(result))
+    .digest('hex');
+  return `compatibility:${code}:${digest}`;
+};
+
+const buildCompatibilityExplanationInput = (code, result) => ({
+  sourceType: 'compatibility',
+  analysisCode: result.analysisCode ?? `${code}_compatibility`,
+  version: result.analysisVersion ?? 'v1',
+  dimensions: (result.dimensions ?? []).map((dimension) => ({
+    key: dimension.key,
+    title: dimension.title,
+    scoreDifference: dimension.scoreDifference,
+  })),
+  patternKey: result.complementaryPatternKey ?? null,
+  metadata: { locale: 'ko-KR', nonClinical: true },
+});
+
+const runCompatibilityExplanationGeneration = async (
+  userId,
+  coupleId,
+  code,
+  result,
+) => {
+  const input = buildCompatibilityExplanationInput(code, result);
+  const sourceKey = compatibilityExplanationSourceKey(code, result);
+  const provider = createExplanationProvider(config);
+  const providerName = provider?.name ?? 'disabled';
+  const model = provider?.model ?? null;
+  const inserted = await query(
+    `INSERT INTO relationship_explanation_generations
+       (requester_user_id, couple_id, scope_type, source_key, status, provider, model,
+        prompt_version, context_version, input_json)
+     VALUES (?, ?, 'compatibility', ?, 'pending', ?, ?, ?, ?, ?)`,
+    [
+      userId,
+      coupleId,
+      sourceKey,
+      providerName,
+      model,
+      config.LLM_PROMPT_VERSION,
+      config.LLM_CONTEXT_VERSION,
+      JSON.stringify(input),
+    ],
+  );
+  const attempt = await createExplanationAttempt({
+    provider,
+    input,
+    providerName,
+    model,
+  });
+  await query(
+    `UPDATE relationship_explanation_generations
+     SET status = ?, explanation_text = ?, error_code = ?,
+         completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+     WHERE generation_id = ? AND couple_id = ?`,
+    [attempt.status, attempt.text, attempt.errorCode, inserted.rows.insertId, coupleId],
+  );
+  const generation = await query(
+    `SELECT generation_id, status, provider, model, prompt_version,
+            context_version, explanation_text, error_code, created_at, completed_at
+     FROM relationship_explanation_generations
+     WHERE generation_id = ? AND couple_id = ?
+     LIMIT 1`,
+    [inserted.rows.insertId, coupleId],
+  );
+  return {
+    row: generation.rows[0] ?? null,
+    sourceKey,
+  };
+};
+
 router.get('/relationship/compatibility/current', async (req, res) => {
   try {
     const coupleId = await getCoupleIdForUser(req.auth.userId);
@@ -2534,6 +2616,83 @@ router.get('/relationship/compatibility/:code/current', async (req, res) => {
     return res.json({ ok: true, ...state });
   } catch (error) {
     console.error('[API] /relationship/compatibility/:code/current error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.get('/relationship/explanations/compatibility/:code/current', async (req, res) => {
+  try {
+    const code = String(req.params.code ?? '').trim();
+    if (!compatibilityCodes.has(code)) {
+      return res.status(404).json({ ok: false, reason: 'compatibility_not_found' });
+    }
+    const state = await getCompatibilityState(req.auth.userId, code);
+    if (state.error) {
+      return res.status(state.error.status).json({ ok: false, reason: state.error.reason });
+    }
+    const coupleId = await getCoupleIdForUser(req.auth.userId);
+    if (coupleId == null) {
+      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+    }
+    if (!state.result) {
+      return res.json({ ok: true, status: 'idle', generation: null });
+    }
+    const sourceKey = compatibilityExplanationSourceKey(code, state.result);
+    const generations = await query(
+      `SELECT generation_id, status, provider, model, prompt_version,
+              context_version, explanation_text, error_code, created_at, completed_at
+       FROM relationship_explanation_generations
+       WHERE couple_id = ? AND scope_type = 'compatibility' AND source_key = ?
+       ORDER BY generation_id DESC
+       LIMIT 1`,
+      [coupleId, sourceKey],
+    );
+    return res.json({
+      ok: true,
+      status: generations.rows[0]?.status ?? 'idle',
+      generation: generations.rows[0]
+        ? explanationGenerationPayload(generations.rows[0])
+        : null,
+    });
+  } catch (error) {
+    console.error('[API] /relationship/explanations/compatibility/:code/current error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.post('/relationship/explanations/compatibility/:code', async (req, res) => {
+  try {
+    const code = String(req.params.code ?? '').trim();
+    if (!compatibilityCodes.has(code)) {
+      return res.status(404).json({ ok: false, reason: 'compatibility_not_found' });
+    }
+    const state = await getCompatibilityState(req.auth.userId, code);
+    if (state.error) {
+      return res.status(state.error.status).json({ ok: false, reason: state.error.reason });
+    }
+    if (!state.result) {
+      return res.status(409).json({ ok: false, reason: 'compatibility_result_required' });
+    }
+    const coupleId = await getCoupleIdForUser(req.auth.userId);
+    if (coupleId == null) {
+      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+    }
+    const generation = await runCompatibilityExplanationGeneration(
+      req.auth.userId,
+      coupleId,
+      code,
+      state.result,
+    );
+    if (!generation.row) {
+      return res.status(500).json({ ok: false, reason: 'explanation_generation_failed' });
+    }
+    return res.status(201).json({
+      ok: true,
+      status: generation.row.status,
+      generation: explanationGenerationPayload(generation.row),
+    });
+  } catch (error) {
+    console.error('[API] /relationship/explanations/compatibility/:code POST error:', error);
     return res.status(500).json({ ok: false, reason: 'internal_error' });
   }
 });

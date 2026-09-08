@@ -129,6 +129,53 @@ void main() {
     expect(state.result, isNull);
   });
 
+  test(
+    'requests a compatibility explanation through its explicit endpoint',
+    () async {
+      final requests = <http.Request>[];
+      final api = CompatibilityApi(
+        baseUrl: 'https://secretbase.example',
+        token: 'jwt-token',
+        client: MockClient((request) async {
+          requests.add(request);
+          return http.Response.bytes(
+            utf8.encode(
+              jsonEncode({
+                'ok': true,
+                'status': 'fallback',
+                'generation': {
+                  'id': 12,
+                  'status': 'fallback',
+                  'provider': 'disabled',
+                  'model': null,
+                  'promptVersion': 'v1',
+                  'contextVersion': 'v1',
+                  'explanation': '고정 궁합 설명',
+                  'errorCode': 'provider_disabled',
+                },
+              }),
+            ),
+            request.method == 'POST' ? 201 : 200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }),
+      );
+
+      final current = await api.fetchExplanation('attachment-conflict');
+      final requested = await api.requestExplanation('attachment-conflict');
+
+      expect(requests[0].method, 'GET');
+      expect(
+        requests[0].url.path,
+        '/api/relationship/explanations/compatibility/attachment-conflict/current',
+      );
+      expect(requests[1].method, 'POST');
+      expect(current.status, 'fallback');
+      expect(requested.generation?.explanation, '고정 궁합 설명');
+      expect(requested.generation?.errorCode, 'provider_disabled');
+    },
+  );
+
   testWidgets('dashboard separates ready and pending cards', (tester) async {
     final dashboardPayload = {
       'ok': true,
@@ -232,5 +279,63 @@ void main() {
 
     expect(find.byKey(const Key('compatibility_ready')), findsOneWidget);
     expect(find.text('차이 30점'), findsOneWidget);
+  });
+
+  testWidgets('requests compatibility explanation only after explicit action', (
+    tester,
+  ) async {
+    var explanationRequested = false;
+    final api = CompatibilityApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient((request) async {
+        if (request.url.path.contains('/explanations/compatibility/')) {
+          explanationRequested = true;
+          return http.Response.bytes(
+            utf8.encode(
+              jsonEncode({
+                'ok': true,
+                'status': 'fallback',
+                'generation': {
+                  'id': 12,
+                  'status': 'fallback',
+                  'provider': 'disabled',
+                  'model': null,
+                  'promptVersion': 'v1',
+                  'contextVersion': 'v1',
+                  'explanation': '고정 궁합 설명이에요.',
+                  'errorCode': 'provider_disabled',
+                },
+              }),
+            ),
+            201,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }
+        return http.Response.bytes(
+          utf8.encode(jsonEncode(_state(status: 'ready'))),
+          200,
+        );
+      }),
+    );
+
+    await tester.pumpWidget(MaterialApp(home: CompatibilityScreen(api: api)));
+    await tester.pumpAndSettle();
+
+    expect(find.text('원할 때만 두 사람의 구조화된 패턴을 자연어로 풀어볼 수 있어요.'), findsOneWidget);
+    await tester.ensureVisible(
+      find.byKey(const Key('request_compatibility_explanation')),
+    );
+    await tester.tap(
+      find.byKey(const Key('request_compatibility_explanation')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(explanationRequested, isTrue);
+    expect(find.text('고정 궁합 설명이에요.'), findsOneWidget);
+    expect(
+      find.byKey(const Key('compatibility_explanation_fallback')),
+      findsOneWidget,
+    );
   });
 }

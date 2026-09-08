@@ -116,6 +116,63 @@ class CompatibilityState {
   }
 }
 
+class CompatibilityExplanationGeneration {
+  final int id;
+  final String status;
+  final String provider;
+  final String? model;
+  final String promptVersion;
+  final String contextVersion;
+  final String? explanation;
+  final String? errorCode;
+
+  const CompatibilityExplanationGeneration({
+    required this.id,
+    required this.status,
+    required this.provider,
+    required this.model,
+    required this.promptVersion,
+    required this.contextVersion,
+    required this.explanation,
+    required this.errorCode,
+  });
+
+  factory CompatibilityExplanationGeneration.fromJson(
+    Map<String, dynamic> json,
+  ) => CompatibilityExplanationGeneration(
+    id: int.tryParse('${json['id']}') ?? 0,
+    status: '${json['status'] ?? ''}',
+    provider: '${json['provider'] ?? ''}',
+    model: json['model'] == null ? null : '${json['model']}',
+    promptVersion: '${json['promptVersion'] ?? ''}',
+    contextVersion: '${json['contextVersion'] ?? ''}',
+    explanation: json['explanation'] == null ? null : '${json['explanation']}',
+    errorCode: json['errorCode'] == null ? null : '${json['errorCode']}',
+  );
+}
+
+class CompatibilityExplanationState {
+  final String status;
+  final CompatibilityExplanationGeneration? generation;
+
+  const CompatibilityExplanationState({
+    required this.status,
+    required this.generation,
+  });
+
+  factory CompatibilityExplanationState.fromJson(Map<String, dynamic> json) {
+    final rawGeneration = json['generation'];
+    return CompatibilityExplanationState(
+      status: '${json['status'] ?? 'idle'}',
+      generation: rawGeneration is Map
+          ? CompatibilityExplanationGeneration.fromJson(
+              Map<String, dynamic>.from(rawGeneration),
+            )
+          : null,
+    );
+  }
+}
+
 class CompatibilityDashboardCard {
   final String code;
   final String title;
@@ -211,6 +268,22 @@ class CompatibilityApi {
     }
   }
 
+  Future<CompatibilityExplanationState> fetchExplanation(String code) async {
+    return _fetchExplanation(
+      Uri.parse(
+        '$baseUrl/api/relationship/explanations/compatibility/$code/current',
+      ),
+      method: 'GET',
+    );
+  }
+
+  Future<CompatibilityExplanationState> requestExplanation(String code) async {
+    return _fetchExplanation(
+      Uri.parse('$baseUrl/api/relationship/explanations/compatibility/$code'),
+      method: 'POST',
+    );
+  }
+
   Future<CompatibilityState> _fetch(String code) async {
     try {
       final response = await _client.get(
@@ -218,6 +291,22 @@ class CompatibilityApi {
         headers: {'Authorization': 'Bearer $token'},
       );
       return CompatibilityState.fromJson(_successfulBody(response));
+    } on http.ClientException {
+      throw const CompatibilityApiException('network_error');
+    } on FormatException {
+      throw const CompatibilityApiException('invalid_response');
+    }
+  }
+
+  Future<CompatibilityExplanationState> _fetchExplanation(
+    Uri uri, {
+    required String method,
+  }) async {
+    try {
+      final response = method == 'POST'
+          ? await _client.post(uri, headers: {'Authorization': 'Bearer $token'})
+          : await _client.get(uri, headers: {'Authorization': 'Bearer $token'});
+      return CompatibilityExplanationState.fromJson(_successfulBody(response));
     } on http.ClientException {
       throw const CompatibilityApiException('network_error');
     } on FormatException {
