@@ -103,8 +103,6 @@ class _PickerSelection<T> {
   final T? value;
 
   const _PickerSelection.confirmed(this.value) : confirmed = true;
-
-  const _PickerSelection.cancelled() : confirmed = false, value = null;
 }
 
 class RelationshipEntryCard extends StatelessWidget {
