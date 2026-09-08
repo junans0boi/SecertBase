@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/auth_service.dart';
@@ -32,19 +35,77 @@ const _birthCountryOptions = [
   _BirthCountryOption('일본', 'Asia/Tokyo'),
   _BirthCountryOption('중국', 'Asia/Shanghai'),
   _BirthCountryOption('대만', 'Asia/Taipei'),
+  _BirthCountryOption('홍콩', 'Asia/Hong_Kong'),
+  _BirthCountryOption('마카오', 'Asia/Macau'),
+  _BirthCountryOption('몽골', 'Asia/Ulaanbaatar'),
+  _BirthCountryOption('필리핀', 'Asia/Manila'),
+  _BirthCountryOption('인도네시아', 'Asia/Jakarta'),
+  _BirthCountryOption('말레이시아', 'Asia/Kuala_Lumpur'),
   _BirthCountryOption('싱가포르', 'Asia/Singapore'),
   _BirthCountryOption('베트남', 'Asia/Ho_Chi_Minh'),
   _BirthCountryOption('태국', 'Asia/Bangkok'),
+  _BirthCountryOption('캄보디아', 'Asia/Phnom_Penh'),
+  _BirthCountryOption('라오스', 'Asia/Vientiane'),
+  _BirthCountryOption('미얀마', 'Asia/Yangon'),
   _BirthCountryOption('인도', 'Asia/Kolkata'),
+  _BirthCountryOption('네팔', 'Asia/Kathmandu'),
+  _BirthCountryOption('스리랑카', 'Asia/Colombo'),
+  _BirthCountryOption('방글라데시', 'Asia/Dhaka'),
+  _BirthCountryOption('파키스탄', 'Asia/Karachi'),
+  _BirthCountryOption('카자흐스탄', 'Asia/Almaty'),
+  _BirthCountryOption('우즈베키스탄', 'Asia/Tashkent'),
+  _BirthCountryOption('아랍에미리트', 'Asia/Dubai'),
+  _BirthCountryOption('사우디아라비아', 'Asia/Riyadh'),
+  _BirthCountryOption('이스라엘', 'Asia/Jerusalem'),
+  _BirthCountryOption('튀르키예', 'Europe/Istanbul'),
   _BirthCountryOption('호주', 'Australia/Sydney'),
   _BirthCountryOption('뉴질랜드', 'Pacific/Auckland'),
-  _BirthCountryOption('미국 동부', 'America/New_York'),
-  _BirthCountryOption('미국 서부', 'America/Los_Angeles'),
-  _BirthCountryOption('캐나다', 'America/Toronto'),
+  _BirthCountryOption('피지', 'Pacific/Fiji'),
   _BirthCountryOption('영국', 'Europe/London'),
+  _BirthCountryOption('아일랜드', 'Europe/Dublin'),
   _BirthCountryOption('프랑스', 'Europe/Paris'),
   _BirthCountryOption('독일', 'Europe/Berlin'),
+  _BirthCountryOption('네덜란드', 'Europe/Amsterdam'),
+  _BirthCountryOption('벨기에', 'Europe/Brussels'),
+  _BirthCountryOption('스페인', 'Europe/Madrid'),
+  _BirthCountryOption('포르투갈', 'Europe/Lisbon'),
+  _BirthCountryOption('이탈리아', 'Europe/Rome'),
+  _BirthCountryOption('스위스', 'Europe/Zurich'),
+  _BirthCountryOption('오스트리아', 'Europe/Vienna'),
+  _BirthCountryOption('스웨덴', 'Europe/Stockholm'),
+  _BirthCountryOption('노르웨이', 'Europe/Oslo'),
+  _BirthCountryOption('덴마크', 'Europe/Copenhagen'),
+  _BirthCountryOption('핀란드', 'Europe/Helsinki'),
+  _BirthCountryOption('폴란드', 'Europe/Warsaw'),
+  _BirthCountryOption('체코', 'Europe/Prague'),
+  _BirthCountryOption('헝가리', 'Europe/Budapest'),
+  _BirthCountryOption('그리스', 'Europe/Athens'),
+  _BirthCountryOption('루마니아', 'Europe/Bucharest'),
+  _BirthCountryOption('우크라이나', 'Europe/Kyiv'),
+  _BirthCountryOption('러시아', 'Europe/Moscow'),
+  _BirthCountryOption('미국', 'America/New_York'),
+  _BirthCountryOption('캐나다', 'America/Toronto'),
+  _BirthCountryOption('멕시코', 'America/Mexico_City'),
+  _BirthCountryOption('브라질', 'America/Sao_Paulo'),
+  _BirthCountryOption('아르헨티나', 'America/Argentina/Buenos_Aires'),
+  _BirthCountryOption('칠레', 'America/Santiago'),
+  _BirthCountryOption('콜롬비아', 'America/Bogota'),
+  _BirthCountryOption('페루', 'America/Lima'),
+  _BirthCountryOption('남아프리카공화국', 'Africa/Johannesburg'),
+  _BirthCountryOption('이집트', 'Africa/Cairo'),
+  _BirthCountryOption('모로코', 'Africa/Casablanca'),
+  _BirthCountryOption('케냐', 'Africa/Nairobi'),
+  _BirthCountryOption('나이지리아', 'Africa/Lagos'),
 ];
+
+class _PickerSelection<T> {
+  final bool confirmed;
+  final T? value;
+
+  const _PickerSelection.confirmed(this.value) : confirmed = true;
+
+  const _PickerSelection.cancelled() : confirmed = false, value = null;
+}
 
 class RelationshipEntryCard extends StatelessWidget {
   final RelationshipAssessmentStatus status;
@@ -124,12 +185,14 @@ class RelationshipUnderstandingScreen extends StatefulWidget {
   final BirthProfileApi? api;
   final RelationshipAssessmentStatus assessmentStatus;
   final bool hasActiveCouple;
+  final bool editBirthProfileOnly;
 
   const RelationshipUnderstandingScreen({
     super.key,
     this.api,
     this.assessmentStatus = RelationshipAssessmentStatus.notStarted,
     this.hasActiveCouple = false,
+    this.editBirthProfileOnly = false,
   });
 
   @override
@@ -220,6 +283,237 @@ class _RelationshipUnderstandingScreenState
     }
   }
 
+  DateTime _initialBirthDate() {
+    final parsed = DateTime.tryParse(_birthDateController.text.trim());
+    if (parsed != null) return parsed;
+    final today = DateTime.now();
+    return DateTime(today.year - 20, today.month, today.day);
+  }
+
+  TimeOfDay? _initialBirthTime() {
+    final match = RegExp(
+      r'^(\d{2}):(\d{2})',
+    ).firstMatch(_birthTimeController.text.trim());
+    if (match == null) return null;
+    return TimeOfDay(
+      hour: int.parse(match.group(1)!),
+      minute: int.parse(match.group(2)!),
+    );
+  }
+
+  String _twoDigits(int value) => value.toString().padLeft(2, '0');
+
+  Future<void> _pickBirthDate() async {
+    final today = DateTime.now();
+    const minYear = 1900;
+    final maxYear = today.year;
+    final initial = _initialBirthDate();
+    var year = math.min(maxYear, math.max(minYear, initial.year));
+    var month = initial.month;
+    var day = math.min(initial.day, DateUtils.getDaysInMonth(year, month));
+    final yearController = FixedExtentScrollController(
+      initialItem: year - minYear,
+    );
+    final monthController = FixedExtentScrollController(initialItem: month - 1);
+    final dayController = FixedExtentScrollController(initialItem: day - 1);
+
+    final result = await showModalBottomSheet<_PickerSelection<DateTime>>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          final dayCount = DateUtils.getDaysInMonth(year, month);
+          void updateDayBounds() {
+            day = math.min(day, dayCount);
+            dayController.jumpToItem(day - 1);
+          }
+
+          return Container(
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Text('생년월일 선택', style: mainTitle(size: 20)),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('취소'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(
+                        context,
+                        _PickerSelection.confirmed(DateTime(year, month, day)),
+                      ),
+                      child: const Text('선택'),
+                    ),
+                  ],
+                ),
+                SizedBox(
+                  height: 220,
+                  child: Row(
+                    children: [
+                      _pickerWheel(
+                        controller: yearController,
+                        itemCount: maxYear - minYear + 1,
+                        labelBuilder: (index) => '${minYear + index}년',
+                        onSelectedItemChanged: (index) {
+                          setModalState(() {
+                            year = minYear + index;
+                            updateDayBounds();
+                          });
+                        },
+                      ),
+                      _pickerWheel(
+                        controller: monthController,
+                        itemCount: 12,
+                        labelBuilder: (index) => '${index + 1}월',
+                        onSelectedItemChanged: (index) {
+                          setModalState(() {
+                            month = index + 1;
+                            updateDayBounds();
+                          });
+                        },
+                      ),
+                      _pickerWheel(
+                        controller: dayController,
+                        itemCount: dayCount,
+                        labelBuilder: (index) => '${index + 1}일',
+                        onSelectedItemChanged: (index) => day = index + 1,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+    yearController.dispose();
+    monthController.dispose();
+    dayController.dispose();
+    if (!mounted ||
+        result == null ||
+        !result.confirmed ||
+        result.value == null) {
+      return;
+    }
+    final selected = result.value!;
+    setState(() {
+      _birthDateController.text =
+          '${selected.year}-${_twoDigits(selected.month)}-${_twoDigits(selected.day)}';
+    });
+  }
+
+  Future<void> _pickBirthTime() async {
+    final initial = _initialBirthTime();
+    var hour = initial?.hour ?? 12;
+    var minute = initial?.minute ?? 0;
+    final hourController = FixedExtentScrollController(initialItem: hour);
+    final minuteController = FixedExtentScrollController(initialItem: minute);
+
+    final result = await showModalBottomSheet<_PickerSelection<String?>>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Text('출생 시각 선택', style: mainTitle(size: 20)),
+                const Spacer(),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('취소'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(
+                    context,
+                    _PickerSelection.confirmed(
+                      '${_twoDigits(hour)}:${_twoDigits(minute)}',
+                    ),
+                  ),
+                  child: const Text('선택'),
+                ),
+              ],
+            ),
+            SizedBox(
+              height: 220,
+              child: Row(
+                children: [
+                  _pickerWheel(
+                    controller: hourController,
+                    itemCount: 24,
+                    labelBuilder: (index) => '${_twoDigits(index)}시',
+                    onSelectedItemChanged: (index) => hour = index,
+                  ),
+                  _pickerWheel(
+                    controller: minuteController,
+                    itemCount: 60,
+                    labelBuilder: (index) => '${_twoDigits(index)}분',
+                    onSelectedItemChanged: (index) => minute = index,
+                  ),
+                ],
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => Navigator.pop(
+                  context,
+                  const _PickerSelection<String?>.confirmed(null),
+                ),
+                icon: const Icon(Icons.backspace_outlined, size: 16),
+                label: const Text('출생 시각 지우기'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    hourController.dispose();
+    minuteController.dispose();
+    if (!mounted || result == null || !result.confirmed) return;
+    setState(() => _birthTimeController.text = result.value ?? '');
+  }
+
+  Widget _pickerWheel({
+    required FixedExtentScrollController controller,
+    required int itemCount,
+    required String Function(int index) labelBuilder,
+    required ValueChanged<int> onSelectedItemChanged,
+  }) {
+    return Expanded(
+      child: CupertinoPicker(
+        scrollController: controller,
+        itemExtent: 44,
+        useMagnifier: true,
+        magnification: 1.08,
+        onSelectedItemChanged: onSelectedItemChanged,
+        children: [
+          for (var index = 0; index < itemCount; index++)
+            Center(child: Text(labelBuilder(index))),
+        ],
+      ),
+    );
+  }
+
   Future<void> _save() async {
     final birthDate = _birthDateController.text.trim();
     final timezone = _timezoneController.text.trim();
@@ -279,11 +573,14 @@ class _RelationshipUnderstandingScreenState
   }
 
   RelationshipAssessmentStatus get _effectiveStatus {
-    if (_profile == null || _profile!.birthDate.trim().isEmpty) {
+    if (!_hasSavedBirthProfile) {
       return RelationshipAssessmentStatus.profileIncomplete;
     }
     return widget.assessmentStatus;
   }
+
+  bool get _hasSavedBirthProfile =>
+      _profile?.birthDate.trim().isNotEmpty == true;
 
   String get _statusTitle => switch (_effectiveStatus) {
     RelationshipAssessmentStatus.profileIncomplete => '출생 프로필을 먼저 완성해주세요',
@@ -569,11 +866,16 @@ class _RelationshipUnderstandingScreenState
 
   @override
   Widget build(BuildContext context) {
+    final showBirthProfile =
+        widget.editBirthProfileOnly || !_hasSavedBirthProfile;
     return Scaffold(
       backgroundColor: kMainBg,
       appBar: AppBar(
         backgroundColor: kMainBg,
-        title: Text('관계 이해 허브', style: mainTitle(size: 22)),
+        title: Text(
+          widget.editBirthProfileOnly ? '출생 프로필 수정' : '관계 이해 허브',
+          style: mainTitle(size: 22),
+        ),
       ),
       body: _loading
           ? const Center(
@@ -594,134 +896,145 @@ class _RelationshipUnderstandingScreenState
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text('관계 이해 허브', style: mainTitle(size: 26)),
-                    const SizedBox(height: 8),
-                    Text(
-                      '개인 영역에서 나를 먼저 살펴보고, 준비가 되면 커플 영역으로 이어가요.',
-                      style: mainBody(size: 14, color: kMainSub, height: 1.5),
-                    ),
-                    const SizedBox(height: 16),
-                    _statusCard(),
-                    const SizedBox(height: 12),
-                    const SizedBox(height: 24),
-                    Text('출생 프로필', style: mainTitle(size: 26)),
-                    const SizedBox(height: 8),
-                    Text(
-                      '나중에 관계 이해 콘텐츠를 맞춤화할 때 사용할 정보예요. '
-                      '출생 시각과 장소는 몰라도 괜찮아요.',
-                      style: mainBody(size: 14, color: kMainSub, height: 1.5),
-                    ),
-                    const SizedBox(height: 20),
-                    MainCard(
-                      padding: const EdgeInsets.all(18),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '달력 구분',
-                            style: mainBody(weight: FontWeight.w700),
-                          ),
-                          const SizedBox(height: 8),
-                          DropdownButtonFormField<BirthCalendarType>(
-                            initialValue: _calendarType,
-                            decoration: _decoration('달력 구분'),
-                            items: const [
-                              DropdownMenuItem(
-                                value: BirthCalendarType.solar,
-                                child: Text('양력'),
-                              ),
-                              DropdownMenuItem(
-                                value: BirthCalendarType.lunar,
-                                child: Text('음력'),
-                              ),
-                            ],
-                            onChanged: (value) {
-                              if (value != null) {
-                                setState(() => _calendarType = value);
-                              }
-                            },
-                          ),
-                          const SizedBox(height: 14),
-                          _textField(_birthDateController, '생년월일 (YYYY-MM-DD)'),
-                          const SizedBox(height: 14),
-                          _textField(
-                            _birthTimeController,
-                            '출생 시각 (HH:mm, 선택)',
-                            keyboardType: TextInputType.datetime,
-                          ),
-                          const SizedBox(height: 14),
-                          DropdownButtonFormField<String>(
-                            initialValue: _birthCountry,
-                            decoration: _decoration('출생 국가'),
-                            items: [
-                              for (final option in _birthCountryOptions)
-                                DropdownMenuItem(
-                                  value: option.label,
-                                  child: Text(option.label),
-                                ),
-                            ],
-                            onChanged: (value) {
-                              if (value != null) _selectBirthCountry(value);
-                            },
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            '선택한 국가의 대표 시간대를 사용해요.',
-                            style: mainBody(size: 12, color: kMainMuted),
-                          ),
-                          const SizedBox(height: 14),
-                          _textField(_birthPlaceController, '출생지 (선택)'),
-                          if (_errorMessage != null) ...[
-                            const SizedBox(height: 14),
+                    if (!widget.editBirthProfileOnly) ...[
+                      Text('관계 이해 허브', style: mainTitle(size: 26)),
+                      const SizedBox(height: 8),
+                      Text(
+                        '개인 영역에서 나를 먼저 살펴보고, 준비가 되면 커플 영역으로 이어가요.',
+                        style: mainBody(size: 14, color: kMainSub, height: 1.5),
+                      ),
+                      const SizedBox(height: 16),
+                      _statusCard(),
+                    ],
+                    if (showBirthProfile) ...[
+                      const SizedBox(height: 24),
+                      Text('출생 프로필', style: mainTitle(size: 26)),
+                      const SizedBox(height: 8),
+                      Text(
+                        '나중에 관계 이해 콘텐츠를 맞춤화할 때 사용할 정보예요. '
+                        '출생 시각과 장소는 몰라도 괜찮아요.',
+                        style: mainBody(size: 14, color: kMainSub, height: 1.5),
+                      ),
+                      const SizedBox(height: 20),
+                      MainCard(
+                        padding: const EdgeInsets.all(18),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             Text(
-                              _errorMessage!,
-                              key: const Key('birth_profile_error'),
-                              style: mainBody(size: 13, color: kError),
+                              '달력 구분',
+                              style: mainBody(weight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 8),
+                            DropdownButtonFormField<BirthCalendarType>(
+                              initialValue: _calendarType,
+                              decoration: _decoration('달력 구분'),
+                              items: const [
+                                DropdownMenuItem(
+                                  value: BirthCalendarType.solar,
+                                  child: Text('양력'),
+                                ),
+                                DropdownMenuItem(
+                                  value: BirthCalendarType.lunar,
+                                  child: Text('음력'),
+                                ),
+                              ],
+                              onChanged: (value) {
+                                if (value != null) {
+                                  setState(() => _calendarType = value);
+                                }
+                              },
+                            ),
+                            const SizedBox(height: 14),
+                            _pickerField(
+                              _birthDateController,
+                              '생년월일 (YYYY-MM-DD)',
+                              icon: Icons.calendar_month_outlined,
+                              onTap: _pickBirthDate,
+                            ),
+                            const SizedBox(height: 14),
+                            _pickerField(
+                              _birthTimeController,
+                              '출생 시각 (HH:mm, 선택)',
+                              icon: Icons.schedule_outlined,
+                              onTap: _pickBirthTime,
+                            ),
+                            const SizedBox(height: 14),
+                            DropdownButtonFormField<String>(
+                              initialValue: _birthCountry,
+                              decoration: _decoration('출생 국가·지역'),
+                              items: [
+                                for (final option in _birthCountryOptions)
+                                  DropdownMenuItem(
+                                    value: option.label,
+                                    child: Text(option.label),
+                                  ),
+                              ],
+                              onChanged: (value) {
+                                if (value != null) _selectBirthCountry(value);
+                              },
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              '국가의 대표 시간대를 사용해요. 도시·지역은 출생지에 적어주세요.',
+                              style: mainBody(size: 12, color: kMainMuted),
+                            ),
+                            const SizedBox(height: 14),
+                            _textField(_birthPlaceController, '출생지 (선택)'),
+                            if (_errorMessage != null) ...[
+                              const SizedBox(height: 14),
+                              Text(
+                                _errorMessage!,
+                                key: const Key('birth_profile_error'),
+                                style: mainBody(size: 13, color: kError),
+                              ),
+                            ],
+                            const SizedBox(height: 18),
+                            SizedBox(
+                              width: double.infinity,
+                              child: FilledButton(
+                                onPressed: _saving ? null : _save,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: kMainRose,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                ),
+                                child: _saving
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : const Text('저장하기'),
+                              ),
                             ),
                           ],
-                          const SizedBox(height: 18),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton(
-                              onPressed: _saving ? null : _save,
-                              style: FilledButton.styleFrom(
-                                backgroundColor: kMainRose,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 14,
-                                ),
-                              ),
-                              child: _saving
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : const Text('저장하기'),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
-                    if (_profile != null) ...[
-                      const SizedBox(height: 14),
-                      Text(
-                        '출생 프로필은 본인 계정에만 저장돼요.',
-                        style: mainBody(size: 12, color: kMainMuted),
-                        textAlign: TextAlign.center,
-                      ),
+                      if (_profile != null) ...[
+                        const SizedBox(height: 14),
+                        Text(
+                          '출생 프로필은 본인 계정에만 저장돼요.',
+                          style: mainBody(size: 12, color: kMainMuted),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
                     ],
-                    const SizedBox(height: 18),
-                    _fortuneArea(),
-                    const SizedBox(height: 12),
-                    _personalArea(),
-                    const SizedBox(height: 12),
-                    _coupleArea(),
-                    const SizedBox(height: 12),
-                    _counselingArea(),
+                    if (!widget.editBirthProfileOnly) ...[
+                      const SizedBox(height: 18),
+                      _fortuneArea(),
+                      const SizedBox(height: 12),
+                      _personalArea(),
+                      const SizedBox(height: 12),
+                      _coupleArea(),
+                      const SizedBox(height: 12),
+                      _counselingArea(),
+                    ],
                   ],
                 ),
               ],
@@ -748,6 +1061,22 @@ class _RelationshipUnderstandingScreenState
       controller: controller,
       keyboardType: keyboardType,
       decoration: _decoration(hint),
+    );
+  }
+
+  Widget _pickerField(
+    TextEditingController controller,
+    String hint, {
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return TextField(
+      controller: controller,
+      readOnly: true,
+      onTap: onTap,
+      decoration: _decoration(
+        hint,
+      ).copyWith(suffixIcon: Icon(icon, color: kMainMuted)),
     );
   }
 }

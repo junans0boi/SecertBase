@@ -7,6 +7,7 @@ import '../../core/app_theme.dart';
 import '../../core/main_design.dart';
 import '../../core/socket_service.dart';
 import '../../core/auth_service.dart';
+import '../relationship/relationship_understanding_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -876,6 +877,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 setState(() {});
               }
             },
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: () async {
+              await Navigator.of(context).maybePop();
+              if (!mounted) return;
+              await Navigator.of(context).push<void>(
+                MaterialPageRoute(
+                  builder: (_) => const RelationshipUnderstandingScreen(
+                    editBirthProfileOnly: true,
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.tune_outlined, size: 18),
+            label: const Text('출생 프로필 상세 수정'),
+            style: _compactButtonStyle(),
           ),
           if (_profileMessage != null) _message(_profileMessage!),
           const SizedBox(height: 14),

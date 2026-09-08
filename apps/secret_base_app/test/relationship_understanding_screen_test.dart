@@ -11,6 +11,10 @@ const _profileResponse =
     '{"ok":true,"birthProfile":{"calendarType":"solar",'
     '"birthDate":"2000-01-01","birthTime":null,'
     '"timezone":"Asia/Seoul","birthPlace":null}}';
+const _emptyProfileResponse =
+    '{"ok":true,"birthProfile":{"calendarType":"solar",'
+    '"birthDate":"","birthTime":null,'
+    '"timezone":"Asia/Seoul","birthPlace":null}}';
 
 void main() {
   testWidgets(
@@ -58,7 +62,12 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(home: RelationshipUnderstandingScreen(api: api)),
+        MaterialApp(
+          home: RelationshipUnderstandingScreen(
+            api: api,
+            editBirthProfileOnly: true,
+          ),
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -93,7 +102,12 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(home: RelationshipUnderstandingScreen(api: api)),
+        MaterialApp(
+          home: RelationshipUnderstandingScreen(
+            api: api,
+            editBirthProfileOnly: true,
+          ),
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -154,7 +168,12 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: RelationshipUnderstandingScreen(api: api)),
+      MaterialApp(
+        home: RelationshipUnderstandingScreen(
+          api: api,
+          editBirthProfileOnly: true,
+        ),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.drag(find.byType(ListView).first, const Offset(0, -300));
@@ -165,6 +184,45 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('시간대 형식을 확인해주세요.'), findsOneWidget);
+  });
+
+  testWidgets('hides the saved birth profile form in the relationship hub', (
+    tester,
+  ) async {
+    final api = BirthProfileApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient((_) async => http.Response(_profileResponse, 200)),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: RelationshipUnderstandingScreen(api: api)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('출생 프로필'), findsNothing);
+    expect(find.text('관계 이해 허브'), findsWidgets);
+    expect(find.byKey(const Key('relationship_personal_area')), findsOneWidget);
+  });
+
+  testWidgets('shows the birth profile form when it is not saved', (
+    tester,
+  ) async {
+    final api = BirthProfileApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient(
+        (_) async => http.Response(_emptyProfileResponse, 200),
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: RelationshipUnderstandingScreen(api: api)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('출생 프로필'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '저장하기'), findsOneWidget);
   });
 
   testWidgets('hub keeps personal area available and explains missing couple', (
