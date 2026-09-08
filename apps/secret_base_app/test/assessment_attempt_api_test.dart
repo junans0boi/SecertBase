@@ -96,4 +96,42 @@ void main() {
       ),
     );
   });
+
+  test('submits an attempt and reads the current private result', () async {
+    final result = {
+      'assessmentCode': 'attachment',
+      'version': 'v1',
+      'dimensions': [
+        {
+          'key': 'reassurance',
+          'title': '확인과 안심',
+          'score': 60,
+          'mean': 3.4,
+          'answerCount': 4,
+        },
+      ],
+      'overallScore': 60,
+      'overallTendencyKey': 'situational_balance',
+      'overallTendency': '상황에 따라 안정감과 개인 공간을 조율하는 경향이 있어요.',
+      'disclaimer': '자기이해용 결과예요.',
+    };
+    final api = AssessmentAttemptApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient((request) async {
+        return http.Response.bytes(
+          utf8.encode(jsonEncode({'ok': true, 'result': result})),
+          201,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      }),
+    );
+
+    final submitted = await api.submit(42);
+    final current = await api.fetchCurrentResult('attachment');
+
+    expect(submitted.overallScore, 60);
+    expect(current?.dimensions.single.title, '확인과 안심');
+    expect(current?.disclaimer, '자기이해용 결과예요.');
+  });
 }

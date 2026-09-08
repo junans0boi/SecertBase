@@ -1278,6 +1278,183 @@ router.patch('/relationship/assessment-attempts/:attemptId/answers/:questionKey'
   }
 });
 
+const attachmentDimensionScore = (rows) => {
+  const byDimension = new Map();
+  for (const row of rows) {
+    const key = row.dimension_key;
+    const bucket = byDimension.get(key) ?? {
+      key,
+      title: row.display_name,
+      sortOrder: Number(row.sort_order),
+      adjustedTotal: 0,
+      answerCount: 0,
+    };
+    const rawValue = Number(row.answer_value);
+    bucket.adjustedTotal += Number(row.reverse_scored) === 1 ? 6 - rawValue : rawValue;
+    bucket.answerCount += 1;
+    byDimension.set(key, bucket);
+  }
+  return [...byDimension.values()]
+    .map((dimension) => {
+      const mean = dimension.adjustedTotal / dimension.answerCount;
+      return {
+        key: dimension.key,
+        title: dimension.title,
+        score: Math.round(((mean - 1) / 4) * 100),
+        mean: Math.round(mean * 100) / 100,
+        answerCount: dimension.answerCount,
+      };
+    })
+    .sort((left, right) => left.sortOrder - right.sortOrder)
+    .map(({ sortOrder, ...dimension }) => dimension);
+};
+
+const attachmentTendency = (dimensions) => {
+  const scores = new Map(dimensions.map((dimension) => [dimension.key, dimension.score]));
+  const reassurance = scores.get('reassurance') ?? 0;
+  const distance = scores.get('distance') ?? 0;
+  const expression = scores.get('expression') ?? 0;
+  if (reassurance >= 70 && distance >= 55 && expression >= 55) {
+    return {
+      key: 'balanced_connection',
+      text: '안정감을 확인하면서도 관계와 개인 공간을 함께 조율하는 경향이 있어요.',
+    };
+  }
+  if (reassurance >= 70 && distance < 50) {
+    return {
+      key: 'reassurance_seeking',
+      text: '관계의 안정감을 자주 확인하고 싶은 경향이 있어요.',
+    };
+  }
+  if (distance >= 70 && reassurance < 50) {
+    return {
+      key: 'autonomous_distance',
+      text: '자율적인 거리와 개인 공간을 중요하게 여기는 경향이 있어요.',
+    };
+  }
+  return {
+    key: 'situational_balance',
+    text: '상황에 따라 안정감과 개인 공간을 조율하는 경향이 있어요.',
+  };
+};
+
+const parseRelationshipResult = (value) => {
+  if (value && typeof value === 'object') return value;
+  try {
+    return JSON.parse(String(value));
+  } catch {
+    return null;
+  }
+};
+
+router.post('/relationship/assessment-attempts/:attemptId/submit', async (req, res) => {
+  try {
+    const attemptId = Number(req.params.attemptId);
+    if (!Number.isSafeInteger(attemptId) || attemptId <= 0) {
+      return res.status(400).json({ ok: false, reason: 'invalid_attempt_id' });
+    }
+
+    const attemptResult = await query(
+      `SELECT a.attempt_id, a.user_id, a.version_id, a.status,
+              v.version_label, v.active_question_count, c.code
+       FROM relationship_assessment_attempts a
+       JOIN relationship_assessment_versions v ON v.version_id = a.version_id
+       JOIN relationship_assessment_catalog c ON c.assessment_id = v.assessment_id
+       WHERE a.attempt_id = ? AND a.user_id = ?
+       LIMIT 1`,
+      [attemptId, req.auth.userId],
+    );
+    const attempt = attemptResult.rows[0];
+    if (!attempt) {
+      return res.status(404).json({ ok: false, reason: 'attempt_not_found' });
+    }
+    if (attempt.code !== 'attachment') {
+      return res.status(400).json({ ok: false, reason: 'unsupported_assessment' });
+    }
+    if (attempt.status !== 'in_progress') {
+      return res.status(409).json({ ok: false, reason: 'attempt_not_in_progress' });
+    }
+
+    const answerResult = await query(
+      `SELECT q.question_key, q.reverse_scored, d.dimension_key,
+              d.display_name, d.sort_order, aa.answer_value
+       FROM relationship_assessment_attempt_answers aa
+       JOIN relationship_assessment_questions q ON q.question_id = aa.question_id
+       JOIN relationship_assessment_dimensions d ON d.dimension_id = q.dimension_id
+       WHERE aa.attempt_id = ? AND q.is_active = 1
+       ORDER BY q.question_order`,
+      [attemptId],
+    );
+    const totalCount = Number(attempt.active_question_count);
+    if (answerResult.rows.length !== totalCount) {
+      return res.status(400).json({
+        ok: false,
+        reason: 'incomplete_attempt',
+        progress: {
+          answeredCount: answerResult.rows.length,
+          totalCount,
+          percentage: totalCount === 0
+            ? 0
+            : Math.round((answerResult.rows.length / totalCount) * 100),
+        },
+      });
+    }
+
+    const dimensions = attachmentDimensionScore(answerResult.rows);
+    const overallScore = Math.round(
+      dimensions.reduce((total, dimension) => total + dimension.score, 0) / dimensions.length,
+    );
+    const tendency = attachmentTendency(dimensions);
+    const result = {
+      assessmentCode: attempt.code,
+      version: attempt.version_label,
+      dimensions,
+      overallScore,
+      overallTendencyKey: tendency.key,
+      overallTendency: tendency.text,
+      disclaimer: '이 결과는 자기이해를 위한 참고 정보이며 의료적 진단이나 치료를 대신하지 않아요.',
+    };
+
+    await query(
+      `INSERT INTO relationship_assessment_results
+         (attempt_id, user_id, version_id, result_json)
+       VALUES (?, ?, ?, ?)`,
+      [attemptId, req.auth.userId, attempt.version_id, JSON.stringify(result)],
+    );
+    await query(
+      `UPDATE relationship_assessment_attempts
+       SET status = 'completed', completed_at = CURRENT_TIMESTAMP,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE attempt_id = ? AND user_id = ? AND status = 'in_progress'`,
+      [attemptId, req.auth.userId],
+    );
+    return res.status(201).json({ ok: true, result });
+  } catch (error) {
+    console.error('[API] /relationship/assessment-attempts/:attemptId/submit error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.get('/relationship/assessment-results/:code/current', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT r.result_json
+       FROM relationship_assessment_results r
+       JOIN relationship_assessment_versions v ON v.version_id = r.version_id
+       JOIN relationship_assessment_catalog c ON c.assessment_id = v.assessment_id
+       WHERE r.user_id = ? AND c.code = ?
+       ORDER BY r.result_id DESC
+       LIMIT 1`,
+      [req.auth.userId, String(req.params.code ?? '').trim()],
+    );
+    const parsed = result.rows[0] ? parseRelationshipResult(result.rows[0].result_json) : null;
+    return res.json({ ok: true, result: parsed });
+  } catch (error) {
+    console.error('[API] /relationship/assessment-results/:code/current error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
 const expirePairingRequests = () =>
   query(
     `UPDATE PairingRequests

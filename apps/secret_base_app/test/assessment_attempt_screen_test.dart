@@ -63,6 +63,34 @@ void main() {
       baseUrl: 'https://secretbase.example',
       token: 'jwt-token',
       client: MockClient((request) async {
+        if (request.url.path.endsWith('/submit')) {
+          return http.Response.bytes(
+            utf8.encode(
+              jsonEncode({
+                'ok': true,
+                'result': {
+                  'assessmentCode': 'attachment',
+                  'version': 'v1',
+                  'dimensions': [
+                    {
+                      'key': 'reassurance',
+                      'title': '확인과 안심',
+                      'score': 80,
+                      'mean': 4.2,
+                      'answerCount': 1,
+                    },
+                  ],
+                  'overallScore': 80,
+                  'overallTendencyKey': 'situational_balance',
+                  'overallTendency': '상황에 따라 안정감과 개인 공간을 조율하는 경향이 있어요.',
+                  'disclaimer': '이 결과는 자기이해를 위한 참고 정보예요.',
+                },
+              }),
+            ),
+            201,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }
         final attempt = Map<String, dynamic>.from(_attemptResponse);
         if (request.method == 'PATCH') {
           answerSaved = true;
@@ -102,5 +130,13 @@ void main() {
 
     expect(answerSaved, isTrue);
     expect(find.text('1/1 문항 저장됨'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('assessment_submit')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('검사 결과'), findsOneWidget);
+    expect(
+      find.byKey(const Key('assessment_result_disclaimer')),
+      findsOneWidget,
+    );
   });
 }

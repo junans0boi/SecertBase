@@ -22,8 +22,10 @@ class AssessmentAttemptScreen extends StatefulWidget {
 
 class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
   AssessmentAttempt? _attempt;
+  AssessmentResult? _result;
   String? _errorMessage;
   String? _savingQuestion;
+  bool _submitting = false;
   bool _loading = true;
 
   @override
@@ -86,11 +88,42 @@ class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
     }
   }
 
+  Future<void> _submit() async {
+    final attempt = _attempt;
+    if (attempt == null ||
+        attempt.progress.answeredCount < attempt.progress.totalCount ||
+        _submitting) {
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _errorMessage = null;
+    });
+    try {
+      final result = await widget.api.submit(attempt.id);
+      if (!mounted) return;
+      setState(() {
+        _result = result;
+        _submitting = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _errorMessage = _messageFor(error);
+      });
+    }
+  }
+
   String _messageFor(Object error) => switch (error) {
     AssessmentAttemptApiException(reason: 'network_error') =>
       '네트워크 연결을 확인하고 다시 시도해주세요.',
     AssessmentAttemptApiException(reason: 'invalid_answer_value') =>
       '답변은 1점부터 5점까지 선택해주세요.',
+    AssessmentAttemptApiException(reason: 'incomplete_attempt') =>
+      '모든 문항에 답변한 뒤 제출할 수 있어요.',
+    AssessmentAttemptApiException(reason: 'attempt_not_in_progress') =>
+      '이미 제출된 검사예요.',
     AssessmentAttemptApiException() => '검사 시도를 불러오지 못했어요.',
     _ => '검사 시도를 불러오지 못했어요.',
   };
@@ -107,6 +140,8 @@ class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
           ? const Center(child: CircularProgressIndicator(color: kMainRose))
           : _errorMessage != null && _attempt == null
           ? _errorState()
+          : _result != null
+          ? _resultContent()
           : _content(),
     );
   }
@@ -168,6 +203,88 @@ class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
         ...widget.assessment.questions.asMap().entries.map(
           (entry) =>
               _questionCard(entry.key, entry.value, selected[entry.value.key]),
+        ),
+        if (progress.answeredCount >= progress.totalCount) ...[
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              key: const Key('assessment_submit'),
+              onPressed: _submitting ? null : _submit,
+              child: _submitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('검사 제출하기'),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _resultContent() {
+    final result = _result!;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
+      children: [
+        Text('검사 결과', style: mainTitle(size: 25)),
+        const SizedBox(height: 6),
+        Text(
+          '지금의 응답을 바탕으로 정리한 자기이해용 결과예요.',
+          style: mainBody(size: 13, color: kMainSub, height: 1.5),
+        ),
+        const SizedBox(height: 16),
+        MainCard(
+          key: const Key('assessment_result_summary'),
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('전체 경향', style: mainBody(size: 12, color: kMainSub)),
+              const SizedBox(height: 5),
+              Text(
+                result.overallTendency,
+                style: mainBody(size: 16, weight: FontWeight.w800),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '전체 점수 ${result.overallScore}점',
+                style: mainBody(weight: FontWeight.w700),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        ...result.dimensions.map(
+          (dimension) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: MainCard(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      dimension.title,
+                      style: mainBody(weight: FontWeight.w700),
+                    ),
+                  ),
+                  Text(
+                    '${dimension.score}점',
+                    style: mainBody(color: kMainLilac, weight: FontWeight.w800),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          result.disclaimer,
+          key: const Key('assessment_result_disclaimer'),
+          style: mainBody(size: 12, color: kMainMuted, height: 1.5),
         ),
       ],
     );

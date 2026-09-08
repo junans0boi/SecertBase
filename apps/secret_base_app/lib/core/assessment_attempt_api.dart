@@ -91,6 +91,68 @@ class AssessmentAttempt {
   };
 }
 
+class AssessmentDimensionResult {
+  final String key;
+  final String title;
+  final int score;
+  final double mean;
+  final int answerCount;
+
+  const AssessmentDimensionResult({
+    required this.key,
+    required this.title,
+    required this.score,
+    required this.mean,
+    required this.answerCount,
+  });
+
+  factory AssessmentDimensionResult.fromJson(Map<String, dynamic> json) =>
+      AssessmentDimensionResult(
+        key: '${json['key'] ?? ''}',
+        title: '${json['title'] ?? ''}',
+        score: int.tryParse('${json['score']}') ?? 0,
+        mean: double.tryParse('${json['mean']}') ?? 0,
+        answerCount: int.tryParse('${json['answerCount']}') ?? 0,
+      );
+}
+
+class AssessmentResult {
+  final String assessmentCode;
+  final String version;
+  final List<AssessmentDimensionResult> dimensions;
+  final int overallScore;
+  final String overallTendencyKey;
+  final String overallTendency;
+  final String disclaimer;
+
+  const AssessmentResult({
+    required this.assessmentCode,
+    required this.version,
+    required this.dimensions,
+    required this.overallScore,
+    required this.overallTendencyKey,
+    required this.overallTendency,
+    required this.disclaimer,
+  });
+
+  factory AssessmentResult.fromJson(Map<String, dynamic> json) =>
+      AssessmentResult(
+        assessmentCode: '${json['assessmentCode'] ?? ''}',
+        version: '${json['version'] ?? ''}',
+        dimensions: (json['dimensions'] as List? ?? const [])
+            .map(
+              (dimension) => AssessmentDimensionResult.fromJson(
+                Map<String, dynamic>.from(dimension as Map),
+              ),
+            )
+            .toList(growable: false),
+        overallScore: int.tryParse('${json['overallScore']}') ?? 0,
+        overallTendencyKey: '${json['overallTendencyKey'] ?? ''}',
+        overallTendency: '${json['overallTendency'] ?? ''}',
+        disclaimer: '${json['disclaimer'] ?? ''}',
+      );
+}
+
 class AssessmentAttemptApiException implements Exception {
   final String reason;
 
@@ -163,6 +225,43 @@ class AssessmentAttemptApi {
         body: jsonEncode({'value': value}),
       );
       return _attemptFromBody(_successfulBody(response));
+    } on http.ClientException {
+      throw const AssessmentAttemptApiException('network_error');
+    } on FormatException {
+      throw const AssessmentAttemptApiException('invalid_response');
+    }
+  }
+
+  Future<AssessmentResult> submit(int attemptId) async {
+    try {
+      final response = await _client.post(
+        Uri.parse(
+          '$baseUrl/api/relationship/assessment-attempts/$attemptId/submit',
+        ),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      final body = _successfulBody(response);
+      final rawResult = body['result'];
+      if (rawResult is! Map) throw const FormatException('Missing result');
+      return AssessmentResult.fromJson(Map<String, dynamic>.from(rawResult));
+    } on http.ClientException {
+      throw const AssessmentAttemptApiException('network_error');
+    } on FormatException {
+      throw const AssessmentAttemptApiException('invalid_response');
+    }
+  }
+
+  Future<AssessmentResult?> fetchCurrentResult(String code) async {
+    try {
+      final response = await _client.get(
+        Uri.parse('$baseUrl/api/relationship/assessment-results/$code/current'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      final body = _successfulBody(response);
+      final rawResult = body['result'];
+      if (rawResult == null) return null;
+      if (rawResult is! Map) throw const FormatException('Invalid result');
+      return AssessmentResult.fromJson(Map<String, dynamic>.from(rawResult));
     } on http.ClientException {
       throw const AssessmentAttemptApiException('network_error');
     } on FormatException {
