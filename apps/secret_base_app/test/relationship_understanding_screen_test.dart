@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -73,6 +75,49 @@ void main() {
     },
   );
 
+  testWidgets(
+    'defaults the country to Korea and maps a selected country to its timezone',
+    (tester) async {
+      final requests = <http.Request>[];
+      final api = BirthProfileApi(
+        baseUrl: 'https://secretbase.example',
+        token: 'jwt-token',
+        client: MockClient((request) async {
+          requests.add(request);
+          return http.Response(
+            _profileResponse,
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(home: RelationshipUnderstandingScreen(api: api)),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.drag(find.byType(ListView).first, const Offset(0, -300));
+      await tester.pumpAndSettle();
+      expect(find.text('대한민국'), findsOneWidget);
+      final countryField = find.byType(DropdownButtonFormField<String>);
+      await tester.ensureVisible(countryField);
+      await tester.tap(countryField);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('일본').last);
+      await tester.pumpAndSettle();
+
+      final saveButton = find.widgetWithText(FilledButton, '저장하기').first;
+      await tester.ensureVisible(saveButton);
+      await tester.tap(saveButton);
+      await tester.pumpAndSettle();
+
+      final payload = jsonDecode(requests.last.body) as Map<String, dynamic>;
+      expect(payload['timezone'], 'Asia/Tokyo');
+      expect(payload['birthPlace'], isNull);
+    },
+  );
+
   testWidgets('shows a network error when the profile cannot be loaded', (
     tester,
   ) async {
@@ -112,13 +157,8 @@ void main() {
       MaterialApp(home: RelationshipUnderstandingScreen(api: api)),
     );
     await tester.pumpAndSettle();
-    final timezoneField = find.byWidgetPredicate(
-      (widget) =>
-          widget is TextField &&
-          widget.decoration?.hintText == '시간대 (예: Asia/Seoul)',
-    );
-    await tester.ensureVisible(timezoneField);
-    await tester.enterText(timezoneField, 'not/a-timezone');
+    await tester.drag(find.byType(ListView).first, const Offset(0, -300));
+    await tester.pumpAndSettle();
     final saveButton = find.widgetWithText(FilledButton, '저장하기').first;
     await tester.ensureVisible(saveButton);
     await tester.tap(saveButton);
