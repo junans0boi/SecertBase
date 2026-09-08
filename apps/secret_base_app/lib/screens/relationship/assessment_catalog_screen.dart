@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../core/assessment_attempt_api.dart';
 import '../../core/assessment_catalog_api.dart';
+import '../../core/auth_service.dart';
 import '../../core/main_design.dart';
+import 'assessment_attempt_screen.dart';
 
 class AssessmentCatalogScreen extends StatefulWidget {
   final AssessmentCatalogApi api;
@@ -153,53 +156,73 @@ class _AssessmentCatalogScreenState extends State<AssessmentCatalogScreen> {
     };
     return Opacity(
       opacity: enabled ? 1 : 0.62,
-      child: MainCard(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    assessment.title,
-                    style: mainBody(weight: FontWeight.w800),
+      child: GestureDetector(
+        onTap: enabled && assessment.audience == AssessmentAudience.individual
+            ? () => _openAssessment(assessment)
+            : null,
+        child: MainCard(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      assessment.title,
+                      style: mainBody(weight: FontWeight.w800),
+                    ),
                   ),
-                ),
-                Text(
-                  assessment.version,
-                  style: mainBody(size: 12, color: kMainMuted),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              assessment.description,
-              style: mainBody(size: 13, color: kMainSub, height: 1.45),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              '후보 ${assessment.candidateQuestionCount}문항 · 실제 ${assessment.activeQuestionCount}문항',
-              style: mainBody(
-                size: 12,
-                color: kMainLilac,
-                weight: FontWeight.w700,
+                  Text(
+                    assessment.version,
+                    style: mainBody(size: 12, color: kMainMuted),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              assessment.dimensions
-                  .map((dimension) => dimension.title)
-                  .join(' · '),
-              style: mainBody(size: 12, color: kMainSub),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              enabled ? status : '파트너 연결 후 이용할 수 있어요',
-              style: mainBody(size: 12, color: kMainMuted),
-            ),
-          ],
+              const SizedBox(height: 6),
+              Text(
+                assessment.description,
+                style: mainBody(size: 13, color: kMainSub, height: 1.45),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                '후보 ${assessment.candidateQuestionCount}문항 · 실제 ${assessment.activeQuestionCount}문항',
+                style: mainBody(
+                  size: 12,
+                  color: kMainLilac,
+                  weight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                assessment.dimensions
+                    .map((dimension) => dimension.title)
+                    .join(' · '),
+                style: mainBody(size: 12, color: kMainSub),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                enabled ? status : '파트너 연결 후 이용할 수 있어요',
+                style: mainBody(size: 12, color: kMainMuted),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openAssessment(AssessmentCatalogItem assessment) {
+    final auth = AuthService();
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => AssessmentAttemptScreen(
+          assessment: assessment,
+          api: AssessmentAttemptApi(
+            baseUrl: auth.baseUrl,
+            token: auth.token ?? '',
+          ),
         ),
       ),
     );
