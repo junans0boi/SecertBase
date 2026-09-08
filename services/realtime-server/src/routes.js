@@ -1753,6 +1753,197 @@ const getSharedCoupleAssessmentState = async (userId, code) => {
   };
 };
 
+const buildAttachmentConflictCompatibility = ({ attachmentOne, attachmentTwo, conflict }) => {
+  const firstByKey = new Map(
+    (attachmentOne.dimensions ?? []).map((dimension) => [dimension.key, dimension]),
+  );
+  const secondByKey = new Map(
+    (attachmentTwo.dimensions ?? []).map((dimension) => [dimension.key, dimension]),
+  );
+  const dimensions = [
+    ['reassurance_gap', '안정감 확인 차이', 'reassurance'],
+    ['distance_gap', '거리와 자율성 차이', 'distance'],
+    ['expression_gap', '감정 표현 차이', 'expression'],
+  ].flatMap(([key, title, sourceKey]) => {
+    const first = firstByKey.get(sourceKey);
+    const second = secondByKey.get(sourceKey);
+    if (!first || !second) return [];
+    return [{
+      key,
+      title,
+      scoreDifference: Math.abs(Number(first.score) - Number(second.score)),
+    }];
+  });
+  const reassuranceGap = dimensions.find((dimension) => dimension.key === 'reassurance_gap')?.scoreDifference ?? 0;
+  const distanceGap = dimensions.find((dimension) => dimension.key === 'distance_gap')?.scoreDifference ?? 0;
+  const safetyAlignment = conflict.dimensions
+    ?.find((dimension) => dimension.key === 'safety')?.alignmentScore ?? 100;
+  let complementaryPattern;
+  let cautionInteractions;
+  if (reassuranceGap >= 30 && safetyAlignment < 70) {
+    complementaryPattern = {
+      key: 'reassurance_and_repair_tension',
+      text: '안정감을 확인하는 방식의 차이가 갈등 뒤 회복 속도와 맞물릴 수 있어요.',
+    };
+    cautionInteractions = [
+      '한 사람은 확인을 원하고 다른 사람은 압박으로 느끼는 순간을 구분해보세요.',
+      '답을 재촉하거나 대화를 닫기 전에 필요한 시간을 구체적으로 알려주세요.',
+    ];
+  } else if (distanceGap >= 30) {
+    complementaryPattern = {
+      key: 'space_and_closeness_translation',
+      text: '가까이 있음과 거리를 두는 방식이 달라 서로의 신호를 번역하는 과정이 중요해요.',
+    };
+    cautionInteractions = [
+      '개인 시간이 곧 관계 거절은 아니라는 점을 서로의 말로 확인해보세요.',
+      '다시 대화할 시점을 정하면 거리 두기가 단절로 느껴지는 일을 줄일 수 있어요.',
+    ];
+  } else {
+    complementaryPattern = {
+      key: 'shared_attachment_language',
+      text: '애착 신호를 이해하는 방식이 비교적 가까워 서로의 의도를 확인하기 좋아요.',
+    };
+    cautionInteractions = [
+      '잘 맞는다고 느끼는 영역도 상황이 달라지면 달라질 수 있음을 기억해보세요.',
+      '서로에게 도움이 되었던 안정감 표현을 한 가지씩 구체화해보세요.',
+    ];
+  }
+  return {
+    analysisCode: 'attachment_conflict',
+    analysisVersion: 'v1',
+    dimensions,
+    complementaryPatternKey: complementaryPattern.key,
+    complementaryPattern: complementaryPattern.text,
+    cautionInteractions,
+    conversationPrompts: [
+      '갈등이 생겼을 때 내가 안정감을 느끼기 위해 필요한 것을 한 문장으로 말해보세요.',
+      '상대가 잠시 거리를 원할 때 관계를 지키면서 기다리는 방법은 무엇일까요?',
+      '다음 갈등에서 회복을 시작할 수 있는 신호를 하나 정해보세요.',
+    ],
+    conflictPatternKey: conflict.relationshipPatternKey ?? null,
+    disclaimer: '두 사람의 개인검사 요약과 커플검사 결과를 조합한 관계 대화용 참고 정보이며, 누구의 잘못이나 의료적 진단을 의미하지 않아요.',
+  };
+};
+
+const getAttachmentConflictCompatibilityState = async (userId) => {
+  const attachment = await getActiveRelationshipAssessment('attachment');
+  const conflict = await getActiveRelationshipAssessment('conflict_repair');
+  const coupleId = await getCoupleIdForUser(userId);
+  if (coupleId == null) return { error: { status: 409, reason: 'active_couple_required' } };
+  const coupleResult = await query(
+    `SELECT CoupleId, User1Id, User2Id
+     FROM Couples
+     WHERE CoupleId = ? AND Status = 'active'
+     LIMIT 1`,
+    [coupleId],
+  );
+  const couple = coupleResult.rows[0];
+  if (!couple || !attachment || !conflict) {
+    return { error: { status: 404, reason: 'compatibility_not_available' } };
+  }
+
+  const attachmentResult = await query(
+    `SELECT r.result_id, r.user_id, r.result_json
+     FROM relationship_assessment_results r
+     JOIN relationship_assessment_attempts a ON a.attempt_id = r.attempt_id
+     WHERE r.version_id = ? AND a.status = 'completed'
+       AND r.user_id IN (?, ?)
+     ORDER BY r.user_id, r.result_id DESC`,
+    [attachment.version_id, couple.User1Id, couple.User2Id],
+  );
+  const attachmentByUser = new Map();
+  for (const row of attachmentResult.rows) {
+    if (!attachmentByUser.has(Number(row.user_id))) attachmentByUser.set(Number(row.user_id), row);
+  }
+  const conflictState = await getCompletedCoupleAssessmentState(
+    coupleId,
+    conflict.version_id,
+    conflict,
+  );
+  const dependencyStatus = {
+    attachment: attachmentByUser.size,
+    conflictRepair: conflictState.completedMemberCount,
+  };
+  const firstAttachment = attachmentByUser.get(Number(couple.User1Id));
+  const secondAttachment = attachmentByUser.get(Number(couple.User2Id));
+  if (!firstAttachment || !secondAttachment || conflictState.status !== 'ready') {
+    return {
+      status: 'pending',
+      dependencyStatus,
+      result: null,
+    };
+  }
+  const conflictResultRow = await query(
+    `SELECT couple_result_id, result_json
+     FROM relationship_couple_assessment_results
+     WHERE couple_id = ? AND version_id = ?
+     ORDER BY couple_result_id DESC
+     LIMIT 1`,
+    [coupleId, conflict.version_id],
+  );
+  const conflictResult = parseRelationshipResult(conflictResultRow.rows[0]?.result_json)
+    ?? conflictState.result;
+  const result = buildAttachmentConflictCompatibility({
+    attachmentOne: parseRelationshipResult(firstAttachment.result_json),
+    attachmentTwo: parseRelationshipResult(secondAttachment.result_json),
+    conflict: conflictResult,
+  });
+  await query(
+    `INSERT IGNORE INTO relationship_compatibility_analyses
+       (couple_id, analysis_code, analysis_version,
+        user1_attachment_result_id, user2_attachment_result_id,
+        conflict_couple_result_id, result_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      coupleId,
+      result.analysisCode,
+      result.analysisVersion,
+      firstAttachment.result_id,
+      secondAttachment.result_id,
+      conflictResultRow.rows[0]?.couple_result_id,
+      JSON.stringify(result),
+    ],
+  );
+  const stored = await query(
+    `SELECT result_json
+     FROM relationship_compatibility_analyses
+     WHERE couple_id = ? AND analysis_code = ? AND analysis_version = ?
+       AND user1_attachment_result_id = ? AND user2_attachment_result_id = ?
+       AND conflict_couple_result_id = ?
+     LIMIT 1`,
+    [
+      coupleId,
+      result.analysisCode,
+      result.analysisVersion,
+      firstAttachment.result_id,
+      secondAttachment.result_id,
+      conflictResultRow.rows[0]?.couple_result_id,
+    ],
+  );
+  return {
+    status: 'ready',
+    dependencyStatus,
+    result: parseRelationshipResult(stored.rows[0]?.result_json) ?? result,
+  };
+};
+
+router.get('/relationship/compatibility/:code/current', async (req, res) => {
+  try {
+    const code = String(req.params.code ?? '').trim();
+    if (code !== 'attachment-conflict') {
+      return res.status(404).json({ ok: false, reason: 'compatibility_not_found' });
+    }
+    const state = await getAttachmentConflictCompatibilityState(req.auth.userId);
+    if (state.error) {
+      return res.status(state.error.status).json({ ok: false, reason: state.error.reason });
+    }
+    return res.json({ ok: true, ...state });
+  } catch (error) {
+    console.error('[API] /relationship/compatibility/:code/current error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
 router.post('/relationship/couple-assessment-attempts/:attemptId/submit', async (req, res) => {
   try {
     const attemptId = Number(req.params.attemptId);

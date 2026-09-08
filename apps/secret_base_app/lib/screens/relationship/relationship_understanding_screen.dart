@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import '../../core/auth_service.dart';
 import '../../core/app_theme.dart';
 import '../../core/assessment_catalog_api.dart';
+import '../../core/compatibility_api.dart';
 import '../../core/birth_profile_api.dart';
 import '../../core/main_design.dart';
 import 'assessment_catalog_screen.dart';
+import 'compatibility_screen.dart';
 
 enum RelationshipAssessmentStatus {
   profileIncomplete,
@@ -351,6 +353,17 @@ class _RelationshipUnderstandingScreenState
     );
   }
 
+  void _openCompatibility() {
+    final auth = AuthService();
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => CompatibilityScreen(
+          api: CompatibilityApi(baseUrl: auth.baseUrl, token: auth.token ?? ''),
+        ),
+      ),
+    );
+  }
+
   Widget _coupleArea() {
     final title = widget.hasActiveCouple ? '커플 영역' : '커플 영역은 잠겨 있어요';
     final description = widget.hasActiveCouple
@@ -377,6 +390,14 @@ class _RelationshipUnderstandingScreenState
                   description,
                   style: mainBody(size: 13, color: kMainSub, height: 1.5),
                 ),
+                if (widget.hasActiveCouple) ...[
+                  const SizedBox(height: 12),
+                  OutlinedButton(
+                    key: const Key('open_compatibility'),
+                    onPressed: _openCompatibility,
+                    child: const Text('궁합 분석 보기'),
+                  ),
+                ],
               ],
             ),
           ),
