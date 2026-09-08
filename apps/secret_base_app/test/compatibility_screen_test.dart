@@ -103,6 +103,32 @@ void main() {
     expect(state.result?.analysisCode, 'emotional-regulation_compatibility');
   });
 
+  test('loads couple compatibility by its independent code', () async {
+    String? requestedPath;
+    final payload = _state(status: 'pending');
+    final api = CompatibilityApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient((request) async {
+        requestedPath = request.url.path;
+        return http.Response.bytes(
+          utf8.encode(jsonEncode(payload)),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      }),
+    );
+
+    final state = await api.fetchCouple('affection-alignment');
+
+    expect(
+      requestedPath,
+      '/api/relationship/compatibility/affection-alignment/current',
+    );
+    expect(state.status, 'pending');
+    expect(state.result, isNull);
+  });
+
   testWidgets('shows pending dependency state', (tester) async {
     final api = CompatibilityApi(
       baseUrl: 'https://secretbase.example',

@@ -2247,17 +2247,109 @@ const getPersonalCompatibilityState = async (userId, code) => {
   };
 };
 
+const coupleCompatibilityDefinitions = new Map([
+  ['togetherness-personal-time', {
+    assessmentCode: 'togetherness_personal_time',
+    pattern: '함께 있음과 개인 시간을 조율하는 방식의 차이를 서로의 생활 리듬으로 이해해보세요.',
+    caution: '함께 있는 시간의 양을 사랑의 크기로 바로 해석하지 않도록 서로의 필요를 확인해보세요.',
+  }],
+  ['affection-alignment', {
+    assessmentCode: 'affection_alignment',
+    pattern: '애정을 표현하고 기대하는 방식의 차이를 번역하면 서로의 노력이 더 잘 보일 수 있어요.',
+    caution: '표현의 빈도나 방식만으로 사랑의 크기를 단정하지 말고 구체적인 부탁으로 바꿔보세요.',
+  }],
+]);
+
+const buildCoupleCompatibilityResult = (code, sharedResult) => {
+  const definition = coupleCompatibilityDefinitions.get(code);
+  return {
+    analysisCode: `${code}_compatibility`,
+    analysisVersion: 'v1',
+    dimensions: (sharedResult.dimensions ?? []).map((dimension) => ({
+      key: dimension.key,
+      title: dimension.title,
+      scoreDifference: Math.max(0, 100 - Number(dimension.alignmentScore ?? 0)),
+    })),
+    complementaryPatternKey: sharedResult.relationshipPatternKey ?? 'coordination_needed',
+    complementaryPattern: definition.pattern,
+    cautionInteractions: [definition.caution],
+    conversationPrompts: sharedResult.conversationPrompts ?? [],
+    conflictPatternKey: null,
+    disclaimer: '두 사람의 커플검사 shared result를 관계 대화용으로 다시 정리한 참고 정보이며, 의료적 진단이나 우열을 의미하지 않아요.',
+  };
+};
+
+const getCoupleCompatibilityState = async (userId, code) => {
+  const definition = coupleCompatibilityDefinitions.get(code);
+  if (!definition) return { error: { status: 404, reason: 'compatibility_not_found' } };
+  const assessment = await getActiveRelationshipAssessment(definition.assessmentCode);
+  const coupleId = await getCoupleIdForUser(userId);
+  if (coupleId == null) return { error: { status: 409, reason: 'active_couple_required' } };
+  if (!assessment) return { error: { status: 404, reason: 'compatibility_not_available' } };
+  const sharedState = await getCompletedCoupleAssessmentState(
+    coupleId,
+    assessment.version_id,
+    assessment,
+  );
+  const dependencyStatus = {
+    [definition.assessmentCode]: sharedState.completedMemberCount,
+  };
+  if (sharedState.status !== 'ready') {
+    return { status: 'pending', dependencyStatus, result: null };
+  }
+  const source = await query(
+    `SELECT couple_result_id, result_json
+     FROM relationship_couple_assessment_results
+     WHERE couple_id = ? AND version_id = ?
+     ORDER BY couple_result_id DESC
+     LIMIT 1`,
+    [coupleId, assessment.version_id],
+  );
+  const sourceRow = source.rows[0];
+  if (!sourceRow) return { error: { status: 500, reason: 'compatibility_source_missing' } };
+  const result = buildCoupleCompatibilityResult(
+    code,
+    parseRelationshipResult(sourceRow.result_json) ?? sharedState.result,
+  );
+  await query(
+    `INSERT IGNORE INTO relationship_couple_compatibility_analyses
+       (couple_id, analysis_code, analysis_version, source_couple_result_id, result_json)
+     VALUES (?, ?, ?, ?, ?)`,
+    [coupleId, result.analysisCode, result.analysisVersion, sourceRow.couple_result_id, JSON.stringify(result)],
+  );
+  const stored = await query(
+    `SELECT result_json
+     FROM relationship_couple_compatibility_analyses
+     WHERE couple_id = ? AND analysis_code = ? AND analysis_version = ?
+       AND source_couple_result_id = ?
+     LIMIT 1`,
+    [coupleId, result.analysisCode, result.analysisVersion, sourceRow.couple_result_id],
+  );
+  return {
+    status: 'ready',
+    dependencyStatus,
+    result: parseRelationshipResult(stored.rows[0]?.result_json) ?? result,
+  };
+};
+
 router.get('/relationship/compatibility/:code/current', async (req, res) => {
   try {
     const code = String(req.params.code ?? '').trim();
-    if (!['attachment-conflict', 'conflict-repair', ...personalCompatibilityDefinitions.keys()].includes(code)) {
+    if (![
+      'attachment-conflict',
+      'conflict-repair',
+      ...personalCompatibilityDefinitions.keys(),
+      ...coupleCompatibilityDefinitions.keys(),
+    ].includes(code)) {
       return res.status(404).json({ ok: false, reason: 'compatibility_not_found' });
     }
     const state = code === 'attachment-conflict'
       ? await getAttachmentConflictCompatibilityState(req.auth.userId)
       : code === 'conflict-repair'
       ? await getConflictRepairCompatibilityState(req.auth.userId)
-      : await getPersonalCompatibilityState(req.auth.userId, code);
+      : personalCompatibilityDefinitions.has(code)
+      ? await getPersonalCompatibilityState(req.auth.userId, code)
+      : await getCoupleCompatibilityState(req.auth.userId, code);
     if (state.error) {
       return res.status(state.error.status).json({ ok: false, reason: state.error.reason });
     }
