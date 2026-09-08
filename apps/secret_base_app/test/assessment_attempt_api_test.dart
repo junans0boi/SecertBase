@@ -212,6 +212,53 @@ void main() {
     expect(state.result?.conversationPrompts.single, contains('부탁'));
   });
 
+  test(
+    'requests and reads personal explanation status separately from result',
+    () async {
+      final requests = <http.Request>[];
+      final api = AssessmentAttemptApi(
+        baseUrl: 'https://secretbase.example',
+        token: 'jwt-token',
+        client: MockClient((request) async {
+          requests.add(request);
+          return http.Response.bytes(
+            utf8.encode(
+              jsonEncode({
+                'ok': true,
+                'status': 'fallback',
+                'generation': {
+                  'id': 9,
+                  'status': 'fallback',
+                  'provider': 'disabled',
+                  'model': null,
+                  'promptVersion': 'v1',
+                  'contextVersion': 'v1',
+                  'explanation': '고정 설명',
+                  'errorCode': 'provider_disabled',
+                },
+              }),
+            ),
+            request.method == 'POST' ? 201 : 200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }),
+      );
+
+      final current = await api.fetchPersonalExplanation('attachment');
+      final requested = await api.requestPersonalExplanation('attachment');
+
+      expect(requests[0].method, 'GET');
+      expect(
+        requests[0].url.path,
+        '/api/relationship/explanations/personal/attachment/current',
+      );
+      expect(requests[1].method, 'POST');
+      expect(current.status, 'fallback');
+      expect(requested.generation?.explanation, '고정 설명');
+      expect(requested.generation?.errorCode, 'provider_disabled');
+    },
+  );
+
   test('maps server and network errors to public reasons', () async {
     final serverApi = AssessmentAttemptApi(
       baseUrl: 'https://secretbase.example',

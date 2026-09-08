@@ -285,6 +285,61 @@ class AssessmentHistoryItem {
   }
 }
 
+class ExplanationGeneration {
+  final int id;
+  final String status;
+  final String provider;
+  final String? model;
+  final String promptVersion;
+  final String contextVersion;
+  final String? explanation;
+  final String? errorCode;
+
+  const ExplanationGeneration({
+    required this.id,
+    required this.status,
+    required this.provider,
+    required this.model,
+    required this.promptVersion,
+    required this.contextVersion,
+    required this.explanation,
+    required this.errorCode,
+  });
+
+  factory ExplanationGeneration.fromJson(Map<String, dynamic> json) =>
+      ExplanationGeneration(
+        id: int.tryParse('${json['id']}') ?? 0,
+        status: '${json['status'] ?? ''}',
+        provider: '${json['provider'] ?? ''}',
+        model: json['model'] == null ? null : '${json['model']}',
+        promptVersion: '${json['promptVersion'] ?? ''}',
+        contextVersion: '${json['contextVersion'] ?? ''}',
+        explanation: json['explanation'] == null
+            ? null
+            : '${json['explanation']}',
+        errorCode: json['errorCode'] == null ? null : '${json['errorCode']}',
+      );
+}
+
+class ExplanationState {
+  final String status;
+  final ExplanationGeneration? generation;
+
+  const ExplanationState({required this.status, required this.generation});
+
+  factory ExplanationState.fromJson(Map<String, dynamic> json) {
+    final rawGeneration = json['generation'];
+    return ExplanationState(
+      status: '${json['status'] ?? 'idle'}',
+      generation: rawGeneration is Map
+          ? ExplanationGeneration.fromJson(
+              Map<String, dynamic>.from(rawGeneration),
+            )
+          : null,
+    );
+  }
+}
+
 class AssessmentAttemptApiException implements Exception {
   final String reason;
 
@@ -466,6 +521,36 @@ class AssessmentAttemptApi {
             ),
           )
           .toList(growable: false);
+    } on http.ClientException {
+      throw const AssessmentAttemptApiException('network_error');
+    } on FormatException {
+      throw const AssessmentAttemptApiException('invalid_response');
+    }
+  }
+
+  Future<ExplanationState> fetchPersonalExplanation(String code) async {
+    try {
+      final response = await _client.get(
+        Uri.parse(
+          '$baseUrl/api/relationship/explanations/personal/$code/current',
+        ),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      return ExplanationState.fromJson(_successfulBody(response));
+    } on http.ClientException {
+      throw const AssessmentAttemptApiException('network_error');
+    } on FormatException {
+      throw const AssessmentAttemptApiException('invalid_response');
+    }
+  }
+
+  Future<ExplanationState> requestPersonalExplanation(String code) async {
+    try {
+      final response = await _client.post(
+        Uri.parse('$baseUrl/api/relationship/explanations/personal/$code'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      return ExplanationState.fromJson(_successfulBody(response));
     } on http.ClientException {
       throw const AssessmentAttemptApiException('network_error');
     } on FormatException {

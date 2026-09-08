@@ -22,6 +22,8 @@ import {
 } from './account-deletion.js';
 import { normalizeMomentClip } from './moment-clip.js';
 import { businessDate } from './business-date.js';
+import { createExplanationProvider } from './relationship-explanation-provider.js';
+import { createExplanationAttempt } from './relationship-explanation-service.js';
 import {
   canReplaceTodayMoment,
   canViewTodayMoment,
@@ -1564,6 +1566,108 @@ const parseRelationshipResult = (value) => {
   }
 };
 
+const getCurrentPersonalResultSource = async (userId, code) => {
+  const assessment = await getActiveRelationshipAssessment(code);
+  if (!assessment) return { error: { status: 404, reason: 'assessment_not_found' } };
+  if (assessment.audience !== 'individual') {
+    return { error: { status: 400, reason: 'assessment_not_personal' } };
+  }
+  const result = await query(
+    `SELECT r.result_id, r.result_json, v.version_label
+     FROM relationship_assessment_results r
+     JOIN relationship_assessment_versions v ON v.version_id = r.version_id
+     JOIN relationship_assessment_catalog c ON c.assessment_id = v.assessment_id
+     WHERE r.user_id = ? AND r.version_id = ? AND c.code = ?
+     ORDER BY r.result_id DESC
+     LIMIT 1`,
+    [userId, assessment.version_id, code],
+  );
+  const row = result.rows[0];
+  if (!row) return { assessment, result: null };
+  return { assessment, result: row, parsed: parseRelationshipResult(row.result_json) };
+};
+
+const explanationGenerationPayload = (row) => ({
+  id: Number(row.generation_id),
+  status: row.status,
+  provider: row.provider,
+  model: row.model,
+  promptVersion: row.prompt_version,
+  contextVersion: row.context_version,
+  explanation: row.explanation_text ?? null,
+  errorCode: row.error_code ?? null,
+  createdAt: row.created_at instanceof Date
+    ? row.created_at.toISOString()
+    : row.created_at == null ? null : String(row.created_at),
+  completedAt: row.completed_at instanceof Date
+    ? row.completed_at.toISOString()
+    : row.completed_at == null ? null : String(row.completed_at),
+});
+
+const buildPersonalExplanationInput = (source) => ({
+  sourceType: 'assessment',
+  assessmentCode: source.assessment.code,
+  version: source.result.version ?? source.assessment.version_label,
+  dimensions: (source.parsed?.dimensions ?? []).map((dimension) => ({
+    key: dimension.key,
+    title: dimension.title,
+    score: dimension.score,
+  })),
+  patternKey: source.parsed?.overallTendencyKey ?? null,
+  metadata: { locale: 'ko-KR', nonClinical: true },
+});
+
+const runPersonalExplanationGeneration = async (userId, source) => {
+  const input = buildPersonalExplanationInput(source);
+  const provider = createExplanationProvider(config);
+  const providerName = provider?.name ?? 'disabled';
+  const model = provider?.model ?? null;
+  const inserted = await query(
+    `INSERT INTO relationship_explanation_generations
+       (requester_user_id, scope_type, source_key, status, provider, model,
+        prompt_version, context_version, input_json)
+     VALUES (?, 'personal_assessment', ?, 'pending', ?, ?, ?, ?, ?)`,
+    [
+      userId,
+      `assessment-result:${source.result.result_id}`,
+      providerName,
+      model,
+      config.LLM_PROMPT_VERSION,
+      config.LLM_CONTEXT_VERSION,
+      JSON.stringify(input),
+    ],
+  );
+  const attempt = await createExplanationAttempt({
+    provider,
+    input,
+    providerName,
+    model,
+  });
+  const updated = await query(
+    `UPDATE relationship_explanation_generations
+     SET status = ?, explanation_text = ?, error_code = ?,
+         completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+     WHERE generation_id = ? AND requester_user_id = ?`,
+    [
+      attempt.status,
+      attempt.text,
+      attempt.errorCode,
+      inserted.rows.insertId,
+      userId,
+    ],
+  );
+  void updated;
+  const generation = await query(
+    `SELECT generation_id, status, provider, model, prompt_version,
+            context_version, explanation_text, error_code, created_at, completed_at
+     FROM relationship_explanation_generations
+     WHERE generation_id = ? AND requester_user_id = ?
+     LIMIT 1`,
+    [inserted.rows.insertId, userId],
+  );
+  return generation.rows[0] ?? null;
+};
+
 const coupleAssessmentCodes = new Set([
   'conflict_repair',
   'togetherness_personal_time',
@@ -2634,6 +2738,62 @@ router.post('/relationship/assessment-attempts/:attemptId/submit', async (req, r
     return res.status(201).json({ ok: true, result });
   } catch (error) {
     console.error('[API] /relationship/assessment-attempts/:attemptId/submit error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.get('/relationship/explanations/personal/:code/current', async (req, res) => {
+  try {
+    const code = String(req.params.code ?? '').trim();
+    const source = await getCurrentPersonalResultSource(req.auth.userId, code);
+    if (source.error) {
+      return res.status(source.error.status).json({ ok: false, reason: source.error.reason });
+    }
+    if (!source.result) {
+      return res.json({ ok: true, status: 'idle', generation: null });
+    }
+    const generations = await query(
+      `SELECT generation_id, status, provider, model, prompt_version,
+              context_version, explanation_text, error_code, created_at, completed_at
+       FROM relationship_explanation_generations
+       WHERE requester_user_id = ? AND scope_type = 'personal_assessment'
+         AND source_key = ?
+       ORDER BY generation_id DESC
+       LIMIT 1`,
+      [req.auth.userId, `assessment-result:${source.result.result_id}`],
+    );
+    return res.json({
+      ok: true,
+      status: generations.rows[0]?.status ?? 'idle',
+      generation: generations.rows[0] ? explanationGenerationPayload(generations.rows[0]) : null,
+    });
+  } catch (error) {
+    console.error('[API] /relationship/explanations/personal/:code/current error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.post('/relationship/explanations/personal/:code', async (req, res) => {
+  try {
+    const code = String(req.params.code ?? '').trim();
+    const source = await getCurrentPersonalResultSource(req.auth.userId, code);
+    if (source.error) {
+      return res.status(source.error.status).json({ ok: false, reason: source.error.reason });
+    }
+    if (!source.result || !source.parsed) {
+      return res.status(409).json({ ok: false, reason: 'personal_result_required' });
+    }
+    const generation = await runPersonalExplanationGeneration(req.auth.userId, source);
+    if (!generation) {
+      return res.status(500).json({ ok: false, reason: 'explanation_generation_failed' });
+    }
+    return res.status(201).json({
+      ok: true,
+      status: generation.status,
+      generation: explanationGenerationPayload(generation),
+    });
+  } catch (error) {
+    console.error('[API] /relationship/explanations/personal/:code POST error:', error);
     return res.status(500).json({ ok: false, reason: 'internal_error' });
   }
 });

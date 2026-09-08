@@ -89,10 +89,34 @@ void main() {
     tester,
   ) async {
     var answerSaved = false;
+    var explanationRequested = false;
     final api = AssessmentAttemptApi(
       baseUrl: 'https://secretbase.example',
       token: 'jwt-token',
       client: MockClient((request) async {
+        if (request.url.path.contains('/explanations/personal/')) {
+          explanationRequested = true;
+          return http.Response.bytes(
+            utf8.encode(
+              jsonEncode({
+                'ok': true,
+                'status': 'fallback',
+                'generation': {
+                  'id': 9,
+                  'status': 'fallback',
+                  'provider': 'disabled',
+                  'model': null,
+                  'promptVersion': 'v1',
+                  'contextVersion': 'v1',
+                  'explanation': '점수와 경향을 바탕으로 한 고정 설명이에요.',
+                  'errorCode': 'provider_disabled',
+                },
+              }),
+            ),
+            201,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }
         if (request.url.path.endsWith('/submit')) {
           return http.Response.bytes(
             utf8.encode(
@@ -166,6 +190,19 @@ void main() {
     expect(find.text('검사 결과'), findsOneWidget);
     expect(
       find.byKey(const Key('assessment_result_disclaimer')),
+      findsOneWidget,
+    );
+    expect(find.text('원할 때만 구조화된 결과를 자연어로 풀어볼 수 있어요.'), findsOneWidget);
+    await tester.ensureVisible(
+      find.byKey(const Key('request_personal_explanation')),
+    );
+    await tester.tap(find.byKey(const Key('request_personal_explanation')));
+    await tester.pumpAndSettle();
+
+    expect(explanationRequested, isTrue);
+    expect(find.text('점수와 경향을 바탕으로 한 고정 설명이에요.'), findsOneWidget);
+    expect(
+      find.byKey(const Key('personal_explanation_fallback')),
       findsOneWidget,
     );
   });

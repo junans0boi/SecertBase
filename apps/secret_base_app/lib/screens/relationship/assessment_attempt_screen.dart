@@ -26,9 +26,11 @@ class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
   AssessmentAttempt? _attempt;
   AssessmentResult? _result;
   CoupleAssessmentState? _coupleState;
+  ExplanationState? _explanationState;
   String? _errorMessage;
   String? _savingQuestion;
   bool _submitting = false;
+  bool _loadingExplanation = false;
   bool _loading = true;
 
   @override
@@ -124,6 +126,27 @@ class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
       if (!mounted) return;
       setState(() {
         _submitting = false;
+        _errorMessage = _messageFor(error);
+      });
+    }
+  }
+
+  Future<void> _requestExplanation() async {
+    if (widget.isCouple || _loadingExplanation) return;
+    setState(() => _loadingExplanation = true);
+    try {
+      final state = await widget.api.requestPersonalExplanation(
+        widget.assessment.code,
+      );
+      if (!mounted) return;
+      setState(() {
+        _explanationState = state;
+        _loadingExplanation = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadingExplanation = false;
         _errorMessage = _messageFor(error);
       });
     }
@@ -308,6 +331,40 @@ class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
           result.disclaimer,
           key: const Key('assessment_result_disclaimer'),
           style: mainBody(size: 12, color: kMainMuted, height: 1.5),
+        ),
+        const SizedBox(height: 16),
+        MainCard(
+          key: const Key('personal_explanation_card'),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('자연어 설명', style: mainBody(weight: FontWeight.w800)),
+              const SizedBox(height: 6),
+              Text(
+                _explanationState?.generation?.explanation ??
+                    '원할 때만 구조화된 결과를 자연어로 풀어볼 수 있어요.',
+                style: mainBody(size: 13, color: kMainSub, height: 1.5),
+              ),
+              const SizedBox(height: 10),
+              if (_explanationState?.status == 'pending' || _loadingExplanation)
+                const Text('설명을 준비하고 있어요…')
+              else
+                OutlinedButton(
+                  key: const Key('request_personal_explanation'),
+                  onPressed: _requestExplanation,
+                  child: Text(
+                    _explanationState == null ? '설명 요청하기' : '다시 생성하기',
+                  ),
+                ),
+              if (_explanationState?.status == 'fallback')
+                Text(
+                  '고정 설명을 표시하고 있어요. 핵심 점수와 판정은 변하지 않아요.',
+                  key: const Key('personal_explanation_fallback'),
+                  style: mainBody(size: 11, color: kMainMuted),
+                ),
+            ],
+          ),
         ),
       ],
     );
