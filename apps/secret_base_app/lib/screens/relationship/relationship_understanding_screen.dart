@@ -20,6 +20,32 @@ enum RelationshipAssessmentStatus {
   resultReady,
 }
 
+class _BirthCountryOption {
+  final String label;
+  final String timezone;
+
+  const _BirthCountryOption(this.label, this.timezone);
+}
+
+const _birthCountryOptions = [
+  _BirthCountryOption('대한민국', 'Asia/Seoul'),
+  _BirthCountryOption('일본', 'Asia/Tokyo'),
+  _BirthCountryOption('중국', 'Asia/Shanghai'),
+  _BirthCountryOption('대만', 'Asia/Taipei'),
+  _BirthCountryOption('싱가포르', 'Asia/Singapore'),
+  _BirthCountryOption('베트남', 'Asia/Ho_Chi_Minh'),
+  _BirthCountryOption('태국', 'Asia/Bangkok'),
+  _BirthCountryOption('인도', 'Asia/Kolkata'),
+  _BirthCountryOption('호주', 'Australia/Sydney'),
+  _BirthCountryOption('뉴질랜드', 'Pacific/Auckland'),
+  _BirthCountryOption('미국 동부', 'America/New_York'),
+  _BirthCountryOption('미국 서부', 'America/Los_Angeles'),
+  _BirthCountryOption('캐나다', 'America/Toronto'),
+  _BirthCountryOption('영국', 'Europe/London'),
+  _BirthCountryOption('프랑스', 'Europe/Paris'),
+  _BirthCountryOption('독일', 'Europe/Berlin'),
+];
+
 class RelationshipEntryCard extends StatelessWidget {
   final RelationshipAssessmentStatus status;
   final VoidCallback onTap;
@@ -120,6 +146,7 @@ class _RelationshipUnderstandingScreenState
   final _timezoneController = TextEditingController(text: 'Asia/Seoul');
   final _birthPlaceController = TextEditingController();
   BirthCalendarType _calendarType = BirthCalendarType.solar;
+  String? _birthCountry = '대한민국';
   BirthProfile? _profile;
   String? _errorMessage;
   bool _loading = true;
@@ -171,7 +198,26 @@ class _RelationshipUnderstandingScreenState
     _birthDateController.text = profile.birthDate;
     _birthTimeController.text = profile.birthTime ?? '';
     _timezoneController.text = profile.timezone;
+    _birthCountry = _birthCountryForTimezone(profile.timezone);
     _birthPlaceController.text = profile.birthPlace ?? '';
+  }
+
+  String? _birthCountryForTimezone(String timezone) {
+    for (final option in _birthCountryOptions) {
+      if (option.timezone == timezone) return option.label;
+    }
+    return null;
+  }
+
+  void _selectBirthCountry(String country) {
+    for (final option in _birthCountryOptions) {
+      if (option.label != country) continue;
+      setState(() {
+        _birthCountry = option.label;
+        _timezoneController.text = option.timezone;
+      });
+      return;
+    }
   }
 
   Future<void> _save() async {
@@ -604,9 +650,24 @@ class _RelationshipUnderstandingScreenState
                             keyboardType: TextInputType.datetime,
                           ),
                           const SizedBox(height: 14),
-                          _textField(
-                            _timezoneController,
-                            '시간대 (예: Asia/Seoul)',
+                          DropdownButtonFormField<String>(
+                            initialValue: _birthCountry,
+                            decoration: _decoration('출생 국가'),
+                            items: [
+                              for (final option in _birthCountryOptions)
+                                DropdownMenuItem(
+                                  value: option.label,
+                                  child: Text(option.label),
+                                ),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) _selectBirthCountry(value);
+                            },
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '선택한 국가의 대표 시간대를 사용해요.',
+                            style: mainBody(size: 12, color: kMainMuted),
                           ),
                           const SizedBox(height: 14),
                           _textField(_birthPlaceController, '출생지 (선택)'),
