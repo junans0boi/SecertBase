@@ -77,10 +77,8 @@ void main() {
       baseUrl: 'https://secretbase.example',
       token: 'jwt-token',
       client: MockClient(
-        (_) async => http.Response(
-          '{"ok":false,"reason":"invalid_timezone"}',
-          400,
-        ),
+        (_) async =>
+            http.Response('{"ok":false,"reason":"invalid_timezone"}', 400),
       ),
     );
 

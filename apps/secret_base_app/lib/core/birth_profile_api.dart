@@ -77,8 +77,11 @@ class BirthProfileApi {
   final String token;
   final http.Client _client;
 
-  BirthProfileApi({required this.baseUrl, required this.token, http.Client? client})
-    : _client = client ?? http.Client();
+  BirthProfileApi({
+    required this.baseUrl,
+    required this.token,
+    http.Client? client,
+  }) : _client = client ?? http.Client();
 
   void close() => _client.close();
 
@@ -89,7 +92,9 @@ class BirthProfileApi {
         headers: {'Authorization': 'Bearer $token'},
       );
       return BirthProfile.fromJson(
-        Map<String, dynamic>.from(_successfulBody(response)['birthProfile'] as Map),
+        Map<String, dynamic>.from(
+          _successfulBody(response)['birthProfile'] as Map,
+        ),
       );
     } on http.ClientException {
       throw const BirthProfileApiException('network_error');
@@ -109,7 +114,9 @@ class BirthProfileApi {
         body: jsonEncode(input.toJson()),
       );
       return BirthProfile.fromJson(
-        Map<String, dynamic>.from(_successfulBody(response)['birthProfile'] as Map),
+        Map<String, dynamic>.from(
+          _successfulBody(response)['birthProfile'] as Map,
+        ),
       );
     } on http.ClientException {
       throw const BirthProfileApiException('network_error');
