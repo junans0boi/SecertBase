@@ -146,6 +146,10 @@ class CompatibilityApi {
     return _fetch('conflict-repair');
   }
 
+  Future<CompatibilityState> fetchPersonal(String code) async {
+    return _fetch(code);
+  }
+
   Future<CompatibilityState> _fetch(String code) async {
     try {
       final response = await _client.get(

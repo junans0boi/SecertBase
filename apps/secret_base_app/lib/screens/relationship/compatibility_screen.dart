@@ -42,7 +42,9 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
     try {
       final state = widget.analysisCode == 'conflict-repair'
           ? await widget.api.fetchConflictRepair()
-          : await widget.api.fetchAttachmentConflict();
+          : widget.analysisCode == 'attachment-conflict'
+          ? await widget.api.fetchAttachmentConflict()
+          : await widget.api.fetchPersonal(widget.analysisCode);
       if (!mounted) return;
       setState(() {
         _state = state;

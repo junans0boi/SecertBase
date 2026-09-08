@@ -2093,15 +2093,171 @@ const getConflictRepairCompatibilityState = async (userId) => {
   };
 };
 
+const personalCompatibilityDefinitions = new Map([
+  ['social-bonding', {
+    assessmentCode: 'social_bonding',
+    dimensions: [
+      ['depth_gap', '관계의 깊이 차이', 'depth'],
+      ['dependence_gap', '의존과 균형 차이', 'dependence'],
+      ['isolation_gap', '고립감 인식 차이', 'isolation'],
+    ],
+    pattern: '사회적 연결을 넓히는 속도와 기대를 서로의 언어로 확인해보는 것이 도움이 될 수 있어요.',
+    prompts: [
+      '각자에게 깊은 관계라고 느껴지는 신호는 무엇인가요?',
+      '파트너 한 사람에게 기대가 몰릴 때 활용할 수 있는 다른 자원은 무엇일까요?',
+      '외로움과 혼자 있는 시간을 구분하기 위해 어떤 신호를 살펴볼까요?',
+    ],
+  }],
+  ['emotional-regulation', {
+    assessmentCode: 'emotional_regulation',
+    dimensions: [
+      ['internal_gap', '내부 처리 차이', 'internal'],
+      ['stimulation_gap', '외부 자극 차이', 'stimulation'],
+      ['dialogue_gap', '대화 선호 차이', 'dialogue'],
+    ],
+    pattern: '감정을 정리하고 회복하는 순서가 다를 수 있어, 서로에게 필요한 도움의 형태를 확인해보세요.',
+    prompts: [
+      '감정이 생겼을 때 먼저 혼자 정리할 시간과 대화할 시점을 어떻게 알릴까요?',
+      '기분 전환을 위해 각자 도움이 되는 활동은 무엇인가요?',
+      '해결책보다 공감이 필요한 순간을 어떤 말로 알려줄 수 있을까요?',
+    ],
+  }],
+  ['relationship-deficiency', {
+    assessmentCode: 'relationship_deficiency',
+    dimensions: [
+      ['self_awareness_gap', '자기 인식 차이', 'self_awareness'],
+      ['partner_expectation_gap', '파트너 기대 차이', 'partner_expectation'],
+      ['alternative_resources_gap', '대안 자원 인식 차이', 'alternative_resources'],
+    ],
+    pattern: '관계에서 느끼는 필요를 한 사람의 책임으로 돌리기보다, 함께 이름 붙이고 자원을 넓혀보는 것이 좋아요.',
+    prompts: [
+      '지금 관계에서 가장 먼저 이름 붙이고 싶은 필요는 무엇인가요?',
+      '파트너에게 바라는 것과 내가 직접 돌볼 수 있는 것을 어떻게 나눌까요?',
+      '관계 밖에서 나를 지지하는 자원을 하나씩 찾아볼 수 있을까요?',
+    ],
+  }],
+]);
+
+const buildPersonalCompatibilityResult = (code, first, second) => {
+  const definition = personalCompatibilityDefinitions.get(code);
+  const firstByKey = new Map(
+    (first.dimensions ?? []).map((dimension) => [dimension.key, dimension]),
+  );
+  const secondByKey = new Map(
+    (second.dimensions ?? []).map((dimension) => [dimension.key, dimension]),
+  );
+  const dimensions = definition.dimensions.flatMap(([key, title, sourceKey]) => {
+    const firstDimension = firstByKey.get(sourceKey);
+    const secondDimension = secondByKey.get(sourceKey);
+    if (!firstDimension || !secondDimension) return [];
+    return [{
+      key,
+      title,
+      scoreDifference: Math.abs(
+        Number(firstDimension.score) - Number(secondDimension.score),
+      ),
+    }];
+  });
+  const maxDifference = dimensions.reduce(
+    (max, dimension) => Math.max(max, dimension.scoreDifference),
+    0,
+  );
+  return {
+    analysisCode: `${code}_compatibility`,
+    analysisVersion: 'v1',
+    dimensions,
+    complementaryPatternKey: maxDifference >= 30 ? 'needs_translation' : 'shared_context',
+    complementaryPattern: definition.pattern,
+    cautionInteractions: [
+      '차이가 큰 영역을 누가 맞는지의 증거로 사용하지 말고 서로의 필요를 설명하는 출발점으로 삼아보세요.',
+    ],
+    conversationPrompts: definition.prompts,
+    conflictPatternKey: null,
+    disclaimer: '두 사람의 개인검사 요약을 조합한 관계 대화용 참고 정보이며, 의료적 진단이나 우열을 의미하지 않아요.',
+  };
+};
+
+const getPersonalCompatibilityState = async (userId, code) => {
+  const definition = personalCompatibilityDefinitions.get(code);
+  if (!definition) return { error: { status: 404, reason: 'compatibility_not_found' } };
+  const assessment = await getActiveRelationshipAssessment(definition.assessmentCode);
+  const coupleId = await getCoupleIdForUser(userId);
+  if (coupleId == null) return { error: { status: 409, reason: 'active_couple_required' } };
+  const coupleResult = await query(
+    `SELECT CoupleId, User1Id, User2Id
+     FROM Couples
+     WHERE CoupleId = ? AND Status = 'active'
+     LIMIT 1`,
+    [coupleId],
+  );
+  const couple = coupleResult.rows[0];
+  if (!couple || !assessment) {
+    return { error: { status: 404, reason: 'compatibility_not_available' } };
+  }
+  const resultRows = await query(
+    `SELECT r.result_id, r.user_id, r.result_json
+     FROM relationship_assessment_results r
+     JOIN relationship_assessment_attempts a ON a.attempt_id = r.attempt_id
+     WHERE r.version_id = ? AND a.status = 'completed'
+       AND r.user_id IN (?, ?)
+     ORDER BY r.user_id, r.result_id DESC`,
+    [assessment.version_id, couple.User1Id, couple.User2Id],
+  );
+  const resultByUser = new Map();
+  for (const row of resultRows.rows) {
+    if (!resultByUser.has(Number(row.user_id))) resultByUser.set(Number(row.user_id), row);
+  }
+  const first = resultByUser.get(Number(couple.User1Id));
+  const second = resultByUser.get(Number(couple.User2Id));
+  const dependencyStatus = { [definition.assessmentCode]: resultByUser.size };
+  if (!first || !second) {
+    return { status: 'pending', dependencyStatus, result: null };
+  }
+  const result = buildPersonalCompatibilityResult(
+    code,
+    parseRelationshipResult(first.result_json),
+    parseRelationshipResult(second.result_json),
+  );
+  await query(
+    `INSERT IGNORE INTO relationship_personal_compatibility_analyses
+       (couple_id, analysis_code, analysis_version,
+        user1_result_id, user2_result_id, result_json)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      coupleId,
+      result.analysisCode,
+      result.analysisVersion,
+      first.result_id,
+      second.result_id,
+      JSON.stringify(result),
+    ],
+  );
+  const stored = await query(
+    `SELECT result_json
+     FROM relationship_personal_compatibility_analyses
+     WHERE couple_id = ? AND analysis_code = ? AND analysis_version = ?
+       AND user1_result_id = ? AND user2_result_id = ?
+     LIMIT 1`,
+    [coupleId, result.analysisCode, result.analysisVersion, first.result_id, second.result_id],
+  );
+  return {
+    status: 'ready',
+    dependencyStatus,
+    result: parseRelationshipResult(stored.rows[0]?.result_json) ?? result,
+  };
+};
+
 router.get('/relationship/compatibility/:code/current', async (req, res) => {
   try {
     const code = String(req.params.code ?? '').trim();
-    if (!['attachment-conflict', 'conflict-repair'].includes(code)) {
+    if (!['attachment-conflict', 'conflict-repair', ...personalCompatibilityDefinitions.keys()].includes(code)) {
       return res.status(404).json({ ok: false, reason: 'compatibility_not_found' });
     }
     const state = code === 'attachment-conflict'
       ? await getAttachmentConflictCompatibilityState(req.auth.userId)
-      : await getConflictRepairCompatibilityState(req.auth.userId);
+      : code === 'conflict-repair'
+      ? await getConflictRepairCompatibilityState(req.auth.userId)
+      : await getPersonalCompatibilityState(req.auth.userId, code);
     if (state.error) {
       return res.status(state.error.status).json({ ok: false, reason: state.error.reason });
     }

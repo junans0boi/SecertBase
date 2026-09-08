@@ -74,6 +74,35 @@ void main() {
     expect(state.result?.conversationStarters.single, contains('첫 문장'));
   });
 
+  test('loads personal compatibility by its independent code', () async {
+    String? requestedPath;
+    final payload = _state(status: 'ready');
+    payload['result'] = {
+      ...Map<String, dynamic>.from(payload['result'] as Map),
+      'analysisCode': 'emotional-regulation_compatibility',
+    };
+    final api = CompatibilityApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient((request) async {
+        requestedPath = request.url.path;
+        return http.Response.bytes(
+          utf8.encode(jsonEncode(payload)),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      }),
+    );
+
+    final state = await api.fetchPersonal('emotional-regulation');
+
+    expect(
+      requestedPath,
+      '/api/relationship/compatibility/emotional-regulation/current',
+    );
+    expect(state.result?.analysisCode, 'emotional-regulation_compatibility');
+  });
+
   testWidgets('shows pending dependency state', (tester) async {
     final api = CompatibilityApi(
       baseUrl: 'https://secretbase.example',
