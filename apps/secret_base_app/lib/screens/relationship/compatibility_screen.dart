@@ -51,7 +51,7 @@ class _CompatibilityDashboardScreenState
             error is CompatibilityApiException &&
                 error.reason == 'network_error'
             ? '네트워크 연결을 확인하고 다시 시도해주세요.'
-            : '궁합 dashboard를 불러오지 못했어요.';
+            : '궁합 분석을 불러오지 못했어요.';
       });
     }
   }
@@ -62,7 +62,7 @@ class _CompatibilityDashboardScreenState
       backgroundColor: kMainBg,
       appBar: AppBar(
         backgroundColor: kMainBg,
-        title: Text('우리의 궁합 dashboard', style: mainTitle(size: 22)),
+        title: Text('우리의 궁합 분석', style: mainTitle(size: 22)),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: kMainRose))
@@ -152,9 +152,20 @@ class _CompatibilityDashboardScreenState
   String _pendingDescription(CompatibilityState state) {
     if (state.dependencyStatus.isEmpty) return '필요한 검사가 아직 완료되지 않았어요.';
     return state.dependencyStatus.entries
-        .map((entry) => '${entry.key} ${entry.value}/2명 완료')
+        .map((entry) => '${_assessmentLabel(entry.key)} ${entry.value}/2명 완료')
         .join(' · ');
   }
+
+  String _assessmentLabel(String code) => switch (code) {
+    'attachment' => '애착 검사',
+    'conflictRepair' || 'conflict_repair' => '갈등·회복 검사',
+    'social_bonding' => '사회적 유대 검사',
+    'emotional_regulation' => '감정 해소 검사',
+    'relationship_deficiency' => '관계 결핍 인식 검사',
+    'togetherness_personal_time' => '함께 있음과 개인 시간 검사',
+    'affection_alignment' => '애정 표현과 기대 검사',
+    _ => '관계 검사',
+  };
 
   Color _statusColor(String status) => switch (status) {
     'ready' => kMainLilac,
@@ -183,7 +194,7 @@ class _CompatibilityDashboardScreenState
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('궁합 dashboard를 불러오지 못했어요', style: mainTitle(size: 20)),
+            Text('궁합 분석을 불러오지 못했어요', style: mainTitle(size: 20)),
             const SizedBox(height: 8),
             Text(_errorMessage!, textAlign: TextAlign.center),
             const SizedBox(height: 14),
