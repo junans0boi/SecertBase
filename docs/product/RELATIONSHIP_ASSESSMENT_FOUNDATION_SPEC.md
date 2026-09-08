@@ -78,14 +78,18 @@ LLM은 검사 결과와 궁합 분석의 자연어 설명을 보조하는 선택
 - The LLM integration is behind a server-side provider adapter. The provider, base URL, model, and credentials are deployment configuration rather than Flutter configuration. No provider-specific choice is required for the deterministic core.
 - LLM explanation status is separate from the core result. The states are equivalent to pending, available, fallback, and failed; a failed or disabled provider returns the fixed-template explanation.
 - The LLM cannot modify scores, labels, access scope, completion status, or Couple membership.
+- Daily fortune, emotional-flow, and relationship-fortune content is persisted by date and content version. A couple fortune is generated once for the active Couple scope and is identical for both members; regeneration requires an explicit user action.
+- Counseling is split into private and shared sessions. Private raw messages are owner-only through the user API. Shared counseling uses only shared messages, structured relationship summaries, and explicitly approved shareable insights; private raw messages never move automatically.
+- The current provider configuration is opt-in. A disabled or failed free provider produces deterministic fortune content or a fixed counseling fallback, and records provider/model/prompt/context metadata when generated.
 - The REST API follows the existing `{ ok: true, ... }` and `{ ok: false, reason: ... }` response convention and authenticates every feature request with the existing JWT middleware.
-- The REST surface provides: birth profile read/update; assessment catalog and progress; assessment detail with active questions; attempt start/resume; answer save; attempt submit; personal result read; compatibility status and result read; and explicit explanation regeneration.
+- The REST surface provides: birth profile read/update; dated fortune read and explicit regeneration; private/shared counseling session creation, message exchange, archive, and read; explicit shareable-insight approval/revocation; assessment catalog and progress; assessment detail with active questions; attempt start/resume; answer save; attempt submit; personal result read; compatibility status and result read; and explicit explanation regeneration.
 - Shared compatibility endpoints resolve the active Couple from the authenticated user. Client-supplied user IDs and Couple IDs are not trusted for authorization.
 - A user without an active Couple may manage individual assessments and birth profile, but cannot start couple assessments or read shared compatibility results.
 - Separation immediately removes access to shared compatibility and couple-assessment results through active-Couple authorization. Personal assessment history remains user-scoped according to existing account lifecycle policy.
 - Flutter adds a dedicated relationship-understanding flow reachable from a Home card. It does not add a bottom-navigation destination in this scope.
 - Flutter uses a dedicated API client with injectable `http.Client`, typed response models, progress/resume state, explicit privacy labels, and fallback rendering for unavailable explanations.
-- No daily fortune generation, private counseling, shared counseling, private-counseling encryption, shareable insight workflow, push notification, premium gate, or clinical diagnosis is part of this spec.
+- Private-counseling at-rest encryption and operator access audit logs are not in this release. The current operational policy allows DB operators to inspect raw private rows, while partner and general authenticated API paths remain blocked.
+- Streaming responses, background generation, push notification, premium gate, and clinical diagnosis are out of scope.
 
 ## Testing Decisions
 
@@ -102,8 +106,8 @@ LLM은 검사 결과와 궁합 분석의 자연어 설명을 보조하는 선택
 
 - Medical diagnosis, clinical treatment, crisis assessment, or claims that the custom tests are equivalent to hospital counseling.
 - Adoption, licensing, or validation of an external clinical instrument.
-- Full saju calculation, daily fortune generation, relationship fortune, or calendar interpretation beyond storing birth profile data.
-- Public couple counseling, private counseling chat, encrypted private logs, operator audit logs, or shareable insights.
+- Full astronomical/calendar saju calculation and claims of factual prediction.
+- Private-counseling at-rest encryption and operator audit logs.
 - Automatic use of MomentLoop, Today Loop, Secret Map, game, or other app history as LLM context.
 - Streaming LLM responses, autonomous app actions, notifications, and background generation.
 - Premium billing, quota monetization, provider marketplace, or a guaranteed free-provider SLA.

@@ -26,6 +26,18 @@ import { businessDate } from './business-date.js';
 import { createExplanationProvider } from './relationship-explanation-provider.js';
 import { createExplanationAttempt } from './relationship-explanation-service.js';
 import {
+  FORTUNE_CONTENT_VERSION,
+  buildEmotionalFlow,
+  buildPersonalFortune,
+  buildRelationshipFortune,
+} from './relationship-fortune.js';
+import {
+  buildFortuneContext,
+  buildPrivateCounselingContext,
+  buildRelationshipContentAttempt,
+  buildSharedCounselingContext,
+} from './relationship-context-builder.js';
+import {
   canReplaceTodayMoment,
   canViewTodayMoment,
   maskLockedTodayMoment,
@@ -7690,6 +7702,770 @@ router.get('/shop/catalog', async (req, res) => {
   } catch (err) {
     console.error('[API] /shop/catalog GET error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Relationship fortune and counseling
+// ---------------------------------------------------------------------------
+
+const relationshipDateTime = (value) => value instanceof Date
+  ? value.toISOString()
+  : value == null ? null : String(value);
+
+const getBirthProfileByUserId = async (userId) => {
+  const result = await query(
+    `SELECT BirthDate, BirthCalendarType, BirthTime, BirthTimezone, BirthPlace
+     FROM Users WHERE UserId = ? LIMIT 1`,
+    [userId],
+  );
+  return result.rows[0] ? birthProfileFromRow(result.rows[0]) : null;
+};
+
+const getActiveCoupleRow = async (userId) => {
+  const result = await query(
+    `SELECT CoupleId, User1Id, User2Id
+     FROM Couples
+     WHERE Status = 'active' AND (User1Id = ? OR User2Id = ?)
+     LIMIT 1`,
+    [userId, userId],
+  );
+  return result.rows[0] ?? null;
+};
+
+const parseRelationshipJson = (value) => {
+  if (value == null) return null;
+  if (typeof value === 'object') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+};
+
+const fortunePayload = (row) => {
+  const result = parseRelationshipJson(row.result_json) ?? {};
+  return {
+    id: Number(row.fortune_id),
+    type: row.fortune_type,
+    date: dateOnly(row.content_date),
+    version: row.content_version,
+    status: row.status,
+    provider: row.provider,
+    model: row.model ?? null,
+    promptVersion: row.prompt_version,
+    contextVersion: row.context_version,
+    createdAt: relationshipDateTime(row.created_at),
+    updatedAt: relationshipDateTime(row.updated_at),
+    result,
+  };
+};
+
+const fortuneFallbackText = (type) => type === 'relationship'
+  ? '오늘은 서로의 행동을 바로 해석하기보다 필요한 관심의 모양을 확인해보세요.'
+  : type === 'emotional_flow'
+  ? '오늘의 감정은 해결보다 이름 붙이기와 회복에 먼저 기대어보세요.'
+  : '오늘은 감정과 부탁을 한 문장씩 나누며 내 마음의 속도를 살펴보세요.';
+
+const createFortuneContent = async ({ type, date, result, profile, partnerProfile }) => {
+  const provider = createExplanationProvider(config);
+  const input = {
+    sourceType: 'fortune',
+    contentType: type,
+    version: FORTUNE_CONTENT_VERSION,
+    core: {
+      title: result.title,
+      summary: result.summary,
+      suggestion: result.suggestion,
+    },
+    context: buildFortuneContext({ date, profile, partnerProfile }),
+  };
+  const generated = await buildRelationshipContentAttempt({
+    provider,
+    input,
+    fallbackText: fortuneFallbackText(type),
+  });
+  return {
+    ...result,
+    generatedText: generated.text,
+    generationStatus: generated.status,
+    generationErrorCode: generated.errorCode,
+  };
+};
+
+const readStoredFortune = async ({ userId = null, coupleId = null, date, type }) => {
+  const scopeColumn = userId == null ? 'couple_id' : 'user_id';
+  const scopeId = userId == null ? coupleId : userId;
+  const result = await query(
+    `SELECT fortune_id, content_date, fortune_type, content_version,
+            provider, model, prompt_version, context_version, status,
+            result_json, created_at, updated_at
+     FROM relationship_fortune_contents
+     WHERE ${scopeColumn} = ? AND content_date = ? AND fortune_type = ?
+       AND content_version = ?
+     LIMIT 1`,
+    [scopeId, date, type, FORTUNE_CONTENT_VERSION],
+  );
+  return result.rows[0] ?? null;
+};
+
+const saveFortune = async ({ userId = null, coupleId = null, date, type, result, profile, partnerProfile, regenerate }) => {
+  if (!regenerate) {
+    const existing = await readStoredFortune({ userId, coupleId, date, type });
+    if (existing) return fortunePayload(existing);
+  }
+  const generatedResult = await createFortuneContent({
+    type,
+    date,
+    result,
+    profile,
+    partnerProfile,
+  });
+  const provider = createExplanationProvider(config);
+  await query(
+    `INSERT INTO relationship_fortune_contents
+       (user_id, couple_id, content_date, fortune_type, content_version,
+        provider, model, prompt_version, context_version, status, result_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       provider = VALUES(provider), model = VALUES(model),
+       prompt_version = VALUES(prompt_version), context_version = VALUES(context_version),
+       status = VALUES(status), result_json = VALUES(result_json),
+       updated_at = CURRENT_TIMESTAMP`,
+    [
+      userId,
+      coupleId,
+      date,
+      type,
+      FORTUNE_CONTENT_VERSION,
+      provider?.name ?? 'disabled',
+      provider?.model ?? null,
+      config.LLM_PROMPT_VERSION,
+      config.LLM_CONTEXT_VERSION,
+      generatedResult.generationStatus,
+      JSON.stringify(generatedResult),
+    ],
+  );
+  const stored = await readStoredFortune({ userId, coupleId, date, type });
+  if (!stored) throw new Error('fortune_storage_failed');
+  return fortunePayload(stored);
+};
+
+const loadFortuneProfilePair = async (userId, couple) => {
+  const ownProfile = await getBirthProfileByUserId(userId);
+  if (!couple) return { ownProfile, firstProfile: ownProfile, secondProfile: null };
+  const firstProfile = await getBirthProfileByUserId(Number(couple.User1Id));
+  const secondProfile = await getBirthProfileByUserId(Number(couple.User2Id));
+  return { ownProfile, firstProfile, secondProfile };
+};
+
+const relationshipFortuneResult = ({ type, date, ownProfile, firstProfile, secondProfile }) => {
+  if (type === 'personal') return buildPersonalFortune({ profile: ownProfile, date });
+  if (type === 'emotional_flow') return buildEmotionalFlow({ profile: ownProfile, date });
+  return buildRelationshipFortune({ firstProfile, secondProfile, date });
+};
+
+const loadTodayFortunes = async (userId, { regenerate = false, types = null } = {}) => {
+  const date = businessDate();
+  const couple = await getActiveCoupleRow(userId);
+  const { ownProfile, firstProfile, secondProfile } = await loadFortuneProfilePair(userId, couple);
+  const requestedTypes = types ?? ['personal', 'emotional_flow', ...(couple ? ['relationship'] : [])];
+  const fortunes = {};
+  for (const type of requestedTypes) {
+    if (type === 'relationship' && !couple) continue;
+    const isShared = type === 'relationship';
+    fortunes[type] = await saveFortune({
+      userId: isShared ? null : userId,
+      coupleId: isShared ? Number(couple.CoupleId) : null,
+      date,
+      type,
+      result: relationshipFortuneResult({
+        type,
+        date,
+        ownProfile,
+        firstProfile,
+        secondProfile,
+      }),
+      profile: isShared ? firstProfile : ownProfile,
+      partnerProfile: isShared ? secondProfile : null,
+      regenerate,
+    });
+  }
+  return {
+    date,
+    contentVersion: FORTUNE_CONTENT_VERSION,
+    profileReady: Boolean(ownProfile?.birthDate),
+    fortunes,
+  };
+};
+
+router.get('/relationship/fortune/today', async (req, res) => {
+  try {
+    return res.json({ ok: true, ...(await loadTodayFortunes(req.auth.userId)) });
+  } catch (error) {
+    console.error('[API] /relationship/fortune/today GET error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.post('/relationship/fortune/today/regenerate', async (req, res) => {
+  try {
+    const requested = req.body?.type == null
+      ? null
+      : [String(req.body.type).trim()];
+    const validTypes = new Set(['personal', 'relationship', 'emotional_flow']);
+    if (requested && (requested.length !== 1 || !validTypes.has(requested[0]))) {
+      return res.status(400).json({ ok: false, reason: 'invalid_fortune_type' });
+    }
+    const result = await loadTodayFortunes(req.auth.userId, {
+      regenerate: true,
+      types: requested,
+    });
+    if (requested?.[0] === 'relationship' && !result.fortunes.relationship) {
+      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+    }
+    return res.status(201).json({ ok: true, ...result });
+  } catch (error) {
+    console.error('[API] /relationship/fortune/today/regenerate POST error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+const counselingSessionPayload = (row) => ({
+  id: Number(row.session_id),
+  scope: row.scope_type,
+  title: row.title,
+  status: row.status,
+  coupleId: row.couple_id == null ? null : Number(row.couple_id),
+  createdAt: relationshipDateTime(row.created_at),
+  updatedAt: relationshipDateTime(row.updated_at),
+  lastMessageAt: relationshipDateTime(row.last_message_at),
+  messageCount: row.message_count == null ? undefined : Number(row.message_count),
+});
+
+const counselingMessagePayload = (row) => ({
+  id: Number(row.message_id),
+  sequence: Number(row.sequence_no),
+  role: row.role,
+  authorUserId: row.author_user_id == null ? null : Number(row.author_user_id),
+  content: row.content,
+  provider: row.provider ?? null,
+  model: row.model ?? null,
+  promptVersion: row.prompt_version ?? null,
+  contextVersion: row.context_version ?? null,
+  generationStatus: row.generation_status ?? null,
+  errorCode: row.error_code ?? null,
+  createdAt: relationshipDateTime(row.created_at),
+});
+
+const normalizeCounselingTitle = (value) => {
+  const title = String(value ?? '').trim();
+  return (title || '관계 대화').slice(0, 160);
+};
+
+const normalizeCounselingMessage = (value) => {
+  const message = String(value ?? '').trim();
+  if (!message || message.length > 4000) return null;
+  return message;
+};
+
+const getPrivateCounselingSession = async (sessionId, userId) => {
+  const result = await query(
+    `SELECT session_id, scope_type, owner_user_id, couple_id, title, status,
+            created_at, updated_at, last_message_at
+     FROM relationship_counseling_sessions
+     WHERE session_id = ? AND scope_type = 'private' AND owner_user_id = ?
+     LIMIT 1`,
+    [sessionId, userId],
+  );
+  return result.rows[0] ?? null;
+};
+
+const getSharedCounselingSession = async (sessionId, userId) => {
+  const result = await query(
+    `SELECT s.session_id, s.scope_type, s.owner_user_id, s.couple_id, s.title, s.status,
+            s.created_at, s.updated_at, s.last_message_at
+     FROM relationship_counseling_sessions s
+     JOIN Couples c ON c.CoupleId = s.couple_id AND c.Status = 'active'
+     WHERE s.session_id = ? AND s.scope_type = 'shared'
+       AND (c.User1Id = ? OR c.User2Id = ?)
+     LIMIT 1`,
+    [sessionId, userId, userId],
+  );
+  return result.rows[0] ?? null;
+};
+
+const getCounselingMessages = async (sessionId) => {
+  const result = await query(
+    `SELECT message_id, sequence_no, role, author_user_id, content,
+            provider, model, prompt_version, context_version,
+            generation_status, error_code, created_at
+     FROM relationship_counseling_messages
+     WHERE session_id = ? ORDER BY sequence_no, message_id`,
+    [sessionId],
+  );
+  return result.rows.map(counselingMessagePayload);
+};
+
+const getPersonalAssessmentSummaries = async (userId) => {
+  const result = await query(
+    `SELECT c.code, v.version_label, r.result_json
+     FROM relationship_assessment_results r
+     JOIN relationship_assessment_versions v ON v.version_id = r.version_id
+     JOIN relationship_assessment_catalog c ON c.assessment_id = v.assessment_id
+     JOIN (
+       SELECT r2.user_id, v2.assessment_id, MAX(r2.result_id) AS result_id
+       FROM relationship_assessment_results r2
+       JOIN relationship_assessment_versions v2 ON v2.version_id = r2.version_id
+       WHERE r2.user_id = ?
+       GROUP BY r2.user_id, v2.assessment_id
+     ) current ON current.result_id = r.result_id
+     WHERE c.audience = 'individual'`,
+    [userId],
+  );
+  return result.rows.flatMap((row) => {
+    const parsed = parseRelationshipJson(row.result_json);
+    if (!parsed) return [];
+    return [{
+      code: row.code,
+      version: row.version_label,
+      tendency: parsed.overallTendency ?? parsed.tendency ?? null,
+      dimensions: parsed.dimensions,
+    }];
+  });
+};
+
+const getSharedCompatibilitySummaries = async (coupleId) => {
+  const result = await query(
+    `SELECT analysis_code, result_json
+     FROM relationship_compatibility_analyses
+     WHERE couple_id = ? ORDER BY analysis_id DESC`,
+    [coupleId],
+  );
+  const seen = new Set();
+  return result.rows.flatMap((row) => {
+    if (seen.has(row.analysis_code)) return [];
+    seen.add(row.analysis_code);
+    const parsed = parseRelationshipJson(row.result_json);
+    if (!parsed) return [];
+    return [{
+      code: row.analysis_code,
+      patternKey: parsed.complementaryPatternKey,
+      dimensions: parsed.dimensions,
+    }];
+  });
+};
+
+const getApprovedInsights = async (coupleId) => {
+  const result = await query(
+    `SELECT insight_id, private_session_id, creator_user_id, insight_text, created_at
+     FROM relationship_shareable_insights
+     WHERE couple_id = ? AND status = 'approved'
+     ORDER BY insight_id`,
+    [coupleId],
+  );
+  return result.rows.map((row) => ({
+    id: Number(row.insight_id),
+    privateSessionId: Number(row.private_session_id),
+    creatorUserId: Number(row.creator_user_id),
+    insightText: row.insight_text,
+    createdAt: relationshipDateTime(row.created_at),
+  }));
+};
+
+const counselingFallbackText = (scope) => scope === 'shared'
+  ? '지금은 두 사람이 함께 확인할 수 있는 정보만 바탕으로 답했어요. 서로의 감정과 부탁을 한 문장씩 나눠보세요.'
+  : '지금 적어준 감정을 판단하지 않고 천천히 살펴볼게요. 감정의 이름, 몸의 반응, 원하는 도움을 나누어 적어보세요.';
+
+const generateCounselingReply = async ({ scope, userId, session, messages }) => {
+  const provider = createExplanationProvider(config);
+  let input;
+  if (scope === 'private') {
+    const profile = await getBirthProfileByUserId(userId);
+    const assessments = await getPersonalAssessmentSummaries(userId);
+    input = {
+      sourceType: 'counseling',
+      contentType: 'private',
+      version: 'v1',
+      context: buildPrivateCounselingContext({
+        profile,
+        assessmentSummaries: assessments,
+        messages,
+      }),
+    };
+  } else {
+    const [compatibilitySummaries, approvedInsights] = await Promise.all([
+      getSharedCompatibilitySummaries(Number(session.couple_id)),
+      getApprovedInsights(Number(session.couple_id)),
+    ]);
+    input = {
+      sourceType: 'counseling',
+      contentType: 'shared',
+      version: 'v1',
+      context: buildSharedCounselingContext({
+        compatibilitySummaries,
+        approvedInsights,
+        messages,
+      }),
+    };
+  }
+  return buildRelationshipContentAttempt({
+    provider,
+    input,
+    fallbackText: counselingFallbackText(scope),
+  });
+};
+
+const insertCounselingMessage = async ({ sessionId, role, authorUserId = null, content, generation = null }) => {
+  const next = await query(
+    'SELECT COALESCE(MAX(sequence_no), 0) + 1 AS next_sequence FROM relationship_counseling_messages WHERE session_id = ?',
+    [sessionId],
+  );
+  await query(
+    `INSERT INTO relationship_counseling_messages
+       (session_id, sequence_no, role, author_user_id, content,
+        provider, model, prompt_version, context_version,
+        generation_status, error_code)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      sessionId,
+      Number(next.rows[0]?.next_sequence ?? 1),
+      role,
+      authorUserId,
+      content,
+      generation?.provider ?? null,
+      generation?.model ?? null,
+      generation ? config.LLM_PROMPT_VERSION : null,
+      generation ? config.LLM_CONTEXT_VERSION : null,
+      generation?.status ?? null,
+      generation?.errorCode ?? null,
+    ],
+  );
+};
+
+const createCounselingSession = async ({ scope, userId, coupleId, title }) => {
+  const inserted = await query(
+    `INSERT INTO relationship_counseling_sessions
+       (scope_type, owner_user_id, couple_id, title)
+     VALUES (?, ?, ?, ?)`,
+    [scope, scope === 'private' ? userId : null, coupleId, title],
+  );
+  const result = await query(
+    `SELECT session_id, scope_type, owner_user_id, couple_id, title, status,
+            created_at, updated_at, last_message_at
+     FROM relationship_counseling_sessions WHERE session_id = ?`,
+    [inserted.rows.insertId],
+  );
+  return result.rows[0];
+};
+
+const counselingResponse = async (res, session) => res.json({
+  ok: true,
+  session: counselingSessionPayload(session),
+  messages: await getCounselingMessages(session.session_id),
+});
+
+const createPrivateSessionFromRequest = async (req, res) => {
+  const session = await createCounselingSession({
+    scope: 'private',
+    userId: req.auth.userId,
+    coupleId: (await getActiveCoupleRow(req.auth.userId))?.CoupleId ?? null,
+    title: normalizeCounselingTitle(req.body?.title),
+  });
+  return res.status(201).json({ ok: true, session: counselingSessionPayload(session), messages: [] });
+};
+
+router.post('/relationship/counseling/private/sessions', async (req, res) => {
+  try {
+    return await createPrivateSessionFromRequest(req, res);
+  } catch (error) {
+    console.error('[API] private counseling session POST error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.get('/relationship/counseling/private/sessions', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT s.session_id, s.scope_type, s.owner_user_id, s.couple_id, s.title, s.status,
+              s.created_at, s.updated_at, s.last_message_at,
+              COUNT(m.message_id) AS message_count
+       FROM relationship_counseling_sessions s
+       LEFT JOIN relationship_counseling_messages m ON m.session_id = s.session_id
+       WHERE s.scope_type = 'private' AND s.owner_user_id = ?
+       GROUP BY s.session_id ORDER BY s.updated_at DESC`,
+      [req.auth.userId],
+    );
+    return res.json({ ok: true, sessions: result.rows.map(counselingSessionPayload) });
+  } catch (error) {
+    console.error('[API] private counseling sessions GET error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.get('/relationship/counseling/private/sessions/:sessionId', async (req, res) => {
+  try {
+    const session = await getPrivateCounselingSession(req.params.sessionId, req.auth.userId);
+    if (!session) return res.status(404).json({ ok: false, reason: 'counseling_session_not_found' });
+    return counselingResponse(res, session);
+  } catch (error) {
+    console.error('[API] private counseling session GET error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.post('/relationship/counseling/private/sessions/:sessionId/messages', async (req, res) => {
+  try {
+    const session = await getPrivateCounselingSession(req.params.sessionId, req.auth.userId);
+    if (!session) return res.status(404).json({ ok: false, reason: 'counseling_session_not_found' });
+    if (session.status !== 'active') return res.status(409).json({ ok: false, reason: 'counseling_session_archived' });
+    const content = normalizeCounselingMessage(req.body?.content);
+    if (!content) return res.status(400).json({ ok: false, reason: 'invalid_message' });
+    await insertCounselingMessage({
+      sessionId: session.session_id,
+      role: 'user',
+      authorUserId: req.auth.userId,
+      content,
+    });
+    const messages = await getCounselingMessages(session.session_id);
+    const generation = await generateCounselingReply({
+      scope: 'private',
+      userId: req.auth.userId,
+      session,
+      messages,
+    });
+    await insertCounselingMessage({
+      sessionId: session.session_id,
+      role: 'assistant',
+      content: generation.text,
+      generation,
+    });
+    await query(
+      `UPDATE relationship_counseling_sessions
+       SET last_message_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+       WHERE session_id = ? AND owner_user_id = ?`,
+      [session.session_id, req.auth.userId],
+    );
+    const updated = await getPrivateCounselingSession(session.session_id, req.auth.userId);
+    return res.status(201).json({ ok: true, session: counselingSessionPayload(updated), messages: await getCounselingMessages(session.session_id) });
+  } catch (error) {
+    console.error('[API] private counseling message POST error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.post('/relationship/counseling/shared/sessions', async (req, res) => {
+  try {
+    const couple = await getActiveCoupleRow(req.auth.userId);
+    if (!couple) return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+    const session = await createCounselingSession({
+      scope: 'shared',
+      userId: req.auth.userId,
+      coupleId: couple.CoupleId,
+      title: normalizeCounselingTitle(req.body?.title),
+    });
+    return res.status(201).json({ ok: true, session: counselingSessionPayload(session), messages: [] });
+  } catch (error) {
+    console.error('[API] shared counseling session POST error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.get('/relationship/counseling/shared/sessions', async (req, res) => {
+  try {
+    const couple = await getActiveCoupleRow(req.auth.userId);
+    if (!couple) return res.json({ ok: true, sessions: [] });
+    const result = await query(
+      `SELECT s.session_id, s.scope_type, s.owner_user_id, s.couple_id, s.title, s.status,
+              s.created_at, s.updated_at, s.last_message_at,
+              COUNT(m.message_id) AS message_count
+       FROM relationship_counseling_sessions s
+       LEFT JOIN relationship_counseling_messages m ON m.session_id = s.session_id
+       WHERE s.scope_type = 'shared' AND s.couple_id = ?
+       GROUP BY s.session_id ORDER BY s.updated_at DESC`,
+      [couple.CoupleId],
+    );
+    return res.json({ ok: true, sessions: result.rows.map(counselingSessionPayload) });
+  } catch (error) {
+    console.error('[API] shared counseling sessions GET error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.get('/relationship/counseling/shared/sessions/:sessionId', async (req, res) => {
+  try {
+    const session = await getSharedCounselingSession(req.params.sessionId, req.auth.userId);
+    if (!session) return res.status(404).json({ ok: false, reason: 'counseling_session_not_found' });
+    return counselingResponse(res, session);
+  } catch (error) {
+    console.error('[API] shared counseling session GET error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.post('/relationship/counseling/shared/sessions/:sessionId/messages', async (req, res) => {
+  try {
+    const session = await getSharedCounselingSession(req.params.sessionId, req.auth.userId);
+    if (!session) return res.status(404).json({ ok: false, reason: 'counseling_session_not_found' });
+    if (session.status !== 'active') return res.status(409).json({ ok: false, reason: 'counseling_session_archived' });
+    const content = normalizeCounselingMessage(req.body?.content);
+    if (!content) return res.status(400).json({ ok: false, reason: 'invalid_message' });
+    await insertCounselingMessage({
+      sessionId: session.session_id,
+      role: 'user',
+      authorUserId: req.auth.userId,
+      content,
+    });
+    const messages = await getCounselingMessages(session.session_id);
+    const generation = await generateCounselingReply({
+      scope: 'shared',
+      userId: req.auth.userId,
+      session,
+      messages,
+    });
+    await insertCounselingMessage({
+      sessionId: session.session_id,
+      role: 'assistant',
+      content: generation.text,
+      generation,
+    });
+    await query(
+      `UPDATE relationship_counseling_sessions
+       SET last_message_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+       WHERE session_id = ? AND scope_type = 'shared'`,
+      [session.session_id],
+    );
+    const updated = await getSharedCounselingSession(session.session_id, req.auth.userId);
+    return res.status(201).json({ ok: true, session: counselingSessionPayload(updated), messages: await getCounselingMessages(session.session_id) });
+  } catch (error) {
+    console.error('[API] shared counseling message POST error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+const archiveCounselingSession = async (req, res, scope) => {
+  const session = scope === 'private'
+    ? await getPrivateCounselingSession(req.params.sessionId, req.auth.userId)
+    : await getSharedCounselingSession(req.params.sessionId, req.auth.userId);
+  if (!session) return res.status(404).json({ ok: false, reason: 'counseling_session_not_found' });
+  await query(
+    'UPDATE relationship_counseling_sessions SET status = \'archived\', updated_at = CURRENT_TIMESTAMP WHERE session_id = ?',
+    [session.session_id],
+  );
+  const updated = scope === 'private'
+    ? await getPrivateCounselingSession(session.session_id, req.auth.userId)
+    : await getSharedCounselingSession(session.session_id, req.auth.userId);
+  return res.json({ ok: true, session: counselingSessionPayload(updated) });
+};
+
+router.post('/relationship/counseling/private/sessions/:sessionId/archive', async (req, res) => {
+  try {
+    return await archiveCounselingSession(req, res, 'private');
+  } catch (error) {
+    console.error('[API] private counseling archive POST error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.post('/relationship/counseling/shared/sessions/:sessionId/archive', async (req, res) => {
+  try {
+    return await archiveCounselingSession(req, res, 'shared');
+  } catch (error) {
+    console.error('[API] shared counseling archive POST error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+const insightPayload = (row) => ({
+  id: Number(row.insight_id),
+  privateSessionId: Number(row.private_session_id),
+  creatorUserId: Number(row.creator_user_id),
+  coupleId: Number(row.couple_id),
+  text: row.insight_text,
+  status: row.status,
+  createdAt: relationshipDateTime(row.created_at),
+  revokedAt: relationshipDateTime(row.revoked_at),
+});
+
+router.post('/relationship/counseling/private/sessions/:sessionId/insights', async (req, res) => {
+  try {
+    const session = await getPrivateCounselingSession(req.params.sessionId, req.auth.userId);
+    if (!session) return res.status(404).json({ ok: false, reason: 'counseling_session_not_found' });
+    const couple = await getActiveCoupleRow(req.auth.userId);
+    if (!couple) return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+    if (Number(session.couple_id) !== Number(couple.CoupleId)) {
+      return res.status(409).json({ ok: false, reason: 'session_not_shareable_with_current_couple' });
+    }
+    const text = String(req.body?.text ?? '').trim();
+    if (!text || text.length > 1200) return res.status(400).json({ ok: false, reason: 'invalid_insight' });
+    const inserted = await query(
+      `INSERT INTO relationship_shareable_insights
+         (private_session_id, creator_user_id, couple_id, insight_text)
+       VALUES (?, ?, ?, ?)`,
+      [session.session_id, req.auth.userId, couple.CoupleId, text],
+    );
+    const result = await query(
+      `SELECT insight_id, private_session_id, creator_user_id, couple_id,
+              insight_text, status, created_at, revoked_at
+       FROM relationship_shareable_insights WHERE insight_id = ?`,
+      [inserted.rows.insertId],
+    );
+    return res.status(201).json({ ok: true, insight: insightPayload(result.rows[0]) });
+  } catch (error) {
+    console.error('[API] shareable insight POST error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.get('/relationship/counseling/private/insights', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT insight_id, private_session_id, creator_user_id, couple_id,
+              insight_text, status, created_at, revoked_at
+       FROM relationship_shareable_insights
+       WHERE creator_user_id = ? ORDER BY insight_id DESC`,
+      [req.auth.userId],
+    );
+    return res.json({ ok: true, insights: result.rows.map(insightPayload) });
+  } catch (error) {
+    console.error('[API] shareable insights GET error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.post('/relationship/counseling/insights/:insightId/revoke', async (req, res) => {
+  try {
+    const updated = await query(
+      `UPDATE relationship_shareable_insights
+       SET status = 'revoked', revoked_at = CURRENT_TIMESTAMP
+       WHERE insight_id = ? AND creator_user_id = ? AND status = 'approved'`,
+      [req.params.insightId, req.auth.userId],
+    );
+    if (updated.rows.affectedRows === 0) {
+      return res.status(404).json({ ok: false, reason: 'insight_not_found' });
+    }
+    const result = await query(
+      `SELECT insight_id, private_session_id, creator_user_id, couple_id,
+              insight_text, status, created_at, revoked_at
+       FROM relationship_shareable_insights WHERE insight_id = ?`,
+      [req.params.insightId],
+    );
+    return res.json({ ok: true, insight: insightPayload(result.rows[0]) });
+  } catch (error) {
+    console.error('[API] shareable insight revoke POST error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.get('/relationship/counseling/shared/insights', async (req, res) => {
+  try {
+    const couple = await getActiveCoupleRow(req.auth.userId);
+    if (!couple) return res.json({ ok: true, insights: [] });
+    const insights = await getApprovedInsights(couple.CoupleId);
+    return res.json({ ok: true, insights });
+  } catch (error) {
+    console.error('[API] shared insights GET error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
   }
 });
 
