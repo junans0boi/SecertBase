@@ -152,6 +152,66 @@ void main() {
     expect(ready.result?.conversationPrompts.single, contains('조율'));
   });
 
+  test('parses affection alignment dimensions for a shared result', () async {
+    final api = AssessmentAttemptApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient(
+        (_) async => http.Response.bytes(
+          utf8.encode(
+            jsonEncode({
+              'ok': true,
+              'status': 'ready',
+              'completedMemberCount': 2,
+              'requiredMemberCount': 2,
+              'result': {
+                'assessmentCode': 'affection_alignment',
+                'version': 'v1',
+                'dimensions': [
+                  {
+                    'key': 'expression',
+                    'title': '애정 표현',
+                    'pairScore': 72,
+                    'alignmentScore': 88,
+                  },
+                  {
+                    'key': 'expectation',
+                    'title': '기대',
+                    'pairScore': 64,
+                    'alignmentScore': 76,
+                  },
+                  {
+                    'key': 'alignment',
+                    'title': '일치와 조율',
+                    'pairScore': 68,
+                    'alignmentScore': 82,
+                  },
+                ],
+                'overallScore': 68,
+                'overallAlignmentScore': 82,
+                'relationshipPatternKey': 'different_but_coordination_possible',
+                'relationshipPattern': '차이를 조율할 수 있어요.',
+                'conversationPrompts': ['표현을 부탁으로 바꿔 말해보세요.'],
+                'disclaimer': '관계 대화용',
+              },
+            }),
+          ),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        ),
+      ),
+    );
+
+    final state = await api.fetchCoupleResult('affection_alignment');
+
+    expect(state.result?.dimensions.map((dimension) => dimension.key), [
+      'expression',
+      'expectation',
+      'alignment',
+    ]);
+    expect(state.result?.conversationPrompts.single, contains('부탁'));
+  });
+
   test('maps server and network errors to public reasons', () async {
     final serverApi = AssessmentAttemptApi(
       baseUrl: 'https://secretbase.example',
