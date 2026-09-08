@@ -64,12 +64,15 @@ class _MarbleScreenState extends State<MarbleScreen> {
   @override
   void dispose() {
     _socket.removeListener(_rebuild);
-    if (_socket.onMarbleTollPaid == _showTollPaidSnackbar)
+    if (_socket.onMarbleTollPaid == _showTollPaidSnackbar) {
       _socket.onMarbleTollPaid = null;
-    if (_socket.onMarbleSpecialTile == _showSpecialTileOverlay)
+    }
+    if (_socket.onMarbleSpecialTile == _showSpecialTileOverlay) {
       _socket.onMarbleSpecialTile = null;
-    if (_socket.onMarblePassedStart == _triggerConfetti)
+    }
+    if (_socket.onMarblePassedStart == _triggerConfetti) {
       _socket.onMarblePassedStart = null;
+    }
     super.dispose();
   }
 

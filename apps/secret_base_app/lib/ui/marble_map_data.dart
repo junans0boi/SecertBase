@@ -290,14 +290,19 @@ Offset marbleNormalizedCenter(int pos) {
   if (pos >= 1 && pos <= 5) return Offset(c + (pos - 1) * s + sh, 1.0 - ch);
 
   // Right side (pos 7–11, bottom→top)
-  if (pos >= 7 && pos <= 11)
+  if (pos >= 7 && pos <= 11) {
     return Offset(1.0 - ch, 1.0 - c - (pos - 6) * s + sh);
+  }
 
   // Top side (pos 13–17, right→left)
-  if (pos >= 13 && pos <= 17) return Offset(1.0 - c - (pos - 12) * s + sh, ch);
+  if (pos >= 13 && pos <= 17) {
+    return Offset(1.0 - c - (pos - 12) * s + sh, ch);
+  }
 
   // Left side (pos 19–23, top→bottom)
-  if (pos >= 19 && pos <= 23) return Offset(ch, c + (pos - 19) * s + sh);
+  if (pos >= 19 && pos <= 23) {
+    return Offset(ch, c + (pos - 19) * s + sh);
+  }
 
   return const Offset(0.5, 0.5);
 }
@@ -315,16 +320,19 @@ Rect? marbleTileRect(int pos) {
   if (pos == 18) return const Rect.fromLTWH(0, 0, 70, 70);
 
   // Bottom side (pos 1–5)
-  if (pos >= 1 && pos <= 5)
+  if (pos >= 1 && pos <= 5) {
     return Rect.fromLTWH(c + (pos - 1) * s, b - c, s, c);
+  }
 
   // Right side (pos 7–11)
-  if (pos >= 7 && pos <= 11)
+  if (pos >= 7 && pos <= 11) {
     return Rect.fromLTWH(b - c, b - c - (pos - 6) * s, c, s);
+  }
 
   // Top side (pos 13–17)
-  if (pos >= 13 && pos <= 17)
+  if (pos >= 13 && pos <= 17) {
     return Rect.fromLTWH(b - c - (pos - 12) * s, 0, s, c);
+  }
 
   // Left side (pos 19–23)
   if (pos >= 19 && pos <= 23) return Rect.fromLTWH(0, c + (pos - 19) * s, c, s);

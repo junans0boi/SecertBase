@@ -210,7 +210,6 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
   bool _compact = false;
 
   late AnimationController _resultBounceCtrl;
-  late Animation<double> _resultBounce;
   late AnimationController _stickThrowCtrl;
   bool _showThrowAnim = false;
   String? _animResult;
@@ -219,7 +218,6 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
   // 결과는 연출이 끝난 뒤에만 노출한다. widget.lastResultName을 직접 그리면
   // 서버 응답이 연출 중에 도착했을 때 스포일러가 된다.
   String? _revealedResultName;
-  bool _revealedNak = false;
   Timer? _countdownTimer;
   Timer? _moveUnlockTimer;
   int _countdownSeconds = 0;
@@ -244,11 +242,6 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
       vsync: this,
       duration: const Duration(milliseconds: 700),
     );
-    _resultBounce = CurvedAnimation(
-      parent: _resultBounceCtrl,
-      curve: Curves.bounceOut,
-    );
-
     _stickThrowCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1800),
@@ -258,7 +251,6 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
         setState(() {
           _showThrowAnim = false;
           _revealedResultName = widget.lastResultName;
-          _revealedNak = widget.lastThrowNak;
         });
         _resultBounceCtrl.forward(from: 0);
         _notifyThrowResultRevealed();
@@ -266,7 +258,6 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
     });
     // 재접속 복원 등 연출 없이 진입한 경우 마지막 결과를 즉시 노출한다.
     _revealedResultName = widget.lastResultName;
-    _revealedNak = widget.lastThrowNak;
     if (_revealedResultName != null) {
       _resultBounceCtrl.value = 1.0;
     }
@@ -829,12 +820,6 @@ class _YutBoardState extends State<YutBoard> with TickerProviderStateMixin {
       5 => '모',
       _ => '$move',
     };
-  }
-
-  String _pendingMoveText() {
-    final moves = widget.pendingMoves;
-    if (moves == null || moves.isEmpty) return '-';
-    return moves.map(_moveLabel).join(' · ');
   }
 
   String _turnThrowText() {

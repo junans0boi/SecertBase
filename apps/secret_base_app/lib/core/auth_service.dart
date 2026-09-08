@@ -190,7 +190,7 @@ class AuthService extends ChangeNotifier {
       }
 
       final account = await GoogleSignIn.instance.authenticate();
-      return _completeGoogleLogin(account);
+      return await _completeGoogleLogin(account);
     } catch (e) {
       _googleLoading = false;
       _googleError = _googleErrorMessage(e);
