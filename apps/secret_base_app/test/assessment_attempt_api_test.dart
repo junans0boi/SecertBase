@@ -256,4 +256,47 @@ void main() {
       expect(result.dimensions.single.key, 'internal');
     },
   );
+
+  test(
+    'keeps relationship deficiency language in the shared result model',
+    () async {
+      final api = AssessmentAttemptApi(
+        baseUrl: 'https://secretbase.example',
+        token: 'jwt-token',
+        client: MockClient(
+          (_) async => http.Response.bytes(
+            utf8.encode(
+              jsonEncode({
+                'ok': true,
+                'result': {
+                  'assessmentCode': 'relationship_deficiency',
+                  'version': 'v1',
+                  'dimensions': [
+                    {
+                      'key': 'self_awareness',
+                      'title': '자기 인식',
+                      'score': 65,
+                      'mean': 3.6,
+                      'answerCount': 4,
+                    },
+                  ],
+                  'overallScore': 60,
+                  'overallTendencyKey': 'needs_in_context',
+                  'overallTendency': '관계 안팎의 필요와 자원을 상황에 맞게 살펴보는 경향이 있어요.',
+                  'disclaimer': '자기이해용',
+                },
+              }),
+            ),
+            201,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          ),
+        ),
+      );
+
+      final result = await api.submit(101);
+
+      expect(result.assessmentCode, 'relationship_deficiency');
+      expect(result.overallTendency, contains('살펴보는'));
+    },
+  );
 }

@@ -1422,9 +1422,39 @@ const emotionalRegulationTendency = (dimensions) => {
   };
 };
 
+const relationshipDeficiencyTendency = (dimensions) => {
+  const scores = new Map(dimensions.map((dimension) => [dimension.key, dimension.score]));
+  const selfAwareness = scores.get('self_awareness') ?? 0;
+  const partnerExpectation = scores.get('partner_expectation') ?? 0;
+  const alternativeResources = scores.get('alternative_resources') ?? 0;
+  if (selfAwareness >= 70 && alternativeResources >= 60) {
+    return {
+      key: 'aware_and_resourced',
+      text: '내 필요를 알아차리고 관계 밖의 자원도 함께 활용하려는 경향이 있어요.',
+    };
+  }
+  if (partnerExpectation >= 70) {
+    return {
+      key: 'expectation_exploration',
+      text: '파트너에게 기대하는 마음이 커질 때, 그 필요를 구체적으로 탐색해볼 수 있는 경향이 있어요.',
+    };
+  }
+  if (selfAwareness < 50) {
+    return {
+      key: 'self_awareness_exploration',
+      text: '관계에서 느끼는 부족함의 이름을 천천히 찾아가는 경향이 있어요.',
+    };
+  }
+  return {
+    key: 'needs_in_context',
+    text: '관계 안팎의 필요와 자원을 상황에 맞게 살펴보는 경향이 있어요.',
+  };
+};
+
 const relationshipTendency = (code, dimensions) => {
   if (code === 'social_bonding') return socialBondingTendency(dimensions);
   if (code === 'emotional_regulation') return emotionalRegulationTendency(dimensions);
+  if (code === 'relationship_deficiency') return relationshipDeficiencyTendency(dimensions);
   return attachmentTendency(dimensions);
 };
 
@@ -1458,7 +1488,12 @@ router.post('/relationship/assessment-attempts/:attemptId/submit', async (req, r
     if (!attempt) {
       return res.status(404).json({ ok: false, reason: 'attempt_not_found' });
     }
-    if (!['attachment', 'social_bonding', 'emotional_regulation'].includes(attempt.code)) {
+    if (![
+      'attachment',
+      'social_bonding',
+      'emotional_regulation',
+      'relationship_deficiency',
+    ].includes(attempt.code)) {
       return res.status(400).json({ ok: false, reason: 'unsupported_assessment' });
     }
     if (attempt.status !== 'in_progress') {
