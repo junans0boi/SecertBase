@@ -14,8 +14,13 @@ import '../relationship/relationship_understanding_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final ValueChanged<int> onNavigate;
+  final RelationshipAssessmentStatus? relationshipStatus;
 
-  const HomeScreen({super.key, required this.onNavigate});
+  const HomeScreen({
+    super.key,
+    required this.onNavigate,
+    this.relationshipStatus,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -289,47 +294,26 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _relationshipCard() {
-    return MainCard(
-      padding: EdgeInsets.zero,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(22),
-        onTap: () => Navigator.of(context).push<void>(
-          MaterialPageRoute(
-            builder: (_) => const RelationshipUnderstandingScreen(),
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: kMainLilacSoft,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Icon(Icons.psychology_outlined, color: kMainLilac),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('관계 이해 시작하기', style: mainBody(weight: FontWeight.w800)),
-                    const SizedBox(height: 4),
-                    Text(
-                      '출생 프로필을 바탕으로 우리를 알아가요',
-                      style: mainBody(size: 12, color: kMainSub),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: kMainMuted),
-            ],
+    final status = widget.relationshipStatus ?? _defaultRelationshipStatus;
+    return RelationshipEntryCard(
+      status: status,
+      onTap: () => Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => RelationshipUnderstandingScreen(
+            assessmentStatus: status,
+            hasActiveCouple: _coupleInfo != null,
           ),
         ),
       ),
     );
+  }
+
+  RelationshipAssessmentStatus get _defaultRelationshipStatus {
+    final birthDate = _auth.user?['BirthDate'] ?? _auth.user?['birthDate'];
+    if (birthDate == null || '$birthDate'.trim().isEmpty) {
+      return RelationshipAssessmentStatus.profileIncomplete;
+    }
+    return RelationshipAssessmentStatus.notStarted;
   }
 
   Widget _sectionTitle(String title, VoidCallback? onTap) {
