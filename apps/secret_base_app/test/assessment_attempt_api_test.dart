@@ -213,4 +213,47 @@ void main() {
     expect(result.assessmentCode, 'social_bonding');
     expect(result.dimensions.single.key, 'depth');
   });
+
+  test(
+    'keeps emotional regulation dimensions in the shared result model',
+    () async {
+      final api = AssessmentAttemptApi(
+        baseUrl: 'https://secretbase.example',
+        token: 'jwt-token',
+        client: MockClient(
+          (_) async => http.Response.bytes(
+            utf8.encode(
+              jsonEncode({
+                'ok': true,
+                'result': {
+                  'assessmentCode': 'emotional_regulation',
+                  'version': 'v1',
+                  'dimensions': [
+                    {
+                      'key': 'internal',
+                      'title': '내부 처리',
+                      'score': 70,
+                      'mean': 3.8,
+                      'answerCount': 4,
+                    },
+                  ],
+                  'overallScore': 60,
+                  'overallTendencyKey': 'mixed_regulation',
+                  'overallTendency': '감정을 섞어 조절하는 경향이 있어요.',
+                  'disclaimer': '자기이해용',
+                },
+              }),
+            ),
+            201,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          ),
+        ),
+      );
+
+      final result = await api.submit(100);
+
+      expect(result.assessmentCode, 'emotional_regulation');
+      expect(result.dimensions.single.key, 'internal');
+    },
+  );
 }

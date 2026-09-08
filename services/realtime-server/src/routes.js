@@ -1393,8 +1393,38 @@ const socialBondingTendency = (dimensions) => {
   };
 };
 
+const emotionalRegulationTendency = (dimensions) => {
+  const scores = new Map(dimensions.map((dimension) => [dimension.key, dimension.score]));
+  const internal = scores.get('internal') ?? 0;
+  const stimulation = scores.get('stimulation') ?? 0;
+  const dialogue = scores.get('dialogue') ?? 0;
+  if (internal >= 70 && dialogue >= 60) {
+    return {
+      key: 'reflective_dialogue',
+      text: '혼자 감정을 정리한 뒤 안전한 대화로 풀어가는 경향이 있어요.',
+    };
+  }
+  if (stimulation >= 70) {
+    return {
+      key: 'external_activation',
+      text: '활동과 환경의 변화를 통해 감정의 흐름을 바꾸는 경향이 있어요.',
+    };
+  }
+  if (dialogue >= 70) {
+    return {
+      key: 'dialogue_seeking',
+      text: '대화와 공감을 통해 감정을 이해하고 회복하는 경향이 있어요.',
+    };
+  }
+  return {
+    key: 'mixed_regulation',
+    text: '상황에 따라 혼자 정리하기와 외부 도움을 섞어 감정을 조절하는 경향이 있어요.',
+  };
+};
+
 const relationshipTendency = (code, dimensions) => {
   if (code === 'social_bonding') return socialBondingTendency(dimensions);
+  if (code === 'emotional_regulation') return emotionalRegulationTendency(dimensions);
   return attachmentTendency(dimensions);
 };
 
@@ -1428,7 +1458,7 @@ router.post('/relationship/assessment-attempts/:attemptId/submit', async (req, r
     if (!attempt) {
       return res.status(404).json({ ok: false, reason: 'attempt_not_found' });
     }
-    if (!['attachment', 'social_bonding'].includes(attempt.code)) {
+    if (!['attachment', 'social_bonding', 'emotional_regulation'].includes(attempt.code)) {
       return res.status(400).json({ ok: false, reason: 'unsupported_assessment' });
     }
     if (attempt.status !== 'in_progress') {
