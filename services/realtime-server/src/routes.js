@@ -1564,6 +1564,283 @@ const parseRelationshipResult = (value) => {
   }
 };
 
+const coupleAssessmentCodes = new Set([
+  'conflict_repair',
+  'togetherness_personal_time',
+  'affection_alignment',
+]);
+
+const relationshipCouplePattern = (dimensions) => {
+  const lowestAlignment = dimensions.reduce(
+    (lowest, dimension) => Math.min(lowest, dimension.alignmentScore),
+    100,
+  );
+  if (lowestAlignment >= 85) {
+    return {
+      key: 'shared_rhythm',
+      text: '두 사람의 관계 감각이 비슷한 편이라, 서로의 강점을 확인하며 이어가기 좋아요.',
+    };
+  }
+  if (lowestAlignment >= 70) {
+    return {
+      key: 'different_but_coordination_possible',
+      text: '두 사람의 감각에 차이가 있지만, 차이를 설명하고 조율할 여지가 보여요.',
+    };
+  }
+  return {
+    key: 'coordination_needed',
+    text: '차이가 크게 느껴지는 영역부터 각자의 필요를 말로 확인하는 연습이 도움이 될 수 있어요.',
+  };
+};
+
+const buildRelationshipCoupleResult = ({ assessmentCode, version, first, second }) => {
+  const secondByKey = new Map(
+    (second.dimensions ?? []).map((dimension) => [dimension.key, dimension]),
+  );
+  const dimensions = (first.dimensions ?? []).flatMap((dimension) => {
+    const counterpart = secondByKey.get(dimension.key);
+    if (!counterpart) return [];
+    const firstScore = Number(dimension.score);
+    const secondScore = Number(counterpart.score);
+    const alignmentScore = 100 - Math.abs(firstScore - secondScore);
+    return [{
+      key: dimension.key,
+      title: dimension.title,
+      pairScore: Math.round((firstScore + secondScore) / 2),
+      alignmentScore,
+    }];
+  });
+  const overallScore = dimensions.length === 0
+    ? 0
+    : Math.round(
+      dimensions.reduce((total, dimension) => total + dimension.pairScore, 0)
+        / dimensions.length,
+    );
+  const overallAlignmentScore = dimensions.length === 0
+    ? 0
+    : Math.round(
+      dimensions.reduce((total, dimension) => total + dimension.alignmentScore, 0)
+        / dimensions.length,
+    );
+  const pattern = relationshipCouplePattern(dimensions);
+  return {
+    assessmentCode,
+    version,
+    dimensions,
+    overallScore,
+    overallAlignmentScore,
+    relationshipPatternKey: pattern.key,
+    relationshipPattern: pattern.text,
+    disclaimer: '두 사람의 응답 조합을 관계 대화의 참고 정보로 정리한 결과이며, 의료적 진단이나 우열을 의미하지 않아요.',
+  };
+};
+
+const getCompletedCoupleAssessmentState = async (coupleId, versionId, assessment) => {
+  const coupleResult = await query(
+    `SELECT CoupleId, User1Id, User2Id
+     FROM Couples
+     WHERE CoupleId = ? AND Status = 'active'
+     LIMIT 1`,
+    [coupleId],
+  );
+  const couple = coupleResult.rows[0];
+  if (!couple) {
+    return {
+      status: 'pending',
+      completedMemberCount: 0,
+      requiredMemberCount: 2,
+      result: null,
+    };
+  }
+
+  const completedResult = await query(
+    `SELECT a.attempt_id, a.user_id, r.result_json
+     FROM relationship_assessment_attempts a
+     JOIN relationship_assessment_results r ON r.attempt_id = a.attempt_id
+     WHERE a.couple_id = ? AND a.version_id = ? AND a.status = 'completed'
+       AND a.user_id IN (?, ?)
+     ORDER BY a.user_id, a.attempt_id DESC`,
+    [coupleId, versionId, couple.User1Id, couple.User2Id],
+  );
+  const latestByUser = new Map();
+  for (const row of completedResult.rows) {
+    const userId = Number(row.user_id);
+    if (!latestByUser.has(userId)) latestByUser.set(userId, row);
+  }
+  const first = latestByUser.get(Number(couple.User1Id));
+  const second = latestByUser.get(Number(couple.User2Id));
+  const completedMemberCount = [first, second].filter(Boolean).length;
+  if (!first || !second) {
+    return {
+      status: 'pending',
+      completedMemberCount,
+      requiredMemberCount: 2,
+      result: null,
+    };
+  }
+
+  const firstResult = parseRelationshipResult(first.result_json);
+  const secondResult = parseRelationshipResult(second.result_json);
+  const sharedResult = buildRelationshipCoupleResult({
+    assessmentCode: assessment.code,
+    version: assessment.version_label,
+    first: firstResult,
+    second: secondResult,
+  });
+  await query(
+    `INSERT IGNORE INTO relationship_couple_assessment_results
+       (couple_id, version_id, user1_attempt_id, user2_attempt_id, result_json)
+     VALUES (?, ?, ?, ?, ?)`,
+    [
+      coupleId,
+      versionId,
+      first.attempt_id,
+      second.attempt_id,
+      JSON.stringify(sharedResult),
+    ],
+  );
+  const storedResult = await query(
+    `SELECT result_json
+     FROM relationship_couple_assessment_results
+     WHERE couple_id = ? AND version_id = ?
+       AND user1_attempt_id = ? AND user2_attempt_id = ?
+     LIMIT 1`,
+    [coupleId, versionId, first.attempt_id, second.attempt_id],
+  );
+  return {
+    status: 'ready',
+    completedMemberCount: 2,
+    requiredMemberCount: 2,
+    result: parseRelationshipResult(storedResult.rows[0]?.result_json) ?? sharedResult,
+  };
+};
+
+const getSharedCoupleAssessmentState = async (userId, code) => {
+  const assessment = await getActiveRelationshipAssessment(code);
+  if (!assessment) return { error: { status: 404, reason: 'assessment_not_found' } };
+  if (assessment.audience !== 'couple' || !coupleAssessmentCodes.has(assessment.code)) {
+    return { error: { status: 400, reason: 'assessment_not_couple' } };
+  }
+  const coupleId = await getCoupleIdForUser(userId);
+  if (coupleId == null) return { error: { status: 409, reason: 'active_couple_required' } };
+  return {
+    assessment,
+    coupleId,
+    state: await getCompletedCoupleAssessmentState(coupleId, assessment.version_id, assessment),
+  };
+};
+
+router.post('/relationship/couple-assessment-attempts/:attemptId/submit', async (req, res) => {
+  try {
+    const attemptId = Number(req.params.attemptId);
+    if (!Number.isSafeInteger(attemptId) || attemptId <= 0) {
+      return res.status(400).json({ ok: false, reason: 'invalid_attempt_id' });
+    }
+    const attemptResult = await query(
+      `SELECT a.attempt_id, a.user_id, a.couple_id, a.version_id, a.status,
+              v.version_label, v.active_question_count, c.code, c.audience
+       FROM relationship_assessment_attempts a
+       JOIN relationship_assessment_versions v ON v.version_id = a.version_id
+       JOIN relationship_assessment_catalog c ON c.assessment_id = v.assessment_id
+       WHERE a.attempt_id = ? AND a.user_id = ?
+       LIMIT 1`,
+      [attemptId, req.auth.userId],
+    );
+    const attempt = attemptResult.rows[0];
+    if (!attempt) return res.status(404).json({ ok: false, reason: 'attempt_not_found' });
+    if (attempt.audience !== 'couple' || !coupleAssessmentCodes.has(attempt.code)) {
+      return res.status(400).json({ ok: false, reason: 'assessment_not_couple' });
+    }
+    if (attempt.status !== 'in_progress') {
+      return res.status(409).json({ ok: false, reason: 'attempt_not_in_progress' });
+    }
+    const coupleId = await getCoupleIdForUser(req.auth.userId);
+    if (coupleId == null || Number(coupleId) !== Number(attempt.couple_id)) {
+      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+    }
+
+    const answerResult = await query(
+      `SELECT q.question_key, q.reverse_scored, d.dimension_key,
+              d.display_name, d.sort_order, aa.answer_value
+       FROM relationship_assessment_attempt_answers aa
+       JOIN relationship_assessment_questions q ON q.question_id = aa.question_id
+       JOIN relationship_assessment_dimensions d ON d.dimension_id = q.dimension_id
+       WHERE aa.attempt_id = ? AND q.is_active = 1
+       ORDER BY q.question_order`,
+      [attemptId],
+    );
+    const totalCount = Number(attempt.active_question_count);
+    if (answerResult.rows.length !== totalCount) {
+      return res.status(400).json({
+        ok: false,
+        reason: 'incomplete_attempt',
+        progress: {
+          answeredCount: answerResult.rows.length,
+          totalCount,
+          percentage: totalCount === 0
+            ? 0
+            : Math.round((answerResult.rows.length / totalCount) * 100),
+        },
+      });
+    }
+
+    const dimensions = relationshipDimensionScore(answerResult.rows);
+    const participantResult = {
+      assessmentCode: attempt.code,
+      version: attempt.version_label,
+      dimensions,
+      overallScore: dimensions.length === 0
+        ? 0
+        : Math.round(dimensions.reduce((total, dimension) => total + dimension.score, 0) / dimensions.length),
+      disclaimer: '커플 공유 결과 계산을 위한 비공개 중간 결과예요.',
+    };
+    await query(
+      `INSERT INTO relationship_assessment_results
+         (attempt_id, user_id, version_id, result_json)
+       VALUES (?, ?, ?, ?)`,
+      [attemptId, req.auth.userId, attempt.version_id, JSON.stringify(participantResult)],
+    );
+    await query(
+      `UPDATE relationship_assessment_attempts
+       SET status = 'completed', completed_at = CURRENT_TIMESTAMP,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE attempt_id = ? AND user_id = ? AND status = 'in_progress'`,
+      [attemptId, req.auth.userId],
+    );
+
+    const assessment = {
+      code: attempt.code,
+      audience: attempt.audience,
+      version_label: attempt.version_label,
+    };
+    const state = await getCompletedCoupleAssessmentState(
+      coupleId,
+      attempt.version_id,
+      assessment,
+    );
+    return res.status(201).json({ ok: true, ...state });
+  } catch (error) {
+    console.error('[API] /relationship/couple-assessment-attempts/:attemptId/submit error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.get('/relationship/couple-assessment-results/:code/current', async (req, res) => {
+  try {
+    const shared = await getSharedCoupleAssessmentState(
+      req.auth.userId,
+      String(req.params.code ?? '').trim(),
+    );
+    if (shared.error) {
+      return res.status(shared.error.status).json({ ok: false, reason: shared.error.reason });
+    }
+    return res.json({ ok: true, ...shared.state });
+  } catch (error) {
+    console.error('[API] /relationship/couple-assessment-results/:code/current error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
 router.post('/relationship/assessment-attempts/:attemptId/submit', async (req, res) => {
   try {
     const attemptId = Number(req.params.attemptId);
@@ -1659,6 +1936,10 @@ router.post('/relationship/assessment-attempts/:attemptId/submit', async (req, r
 
 router.get('/relationship/assessment-results/:code/current', async (req, res) => {
   try {
+    const assessment = await getActiveRelationshipAssessment(String(req.params.code ?? '').trim());
+    if (assessment && assessment.audience !== 'individual') {
+      return res.status(400).json({ ok: false, reason: 'assessment_not_personal' });
+    }
     const result = await query(
       `SELECT r.result_json
        FROM relationship_assessment_results r
@@ -1679,6 +1960,10 @@ router.get('/relationship/assessment-results/:code/current', async (req, res) =>
 
 router.get('/relationship/assessment-results/:code/history', async (req, res) => {
   try {
+    const assessment = await getActiveRelationshipAssessment(String(req.params.code ?? '').trim());
+    if (assessment && assessment.audience !== 'individual') {
+      return res.status(400).json({ ok: false, reason: 'assessment_not_personal' });
+    }
     const result = await query(
       `SELECT r.result_id, r.result_json, r.created_at, v.version_label
        FROM relationship_assessment_results r

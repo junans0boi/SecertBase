@@ -25,6 +25,7 @@ class AssessmentAttemptScreen extends StatefulWidget {
 class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
   AssessmentAttempt? _attempt;
   AssessmentResult? _result;
+  CoupleAssessmentState? _coupleState;
   String? _errorMessage;
   String? _savingQuestion;
   bool _submitting = false;
@@ -104,6 +105,15 @@ class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
       _errorMessage = null;
     });
     try {
+      if (widget.isCouple) {
+        final state = await widget.api.submitCouple(attempt.id);
+        if (!mounted) return;
+        setState(() {
+          _coupleState = state;
+          _submitting = false;
+        });
+        return;
+      }
       final result = await widget.api.submit(attempt.id);
       if (!mounted) return;
       setState(() {
@@ -128,6 +138,8 @@ class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
       '모든 문항에 답변한 뒤 제출할 수 있어요.',
     AssessmentAttemptApiException(reason: 'attempt_not_in_progress') =>
       '이미 제출된 검사예요.',
+    AssessmentAttemptApiException(reason: 'active_couple_required') =>
+      '활성 커플 연결이 필요해요.',
     AssessmentAttemptApiException() => '검사 시도를 불러오지 못했어요.',
     _ => '검사 시도를 불러오지 못했어요.',
   };
@@ -144,6 +156,8 @@ class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
           ? const Center(child: CircularProgressIndicator(color: kMainRose))
           : _errorMessage != null && _attempt == null
           ? _errorState()
+          : widget.isCouple && _coupleState != null
+          ? _coupleStateContent()
           : _result != null
           ? _resultContent()
           : _content(),
@@ -293,6 +307,95 @@ class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
         Text(
           result.disclaimer,
           key: const Key('assessment_result_disclaimer'),
+          style: mainBody(size: 12, color: kMainMuted, height: 1.5),
+        ),
+      ],
+    );
+  }
+
+  Widget _coupleStateContent() {
+    final state = _coupleState!;
+    if (state.result == null) {
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
+        children: [
+          Text('파트너 응답을 기다리는 중', style: mainTitle(size: 25)),
+          const SizedBox(height: 8),
+          Text(
+            '${state.completedMemberCount}/${state.requiredMemberCount}명이 완료했어요. 파트너가 같은 검사를 마치면 공유 결과가 열려요.',
+            key: const Key('couple_assessment_pending'),
+            style: mainBody(size: 14, color: kMainSub, height: 1.55),
+          ),
+          const SizedBox(height: 16),
+          MainCard(
+            padding: const EdgeInsets.all(18),
+            child: Text(
+              '각자의 답변과 개인별 점수는 서로에게 공개되지 않아요. 두 사람의 완료 신호만 공유 결과 생성에 사용돼요.',
+              style: mainBody(size: 13, color: kMainSub, height: 1.55),
+            ),
+          ),
+        ],
+      );
+    }
+
+    final result = state.result!;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
+      children: [
+        Text('두 사람의 관계 결과', style: mainTitle(size: 25)),
+        const SizedBox(height: 6),
+        Text(
+          '개인별 답변은 공개하지 않고, 두 사람의 조합만 정리했어요.',
+          style: mainBody(size: 13, color: kMainSub, height: 1.5),
+        ),
+        const SizedBox(height: 16),
+        MainCard(
+          key: const Key('couple_assessment_result_summary'),
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('관계 조합', style: mainBody(size: 12, color: kMainSub)),
+              const SizedBox(height: 5),
+              Text(
+                result.relationshipPattern,
+                style: mainBody(size: 16, weight: FontWeight.w800),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '관계 점수 ${result.overallScore}점 · 조율도 ${result.overallAlignmentScore}점',
+                style: mainBody(weight: FontWeight.w700),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        ...result.dimensions.map(
+          (dimension) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: MainCard(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      dimension.title,
+                      style: mainBody(weight: FontWeight.w700),
+                    ),
+                  ),
+                  Text(
+                    '조합 ${dimension.pairScore} · 조율 ${dimension.alignmentScore}',
+                    style: mainBody(color: kMainLilac, weight: FontWeight.w800),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          result.disclaimer,
+          key: const Key('couple_assessment_result_disclaimer'),
           style: mainBody(size: 12, color: kMainMuted, height: 1.5),
         ),
       ],

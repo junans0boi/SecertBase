@@ -98,6 +98,58 @@ void main() {
     expect(attempt.coupleId, 73);
   });
 
+  test('parses pending and ready couple result states', () async {
+    final requests = <http.Request>[];
+    final api = AssessmentAttemptApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient((request) async {
+        requests.add(request);
+        final ready = request.url.path.contains('submit');
+        return http.Response.bytes(
+          utf8.encode(
+            jsonEncode({
+              'ok': true,
+              'status': ready ? 'ready' : 'pending',
+              'completedMemberCount': ready ? 2 : 1,
+              'requiredMemberCount': 2,
+              'result': ready
+                  ? {
+                      'assessmentCode': 'conflict_repair',
+                      'version': 'v1',
+                      'dimensions': [
+                        {
+                          'key': 'safety',
+                          'title': '대화 안전감',
+                          'pairScore': 70,
+                          'alignmentScore': 90,
+                        },
+                      ],
+                      'overallScore': 70,
+                      'overallAlignmentScore': 90,
+                      'relationshipPatternKey': 'shared_rhythm',
+                      'relationshipPattern': '비슷한 리듬',
+                      'disclaimer': '관계 대화용',
+                    }
+                  : null,
+            }),
+          ),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      }),
+    );
+
+    final pending = await api.fetchCoupleResult('conflict_repair');
+    final ready = await api.submitCouple(42);
+
+    expect(requests[0].url.path, contains('/couple-assessment-results/'));
+    expect(pending.status, 'pending');
+    expect(pending.result, isNull);
+    expect(ready.status, 'ready');
+    expect(ready.result?.dimensions.single.alignmentScore, 90);
+  });
+
   test('maps server and network errors to public reasons', () async {
     final serverApi = AssessmentAttemptApi(
       baseUrl: 'https://secretbase.example',

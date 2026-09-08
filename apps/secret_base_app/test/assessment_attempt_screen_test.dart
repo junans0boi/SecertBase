@@ -215,4 +215,163 @@ void main() {
     expect(find.text('커플 검사 진행 중'), findsOneWidget);
     expect(find.textContaining('각자의 답변은 서로에게 공개되지 않으며'), findsOneWidget);
   });
+
+  testWidgets('couple attempt screen shows pending state after submission', (
+    tester,
+  ) async {
+    String? requestedSubmitPath;
+    final api = AssessmentAttemptApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient((request) async {
+        if (request.url.path.endsWith('/submit')) {
+          requestedSubmitPath = request.url.path;
+          return http.Response.bytes(
+            utf8.encode(
+              jsonEncode({
+                'ok': true,
+                'status': 'pending',
+                'completedMemberCount': 1,
+                'requiredMemberCount': 2,
+                'result': null,
+              }),
+            ),
+            201,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }
+        final attempt = Map<String, dynamic>.from(_attemptResponse);
+        if (request.method == 'PATCH') {
+          attempt['progress'] = {
+            'answeredCount': 1,
+            'totalCount': 1,
+            'percentage': 100,
+            'lastSavedAt': '2026-09-08T10:02:00.000Z',
+          };
+          attempt['answers'] = [
+            {
+              'questionKey': 'q01',
+              'value': 5,
+              'savedAt': '2026-09-08T10:02:00.000Z',
+            },
+          ];
+        }
+        return http.Response.bytes(
+          utf8.encode(jsonEncode({'ok': true, 'attempt': attempt})),
+          request.method == 'POST' ? 201 : 200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      }),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AssessmentAttemptScreen(
+          assessment: _coupleAssessment,
+          api: api,
+          isCouple: true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, '5'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('assessment_submit')));
+    await tester.pumpAndSettle();
+
+    expect(
+      requestedSubmitPath,
+      '/api/relationship/couple-assessment-attempts/42/submit',
+    );
+    expect(find.byKey(const Key('couple_assessment_pending')), findsOneWidget);
+    expect(find.text('파트너 응답을 기다리는 중'), findsOneWidget);
+  });
+
+  testWidgets('couple attempt screen renders a ready shared result', (
+    tester,
+  ) async {
+    final api = AssessmentAttemptApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient((request) async {
+        if (request.url.path.endsWith('/submit')) {
+          return http.Response.bytes(
+            utf8.encode(
+              jsonEncode({
+                'ok': true,
+                'status': 'ready',
+                'completedMemberCount': 2,
+                'requiredMemberCount': 2,
+                'result': {
+                  'assessmentCode': 'conflict_repair',
+                  'version': 'v1',
+                  'dimensions': [
+                    {
+                      'key': 'safety',
+                      'title': '대화 안전감',
+                      'pairScore': 70,
+                      'alignmentScore': 90,
+                    },
+                  ],
+                  'overallScore': 70,
+                  'overallAlignmentScore': 90,
+                  'relationshipPatternKey': 'shared_rhythm',
+                  'relationshipPattern': '두 사람의 관계 감각이 비슷한 편이에요.',
+                  'disclaimer': '관계 대화용 결과예요.',
+                },
+              }),
+            ),
+            201,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }
+        final attempt = Map<String, dynamic>.from(_attemptResponse);
+        if (request.method == 'PATCH') {
+          attempt['progress'] = {
+            'answeredCount': 1,
+            'totalCount': 1,
+            'percentage': 100,
+            'lastSavedAt': '2026-09-08T10:02:00.000Z',
+          };
+          attempt['answers'] = [
+            {
+              'questionKey': 'q01',
+              'value': 5,
+              'savedAt': '2026-09-08T10:02:00.000Z',
+            },
+          ];
+        }
+        return http.Response.bytes(
+          utf8.encode(jsonEncode({'ok': true, 'attempt': attempt})),
+          request.method == 'POST' ? 201 : 200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      }),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AssessmentAttemptScreen(
+          assessment: _coupleAssessment,
+          api: api,
+          isCouple: true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, '5'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('assessment_submit')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('couple_assessment_result_summary')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('조합 70 · 조율 90'), findsOneWidget);
+    expect(
+      find.byKey(const Key('couple_assessment_result_disclaimer')),
+      findsOneWidget,
+    );
+  });
 }

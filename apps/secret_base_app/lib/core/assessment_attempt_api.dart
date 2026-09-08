@@ -161,6 +161,98 @@ class AssessmentResult {
       );
 }
 
+class CoupleAssessmentDimensionResult {
+  final String key;
+  final String title;
+  final int pairScore;
+  final int alignmentScore;
+
+  const CoupleAssessmentDimensionResult({
+    required this.key,
+    required this.title,
+    required this.pairScore,
+    required this.alignmentScore,
+  });
+
+  factory CoupleAssessmentDimensionResult.fromJson(Map<String, dynamic> json) =>
+      CoupleAssessmentDimensionResult(
+        key: '${json['key'] ?? ''}',
+        title: '${json['title'] ?? ''}',
+        pairScore: int.tryParse('${json['pairScore']}') ?? 0,
+        alignmentScore: int.tryParse('${json['alignmentScore']}') ?? 0,
+      );
+}
+
+class CoupleAssessmentResult {
+  final String assessmentCode;
+  final String version;
+  final List<CoupleAssessmentDimensionResult> dimensions;
+  final int overallScore;
+  final int overallAlignmentScore;
+  final String relationshipPatternKey;
+  final String relationshipPattern;
+  final String disclaimer;
+
+  const CoupleAssessmentResult({
+    required this.assessmentCode,
+    required this.version,
+    required this.dimensions,
+    required this.overallScore,
+    required this.overallAlignmentScore,
+    required this.relationshipPatternKey,
+    required this.relationshipPattern,
+    required this.disclaimer,
+  });
+
+  factory CoupleAssessmentResult.fromJson(Map<String, dynamic> json) =>
+      CoupleAssessmentResult(
+        assessmentCode: '${json['assessmentCode'] ?? ''}',
+        version: '${json['version'] ?? ''}',
+        dimensions: (json['dimensions'] as List? ?? const [])
+            .map(
+              (dimension) => CoupleAssessmentDimensionResult.fromJson(
+                Map<String, dynamic>.from(dimension as Map),
+              ),
+            )
+            .toList(growable: false),
+        overallScore: int.tryParse('${json['overallScore']}') ?? 0,
+        overallAlignmentScore:
+            int.tryParse('${json['overallAlignmentScore']}') ?? 0,
+        relationshipPatternKey: '${json['relationshipPatternKey'] ?? ''}',
+        relationshipPattern: '${json['relationshipPattern'] ?? ''}',
+        disclaimer: '${json['disclaimer'] ?? ''}',
+      );
+}
+
+class CoupleAssessmentState {
+  final String status;
+  final int completedMemberCount;
+  final int requiredMemberCount;
+  final CoupleAssessmentResult? result;
+
+  const CoupleAssessmentState({
+    required this.status,
+    required this.completedMemberCount,
+    required this.requiredMemberCount,
+    required this.result,
+  });
+
+  factory CoupleAssessmentState.fromJson(Map<String, dynamic> json) {
+    final rawResult = json['result'];
+    return CoupleAssessmentState(
+      status: '${json['status'] ?? 'pending'}',
+      completedMemberCount:
+          int.tryParse('${json['completedMemberCount']}') ?? 0,
+      requiredMemberCount: int.tryParse('${json['requiredMemberCount']}') ?? 2,
+      result: rawResult is Map
+          ? CoupleAssessmentResult.fromJson(
+              Map<String, dynamic>.from(rawResult),
+            )
+          : null,
+    );
+  }
+}
+
 class AssessmentHistoryItem {
   final int id;
   final String version;
@@ -294,6 +386,38 @@ class AssessmentAttemptApi {
       final rawResult = body['result'];
       if (rawResult is! Map) throw const FormatException('Missing result');
       return AssessmentResult.fromJson(Map<String, dynamic>.from(rawResult));
+    } on http.ClientException {
+      throw const AssessmentAttemptApiException('network_error');
+    } on FormatException {
+      throw const AssessmentAttemptApiException('invalid_response');
+    }
+  }
+
+  Future<CoupleAssessmentState> submitCouple(int attemptId) async {
+    try {
+      final response = await _client.post(
+        Uri.parse(
+          '$baseUrl/api/relationship/couple-assessment-attempts/$attemptId/submit',
+        ),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      return CoupleAssessmentState.fromJson(_successfulBody(response));
+    } on http.ClientException {
+      throw const AssessmentAttemptApiException('network_error');
+    } on FormatException {
+      throw const AssessmentAttemptApiException('invalid_response');
+    }
+  }
+
+  Future<CoupleAssessmentState> fetchCoupleResult(String code) async {
+    try {
+      final response = await _client.get(
+        Uri.parse(
+          '$baseUrl/api/relationship/couple-assessment-results/$code/current',
+        ),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      return CoupleAssessmentState.fromJson(_successfulBody(response));
     } on http.ClientException {
       throw const AssessmentAttemptApiException('network_error');
     } on FormatException {
