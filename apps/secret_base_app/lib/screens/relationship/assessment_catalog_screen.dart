@@ -158,9 +158,7 @@ class _AssessmentCatalogScreenState extends State<AssessmentCatalogScreen> {
     return Opacity(
       opacity: enabled ? 1 : 0.62,
       child: GestureDetector(
-        onTap: enabled && assessment.audience == AssessmentAudience.individual
-            ? () => _openAssessment(assessment)
-            : null,
+        onTap: enabled ? () => _openAssessment(assessment) : null,
         child: MainCard(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -231,6 +229,7 @@ class _AssessmentCatalogScreenState extends State<AssessmentCatalogScreen> {
       MaterialPageRoute(
         builder: (_) => AssessmentAttemptScreen(
           assessment: assessment,
+          isCouple: assessment.audience == AssessmentAudience.couple,
           api: AssessmentAttemptApi(
             baseUrl: auth.baseUrl,
             token: auth.token ?? '',

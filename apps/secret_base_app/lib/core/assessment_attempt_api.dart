@@ -48,6 +48,8 @@ class AssessmentAttemptProgress {
 class AssessmentAttempt {
   final int id;
   final String assessmentCode;
+  final String audience;
+  final int? coupleId;
   final String version;
   final String status;
   final String? startedAt;
@@ -58,6 +60,8 @@ class AssessmentAttempt {
   const AssessmentAttempt({
     required this.id,
     required this.assessmentCode,
+    required this.audience,
+    required this.coupleId,
     required this.version,
     required this.status,
     required this.startedAt,
@@ -70,6 +74,10 @@ class AssessmentAttempt {
       AssessmentAttempt(
         id: int.tryParse('${json['id']}') ?? 0,
         assessmentCode: '${json['assessmentCode'] ?? ''}',
+        audience: '${json['audience'] ?? 'individual'}',
+        coupleId: json['coupleId'] == null
+            ? null
+            : int.tryParse('${json['coupleId']}'),
         version: '${json['version'] ?? ''}',
         status: '${json['status'] ?? ''}',
         startedAt: json['startedAt'] == null ? null : '${json['startedAt']}',
@@ -224,6 +232,21 @@ class AssessmentAttemptApi {
     try {
       final response = await _client.post(
         _attemptEndpoint(code),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      final body = _successfulBody(response);
+      return _attemptFromBody(body);
+    } on http.ClientException {
+      throw const AssessmentAttemptApiException('network_error');
+    } on FormatException {
+      throw const AssessmentAttemptApiException('invalid_response');
+    }
+  }
+
+  Future<AssessmentAttempt> startCoupleOrResume(String code) async {
+    try {
+      final response = await _client.post(
+        Uri.parse('$baseUrl/api/relationship/couple-assessments/$code/attempt'),
         headers: {'Authorization': 'Bearer $token'},
       );
       final body = _successfulBody(response);

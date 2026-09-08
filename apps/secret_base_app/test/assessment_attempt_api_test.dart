@@ -8,6 +8,8 @@ import 'package:secret_base_app/core/assessment_attempt_api.dart';
 Map<String, dynamic> _attempt({int answeredCount = 0}) => {
   'id': 42,
   'assessmentCode': 'attachment',
+  'audience': 'individual',
+  'coupleId': null,
   'version': 'v1',
   'status': 'in_progress',
   'startedAt': '2026-09-08T10:00:00.000Z',
@@ -58,6 +60,42 @@ void main() {
     expect(jsonDecode(requests[1].body), {'value': 5});
     expect(started.progress.answeredCount, 0);
     expect(saved.answerByQuestion, {'q01': 5});
+  });
+
+  test('starts a couple attempt through the couple-scoped endpoint', () async {
+    final requests = <http.Request>[];
+    final api = AssessmentAttemptApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient((request) async {
+        requests.add(request);
+        return http.Response.bytes(
+          utf8.encode(
+            jsonEncode({
+              'ok': true,
+              'attempt': {
+                ..._attempt(),
+                'assessmentCode': 'conflict_repair',
+                'audience': 'couple',
+                'coupleId': 73,
+              },
+            }),
+          ),
+          201,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      }),
+    );
+
+    final attempt = await api.startCoupleOrResume('conflict_repair');
+
+    expect(requests.single.method, 'POST');
+    expect(
+      requests.single.url.path,
+      '/api/relationship/couple-assessments/conflict_repair/attempt',
+    );
+    expect(attempt.audience, 'couple');
+    expect(attempt.coupleId, 73);
   });
 
   test('maps server and network errors to public reasons', () async {

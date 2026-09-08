@@ -54,6 +54,36 @@ final _assessment = AssessmentCatalogItem(
   ],
 );
 
+final _coupleAssessment = AssessmentCatalogItem(
+  code: 'conflict_repair',
+  audience: AssessmentAudience.couple,
+  title: '갈등과 회복 방식',
+  description: '설명',
+  version: 'v1',
+  candidateQuestionCount: 24,
+  activeQuestionCount: 1,
+  completionStatus: AssessmentCompletionStatus.notStarted,
+  dimensions: const [
+    AssessmentDimension(key: 'conflict_signal', title: '갈등 신호', order: 1),
+  ],
+  questions: const [
+    AssessmentQuestion(
+      key: 'q01',
+      prompt: '갈등이 생겼을 때 서로의 신호를 알아차린다.',
+      dimensionKey: 'conflict_signal',
+      reverseScored: false,
+      order: 1,
+      likertScale: [
+        LikertOption(value: 1, label: '전혀 그렇지 않다'),
+        LikertOption(value: 2, label: '그렇지 않다'),
+        LikertOption(value: 3, label: '보통이다'),
+        LikertOption(value: 4, label: '그렇다'),
+        LikertOption(value: 5, label: '매우 그렇다'),
+      ],
+    ),
+  ],
+);
+
 void main() {
   testWidgets('attempt screen resumes progress and saves a selected answer', (
     tester,
@@ -138,5 +168,51 @@ void main() {
       find.byKey(const Key('assessment_result_disclaimer')),
       findsOneWidget,
     );
+  });
+
+  testWidgets('couple attempt screen uses the private-answer notice', (
+    tester,
+  ) async {
+    String? requestedPath;
+    final api = AssessmentAttemptApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient((request) async {
+        requestedPath = request.url.path;
+        return http.Response.bytes(
+          utf8.encode(
+            jsonEncode({
+              'ok': true,
+              'attempt': {
+                ..._attemptResponse,
+                'assessmentCode': 'conflict_repair',
+                'audience': 'couple',
+                'coupleId': 73,
+              },
+            }),
+          ),
+          201,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      }),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AssessmentAttemptScreen(
+          assessment: _coupleAssessment,
+          api: api,
+          isCouple: true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      requestedPath,
+      '/api/relationship/couple-assessments/conflict_repair/attempt',
+    );
+    expect(find.text('커플 검사 진행 중'), findsOneWidget);
+    expect(find.textContaining('각자의 답변은 서로에게 공개되지 않으며'), findsOneWidget);
   });
 }

@@ -8,11 +8,13 @@ import '../../core/main_design.dart';
 class AssessmentAttemptScreen extends StatefulWidget {
   final AssessmentCatalogItem assessment;
   final AssessmentAttemptApi api;
+  final bool isCouple;
 
   const AssessmentAttemptScreen({
     super.key,
     required this.assessment,
     required this.api,
+    this.isCouple = false,
   });
 
   @override
@@ -46,7 +48,9 @@ class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
       _errorMessage = null;
     });
     try {
-      final attempt = await widget.api.startOrResume(widget.assessment.code);
+      final attempt = widget.isCouple
+          ? await widget.api.startCoupleOrResume(widget.assessment.code)
+          : await widget.api.startOrResume(widget.assessment.code);
       if (!mounted) return;
       setState(() {
         _attempt = attempt;
@@ -153,10 +157,15 @@ class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
       children: [
-        Text('검사 진행 중', style: mainTitle(size: 25)),
+        Text(
+          widget.isCouple ? '커플 검사 진행 중' : '검사 진행 중',
+          style: mainTitle(size: 25),
+        ),
         const SizedBox(height: 6),
         Text(
-          '답변은 선택할 때마다 저장되며, 나중에 이어서 할 수 있어요.',
+          widget.isCouple
+              ? '각자의 답변은 서로에게 공개되지 않으며, 선택할 때마다 저장돼요.'
+              : '답변은 선택할 때마다 저장되며, 나중에 이어서 할 수 있어요.',
           style: mainBody(size: 13, color: kMainSub, height: 1.5),
         ),
         const SizedBox(height: 16),

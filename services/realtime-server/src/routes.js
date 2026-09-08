@@ -1114,7 +1114,7 @@ router.get('/relationship/assessments', async (req, res) => {
 
 const getActiveRelationshipAssessment = async (code) => {
   const result = await query(
-    `SELECT a.code, v.version_id, v.version_label, v.active_question_count
+    `SELECT a.code, a.audience, v.version_id, v.version_label, v.active_question_count
      FROM relationship_assessment_catalog a
      JOIN relationship_assessment_versions v
        ON v.assessment_id = a.assessment_id AND v.is_active = 1
@@ -1146,6 +1146,8 @@ const relationshipAttemptPayload = async (attempt, assessment) => {
   return {
     id: Number(attempt.attempt_id),
     assessmentCode: assessment.code,
+    audience: assessment.audience,
+    coupleId: attempt.couple_id == null ? null : Number(attempt.couple_id),
     version: assessment.version_label,
     status: attempt.status,
     startedAt: attempt.started_at instanceof Date
@@ -1166,7 +1168,7 @@ const relationshipAttemptPayload = async (attempt, assessment) => {
 
 const findInProgressRelationshipAttempt = async (userId, versionId) => {
   const result = await query(
-    `SELECT attempt_id, status, started_at, updated_at
+    `SELECT attempt_id, couple_id, status, started_at, updated_at
      FROM relationship_assessment_attempts
      WHERE user_id = ? AND version_id = ? AND status = 'in_progress'
      ORDER BY attempt_id DESC
@@ -1176,11 +1178,26 @@ const findInProgressRelationshipAttempt = async (userId, versionId) => {
   return result.rows[0] ?? null;
 };
 
+const findInProgressRelationshipCoupleAttempt = async (userId, versionId, coupleId) => {
+  const result = await query(
+    `SELECT attempt_id, couple_id, status, started_at, updated_at
+     FROM relationship_assessment_attempts
+     WHERE user_id = ? AND version_id = ? AND couple_id = ? AND status = 'in_progress'
+     ORDER BY attempt_id DESC
+     LIMIT 1`,
+    [userId, versionId, coupleId],
+  );
+  return result.rows[0] ?? null;
+};
+
 router.get('/relationship/assessments/:code/attempt', async (req, res) => {
   try {
     const assessment = await getActiveRelationshipAssessment(String(req.params.code ?? '').trim());
     if (!assessment) {
       return res.status(404).json({ ok: false, reason: 'assessment_not_found' });
+    }
+    if (assessment.audience !== 'individual') {
+      return res.status(400).json({ ok: false, reason: 'assessment_not_personal' });
     }
     const attempt = await findInProgressRelationshipAttempt(
       req.auth.userId,
@@ -1202,6 +1219,9 @@ router.post('/relationship/assessments/:code/attempt', async (req, res) => {
     if (!assessment) {
       return res.status(404).json({ ok: false, reason: 'assessment_not_found' });
     }
+    if (assessment.audience !== 'individual') {
+      return res.status(400).json({ ok: false, reason: 'assessment_not_personal' });
+    }
     let attempt = await findInProgressRelationshipAttempt(
       req.auth.userId,
       assessment.version_id,
@@ -1209,12 +1229,12 @@ router.post('/relationship/assessments/:code/attempt', async (req, res) => {
     let created = false;
     if (!attempt) {
       const inserted = await query(
-        `INSERT INTO relationship_assessment_attempts (user_id, version_id)
-         VALUES (?, ?)`,
+        `INSERT INTO relationship_assessment_attempts (user_id, version_id, couple_id)
+         VALUES (?, ?, NULL)`,
         [req.auth.userId, assessment.version_id],
       );
       const createdResult = await query(
-        `SELECT attempt_id, status, started_at, updated_at
+        `SELECT attempt_id, couple_id, status, started_at, updated_at
          FROM relationship_assessment_attempts
          WHERE attempt_id = ? AND user_id = ?`,
         [inserted.rows.insertId, req.auth.userId],
@@ -1236,6 +1256,83 @@ router.post('/relationship/assessments/:code/attempt', async (req, res) => {
   }
 });
 
+router.get('/relationship/couple-assessments/:code/attempt', async (req, res) => {
+  try {
+    const assessment = await getActiveRelationshipAssessment(String(req.params.code ?? '').trim());
+    if (!assessment) {
+      return res.status(404).json({ ok: false, reason: 'assessment_not_found' });
+    }
+    if (assessment.audience !== 'couple') {
+      return res.status(400).json({ ok: false, reason: 'assessment_not_couple' });
+    }
+    const coupleId = await getCoupleIdForUser(req.auth.userId);
+    if (coupleId == null) {
+      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+    }
+    const attempt = await findInProgressRelationshipCoupleAttempt(
+      req.auth.userId,
+      assessment.version_id,
+      coupleId,
+    );
+    return res.json({
+      ok: true,
+      attempt: attempt ? await relationshipAttemptPayload(attempt, assessment) : null,
+    });
+  } catch (error) {
+    console.error('[API] /relationship/couple-assessments/:code/attempt GET error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.post('/relationship/couple-assessments/:code/attempt', async (req, res) => {
+  try {
+    const assessment = await getActiveRelationshipAssessment(String(req.params.code ?? '').trim());
+    if (!assessment) {
+      return res.status(404).json({ ok: false, reason: 'assessment_not_found' });
+    }
+    if (assessment.audience !== 'couple') {
+      return res.status(400).json({ ok: false, reason: 'assessment_not_couple' });
+    }
+    const coupleId = await getCoupleIdForUser(req.auth.userId);
+    if (coupleId == null) {
+      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+    }
+
+    let attempt = await findInProgressRelationshipCoupleAttempt(
+      req.auth.userId,
+      assessment.version_id,
+      coupleId,
+    );
+    let created = false;
+    if (!attempt) {
+      const inserted = await query(
+        `INSERT INTO relationship_assessment_attempts (user_id, couple_id, version_id)
+         VALUES (?, ?, ?)`,
+        [req.auth.userId, coupleId, assessment.version_id],
+      );
+      const createdResult = await query(
+        `SELECT attempt_id, couple_id, status, started_at, updated_at
+         FROM relationship_assessment_attempts
+         WHERE attempt_id = ? AND user_id = ? AND couple_id = ?`,
+        [inserted.rows.insertId, req.auth.userId, coupleId],
+      );
+      attempt = createdResult.rows[0] ?? null;
+      created = true;
+    }
+    if (!attempt) {
+      return res.status(500).json({ ok: false, reason: 'attempt_creation_failed' });
+    }
+    return res.status(created ? 201 : 200).json({
+      ok: true,
+      resumed: !created,
+      attempt: await relationshipAttemptPayload(attempt, assessment),
+    });
+  } catch (error) {
+    console.error('[API] /relationship/couple-assessments/:code/attempt POST error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
 router.patch('/relationship/assessment-attempts/:attemptId/answers/:questionKey', async (req, res) => {
   try {
     const attemptId = Number(req.params.attemptId);
@@ -1248,8 +1345,8 @@ router.patch('/relationship/assessment-attempts/:attemptId/answers/:questionKey'
     }
 
     const attemptResult = await query(
-      `SELECT a.attempt_id, a.version_id, a.status, a.started_at, a.updated_at,
-              v.version_label, c.code, v.active_question_count
+      `SELECT a.attempt_id, a.couple_id, a.version_id, a.status, a.started_at, a.updated_at,
+              v.version_label, c.code, c.audience, v.active_question_count
        FROM relationship_assessment_attempts a
        JOIN relationship_assessment_versions v ON v.version_id = a.version_id
        JOIN relationship_assessment_catalog c ON c.assessment_id = v.assessment_id
@@ -1289,7 +1386,7 @@ router.patch('/relationship/assessment-attempts/:attemptId/answers/:questionKey'
     );
 
     const updatedResult = await query(
-      `SELECT attempt_id, status, started_at, updated_at
+      `SELECT attempt_id, couple_id, status, started_at, updated_at
        FROM relationship_assessment_attempts
        WHERE attempt_id = ? AND user_id = ?`,
       [attemptId, req.auth.userId],
