@@ -120,8 +120,7 @@ void main() {
     await tester.ensureVisible(timezoneField);
     await tester.enterText(timezoneField, 'not/a-timezone');
     final saveButton = find.widgetWithText(FilledButton, '저장하기').first;
-    await tester.drag(find.byType(ListView), const Offset(0, -600));
-    await tester.pump();
+    await tester.ensureVisible(saveButton);
     await tester.tap(saveButton);
     await tester.pumpAndSettle();
 

@@ -65,9 +65,20 @@ export const normalizeExplanationInput = (input) => {
   return normalized;
 };
 
-const fixtureText = (input) => input.sourceType === 'compatibility'
-  ? '두 사람의 구조화된 관계 패턴을 바탕으로 대화를 시작할 수 있는 지점을 정리했어요.'
-  : '구조화된 검사 결과를 바탕으로 현재의 경향을 천천히 살펴볼 수 있어요.';
+const fixtureText = (input) => {
+  if (input.sourceType === 'compatibility') {
+    return '두 사람의 구조화된 관계 패턴을 바탕으로 대화를 시작할 수 있는 지점을 정리했어요.';
+  }
+  if (input.sourceType === 'fortune') {
+    return '오늘의 흐름을 사실 예측이 아닌 자기성찰을 위한 질문으로 천천히 살펴보세요.';
+  }
+  if (input.sourceType === 'counseling') {
+    return input.contentType === 'shared'
+      ? '두 사람이 함께 확인할 수 있는 정보만 바탕으로 다음 대화를 시작해보세요.'
+      : '지금의 감정을 판단하지 않고 이름 붙이며 천천히 살펴볼 수 있어요.';
+  }
+  return '구조화된 검사 결과를 바탕으로 현재의 경향을 천천히 살펴볼 수 있어요.';
+};
 
 export const createFixtureExplanationProvider = ({
   mode = 'success',
