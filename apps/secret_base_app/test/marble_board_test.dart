@@ -38,9 +38,7 @@ Widget _board({String? gameId, String phase = 'throwing'}) {
 }
 
 void main() {
-  testWidgets('마블 작전 시작 화면과 플레이 화면이 윷 요소 없이 렌더링된다', (
-    tester,
-  ) async {
+  testWidgets('마블 작전 시작 화면과 플레이 화면이 윷 요소 없이 렌더링된다', (tester) async {
     await tester.pumpWidget(_board());
     await tester.pump();
 

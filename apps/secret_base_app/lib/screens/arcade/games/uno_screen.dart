@@ -259,7 +259,12 @@ class _UnoScreenState extends State<UnoScreen> {
                       child: IgnorePointer(
                         child: Column(
                           children: _itemEffects
-                              .map((e) => _UnoItemEffectBadge(stat: e.stat, amount: e.amount))
+                              .map(
+                                (e) => _UnoItemEffectBadge(
+                                  stat: e.stat,
+                                  amount: e.amount,
+                                ),
+                              )
                               .toList(),
                         ),
                       ),
@@ -763,7 +768,9 @@ class _UnoItemEffectBadge extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.78),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFF9D83FF).withValues(alpha: 0.6)),
+          border: Border.all(
+            color: const Color(0xFF9D83FF).withValues(alpha: 0.6),
+          ),
         ),
         child: Text(
           _message(stat, amount),

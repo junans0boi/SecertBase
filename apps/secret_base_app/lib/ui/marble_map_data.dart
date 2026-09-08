@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
 enum MarbleTileType {
-  start,    // 임무개시
-  jail,     // 블랙사이트
-  tax,      // 운영본부
-  gate,     // 비밀게이트
+  start, // 임무개시
+  jail, // 블랙사이트
+  tax, // 운영본부
+  gate, // 비밀게이트
   property, // 도시
-  tourist,  // 관광지 (비밀의 섬/해변)
-  card,     // 작전카드
+  tourist, // 관광지 (비밀의 섬/해변)
+  card, // 작전카드
 }
 
 class MarbleTile {
@@ -29,14 +29,14 @@ class MarbleTile {
 }
 
 // ── Color palette ────────────────────────────────────────────────────────────
-const _kRed    = Color(0xFFE8305A);
+const _kRed = Color(0xFFE8305A);
 const _kOrange = Color(0xFFEA7D27);
-const _kGreen  = Color(0xFF16A34A);
-const _kBlue   = Color(0xFF2563EB);
+const _kGreen = Color(0xFF16A34A);
+const _kBlue = Color(0xFF2563EB);
 const _kPurple = Color(0xFF7C3AED);
-const _kGold   = Color(0xFFF59E0B);
+const _kGold = Color(0xFFF59E0B);
 const _kTourist = Color(0xFFEC4899);
-const _kCard   = Color(0xFF0EA5E9);
+const _kCard = Color(0xFF0EA5E9);
 
 // ── 24-tile board (clockwise from bottom-left corner) ───────────────────────
 //
@@ -68,71 +68,230 @@ const _kCard   = Color(0xFF0EA5E9);
 //
 const List<MarbleTile> kBoardTiles = [
   // ── Corners ──
-  MarbleTile(pos:  0, type: MarbleTileType.start,   name: '임무개시',  emoji: '🚀', color: Color(0xFF22C55E)),
-  MarbleTile(pos:  6, type: MarbleTileType.jail,    name: '블랙사이트', emoji: '⛓️', color: Color(0xFF6B7280)),
-  MarbleTile(pos: 12, type: MarbleTileType.tax,     name: '운영본부',  emoji: '🏦', color: Color(0xFF6B7280)),
-  MarbleTile(pos: 18, type: MarbleTileType.gate,    name: '비밀게이트', emoji: '🌀', color: Color(0xFF0891B2)),
+  MarbleTile(
+    pos: 0,
+    type: MarbleTileType.start,
+    name: '임무개시',
+    emoji: '🚀',
+    color: Color(0xFF22C55E),
+  ),
+  MarbleTile(
+    pos: 6,
+    type: MarbleTileType.jail,
+    name: '블랙사이트',
+    emoji: '⛓️',
+    color: Color(0xFF6B7280),
+  ),
+  MarbleTile(
+    pos: 12,
+    type: MarbleTileType.tax,
+    name: '운영본부',
+    emoji: '🏦',
+    color: Color(0xFF6B7280),
+  ),
+  MarbleTile(
+    pos: 18,
+    type: MarbleTileType.gate,
+    name: '비밀게이트',
+    emoji: '🌀',
+    color: Color(0xFF0891B2),
+  ),
 
   // ── Bottom side (pos 1–5) ──
-  MarbleTile(pos: 1, type: MarbleTileType.property, name: '방콕',    emoji: '🏯', color: _kRed,    price: 500000),
-  MarbleTile(pos: 2, type: MarbleTileType.property, name: '카이로',  emoji: '🐪', color: _kRed,    price: 500000),
-  MarbleTile(pos: 3, type: MarbleTileType.card,     name: '작전카드', emoji: '🃏', color: _kCard),
-  MarbleTile(pos: 4, type: MarbleTileType.property, name: '뭄바이',  emoji: '🕌', color: _kOrange, price: 700000),
-  MarbleTile(pos: 5, type: MarbleTileType.property, name: '자카르타', emoji: '🌴', color: _kOrange, price: 700000),
+  MarbleTile(
+    pos: 1,
+    type: MarbleTileType.property,
+    name: '방콕',
+    emoji: '🏯',
+    color: _kRed,
+    price: 500000,
+  ),
+  MarbleTile(
+    pos: 2,
+    type: MarbleTileType.property,
+    name: '카이로',
+    emoji: '🐪',
+    color: _kRed,
+    price: 500000,
+  ),
+  MarbleTile(
+    pos: 3,
+    type: MarbleTileType.card,
+    name: '작전카드',
+    emoji: '🃏',
+    color: _kCard,
+  ),
+  MarbleTile(
+    pos: 4,
+    type: MarbleTileType.property,
+    name: '뭄바이',
+    emoji: '🕌',
+    color: _kOrange,
+    price: 700000,
+  ),
+  MarbleTile(
+    pos: 5,
+    type: MarbleTileType.property,
+    name: '자카르타',
+    emoji: '🌴',
+    color: _kOrange,
+    price: 700000,
+  ),
 
   // ── Right side (pos 7–11) ──
-  MarbleTile(pos:  7, type: MarbleTileType.property, name: '시드니',   emoji: '🦘', color: _kGreen,   price: 1000000),
-  MarbleTile(pos:  8, type: MarbleTileType.tourist,  name: '비밀의섬', emoji: '🏝️', color: _kTourist, price: 1000000),
-  MarbleTile(pos:  9, type: MarbleTileType.card,     name: '작전카드', emoji: '🃏', color: _kCard),
-  MarbleTile(pos: 10, type: MarbleTileType.property, name: '베를린',   emoji: '🧱', color: _kGreen,   price: 1000000),
-  MarbleTile(pos: 11, type: MarbleTileType.property, name: '모스크바', emoji: '🏛️', color: _kGreen,   price: 1000000),
+  MarbleTile(
+    pos: 7,
+    type: MarbleTileType.property,
+    name: '시드니',
+    emoji: '🦘',
+    color: _kGreen,
+    price: 1000000,
+  ),
+  MarbleTile(
+    pos: 8,
+    type: MarbleTileType.tourist,
+    name: '비밀의섬',
+    emoji: '🏝️',
+    color: _kTourist,
+    price: 1000000,
+  ),
+  MarbleTile(
+    pos: 9,
+    type: MarbleTileType.card,
+    name: '작전카드',
+    emoji: '🃏',
+    color: _kCard,
+  ),
+  MarbleTile(
+    pos: 10,
+    type: MarbleTileType.property,
+    name: '베를린',
+    emoji: '🧱',
+    color: _kGreen,
+    price: 1000000,
+  ),
+  MarbleTile(
+    pos: 11,
+    type: MarbleTileType.property,
+    name: '모스크바',
+    emoji: '🏛️',
+    color: _kGreen,
+    price: 1000000,
+  ),
 
   // ── Top side (pos 13–17) ──
-  MarbleTile(pos: 13, type: MarbleTileType.property, name: '도쿄',     emoji: '⛩️', color: _kBlue,    price: 1300000),
-  MarbleTile(pos: 14, type: MarbleTileType.property, name: '상하이',   emoji: '🏙️', color: _kBlue,    price: 1300000),
-  MarbleTile(pos: 15, type: MarbleTileType.card,     name: '작전카드', emoji: '🃏', color: _kCard),
-  MarbleTile(pos: 16, type: MarbleTileType.property, name: '뉴욕',     emoji: '🗽', color: _kPurple,  price: 1600000),
-  MarbleTile(pos: 17, type: MarbleTileType.tourist,  name: '비밀의해변', emoji: '🏖️', color: _kTourist, price: 1000000),
+  MarbleTile(
+    pos: 13,
+    type: MarbleTileType.property,
+    name: '도쿄',
+    emoji: '⛩️',
+    color: _kBlue,
+    price: 1300000,
+  ),
+  MarbleTile(
+    pos: 14,
+    type: MarbleTileType.property,
+    name: '상하이',
+    emoji: '🏙️',
+    color: _kBlue,
+    price: 1300000,
+  ),
+  MarbleTile(
+    pos: 15,
+    type: MarbleTileType.card,
+    name: '작전카드',
+    emoji: '🃏',
+    color: _kCard,
+  ),
+  MarbleTile(
+    pos: 16,
+    type: MarbleTileType.property,
+    name: '뉴욕',
+    emoji: '🗽',
+    color: _kPurple,
+    price: 1600000,
+  ),
+  MarbleTile(
+    pos: 17,
+    type: MarbleTileType.tourist,
+    name: '비밀의해변',
+    emoji: '🏖️',
+    color: _kTourist,
+    price: 1000000,
+  ),
 
   // ── Left side (pos 19–23) ──
-  MarbleTile(pos: 19, type: MarbleTileType.property, name: '파리',   emoji: '🗼', color: _kPurple, price: 1600000),
-  MarbleTile(pos: 20, type: MarbleTileType.property, name: '런던',   emoji: '🎡', color: _kGold,   price: 2000000),
-  MarbleTile(pos: 21, type: MarbleTileType.card,     name: '작전카드', emoji: '🃏', color: _kCard),
-  MarbleTile(pos: 22, type: MarbleTileType.property, name: '두바이', emoji: '🌆', color: _kGold,   price: 2000000),
-  MarbleTile(pos: 23, type: MarbleTileType.property, name: '서울',   emoji: '🏙️', color: _kGold,   price: 2000000),
+  MarbleTile(
+    pos: 19,
+    type: MarbleTileType.property,
+    name: '파리',
+    emoji: '🗼',
+    color: _kPurple,
+    price: 1600000,
+  ),
+  MarbleTile(
+    pos: 20,
+    type: MarbleTileType.property,
+    name: '런던',
+    emoji: '🎡',
+    color: _kGold,
+    price: 2000000,
+  ),
+  MarbleTile(
+    pos: 21,
+    type: MarbleTileType.card,
+    name: '작전카드',
+    emoji: '🃏',
+    color: _kCard,
+  ),
+  MarbleTile(
+    pos: 22,
+    type: MarbleTileType.property,
+    name: '두바이',
+    emoji: '🌆',
+    color: _kGold,
+    price: 2000000,
+  ),
+  MarbleTile(
+    pos: 23,
+    type: MarbleTileType.property,
+    name: '서울',
+    emoji: '🏙️',
+    color: _kGold,
+    price: 2000000,
+  ),
 ];
 
-final Map<int, MarbleTile> kTileByPos = {
-  for (final t in kBoardTiles) t.pos: t,
-};
+final Map<int, MarbleTile> kTileByPos = {for (final t in kBoardTiles) t.pos: t};
 
 // ── Board geometry (logical 560×560 coordinate space) ──────────────────────
 //
 //  24-tile board: 4 corners + 5 non-corner tiles per side.
 //  Corners at pos 0(BL), 6(BR), 12(TR), 18(TL).
 //
-const double kBoardUnit  = 560.0;
+const double kBoardUnit = 560.0;
 const double kCornerSize = 70.0;
 const double kSideLength = 84.0; // (560 - 70*2) / 5 = 84 exactly
 
 // Returns the normalized center [0.0, 1.0] of each tile.
 Offset marbleNormalizedCenter(int pos) {
-  const double c  = kCornerSize / kBoardUnit; // 70/560 ≈ 0.125
-  const double s  = kSideLength / kBoardUnit; // 84/560 = 0.15
-  const double ch = c / 2;                    // corner half
-  const double sh = s / 2;                    // side half
+  const double c = kCornerSize / kBoardUnit; // 70/560 ≈ 0.125
+  const double s = kSideLength / kBoardUnit; // 84/560 = 0.15
+  const double ch = c / 2; // corner half
+  const double sh = s / 2; // side half
 
   // Corners
-  if (pos ==  0) return Offset(ch, 1.0 - ch);           // bottom-left
-  if (pos ==  6) return Offset(1.0 - ch, 1.0 - ch);     // bottom-right
-  if (pos == 12) return Offset(1.0 - ch, ch);            // top-right
-  if (pos == 18) return Offset(ch, ch);                  // top-left
+  if (pos == 0) return Offset(ch, 1.0 - ch); // bottom-left
+  if (pos == 6) return Offset(1.0 - ch, 1.0 - ch); // bottom-right
+  if (pos == 12) return Offset(1.0 - ch, ch); // top-right
+  if (pos == 18) return Offset(ch, ch); // top-left
 
   // Bottom side (pos 1–5, left→right)
-  if (pos >= 1 && pos <= 5)   return Offset(c + (pos - 1) * s + sh, 1.0 - ch);
+  if (pos >= 1 && pos <= 5) return Offset(c + (pos - 1) * s + sh, 1.0 - ch);
 
   // Right side (pos 7–11, bottom→top)
-  if (pos >= 7 && pos <= 11)  return Offset(1.0 - ch, 1.0 - c - (pos - 6) * s + sh);
+  if (pos >= 7 && pos <= 11)
+    return Offset(1.0 - ch, 1.0 - c - (pos - 6) * s + sh);
 
   // Top side (pos 13–17, right→left)
   if (pos >= 13 && pos <= 17) return Offset(1.0 - c - (pos - 12) * s + sh, ch);
@@ -147,25 +306,28 @@ Offset marbleNormalizedCenter(int pos) {
 Rect? marbleTileRect(int pos) {
   const double c = kCornerSize; // 70
   const double s = kSideLength; // 84
-  const double b = kBoardUnit;  // 560
+  const double b = kBoardUnit; // 560
 
   // Corners
-  if (pos ==  0) return Rect.fromLTWH(0,       b - c, c,     c);
-  if (pos ==  6) return Rect.fromLTWH(b - c,   b - c, c,     c);
-  if (pos == 12) return Rect.fromLTWH(b - c,   0,     c,     c);
-  if (pos == 18) return const Rect.fromLTWH(0, 0,     70,   70);
+  if (pos == 0) return Rect.fromLTWH(0, b - c, c, c);
+  if (pos == 6) return Rect.fromLTWH(b - c, b - c, c, c);
+  if (pos == 12) return Rect.fromLTWH(b - c, 0, c, c);
+  if (pos == 18) return const Rect.fromLTWH(0, 0, 70, 70);
 
   // Bottom side (pos 1–5)
-  if (pos >= 1  && pos <= 5)  return Rect.fromLTWH(c + (pos - 1) * s,          b - c, s, c);
+  if (pos >= 1 && pos <= 5)
+    return Rect.fromLTWH(c + (pos - 1) * s, b - c, s, c);
 
   // Right side (pos 7–11)
-  if (pos >= 7  && pos <= 11) return Rect.fromLTWH(b - c, b - c - (pos - 6)  * s, c, s);
+  if (pos >= 7 && pos <= 11)
+    return Rect.fromLTWH(b - c, b - c - (pos - 6) * s, c, s);
 
   // Top side (pos 13–17)
-  if (pos >= 13 && pos <= 17) return Rect.fromLTWH(b - c - (pos - 12) * s,    0,   s, c);
+  if (pos >= 13 && pos <= 17)
+    return Rect.fromLTWH(b - c - (pos - 12) * s, 0, s, c);
 
   // Left side (pos 19–23)
-  if (pos >= 19 && pos <= 23) return Rect.fromLTWH(0, c + (pos - 19) * s,         c, s);
+  if (pos >= 19 && pos <= 23) return Rect.fromLTWH(0, c + (pos - 19) * s, c, s);
 
   return null;
 }
@@ -173,33 +335,33 @@ Rect? marbleTileRect(int pos) {
 // ── Economy helpers ──────────────────────────────────────────────────────────
 
 const _kBuildCosts = {
-  'red':    [200000,   500000,  1000000],
-  'orange': [300000,   700000,  1400000],
-  'green':  [400000,  1000000,  2000000],
-  'blue':   [600000,  1300000,  2600000],
-  'purple': [800000,  1600000,  3200000],
-  'gold':  [1000000,  2000000,  4000000],
+  'red': [200000, 500000, 1000000],
+  'orange': [300000, 700000, 1400000],
+  'green': [400000, 1000000, 2000000],
+  'blue': [600000, 1300000, 2600000],
+  'purple': [800000, 1600000, 3200000],
+  'gold': [1000000, 2000000, 4000000],
 };
 
 const _kTolls = {
-  'red':    [20000,   80000,  250000,   700000],
-  'orange': [30000,  120000,  380000,  1000000],
-  'green':  [50000,  180000,  550000,  1500000],
-  'blue':   [70000,  250000,  780000,  2100000],
-  'purple': [90000,  320000, 1000000,  2700000],
-  'gold':  [120000,  450000, 1400000,  3800000],
+  'red': [20000, 80000, 250000, 700000],
+  'orange': [30000, 120000, 380000, 1000000],
+  'green': [50000, 180000, 550000, 1500000],
+  'blue': [70000, 250000, 780000, 2100000],
+  'purple': [90000, 320000, 1000000, 2700000],
+  'gold': [120000, 450000, 1400000, 3800000],
 };
 
 String tileColorOf(int pos) {
   final t = kTileByPos[pos];
   if (t == null) return '';
   if (t.type == MarbleTileType.property) {
-    if (t.color == _kRed)    return 'red';
+    if (t.color == _kRed) return 'red';
     if (t.color == _kOrange) return 'orange';
-    if (t.color == _kGreen)  return 'green';
-    if (t.color == _kBlue)   return 'blue';
+    if (t.color == _kGreen) return 'green';
+    if (t.color == _kBlue) return 'blue';
     if (t.color == _kPurple) return 'purple';
-    if (t.color == _kGold)   return 'gold';
+    if (t.color == _kGold) return 'gold';
   }
   return '';
 }
