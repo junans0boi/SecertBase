@@ -173,4 +173,44 @@ void main() {
     expect(history.single.id, 7);
     expect(history.single.result.overallScore, 50);
   });
+
+  test('keeps social bonding dimensions in the shared result model', () async {
+    final api = AssessmentAttemptApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient(
+        (_) async => http.Response.bytes(
+          utf8.encode(
+            jsonEncode({
+              'ok': true,
+              'result': {
+                'assessmentCode': 'social_bonding',
+                'version': 'v1',
+                'dimensions': [
+                  {
+                    'key': 'depth',
+                    'title': '관계의 깊이',
+                    'score': 70,
+                    'mean': 3.8,
+                    'answerCount': 4,
+                  },
+                ],
+                'overallScore': 60,
+                'overallTendencyKey': 'developing_connections',
+                'overallTendency': '관계의 깊이를 넓혀가는 경향이 있어요.',
+                'disclaimer': '자기이해용',
+              },
+            }),
+          ),
+          201,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        ),
+      ),
+    );
+
+    final result = await api.submit(99);
+
+    expect(result.assessmentCode, 'social_bonding');
+    expect(result.dimensions.single.key, 'depth');
+  });
 }

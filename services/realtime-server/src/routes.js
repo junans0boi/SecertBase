@@ -1304,7 +1304,7 @@ router.patch('/relationship/assessment-attempts/:attemptId/answers/:questionKey'
   }
 });
 
-const attachmentDimensionScore = (rows) => {
+const relationshipDimensionScore = (rows) => {
   const byDimension = new Map();
   for (const row of rows) {
     const key = row.dimension_key;
@@ -1364,6 +1364,40 @@ const attachmentTendency = (dimensions) => {
   };
 };
 
+const socialBondingTendency = (dimensions) => {
+  const scores = new Map(dimensions.map((dimension) => [dimension.key, dimension.score]));
+  const depth = scores.get('depth') ?? 0;
+  const dependence = scores.get('dependence') ?? 0;
+  const isolation = scores.get('isolation') ?? 0;
+  if (depth >= 70 && dependence < 50 && isolation < 50) {
+    return {
+      key: 'connected_and_balanced',
+      text: '깊은 연결을 만들면서도 여러 관계와 나만의 균형을 함께 지키는 경향이 있어요.',
+    };
+  }
+  if (dependence >= 70) {
+    return {
+      key: 'focused_dependence',
+      text: '소수의 중요한 관계에 정서적 기대가 많이 모이는 경향이 있어요.',
+    };
+  }
+  if (isolation >= 70) {
+    return {
+      key: 'isolation_awareness',
+      text: '외로움과 연결의 부족을 자주 알아차리고 관계 자원이 필요한 경향이 있어요.',
+    };
+  }
+  return {
+    key: 'developing_connections',
+    text: '관계의 깊이와 연결 방식을 상황에 따라 넓혀가는 경향이 있어요.',
+  };
+};
+
+const relationshipTendency = (code, dimensions) => {
+  if (code === 'social_bonding') return socialBondingTendency(dimensions);
+  return attachmentTendency(dimensions);
+};
+
 const parseRelationshipResult = (value) => {
   if (value && typeof value === 'object') return value;
   try {
@@ -1394,7 +1428,7 @@ router.post('/relationship/assessment-attempts/:attemptId/submit', async (req, r
     if (!attempt) {
       return res.status(404).json({ ok: false, reason: 'attempt_not_found' });
     }
-    if (attempt.code !== 'attachment') {
+    if (!['attachment', 'social_bonding'].includes(attempt.code)) {
       return res.status(400).json({ ok: false, reason: 'unsupported_assessment' });
     }
     if (attempt.status !== 'in_progress') {
@@ -1426,11 +1460,11 @@ router.post('/relationship/assessment-attempts/:attemptId/submit', async (req, r
       });
     }
 
-    const dimensions = attachmentDimensionScore(answerResult.rows);
+    const dimensions = relationshipDimensionScore(answerResult.rows);
     const overallScore = Math.round(
       dimensions.reduce((total, dimension) => total + dimension.score, 0) / dimensions.length,
     );
-    const tendency = attachmentTendency(dimensions);
+    const tendency = relationshipTendency(attempt.code, dimensions);
     const result = {
       assessmentCode: attempt.code,
       version: attempt.version_label,
