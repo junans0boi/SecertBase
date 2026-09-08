@@ -153,6 +153,33 @@ class AssessmentResult {
       );
 }
 
+class AssessmentHistoryItem {
+  final int id;
+  final String version;
+  final String? createdAt;
+  final AssessmentResult result;
+
+  const AssessmentHistoryItem({
+    required this.id,
+    required this.version,
+    required this.createdAt,
+    required this.result,
+  });
+
+  factory AssessmentHistoryItem.fromJson(Map<String, dynamic> json) {
+    final rawResult = json['result'];
+    if (rawResult is! Map) {
+      throw const FormatException('Invalid history result');
+    }
+    return AssessmentHistoryItem(
+      id: int.tryParse('${json['id']}') ?? 0,
+      version: '${json['version'] ?? ''}',
+      createdAt: json['createdAt'] == null ? null : '${json['createdAt']}',
+      result: AssessmentResult.fromJson(Map<String, dynamic>.from(rawResult)),
+    );
+  }
+}
+
 class AssessmentAttemptApiException implements Exception {
   final String reason;
 
@@ -262,6 +289,31 @@ class AssessmentAttemptApi {
       if (rawResult == null) return null;
       if (rawResult is! Map) throw const FormatException('Invalid result');
       return AssessmentResult.fromJson(Map<String, dynamic>.from(rawResult));
+    } on http.ClientException {
+      throw const AssessmentAttemptApiException('network_error');
+    } on FormatException {
+      throw const AssessmentAttemptApiException('invalid_response');
+    }
+  }
+
+  Future<List<AssessmentHistoryItem>> fetchHistory(String code) async {
+    try {
+      final response = await _client.get(
+        Uri.parse('$baseUrl/api/relationship/assessment-results/$code/history'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      final body = _successfulBody(response);
+      final rawHistory = body['history'];
+      if (rawHistory is! List) {
+        throw const FormatException('Missing history');
+      }
+      return rawHistory
+          .map(
+            (item) => AssessmentHistoryItem.fromJson(
+              Map<String, dynamic>.from(item as Map),
+            ),
+          )
+          .toList(growable: false);
     } on http.ClientException {
       throw const AssessmentAttemptApiException('network_error');
     } on FormatException {

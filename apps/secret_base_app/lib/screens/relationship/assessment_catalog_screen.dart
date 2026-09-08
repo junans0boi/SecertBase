@@ -5,6 +5,7 @@ import '../../core/assessment_catalog_api.dart';
 import '../../core/auth_service.dart';
 import '../../core/main_design.dart';
 import 'assessment_attempt_screen.dart';
+import 'assessment_history_screen.dart';
 
 class AssessmentCatalogScreen extends StatefulWidget {
   final AssessmentCatalogApi api;
@@ -206,6 +207,17 @@ class _AssessmentCatalogScreenState extends State<AssessmentCatalogScreen> {
                 enabled ? status : '파트너 연결 후 이용할 수 있어요',
                 style: mainBody(size: 12, color: kMainMuted),
               ),
+              if (enabled &&
+                  assessment.audience == AssessmentAudience.individual &&
+                  assessment.completionStatus ==
+                      AssessmentCompletionStatus.completed)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: () => _openHistory(assessment),
+                    child: const Text('과거 결과 보기'),
+                  ),
+                ),
             ],
           ),
         ),
@@ -219,6 +231,22 @@ class _AssessmentCatalogScreenState extends State<AssessmentCatalogScreen> {
       MaterialPageRoute(
         builder: (_) => AssessmentAttemptScreen(
           assessment: assessment,
+          api: AssessmentAttemptApi(
+            baseUrl: auth.baseUrl,
+            token: auth.token ?? '',
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openHistory(AssessmentCatalogItem assessment) {
+    final auth = AuthService();
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => AssessmentHistoryScreen(
+          title: assessment.title,
+          assessmentCode: assessment.code,
           api: AssessmentAttemptApi(
             baseUrl: auth.baseUrl,
             token: auth.token ?? '',

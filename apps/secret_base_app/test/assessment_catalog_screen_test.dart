@@ -11,6 +11,7 @@ Map<String, dynamic> _assessment({
   required String code,
   required String audience,
   required String title,
+  String completionStatus = 'not_started',
 }) => {
   'code': code,
   'audience': audience,
@@ -19,7 +20,7 @@ Map<String, dynamic> _assessment({
   'version': 'v1',
   'candidateQuestionCount': 24,
   'activeQuestionCount': 12,
-  'completionStatus': 'not_started',
+  'completionStatus': completionStatus,
   'dimensions': [
     {'key': 'one', 'title': '차원 하나', 'order': 1},
     {'key': 'two', 'title': '차원 둘', 'order': 2},
@@ -45,6 +46,7 @@ void main() {
                   code: 'attachment',
                   audience: 'individual',
                   title: '애착과 안정감',
+                  completionStatus: 'completed',
                 ),
                 _assessment(
                   code: 'conflict_repair',
@@ -73,5 +75,6 @@ void main() {
     expect(find.text('갈등과 회복 방식'), findsOneWidget);
     expect(find.text('후보 24문항 · 실제 12문항'), findsNWidgets(2));
     expect(find.text('파트너 연결 후 이용할 수 있어요'), findsOneWidget);
+    expect(find.text('과거 결과 보기'), findsOneWidget);
   });
 }

@@ -1037,8 +1037,34 @@ router.get('/relationship/assessments', async (req, res) => {
          WHERE a.is_active = 1
          ORDER BY a.sort_order, q.question_order`,
       ),
+      query(
+        `SELECT a.code,
+                CASE
+                  WHEN EXISTS (
+                    SELECT 1
+                    FROM relationship_assessment_attempts ra
+                    WHERE ra.user_id = ? AND ra.version_id = v.version_id
+                      AND ra.status = 'in_progress'
+                  ) THEN 'in_progress'
+                  WHEN EXISTS (
+                    SELECT 1
+                    FROM relationship_assessment_results rr
+                    WHERE rr.user_id = ? AND rr.version_id = v.version_id
+                  ) THEN 'completed'
+                  ELSE 'not_started'
+                END AS completion_status
+         FROM relationship_assessment_catalog a
+         JOIN relationship_assessment_versions v
+           ON v.assessment_id = a.assessment_id AND v.is_active = 1
+         WHERE a.is_active = 1
+         ORDER BY a.sort_order, a.assessment_id`,
+        [req.auth.userId, req.auth.userId],
+      ),
     ]);
 
+    const statusByCode = new Map(
+      statusResult.rows.map((row) => [row.code, row.completion_status]),
+    );
     const assessments = catalogResult.rows.map((row) => ({
       code: row.code,
       audience: row.audience,
@@ -1047,7 +1073,7 @@ router.get('/relationship/assessments', async (req, res) => {
       version: row.version_label,
       candidateQuestionCount: Number(row.candidate_question_count),
       activeQuestionCount: Number(row.active_question_count),
-      completionStatus: 'not_started',
+      completionStatus: statusByCode.get(row.code) ?? 'not_started',
       dimensions: [],
       questions: [],
     }));
@@ -1451,6 +1477,36 @@ router.get('/relationship/assessment-results/:code/current', async (req, res) =>
     return res.json({ ok: true, result: parsed });
   } catch (error) {
     console.error('[API] /relationship/assessment-results/:code/current error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.get('/relationship/assessment-results/:code/history', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT r.result_id, r.result_json, r.created_at, v.version_label
+       FROM relationship_assessment_results r
+       JOIN relationship_assessment_versions v ON v.version_id = r.version_id
+       JOIN relationship_assessment_catalog c ON c.assessment_id = v.assessment_id
+       WHERE r.user_id = ? AND c.code = ?
+       ORDER BY r.result_id DESC`,
+      [req.auth.userId, String(req.params.code ?? '').trim()],
+    );
+    const history = result.rows.flatMap((row) => {
+      const parsed = parseRelationshipResult(row.result_json);
+      if (!parsed) return [];
+      return [{
+        id: Number(row.result_id),
+        version: row.version_label,
+        createdAt: row.created_at instanceof Date
+          ? row.created_at.toISOString()
+          : row.created_at == null ? null : String(row.created_at),
+        result: parsed,
+      }];
+    });
+    return res.json({ ok: true, history });
+  } catch (error) {
+    console.error('[API] /relationship/assessment-results/:code/history error:', error);
     return res.status(500).json({ ok: false, reason: 'internal_error' });
   }
 });
