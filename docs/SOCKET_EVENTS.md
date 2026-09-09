@@ -5,7 +5,7 @@ Last updated: 2026-07-15
 Socket.IO endpoint:
 
 ```text
-Production: https://secertbase.kro.kr/socket.io/
+Production: https://secretbase.cloud/socket.io/
 Local:      http://localhost:4100/socket.io/
 ```
 

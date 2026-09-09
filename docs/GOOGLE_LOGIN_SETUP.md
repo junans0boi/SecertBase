@@ -21,7 +21,7 @@ Create an OAuth 2.0 Web application client.
 Authorized JavaScript origins should include:
 
 ```text
-https://secertbase.kro.kr
+https://secretbase.cloud
 http://localhost
 http://localhost:7357
 ```
@@ -56,7 +56,7 @@ The same client ID must be passed to Flutter at build time:
 
 ```bash
 flutter build web --release --no-wasm-dry-run \
-  --dart-define=SOCKET_URL=https://secertbase.kro.kr \
+  --dart-define=SOCKET_URL=https://secretbase.cloud \
   --dart-define=GOOGLE_CLIENT_ID=<google-web-client-id>
 ```
 

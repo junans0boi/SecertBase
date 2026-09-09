@@ -2,7 +2,7 @@
 # deploy_test_server.sh — 격리된 테스터 배포 스크립트
 #
 # 이 스크립트는 test.secertbase.kro.kr 테스터 환경에서만 실행한다.
-# 운영 환경(secertbase.kro.kr)과는 완전히 격리된 별도 서비스를 배포한다.
+# 운영 환경(secretbase.cloud)과는 완전히 격리된 별도 서비스를 배포한다.
 #
 # 격리 요건:
 #   - PM2 프로세스: secretbase-test (운영은 secretbase-realtime)

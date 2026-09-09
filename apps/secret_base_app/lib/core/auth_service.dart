@@ -15,10 +15,11 @@ const kakaoReviewAutoLogin = bool.fromEnvironment(
   'KAKAO_REVIEW_AUTO_LOGIN',
   defaultValue: false,
 );
+const _kakaoReviewHosts = {'secretbase.cloud', 'secertbase.kro.kr'};
 
 bool get isKakaoReviewHost {
   if (!kIsWeb) return false;
-  return Uri.base.host.toLowerCase() == 'secertbase.kro.kr';
+  return _kakaoReviewHosts.contains(Uri.base.host.toLowerCase());
 }
 
 bool get shouldUseKakaoReviewAutoLogin =>

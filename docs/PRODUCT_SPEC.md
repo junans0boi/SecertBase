@@ -24,7 +24,7 @@
 - 영구 저장소: MariaDB
 - 파일 저장: 서버 로컬 `uploads/`
 - 인프라: Ubuntu 홈서버 + nginx + PM2
-- 운영 URL: `https://secertbase.kro.kr`
+- 운영 URL: `https://secretbase.cloud`
 
 ## 현재 제품 상태
 

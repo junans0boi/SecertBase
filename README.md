@@ -2,7 +2,7 @@
 
 > 우리 둘만의 공간 — 실시간 커플 게임 플랫폼
 
-**배포 주소**: [https://secertbase.kro.kr](https://secertbase.kro.kr)
+**배포 주소**: [https://secretbase.cloud](https://secretbase.cloud)
 
 ---
 

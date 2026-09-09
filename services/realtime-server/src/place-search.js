@@ -382,7 +382,7 @@ async function reverseGeocodeNominatim({ latitude, longitude, fetchImpl }) {
   url.searchParams.set('accept-language', 'ko');
 
   const res = await fetchImpl(url, {
-    headers: { 'User-Agent': 'SecretBase/1.0 (https://secertbase.kro.kr)' },
+    headers: { 'User-Agent': 'SecretBase/1.0 (https://secretbase.cloud)' },
   });
 
   if (!res.ok) {

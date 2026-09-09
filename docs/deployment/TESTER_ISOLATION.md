@@ -14,7 +14,7 @@
 | 업로드 루트 | `/var/www/secretbase/uploads` | `/var/www/secretbase-test/uploads` | ⬜ 서버에서 설정 필요 |
 | 백엔드 .env | `.env` | `.env.test` | ⬜ 서버에서 설정 필요 |
 | 프론트엔드 빌드 | `/var/www/secretbase` | `/var/www/secretbase-test` | ✅ Caddy 설정 완료 |
-| Caddy 라우팅 | `secertbase.kro.kr` | `test.secertbase.kro.kr` | ✅ 완료 |
+| Caddy 라우팅 | `secretbase.cloud` | `test.secertbase.kro.kr` | ✅ 완료 |
 | 배포 스크립트 백엔드 검증 | `npm test` + `npm run check` | `npm test` + `npm run check` | ✅ `scripts/deploy_test_server.sh` 업데이트 |
 
 ## 서버에서 테스터 격리 설정 절차
@@ -70,7 +70,7 @@ pm2 save
 `/etc/caddy/Caddyfile` 에서 두 도메인이 각자의 백엔드 포트로 연결되는지 확인한다:
 
 ```caddy
-secertbase.kro.kr {
+secretbase.cloud, secertbase.kro.kr {
   root * /var/www/secretbase
   # ... /api, /socket.io → 127.0.0.1:4100
 }
@@ -117,7 +117,7 @@ mysql -u junzzang -p secretbase_test -e "SELECT COUNT(*) FROM Users;"
 pm2 list
 
 # Caddy가 각 포트로 라우팅하는지 확인
-curl -s https://secertbase.kro.kr/health
+curl -s https://secretbase.cloud/health
 curl -s https://test.secertbase.kro.kr/health
 ```
 

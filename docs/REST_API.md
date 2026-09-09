@@ -5,14 +5,14 @@ Last updated: 2026-07-15
 Base URLs:
 
 ```text
-Production: https://secertbase.kro.kr/api
+Production: https://secretbase.cloud/api
 Local:      http://localhost:4100/api
 ```
 
 File uploads are served from:
 
 ```text
-Production: https://secertbase.kro.kr/uploads/<filename>
+Production: https://secretbase.cloud/uploads/<filename>
 Local:      http://localhost:4100/uploads/<filename>
 ```
 
@@ -998,7 +998,7 @@ internal_error
 Not under `/api`.
 
 ```text
-https://secertbase.kro.kr/health
+https://secretbase.cloud/health
 ```
 
 Response:

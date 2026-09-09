@@ -2178,7 +2178,7 @@ class _MapScreenState extends State<MapScreen> {
 
     final uri = switch (provider) {
       _DirectionsProvider.naver => Uri.parse(
-        'nmap://route/public?dlat=$lat&dlng=$lng&dname=$encodedName&appname=secertbase.kro.kr',
+        'nmap://route/public?dlat=$lat&dlng=$lng&dname=$encodedName&appname=secretbase.cloud',
       ),
       _DirectionsProvider.kakao => Uri.parse(
         'kakaomap://route?ep=$lat,$lng&by=publictransit',

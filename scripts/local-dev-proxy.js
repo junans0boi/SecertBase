@@ -5,7 +5,7 @@ const https = require('https');
 const tls = require('tls');
 
 const PORT = Number(process.env.PORT || 3000);
-const TARGET_HOST = process.env.TARGET_HOST || 'secertbase.kro.kr';
+const TARGET_HOST = process.env.TARGET_HOST || 'secretbase.cloud';
 const TARGET_ORIGIN = `https://${TARGET_HOST}`;
 const LOCAL_PLACE_SEARCH_ORIGIN = process.env.LOCAL_PLACE_SEARCH_ORIGIN || '';
 const PROXY_PREFIXES = ['/api', '/socket.io', '/uploads', '/health'];

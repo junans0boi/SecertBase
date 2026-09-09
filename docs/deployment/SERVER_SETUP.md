@@ -16,7 +16,7 @@ This document outlines the current server configuration and deployment steps for
 - **Google Login:** requires `GOOGLE_CLIENT_ID` in `.env` and deploy-time `GOOGLE_CLIENT_ID`
 - **Service Name:** `secretbase-realtime` (PM2)
 - **Port:** 4100
-- **URL:** `https://secertbase.kro.kr/socket.io/`
+- **URL:** `https://secretbase.cloud/socket.io/`
 
 ## API Endpoints (New)
 - **POST `/api/auth/register`:** User registration with auto-generated `UserCode`.
@@ -28,7 +28,7 @@ This document outlines the current server configuration and deployment steps for
 - **Production/review path:** `/var/www/secretbase` (Static build from `SecertBase/apps/secret_base_app/build/web`)
 - **Tester path:** `/var/www/secretbase-test`
 - **Technology:** Flutter Web
-- **Review injected URL:** `SOCKET_URL=https://secertbase.kro.kr`
+- **Review injected URL:** `SOCKET_URL=https://secretbase.cloud`
 - **Tester injected URL:** `SOCKET_URL=https://test.secertbase.kro.kr`
 
 ## Nginx Configuration (Server 1 / legacy)
@@ -133,4 +133,4 @@ Public domain SSH requires router/NAT port forwarding for TCP 22. As of the late
 - Caddy serves the normal tester Flutter build from `/var/www/secretbase-test` on Server 2.
 - PM2 owns the backend process `secretbase-realtime`.
 - The server currently keeps local-only reference folders such as `trash/` and `uno/` untracked.
-- `secertbase.kro.kr` is the normal production/login domain. Use `test.secertbase.kro.kr` for friend/tester access.
+- `secretbase.cloud` is the normal production/login domain. `secertbase.kro.kr` remains as a legacy production alias. Use `test.secertbase.kro.kr` for friend/tester access.

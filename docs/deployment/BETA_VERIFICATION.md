@@ -93,7 +93,7 @@ BACKUP_ENCRYPTION_KEY="운영용암호화대칭키" \
 
 1. **상태 API 검증:**
    ```bash
-   curl -fsS https://secertbase.kro.kr/health
+   curl -fsS https://secretbase.cloud/health
    ```
 2. **PM2 프로세스 정상 구동 확인:**
    ```bash
@@ -104,4 +104,4 @@ BACKUP_ENCRYPTION_KEY="운영용암호화대칭키" \
    sudo systemctl status caddy
    ```
 4. **실제 서비스 접속 스모크 체크:**
-   - 모바일 브라우저로 `https://secertbase.kro.kr` 접속 후 로그인 및 매칭 상태가 유지되는지 최종 확인한다.
+   - 모바일 브라우저로 `https://secretbase.cloud` 접속 후 로그인 및 매칭 상태가 유지되는지 최종 확인한다.

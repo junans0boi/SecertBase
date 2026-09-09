@@ -210,7 +210,7 @@ The script:
 2. pulls `origin/main`
 3. runs backend install/test/check
 4. runs `flutter pub get`
-5. builds Flutter Web with `SOCKET_URL=https://secertbase.kro.kr`
+5. builds Flutter Web with `SOCKET_URL=https://secretbase.cloud`
 6. syncs `build/web/` to `/var/www/secretbase`
 7. starts or restarts PM2 process `secretbase-realtime`
 8. waits for `http://localhost:4100/health`
