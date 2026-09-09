@@ -334,44 +334,62 @@ void main() {
     expect(current?.disclaimer, '자기이해용 결과예요.');
   });
 
-  test('reads completed result history without exposing answers', () async {
-    final api = AssessmentAttemptApi(
-      baseUrl: 'https://secretbase.example',
-      token: 'jwt-token',
-      client: MockClient((_) async {
-        return http.Response.bytes(
-          utf8.encode(
-            jsonEncode({
-              'ok': true,
-              'history': [
-                {
-                  'id': 7,
-                  'version': 'v1',
-                  'createdAt': '2026-09-08T10:00:00.000Z',
-                  'result': {
-                    'assessmentCode': 'attachment',
+  test(
+    'reads completed result history with immutable question answers',
+    () async {
+      final api = AssessmentAttemptApi(
+        baseUrl: 'https://secretbase.example',
+        token: 'jwt-token',
+        client: MockClient((_) async {
+          return http.Response.bytes(
+            utf8.encode(
+              jsonEncode({
+                'ok': true,
+                'history': [
+                  {
+                    'id': 7,
                     'version': 'v1',
-                    'dimensions': [],
-                    'overallScore': 50,
-                    'overallTendencyKey': 'situational_balance',
-                    'overallTendency': '경향',
-                    'disclaimer': '자기이해용',
+                    'createdAt': '2026-09-08T10:00:00.000Z',
+                    'answers': [
+                      {
+                        'questionKey': 'q01',
+                        'prompt': '가까운 사람에게 마음을 표현할 수 있다.',
+                        'order': 1,
+                        'dimensionTitle': '확인과 안심',
+                        'value': 4,
+                        'label': '그렇다',
+                        'reverseScored': false,
+                      },
+                    ],
+                    'result': {
+                      'assessmentCode': 'attachment',
+                      'version': 'v1',
+                      'dimensions': [],
+                      'overallScore': 50,
+                      'overallTendencyKey': 'situational_balance',
+                      'overallTendency': '경향',
+                      'disclaimer': '자기이해용',
+                    },
                   },
-                },
-              ],
-            }),
-          ),
-          200,
-          headers: {'content-type': 'application/json; charset=utf-8'},
-        );
-      }),
-    );
+                ],
+              }),
+            ),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }),
+      );
 
-    final history = await api.fetchHistory('attachment');
+      final history = await api.fetchHistory('attachment');
 
-    expect(history.single.id, 7);
-    expect(history.single.result.overallScore, 50);
-  });
+      expect(history.single.id, 7);
+      expect(history.single.result.overallScore, 50);
+      expect(history.single.answers.single.questionKey, 'q01');
+      expect(history.single.answers.single.prompt, contains('마음을 표현'));
+      expect(history.single.answers.single.value, 4);
+      expect(history.single.answers.single.label, '그렇다');
+    },
+  );
 
   test('keeps social bonding dimensions in the shared result model', () async {
     final api = AssessmentAttemptApi(

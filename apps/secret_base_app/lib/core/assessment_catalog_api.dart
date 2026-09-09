@@ -101,6 +101,7 @@ class AssessmentCatalogItem {
   final int candidateQuestionCount;
   final int activeQuestionCount;
   final AssessmentCompletionStatus completionStatus;
+  final bool hasResultHistory;
   final List<AssessmentDimension> dimensions;
   final List<AssessmentQuestion> questions;
 
@@ -113,6 +114,7 @@ class AssessmentCatalogItem {
     required this.candidateQuestionCount,
     required this.activeQuestionCount,
     required this.completionStatus,
+    this.hasResultHistory = false,
     required this.dimensions,
     required this.questions,
   });
@@ -143,6 +145,7 @@ class AssessmentCatalogItem {
       candidateQuestionCount: _requiredInt(json['candidateQuestionCount']),
       activeQuestionCount: _requiredInt(json['activeQuestionCount']),
       completionStatus: _completionStatusFromJson(json['completionStatus']),
+      hasResultHistory: json['hasResultHistory'] == true,
       dimensions: dimensions,
       questions: questions,
     );

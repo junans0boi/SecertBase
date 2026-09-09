@@ -1067,13 +1067,18 @@ router.get('/relationship/assessments', async (req, res) => {
                     WHERE rr.user_id = ? AND rr.version_id = v.version_id
                   ) THEN 'completed'
                   ELSE 'not_started'
-                END AS completion_status
+                END AS completion_status,
+                EXISTS (
+                  SELECT 1
+                  FROM relationship_assessment_results rh
+                  WHERE rh.user_id = ? AND rh.version_id = v.version_id
+                ) AS has_result_history
          FROM relationship_assessment_catalog a
          JOIN relationship_assessment_versions v
            ON v.assessment_id = a.assessment_id AND v.is_active = 1
          WHERE a.is_active = 1
          ORDER BY a.sort_order, a.assessment_id`,
-        [req.auth.userId, req.auth.userId],
+        [req.auth.userId, req.auth.userId, req.auth.userId],
       ),
     ]);
 
@@ -1089,6 +1094,8 @@ router.get('/relationship/assessments', async (req, res) => {
       candidateQuestionCount: Number(row.candidate_question_count),
       activeQuestionCount: Number(row.active_question_count),
       completionStatus: statusByCode.get(row.code) ?? 'not_started',
+      hasResultHistory:
+        row.has_result_history === true || Number(row.has_result_history) === 1,
       dimensions: [],
       questions: [],
     }));
@@ -3009,26 +3016,54 @@ router.get('/relationship/assessment-results/:code/history', async (req, res) =>
       return res.status(400).json({ ok: false, reason: 'assessment_not_personal' });
     }
     const result = await query(
-      `SELECT r.result_id, r.result_json, r.created_at, v.version_label
+      `SELECT r.result_id, r.result_json, r.created_at, v.version_label,
+              q.question_key, q.prompt, q.question_order, q.reverse_scored,
+              d.display_name AS dimension_title, aa.answer_value
        FROM relationship_assessment_results r
        JOIN relationship_assessment_versions v ON v.version_id = r.version_id
        JOIN relationship_assessment_catalog c ON c.assessment_id = v.assessment_id
+       LEFT JOIN relationship_assessment_attempt_answers aa
+         ON aa.attempt_id = r.attempt_id
+       LEFT JOIN relationship_assessment_questions q
+         ON q.question_id = aa.question_id AND q.version_id = r.version_id
+       LEFT JOIN relationship_assessment_dimensions d
+         ON d.dimension_id = q.dimension_id
        WHERE r.user_id = ? AND c.code = ?
-       ORDER BY r.result_id DESC`,
+       ORDER BY r.result_id DESC, q.question_order`,
       [req.auth.userId, String(req.params.code ?? '').trim()],
     );
-    const history = result.rows.flatMap((row) => {
-      const parsed = parseRelationshipResult(row.result_json);
-      if (!parsed) return [];
-      return [{
-        id: Number(row.result_id),
-        version: row.version_label,
-        createdAt: row.created_at instanceof Date
-          ? row.created_at.toISOString()
-          : row.created_at == null ? null : String(row.created_at),
-        result: parsed,
-      }];
-    });
+    const historyById = new Map();
+    for (const row of result.rows) {
+      const resultId = Number(row.result_id);
+      let item = historyById.get(resultId);
+      if (!item) {
+        const parsed = parseRelationshipResult(row.result_json);
+        if (!parsed) continue;
+        item = {
+          id: resultId,
+          version: row.version_label,
+          createdAt: row.created_at instanceof Date
+            ? row.created_at.toISOString()
+            : row.created_at == null ? null : String(row.created_at),
+          result: parsed,
+          answers: [],
+        };
+        historyById.set(resultId, item);
+      }
+      if (row.question_key != null) {
+        const value = Number(row.answer_value);
+        item.answers.push({
+          questionKey: row.question_key,
+          prompt: row.prompt,
+          order: Number(row.question_order),
+          dimensionTitle: row.dimension_title,
+          value,
+          label: relationshipLikertScale.find((option) => option.value === value)?.label ?? String(value),
+          reverseScored: Boolean(row.reverse_scored),
+        });
+      }
+    }
+    const history = [...historyById.values()];
     return res.json({ ok: true, history });
   } catch (error) {
     console.error('[API] /relationship/assessment-results/:code/history error:', error);
@@ -6585,7 +6620,19 @@ router.patch('/couple/info', async (req, res) => {
     await ensureCouplesStartDate();
     const { start_date } = req.body;
     const userId = req.auth.userId;
-    if (!start_date) return res.status(400).json({ ok: false, reason: 'missing_fields' });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(start_date ?? ''))) {
+      return res.status(400).json({ ok: false, reason: 'invalid_start_date' });
+    }
+
+    const couple = await query(
+      `SELECT CoupleId FROM Couples
+       WHERE Status = 'active' AND (User1Id = ? OR User2Id = ?)
+       LIMIT 1`,
+      [userId, userId],
+    );
+    if (couple.rows.length === 0) {
+      return res.status(404).json({ ok: false, reason: 'couple_not_found' });
+    }
 
     await query(
       `UPDATE Couples SET StartDate = ?
@@ -6593,7 +6640,11 @@ router.patch('/couple/info', async (req, res) => {
       [start_date, userId, userId]
     );
 
-    res.json({ ok: true });
+    res.json({
+      ok: true,
+      coupleId: couple.rows[0].CoupleId,
+      startDate: String(start_date),
+    });
   } catch (err) {
     console.error('[API] /couple/info PATCH error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });

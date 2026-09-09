@@ -105,6 +105,8 @@ class _PickerSelection<T> {
   const _PickerSelection.confirmed(this.value) : confirmed = true;
 }
 
+enum _RelationshipArea { personal, couple }
+
 class RelationshipEntryCard extends StatelessWidget {
   final RelationshipAssessmentStatus status;
   final VoidCallback onTap;
@@ -181,6 +183,7 @@ class RelationshipEntryCard extends StatelessWidget {
 
 class RelationshipUnderstandingScreen extends StatefulWidget {
   final BirthProfileApi? api;
+  final AssessmentCatalogApi? assessmentCatalogApi;
   final RelationshipAssessmentStatus assessmentStatus;
   final bool hasActiveCouple;
   final bool editBirthProfileOnly;
@@ -188,6 +191,7 @@ class RelationshipUnderstandingScreen extends StatefulWidget {
   const RelationshipUnderstandingScreen({
     super.key,
     this.api,
+    this.assessmentCatalogApi,
     this.assessmentStatus = RelationshipAssessmentStatus.notStarted,
     this.hasActiveCouple = false,
     this.editBirthProfileOnly = false,
@@ -199,9 +203,13 @@ class RelationshipUnderstandingScreen extends StatefulWidget {
 }
 
 class _RelationshipUnderstandingScreenState
-    extends State<RelationshipUnderstandingScreen> {
+    extends State<RelationshipUnderstandingScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _areaTabController;
   late final BirthProfileApi _api;
   late final bool _ownsApi;
+  late final AssessmentCatalogApi? _assessmentCatalogApi;
+  late final bool _ownsAssessmentCatalogApi;
   final _birthDateController = TextEditingController();
   final _birthTimeController = TextEditingController();
   final _timezoneController = TextEditingController(text: 'Asia/Seoul');
@@ -209,13 +217,16 @@ class _RelationshipUnderstandingScreenState
   BirthCalendarType _calendarType = BirthCalendarType.solar;
   String? _birthCountry = '대한민국';
   BirthProfile? _profile;
+  RelationshipAssessmentStatus? _loadedAssessmentStatus;
   String? _errorMessage;
   bool _loading = true;
   bool _saving = false;
+  _RelationshipArea _selectedArea = _RelationshipArea.personal;
 
   @override
   void initState() {
     super.initState();
+    _areaTabController = TabController(length: 2, vsync: this);
     _ownsApi = widget.api == null;
     _api =
         widget.api ??
@@ -223,12 +234,26 @@ class _RelationshipUnderstandingScreenState
           baseUrl: AuthService().baseUrl,
           token: AuthService().token ?? '',
         );
+    _ownsAssessmentCatalogApi =
+        widget.assessmentCatalogApi == null &&
+        widget.api == null &&
+        !widget.editBirthProfileOnly;
+    _assessmentCatalogApi =
+        widget.assessmentCatalogApi ??
+        (_ownsAssessmentCatalogApi
+            ? AssessmentCatalogApi(
+                baseUrl: AuthService().baseUrl,
+                token: AuthService().token ?? '',
+              )
+            : null);
     _loadProfile();
   }
 
   @override
   void dispose() {
+    _areaTabController.dispose();
     if (_ownsApi) _api.close();
+    if (_ownsAssessmentCatalogApi) _assessmentCatalogApi?.close();
     _birthDateController.dispose();
     _birthTimeController.dispose();
     _timezoneController.dispose();
@@ -239,10 +264,21 @@ class _RelationshipUnderstandingScreenState
   Future<void> _loadProfile() async {
     try {
       final profile = await _api.fetch();
+      RelationshipAssessmentStatus? loadedAssessmentStatus;
+      final catalogApi = _assessmentCatalogApi;
+      if (catalogApi != null) {
+        try {
+          final assessments = await catalogApi.fetch();
+          loadedAssessmentStatus = _statusFromAssessments(assessments);
+        } catch (_) {
+          // The relationship hub remains usable when assessment status is unavailable.
+        }
+      }
       if (!mounted) return;
       _setProfile(profile);
       setState(() {
         _profile = profile;
+        _loadedAssessmentStatus = loadedAssessmentStatus;
         _loading = false;
       });
     } catch (error) {
@@ -574,7 +610,28 @@ class _RelationshipUnderstandingScreenState
     if (!_hasSavedBirthProfile) {
       return RelationshipAssessmentStatus.profileIncomplete;
     }
-    return widget.assessmentStatus;
+    return _loadedAssessmentStatus ?? widget.assessmentStatus;
+  }
+
+  RelationshipAssessmentStatus _statusFromAssessments(
+    List<AssessmentCatalogItem> assessments,
+  ) {
+    final personal = assessments.where(
+      (assessment) => assessment.audience == AssessmentAudience.individual,
+    );
+    if (personal.any(
+      (assessment) =>
+          assessment.completionStatus == AssessmentCompletionStatus.inProgress,
+    )) {
+      return RelationshipAssessmentStatus.inProgress;
+    }
+    if (personal.any(
+      (assessment) =>
+          assessment.completionStatus == AssessmentCompletionStatus.completed,
+    )) {
+      return RelationshipAssessmentStatus.resultReady;
+    }
+    return RelationshipAssessmentStatus.notStarted;
   }
 
   bool get _hasSavedBirthProfile =>
@@ -675,15 +732,15 @@ class _RelationshipUnderstandingScreenState
           ),
           const SizedBox(height: 12),
           OutlinedButton(
-            onPressed: _openCatalog,
-            child: const Text('검사 목록 보기'),
+            onPressed: () => _openCatalog(AssessmentAudience.individual),
+            child: const Text('개인 검사 보기'),
           ),
         ],
       ),
     );
   }
 
-  void _openCatalog() {
+  void _openCatalog(AssessmentAudience audience) {
     final auth = AuthService();
     Navigator.of(context).push<void>(
       MaterialPageRoute(
@@ -693,6 +750,7 @@ class _RelationshipUnderstandingScreenState
             token: auth.token ?? '',
           ),
           hasActiveCouple: widget.hasActiveCouple,
+          audienceFilter: audience,
         ),
       ),
     );
@@ -709,13 +767,16 @@ class _RelationshipUnderstandingScreenState
     );
   }
 
-  void _openFortune() {
+  void _openFortune(FortuneScope scope) {
     final auth = AuthService();
     Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => RelationshipFortuneScreen(
           api: FortuneApi(baseUrl: auth.baseUrl, token: auth.token ?? ''),
-          onOpenCounseling: _openPrivateCounseling,
+          onOpenCounseling: scope == FortuneScope.personal
+              ? _openPrivateCounseling
+              : _openSharedCounseling,
+          scope: scope,
         ),
       ),
     );
@@ -745,7 +806,8 @@ class _RelationshipUnderstandingScreenState
     );
   }
 
-  Widget _fortuneArea() {
+  Widget _fortuneArea({required FortuneScope scope}) {
+    final isCouple = scope == FortuneScope.couple;
     return MainCard(
       key: const Key('relationship_fortune_area'),
       padding: const EdgeInsets.all(18),
@@ -758,17 +820,24 @@ class _RelationshipUnderstandingScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('오늘의 운세', style: mainBody(weight: FontWeight.w800)),
+                Text(
+                  isCouple ? '오늘의 관계 운세' : '오늘의 운세',
+                  style: mainBody(weight: FontWeight.w800),
+                ),
                 const SizedBox(height: 6),
                 Text(
-                  '출생 프로필을 바탕으로 오늘의 감정 흐름과 관계 신호를 살펴봐요.',
+                  isCouple
+                      ? '두 사람의 관계 흐름과 오늘 확인해볼 대화 신호를 살펴봐요.'
+                      : '출생 프로필을 바탕으로 오늘의 감정 흐름을 살펴봐요.',
                   style: mainBody(size: 13, color: kMainSub, height: 1.5),
                 ),
                 const SizedBox(height: 10),
                 OutlinedButton(
-                  key: const Key('open_fortune'),
-                  onPressed: _openFortune,
-                  child: const Text('오늘의 운세 보기'),
+                  key: Key(
+                    isCouple ? 'open_relationship_fortune' : 'open_fortune',
+                  ),
+                  onPressed: () => _openFortune(scope),
+                  child: Text(isCouple ? '관계 운세 보기' : '오늘의 운세 보기'),
                 ),
               ],
             ),
@@ -778,9 +847,13 @@ class _RelationshipUnderstandingScreenState
     );
   }
 
-  Widget _counselingArea() {
+  Widget _counselingArea({required bool shared}) {
     return MainCard(
-      key: const Key('relationship_counseling_area'),
+      key: Key(
+        shared
+            ? 'relationship_shared_counseling_area'
+            : 'relationship_counseling_area',
+      ),
       padding: const EdgeInsets.all(18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -789,12 +862,17 @@ class _RelationshipUnderstandingScreenState
             children: [
               const Icon(Icons.forum_outlined, color: kMainLilac),
               const SizedBox(width: 8),
-              Text('AI 상담', style: mainBody(weight: FontWeight.w800)),
+              Text(
+                shared ? '커플 상담' : '프라이빗 상담',
+                style: mainBody(weight: FontWeight.w800),
+              ),
             ],
           ),
           const SizedBox(height: 8),
           Text(
-            '자연어 답변은 보조 기능이고, 점수·권한·공유 범위를 바꾸지 않아요.',
+            shared
+                ? '두 사람이 함께 확인할 수 있는 내용만 바탕으로 대화해요.'
+                : '나만 볼 수 있는 공간에서 감정과 관계 패턴을 정리해요.',
             style: mainBody(size: 13, color: kMainSub, height: 1.5),
           ),
           const SizedBox(height: 10),
@@ -803,16 +881,14 @@ class _RelationshipUnderstandingScreenState
             runSpacing: 8,
             children: [
               OutlinedButton(
-                key: const Key('open_private_counseling'),
-                onPressed: _openPrivateCounseling,
-                child: const Text('프라이빗 상담'),
-              ),
-              if (widget.hasActiveCouple)
-                OutlinedButton(
-                  key: const Key('open_shared_counseling'),
-                  onPressed: _openSharedCounseling,
-                  child: const Text('커플 상담'),
+                key: Key(
+                  shared ? 'open_shared_counseling' : 'open_private_counseling',
                 ),
+                onPressed: shared
+                    ? _openSharedCounseling
+                    : _openPrivateCounseling,
+                child: Text(shared ? '커플 상담 시작' : '프라이빗 상담 시작'),
+              ),
             ],
           ),
         ],
@@ -849,6 +925,12 @@ class _RelationshipUnderstandingScreenState
                 if (widget.hasActiveCouple) ...[
                   const SizedBox(height: 12),
                   OutlinedButton(
+                    key: const Key('open_couple_catalog'),
+                    onPressed: () => _openCatalog(AssessmentAudience.couple),
+                    child: const Text('커플 검사 보기'),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton(
                     key: const Key('open_compatibility'),
                     onPressed: _openCompatibility,
                     child: const Text('궁합 분석 보기'),
@@ -860,6 +942,20 @@ class _RelationshipUnderstandingScreenState
         ],
       ),
     );
+  }
+
+  void _selectArea(int index) {
+    final area = index == 0
+        ? _RelationshipArea.personal
+        : _RelationshipArea.couple;
+    if (area == _RelationshipArea.couple && !widget.hasActiveCouple) {
+      _areaTabController.animateTo(0);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('파트너를 연결하면 커플 영역을 이용할 수 있어요.')),
+      );
+      return;
+    }
+    setState(() => _selectedArea = area);
   }
 
   @override
@@ -874,6 +970,35 @@ class _RelationshipUnderstandingScreenState
           widget.editBirthProfileOnly ? '출생 프로필 수정' : '관계 이해 허브',
           style: mainTitle(size: 22),
         ),
+        bottom: widget.editBirthProfileOnly
+            ? null
+            : PreferredSize(
+                preferredSize: const Size.fromHeight(48),
+                child: TabBar(
+                  controller: _areaTabController,
+                  onTap: _selectArea,
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.center,
+                  indicatorSize: TabBarIndicatorSize.label,
+                  indicator: const UnderlineTabIndicator(
+                    borderSide: BorderSide(color: kMainInk, width: 3),
+                    insets: EdgeInsets.symmetric(horizontal: 10),
+                  ),
+                  dividerColor: Colors.transparent,
+                  labelColor: kMainInk,
+                  unselectedLabelColor: kMainMuted,
+                  labelStyle: mainBody(size: 18, weight: FontWeight.w800),
+                  unselectedLabelStyle: mainBody(
+                    size: 18,
+                    weight: FontWeight.w700,
+                  ),
+                  labelPadding: const EdgeInsets.symmetric(horizontal: 28),
+                  tabs: [
+                    const Tab(text: '개인'),
+                    const Tab(text: '커플'),
+                  ],
+                ),
+              ),
       ),
       body: _loading
           ? const Center(
@@ -898,13 +1023,18 @@ class _RelationshipUnderstandingScreenState
                       Text('관계 이해 허브', style: mainTitle(size: 26)),
                       const SizedBox(height: 8),
                       Text(
-                        '개인 영역에서 나를 먼저 살펴보고, 준비가 되면 커플 영역으로 이어가요.',
+                        _selectedArea == _RelationshipArea.personal
+                            ? '내 감정과 관계 패턴을 먼저 살펴봐요.'
+                            : '두 사람의 응답이 모이면 관계 패턴을 함께 살펴봐요.',
                         style: mainBody(size: 14, color: kMainSub, height: 1.5),
                       ),
-                      const SizedBox(height: 16),
-                      _statusCard(),
+                      if (_selectedArea == _RelationshipArea.personal) ...[
+                        const SizedBox(height: 16),
+                        _statusCard(),
+                      ],
                     ],
-                    if (showBirthProfile) ...[
+                    if (showBirthProfile &&
+                        _selectedArea == _RelationshipArea.personal) ...[
                       const SizedBox(height: 24),
                       Text('출생 프로필', style: mainTitle(size: 26)),
                       const SizedBox(height: 8),
@@ -1025,13 +1155,19 @@ class _RelationshipUnderstandingScreenState
                     ],
                     if (!widget.editBirthProfileOnly) ...[
                       const SizedBox(height: 18),
-                      _fortuneArea(),
-                      const SizedBox(height: 12),
-                      _personalArea(),
-                      const SizedBox(height: 12),
-                      _coupleArea(),
-                      const SizedBox(height: 12),
-                      _counselingArea(),
+                      if (_selectedArea == _RelationshipArea.personal) ...[
+                        _fortuneArea(scope: FortuneScope.personal),
+                        const SizedBox(height: 12),
+                        _personalArea(),
+                        const SizedBox(height: 12),
+                        _counselingArea(shared: false),
+                      ] else ...[
+                        _fortuneArea(scope: FortuneScope.couple),
+                        const SizedBox(height: 12),
+                        _coupleArea(),
+                        const SizedBox(height: 12),
+                        _counselingArea(shared: true),
+                      ],
                     ],
                   ],
                 ),

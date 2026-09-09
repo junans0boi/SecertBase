@@ -1,11 +1,11 @@
 {
-    "name": "secret_base_app",
-    "short_name": "secret_base_app",
+    "name": "비밀기지",
+    "short_name": "비밀기지",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#FFFFFB",
+    "theme_color": "#FF6F9F",
+    "description": "우리 둘만의 비밀 공간에서 함께 즐기는 실시간 커플 게임",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

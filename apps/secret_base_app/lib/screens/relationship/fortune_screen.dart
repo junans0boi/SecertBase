@@ -4,11 +4,19 @@ import '../../core/auth_service.dart';
 import '../../core/fortune_api.dart';
 import '../../core/main_design.dart';
 
+enum FortuneScope { personal, couple }
+
 class RelationshipFortuneScreen extends StatefulWidget {
   final FortuneApi? api;
   final VoidCallback? onOpenCounseling;
+  final FortuneScope scope;
 
-  const RelationshipFortuneScreen({super.key, this.api, this.onOpenCounseling});
+  const RelationshipFortuneScreen({
+    super.key,
+    this.api,
+    this.onOpenCounseling,
+    this.scope = FortuneScope.personal,
+  });
 
   @override
   State<RelationshipFortuneScreen> createState() =>
@@ -161,11 +169,15 @@ class _RelationshipFortuneScreenState extends State<RelationshipFortuneScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isCouple = widget.scope == FortuneScope.couple;
     return Scaffold(
       backgroundColor: kMainBg,
       appBar: AppBar(
         backgroundColor: kMainBg,
-        title: Text('오늘의 운세', style: mainTitle(size: 22)),
+        title: Text(
+          isCouple ? '오늘의 관계 운세' : '오늘의 개인 운세',
+          style: mainTitle(size: 22),
+        ),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: kMainRose))
@@ -189,22 +201,21 @@ class _RelationshipFortuneScreenState extends State<RelationshipFortuneScreen> {
                     Text(_error!, style: mainBody(size: 13, color: kMainRose)),
                   ],
                   const SizedBox(height: 12),
-                  _fortuneCard(
-                    _today?.personal,
-                    emptyText: '출생 프로필을 저장하면 개인 운세가 준비돼요.',
-                  ),
-                  const SizedBox(height: 12),
-                  _fortuneCard(
-                    _today?.emotionalFlow,
-                    emptyText: '오늘의 감정 흐름이 아직 없어요.',
-                  ),
-                  if (_today?.relationship != null) ...[
+                  if (!isCouple) ...[
+                    _fortuneCard(
+                      _today?.personal,
+                      emptyText: '출생 프로필을 저장하면 개인 운세가 준비돼요.',
+                    ),
                     const SizedBox(height: 12),
+                    _fortuneCard(
+                      _today?.emotionalFlow,
+                      emptyText: '오늘의 감정 흐름이 아직 없어요.',
+                    ),
+                  ] else
                     _fortuneCard(
                       _today?.relationship,
                       emptyText: '커플을 연결하면 관계 운세가 준비돼요.',
                     ),
-                  ],
                   if (widget.onOpenCounseling != null) ...[
                     const SizedBox(height: 18),
                     FilledButton.icon(

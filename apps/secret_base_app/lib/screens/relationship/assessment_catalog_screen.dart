@@ -10,11 +10,13 @@ import 'assessment_history_screen.dart';
 class AssessmentCatalogScreen extends StatefulWidget {
   final AssessmentCatalogApi api;
   final bool hasActiveCouple;
+  final AssessmentAudience? audienceFilter;
 
   const AssessmentCatalogScreen({
     super.key,
     required this.api,
     this.hasActiveCouple = false,
+    this.audienceFilter,
   });
 
   @override
@@ -84,35 +86,58 @@ class _AssessmentCatalogScreenState extends State<AssessmentCatalogScreen> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
               children: [
-                Text('나를 이해하는 검사', style: mainTitle(size: 24)),
+                Text(
+                  widget.audienceFilter == AssessmentAudience.couple
+                      ? '우리의 관계를 이해하는 검사'
+                      : '나를 이해하는 검사',
+                  style: mainTitle(size: 24),
+                ),
                 const SizedBox(height: 6),
                 Text(
-                  '고정된 문항과 버전으로 진행 상태를 확인할 수 있어요.',
+                  '검사를 시작하면 답변이 저장되고, 제출 후 결과가 기록돼요. '
+                  '다시 검사해도 이전 기록은 남아 있어요.',
                   style: mainBody(size: 13, color: kMainSub, height: 1.5),
                 ),
                 const SizedBox(height: 18),
-                _section(
-                  '개인 검사',
-                  _assessments!
-                      .where(
-                        (assessment) =>
-                            assessment.audience ==
-                            AssessmentAudience.individual,
-                      )
-                      .toList(),
-                  enabled: true,
-                ),
-                const SizedBox(height: 18),
-                _section(
-                  '커플 검사',
-                  _assessments!
-                      .where(
-                        (assessment) =>
-                            assessment.audience == AssessmentAudience.couple,
-                      )
-                      .toList(),
-                  enabled: widget.hasActiveCouple,
-                ),
+                if (widget.audienceFilter == null) ...[
+                  _section(
+                    '개인 검사',
+                    _assessments!
+                        .where(
+                          (assessment) =>
+                              assessment.audience ==
+                              AssessmentAudience.individual,
+                        )
+                        .toList(),
+                    enabled: true,
+                  ),
+                  const SizedBox(height: 18),
+                  _section(
+                    '커플 검사',
+                    _assessments!
+                        .where(
+                          (assessment) =>
+                              assessment.audience == AssessmentAudience.couple,
+                        )
+                        .toList(),
+                    enabled: widget.hasActiveCouple,
+                  ),
+                ] else
+                  _section(
+                    widget.audienceFilter == AssessmentAudience.couple
+                        ? '커플 검사'
+                        : '개인 검사',
+                    _assessments!
+                        .where(
+                          (assessment) =>
+                              assessment.audience == widget.audienceFilter,
+                        )
+                        .toList(),
+                    enabled:
+                        widget.audienceFilter ==
+                            AssessmentAudience.individual ||
+                        widget.hasActiveCouple,
+                  ),
               ],
             ),
     );
@@ -157,71 +182,124 @@ class _AssessmentCatalogScreenState extends State<AssessmentCatalogScreen> {
     };
     return Opacity(
       opacity: enabled ? 1 : 0.62,
-      child: GestureDetector(
-        onTap: enabled ? () => _openAssessment(assessment) : null,
-        child: MainCard(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Text(
-                      assessment.title,
-                      style: mainBody(weight: FontWeight.w800),
+      child: MainCard(
+        padding: const EdgeInsets.all(16),
+        radius: 18,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    assessment.title,
+                    style: mainBody(weight: FontWeight.w800),
+                  ),
+                ),
+                Text(
+                  assessment.version,
+                  style: mainBody(size: 12, color: kMainMuted),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              assessment.description,
+              style: mainBody(size: 13, color: kMainSub, height: 1.45),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              '후보 ${assessment.candidateQuestionCount}문항 · 실제 ${assessment.activeQuestionCount}문항',
+              style: mainBody(
+                size: 12,
+                color: kMainLilac,
+                weight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              assessment.dimensions
+                  .map((dimension) => dimension.title)
+                  .join(' · '),
+              style: mainBody(size: 12, color: kMainSub),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: enabled ? kMainRoseSoft : kMainPaperSoft,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        enabled ? status : '파트너 연결 후 이용할 수 있어요',
+                        style: mainBody(
+                          size: 12,
+                          color: enabled ? kMainRose : kMainMuted,
+                          weight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ),
-                  Text(
-                    assessment.version,
-                    style: mainBody(size: 12, color: kMainMuted),
+                ),
+                if (assessment.audience == AssessmentAudience.individual)
+                  TextButton.icon(
+                    key: Key('assessment_history_${assessment.code}'),
+                    onPressed: enabled ? () => _openHistory(assessment) : null,
+                    icon: const Icon(Icons.history_rounded, size: 17),
+                    label: const Text('기록 보기'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: kMainInk,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      visualDensity: VisualDensity.compact,
+                    ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                assessment.description,
-                style: mainBody(size: 13, color: kMainSub, height: 1.45),
-              ),
+              ],
+            ),
+            if (enabled) ...[
               const SizedBox(height: 10),
-              Text(
-                '후보 ${assessment.candidateQuestionCount}문항 · 실제 ${assessment.activeQuestionCount}문항',
-                style: mainBody(
-                  size: 12,
-                  color: kMainLilac,
-                  weight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                assessment.dimensions
-                    .map((dimension) => dimension.title)
-                    .join(' · '),
-                style: mainBody(size: 12, color: kMainSub),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                enabled ? status : '파트너 연결 후 이용할 수 있어요',
-                style: mainBody(size: 12, color: kMainMuted),
-              ),
-              if (enabled &&
-                  assessment.audience == AssessmentAudience.individual &&
-                  assessment.completionStatus ==
-                      AssessmentCompletionStatus.completed)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton(
-                    onPressed: () => _openHistory(assessment),
-                    child: const Text('과거 결과 보기'),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  key: Key('assessment_action_${assessment.code}'),
+                  onPressed: () => _openAssessment(assessment),
+                  icon: Icon(
+                    assessment.completionStatus ==
+                            AssessmentCompletionStatus.completed
+                        ? Icons.refresh_rounded
+                        : Icons.play_arrow_rounded,
+                    size: 18,
+                  ),
+                  label: Text(_actionLabel(assessment)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: kMainInk,
+                    side: const BorderSide(color: kMainLine),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                 ),
+              ),
             ],
-          ),
+          ],
         ),
       ),
     );
   }
+
+  String _actionLabel(AssessmentCatalogItem assessment) =>
+      switch (assessment.completionStatus) {
+        AssessmentCompletionStatus.notStarted => '검사 시작하기',
+        AssessmentCompletionStatus.inProgress => '검사 이어하기',
+        AssessmentCompletionStatus.completed => '다시 검사하기',
+      };
 
   void _openAssessment(AssessmentCatalogItem assessment) {
     final auth = AuthService();

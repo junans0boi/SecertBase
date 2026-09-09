@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/semantics.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'core/app_theme.dart';
 import 'core/main_design.dart';
@@ -12,6 +13,7 @@ import 'screens/home_shell.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  SemanticsBinding.instance.ensureSemantics();
 
   await GoogleFonts.pendingFonts([GoogleFonts.gaegu(), GoogleFonts.notoSans()]);
 
@@ -174,7 +176,7 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CozyMascot(size: 120),
+              const BrandLogo(size: 120),
               const SizedBox(height: 24),
               Text('비밀기지로 입장하는 중...', style: mainTitle(size: 24)),
               const SizedBox(height: 12),
@@ -236,7 +238,7 @@ class _ReviewAutoLoginScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CozyMascot(size: 116),
+              const BrandLogo(size: 116),
               const SizedBox(height: 24),
               Text('비밀기지로 입장하는 중...', style: mainTitle(size: 24)),
               const SizedBox(height: 10),

@@ -70,6 +70,7 @@ test(
       const catalogBody = await catalogAfterFirst.json();
       const attachment = catalogBody.assessments.find((item) => item.code === 'attachment');
       assert.equal(attachment.completionStatus, 'completed');
+      assert.equal(attachment.hasResultHistory, true);
 
       const secondStart = await server.request('/relationship/assessments/attachment/attempt', {
         token: aliceToken,
@@ -78,6 +79,15 @@ test(
       const secondBody = await secondStart.json();
       assert.equal(secondStart.status, 201, JSON.stringify(secondBody));
       assert.notEqual(secondBody.attempt.id, first.attemptId);
+
+      const catalogDuringRetake = await server.request('/relationship/assessments', {
+        token: aliceToken,
+      });
+      const catalogDuringRetakeBody = await catalogDuringRetake.json();
+      const attachmentDuringRetake = catalogDuringRetakeBody.assessments
+        .find((item) => item.code === 'attachment');
+      assert.equal(attachmentDuringRetake.completionStatus, 'in_progress');
+      assert.equal(attachmentDuringRetake.hasResultHistory, true);
 
       const current = await server.request('/relationship/assessment-results/attachment/current', {
         token: aliceToken,

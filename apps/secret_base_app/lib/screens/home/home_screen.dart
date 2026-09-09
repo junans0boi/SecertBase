@@ -5,10 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../../core/auth_service.dart';
 import '../../core/main_design.dart';
-import '../../core/today_api.dart';
 import 'memory_list_screen.dart';
-import 'today_card.dart';
-import 'today_loop_viewer.dart';
 import '../secret_base/secret_base_screen.dart';
 import '../relationship/relationship_understanding_screen.dart';
 import '../../core/fortune_api.dart';
@@ -31,12 +28,9 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _auth = AuthService();
   Map<String, dynamic>? _coupleInfo;
-  List<Map<String, dynamic>> _todayPins = [];
-  List<Map<String, dynamic>> _todayMoments = [];
-  TodayState? _todayState;
   Map<String, dynamic>? _memoryCard;
   int _memoryCardTotal = 0;
-  bool _loading = true;
+  RelationshipAssessmentStatus? _loadedRelationshipStatus;
 
   Map<String, String> get _authHeaders => {
     if (_auth.token != null) 'Authorization': 'Bearer ${_auth.token}',
@@ -49,61 +43,30 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _load() async {
-    if (mounted) setState(() => _loading = true);
-    final todayFuture = _loadTodayState();
     try {
-      final userId = _auth.user?['UserId'] ?? _auth.user?['id'];
       final responses = await Future.wait([
         http.get(
           Uri.parse('${_auth.baseUrl}/api/couple/info'),
           headers: _authHeaders,
         ),
         http.get(
-          Uri.parse('${_auth.baseUrl}/api/setlog').replace(
-            queryParameters: {if (userId != null) 'user_id': '$userId'},
-          ),
+          Uri.parse('${_auth.baseUrl}/api/retention/memory-card'),
           headers: _authHeaders,
         ),
-        http.get(Uri.parse('${_auth.baseUrl}/api/map'), headers: _authHeaders),
         http.get(
-          Uri.parse('${_auth.baseUrl}/api/retention/memory-card'),
+          Uri.parse('${_auth.baseUrl}/api/relationship/assessments'),
           headers: _authHeaders,
         ),
       ]);
       if (!mounted) return;
       final couple = jsonDecode(responses[0].body) as Map<String, dynamic>;
-      final moments = jsonDecode(responses[1].body) as Map<String, dynamic>;
-      final mapData = jsonDecode(responses[2].body) as Map<String, dynamic>;
-      final todayState = await todayFuture;
-      final now = DateTime.now();
-      final nowStr =
-          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
 
       setState(() {
-        _todayState = todayState;
         if (responses[0].statusCode == 200 && couple['ok'] == true) {
           _coupleInfo = couple;
         }
-        if (responses[1].statusCode == 200 && moments['ok'] == true) {
-          final allPosts = (moments['posts'] as List? ?? const [])
-              .map((post) => Map<String, dynamic>.from(post as Map))
-              .toList();
-          _todayMoments = allPosts.where((post) {
-            final dateStr = '${post['taken_at'] ?? post['captured_at'] ?? ''}';
-            return dateStr.startsWith(nowStr) || dateStr.contains(nowStr);
-          }).toList();
-        }
-        if (responses[2].statusCode == 200 && mapData['ok'] == true) {
-          final allPins = (mapData['pins'] as List? ?? const [])
-              .map((pin) => Map<String, dynamic>.from(pin as Map))
-              .toList();
-          _todayPins = allPins.where((pin) {
-            final dateStr = '${pin['visit_date'] ?? pin['created_at'] ?? ''}';
-            return dateStr.startsWith(nowStr) || dateStr.contains(nowStr);
-          }).toList();
-        }
-        if (responses[3].statusCode == 200) {
-          final mc = jsonDecode(responses[3].body) as Map<String, dynamic>;
+        if (responses[1].statusCode == 200) {
+          final mc = jsonDecode(responses[1].body) as Map<String, dynamic>;
           if (mc['ok'] == true && mc['card'] != null) {
             _memoryCard = mc['card'] as Map<String, dynamic>;
             _memoryCardTotal = mc['total_count'] as int? ?? 0;
@@ -112,61 +75,18 @@ class _HomeScreenState extends State<HomeScreen> {
             _memoryCardTotal = 0;
           }
         }
+        if (responses[2].statusCode == 200) {
+          final catalog = jsonDecode(responses[2].body) as Map<String, dynamic>;
+          final assessments = catalog['assessments'];
+          if (catalog['ok'] == true && assessments is List) {
+            _loadedRelationshipStatus = _relationshipStatusFromCatalog(
+              assessments,
+            );
+          }
+        }
       });
     } catch (_) {
       // Home remains resilient
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<TodayState?> _loadTodayState() async {
-    final token = _auth.token;
-    if (token == null) return null;
-    final api = TodayApi(baseUrl: _auth.baseUrl, token: token);
-    try {
-      return await api.fetchState();
-    } catch (_) {
-      return null;
-    } finally {
-      api.close();
-    }
-  }
-
-  void _openTodayLoop() {
-    final state = _todayState;
-    if (state == null) return;
-    Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => TodayLoopViewer(state: state, baseUrl: _auth.baseUrl),
-      ),
-    );
-    _markTodayLoopViewed();
-  }
-
-  Future<void> _markTodayLoopViewed() async {
-    final token = _auth.token;
-    final state = _todayState;
-    if (token == null || state == null || !state.canOpenLoop) return;
-    final api = TodayApi(baseUrl: _auth.baseUrl, token: token);
-    try {
-      final viewedAt = await api.markViewed();
-      if (!mounted) return;
-      setState(() {
-        _todayState = TodayState(
-          date: state.date,
-          status: TodayStatus.viewed,
-          hasPartnerMoment: state.hasPartnerMoment,
-          revealedAt: state.revealedAt,
-          viewedAt: viewedAt,
-          myMoment: state.myMoment,
-          partnerMoment: state.partnerMoment,
-        );
-      });
-    } catch (_) {
-      // Viewing remains available even if the analytics acknowledgement fails.
-    } finally {
-      api.close();
     }
   }
 
@@ -180,24 +100,12 @@ class _HomeScreenState extends State<HomeScreen> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(18, 16, 18, 32),
           children: [
-            if (_loading && _todayState == null)
-              const MainCard(
-                child: SizedBox(
-                  height: 96,
-                  child: Center(
-                    child: CircularProgressIndicator(color: kMainRose),
-                  ),
-                ),
-              )
-            else if (_todayState != null)
-              TodayCard(
-                state: _todayState!,
-                onCreateMoment: () => widget.onNavigate(1),
-                onOpenLoop: _openTodayLoop,
-              ),
-            if (_loading || _todayState != null) const SizedBox(height: 18),
+            _homeHeader(),
+            const SizedBox(height: 20),
             _coupleCard(),
-            const SizedBox(height: 18),
+            const SizedBox(height: 14),
+            _quickActions(),
+            const SizedBox(height: 22),
             _fortuneCard(),
             const SizedBox(height: 18),
             _relationshipCard(),
@@ -210,53 +118,78 @@ class _HomeScreenState extends State<HomeScreen> {
                 authHeaders: _authHeaders,
               ),
             ],
-            const SizedBox(height: 18),
-            _sectionTitle('오늘의 소식 & MomentLoop', () => widget.onNavigate(1)),
-            const SizedBox(height: 8),
-            _momentPreview(),
-            const SizedBox(height: 18),
-            _sectionTitle('함께하기', null),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: _Shortcut(
-                    icon: Icons.map_outlined,
-                    title: '비밀 지도',
-                    subtitle: '우리 장소 보기',
-                    color: kMainSage,
-                    onTap: () => widget.onNavigate(2),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _Shortcut(
-                    icon: Icons.sports_esports_outlined,
-                    title: '함께 놀기',
-                    subtitle: '세 가지 게임',
-                    color: kMainRose,
-                    onTap: () => widget.onNavigate(3),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            _Shortcut(
-              icon: Icons.cottage_outlined,
-              title: '우리의 비밀기지',
-              subtitle: '마일스톤과 월별 엽서',
-              color: kMainLilac,
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => SecretBaseScreen(
-                    baseUrl: _auth.baseUrl,
-                    authHeaders: _authHeaders,
-                  ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _homeHeader() {
+    final name = _auth.user?['Nickname'] ?? _auth.user?['UserName'] ?? '우리';
+    return Row(
+      children: [
+        const BrandLogo(size: 38),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('우리의 하루', style: mainTitle(size: 25)),
+              Text('$name님, 오늘도 함께 기록해요', style: mainBody(size: 12)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _quickActions() {
+    return SizedBox(
+      height: 104,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        clipBehavior: Clip.none,
+        children: [
+          _QuickAction(
+            icon: Icons.auto_stories_rounded,
+            title: '오늘 기록',
+            subtitle: '우리의 순간',
+            color: kMainRose,
+            background: kMainRoseSoft,
+            onTap: () => widget.onNavigate(1),
+          ),
+          _QuickAction(
+            icon: Icons.map_outlined,
+            title: '비밀 지도',
+            subtitle: '장소 남기기',
+            color: kMainSage,
+            background: kMainSageSoft,
+            onTap: () => widget.onNavigate(2),
+          ),
+          _QuickAction(
+            icon: Icons.sports_esports_outlined,
+            title: '함께 놀기',
+            subtitle: '게임 한 판',
+            color: kMainSky,
+            background: kMainSkySoft,
+            onTap: () => widget.onNavigate(3),
+          ),
+          _QuickAction(
+            icon: Icons.cottage_outlined,
+            title: '비밀기지',
+            subtitle: '우리의 기록',
+            color: kMainLilac,
+            background: kMainLilacSoft,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => SecretBaseScreen(
+                  baseUrl: _auth.baseUrl,
+                  authHeaders: _authHeaders,
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -370,204 +303,24 @@ class _HomeScreenState extends State<HomeScreen> {
     if (birthDate == null || '$birthDate'.trim().isEmpty) {
       return RelationshipAssessmentStatus.profileIncomplete;
     }
+    return _loadedRelationshipStatus ?? RelationshipAssessmentStatus.notStarted;
+  }
+
+  RelationshipAssessmentStatus _relationshipStatusFromCatalog(List raw) {
+    final personalAssessments = raw.whereType<Map>().where(
+      (assessment) => assessment['audience'] == 'individual',
+    );
+    if (personalAssessments.any(
+      (assessment) => assessment['completionStatus'] == 'in_progress',
+    )) {
+      return RelationshipAssessmentStatus.inProgress;
+    }
+    if (personalAssessments.any(
+      (assessment) => assessment['completionStatus'] == 'completed',
+    )) {
+      return RelationshipAssessmentStatus.resultReady;
+    }
     return RelationshipAssessmentStatus.notStarted;
-  }
-
-  Widget _sectionTitle(String title, VoidCallback? onTap) {
-    return Row(
-      children: [
-        Expanded(child: Text(title, style: mainTitle(size: 20))),
-        if (onTap != null)
-          IconButton(
-            tooltip: '전체 보기',
-            onPressed: onTap,
-            icon: const Icon(Icons.arrow_forward_rounded),
-          ),
-      ],
-    );
-  }
-
-  Widget _momentPreview() {
-    if (_loading) {
-      return const SizedBox(
-        height: 84,
-        child: Center(child: CircularProgressIndicator(color: kMainRose)),
-      );
-    }
-
-    final hasTodayPins = _todayPins.isNotEmpty;
-    final hasTodayMoments = _todayMoments.isNotEmpty;
-
-    if (!hasTodayPins && !hasTodayMoments) {
-      return MainCard(
-        padding: EdgeInsets.zero,
-        child: Material(
-          type: MaterialType.transparency,
-          borderRadius: BorderRadius.circular(22),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(22),
-            onTap: () => widget.onNavigate(1),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  const Icon(Icons.auto_stories_outlined, color: kMainRose),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '아직 오늘 남긴 기록이 없어요',
-                          style: mainBody(weight: FontWeight.w700),
-                        ),
-                        Text(
-                          '오늘의 추억이나 장소를 기록해보세요!',
-                          style: mainBody(size: 12, color: kMainSub),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Icon(
-                    Icons.arrow_forward_ios_rounded,
-                    size: 16,
-                    color: kMainMuted,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Column(
-      children: [
-        if (hasTodayPins) ...[
-          MainCard(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.place_rounded, color: kMainSage, size: 18),
-                    const SizedBox(width: 6),
-                    Text(
-                      '오늘 추가한 비밀지도 장소',
-                      style: mainBody(weight: FontWeight.w800, size: 13),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: _todayPins.map((pin) {
-                    final cat = pin['category'] ?? '기타';
-                    return InkWell(
-                      onTap: () => widget.onNavigate(1),
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: kMainSageSoft,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          '📍 ${pin['place_name']} ($cat)',
-                          style: mainBody(
-                            size: 12,
-                            color: kMainInk,
-                            weight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
-        if (hasTodayMoments) ...[
-          MainCard(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.photo_library_rounded,
-                      color: kMainRose,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      '오늘 업로드한 이미지/순간',
-                      style: mainBody(weight: FontWeight.w800, size: 13),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  height: 100,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _todayMoments.length,
-                    separatorBuilder: (_, a) => const SizedBox(width: 10),
-                    itemBuilder: (ctx, i) {
-                      final m = _todayMoments[i];
-                      final mediaUrl = '${m['media_url'] ?? ''}'.trim();
-                      final fullUrl = mediaUrl.isEmpty
-                          ? ''
-                          : (mediaUrl.startsWith('http')
-                                ? mediaUrl
-                                : '${_auth.baseUrl}$mediaUrl');
-                      return GestureDetector(
-                        onTap: () => widget.onNavigate(1),
-                        child: AspectRatio(
-                          aspectRatio: 1.0,
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Container(
-                              color: kMainRoseSoft,
-                              child: fullUrl.isNotEmpty
-                                  ? Image.network(
-                                      fullUrl,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (_, a, b) => const Center(
-                                        child: Icon(
-                                          Icons.broken_image_outlined,
-                                          color: kMainMuted,
-                                        ),
-                                      ),
-                                    )
-                                  : const Center(
-                                      child: Icon(
-                                        Icons.note_alt_outlined,
-                                        color: kMainRose,
-                                        size: 28,
-                                      ),
-                                    ),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ],
-    );
   }
 }
 
@@ -706,38 +459,58 @@ class _MemoryCardWidget extends StatelessWidget {
   }
 }
 
-class _Shortcut extends StatelessWidget {
+class _QuickAction extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
   final Color color;
+  final Color background;
   final VoidCallback onTap;
 
-  const _Shortcut({
+  const _QuickAction({
     required this.icon,
     required this.title,
     required this.subtitle,
     required this.color,
+    required this.background,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return MainCard(
-      padding: EdgeInsets.zero,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(icon, color: color),
-              const SizedBox(height: 16),
-              Text(title, style: mainBody(weight: FontWeight.w800)),
-              Text(subtitle, style: mainBody(size: 12, color: kMainSub)),
-            ],
+    return Padding(
+      padding: const EdgeInsets.only(right: 10),
+      child: SizedBox(
+        width: 118,
+        child: Material(
+          color: kMainPaper,
+          borderRadius: BorderRadius.circular(20),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(20),
+            child: Padding(
+              padding: const EdgeInsets.all(13),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: background,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(icon, color: color, size: 19),
+                  ),
+                  const Spacer(),
+                  Text(
+                    title,
+                    style: mainBody(size: 13, weight: FontWeight.w800),
+                  ),
+                  Text(subtitle, style: mainBody(size: 11, color: kMainMuted)),
+                ],
+              ),
+            ),
           ),
         ),
       ),

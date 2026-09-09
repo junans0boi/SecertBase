@@ -167,6 +167,27 @@ class IconBadge extends StatelessWidget {
   }
 }
 
+class BrandLogo extends StatelessWidget {
+  final double size;
+
+  const BrandLogo({super.key, this.size = 96});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: '비밀기지 로고',
+      image: true,
+      child: Image.asset(
+        'assets/branding/secret_base_symbol.png',
+        width: size,
+        height: size,
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.high,
+      ),
+    );
+  }
+}
+
 // Keep DoodleBadge as alias for backward compat
 class DoodleBadge extends StatelessWidget {
   final Widget child;

@@ -150,7 +150,7 @@ class _PartnerScreenState extends State<PartnerScreen> {
                 constraints: const BoxConstraints(maxWidth: 400),
                 child: Column(
                   children: [
-                    const CozyMascot(size: 80),
+                    const BrandLogo(size: 80),
                     const SizedBox(height: 20),
                     Text('연결 대기 공간', style: mainTitle(size: 30)),
                     const SizedBox(height: 12),

@@ -84,6 +84,18 @@ test(
       assert.equal(current.status, 200, JSON.stringify(currentBody));
       assert.deepEqual(currentBody.result, submittedBody.result);
 
+      const history = await server.request(
+        '/relationship/assessment-results/attachment/history',
+        { token: aliceToken },
+      );
+      const historyBody = await history.json();
+      assert.equal(history.status, 200, JSON.stringify(historyBody));
+      assert.equal(historyBody.history.length, 1);
+      assert.equal(historyBody.history[0].answers.length, 12);
+      assert.equal(historyBody.history[0].answers[0].questionKey, 'q01');
+      assert.equal(historyBody.history[0].answers[0].value, 4);
+      assert.equal(historyBody.history[0].answers[0].label, '그렇다');
+
       const partnerResult = await server.request(
         '/relationship/assessment-results/attachment/current',
         { token: bobToken },

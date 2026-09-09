@@ -2332,15 +2332,30 @@ class _MapScreenState extends State<MapScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (!widget.closeAsModal) ...[
+                    Row(
+                      children: [
+                        const BrandLogo(size: 34),
+                        const SizedBox(width: 9),
+                        Text('우리 지도', style: mainTitle(size: 25)),
+                        const Spacer(),
+                        Text(
+                          '${_pins.length}곳',
+                          style: mainBody(size: 12, color: kMainSub),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   Row(
                     children: [
-                      _RoundIconButton(
-                        icon: widget.closeAsModal
-                            ? Icons.close_rounded
-                            : Icons.arrow_back_ios_new_rounded,
-                        onTap: () => Navigator.pop(context),
-                      ),
-                      const SizedBox(width: 8),
+                      if (widget.closeAsModal) ...[
+                        _RoundIconButton(
+                          icon: Icons.close_rounded,
+                          onTap: () => Navigator.pop(context),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
                       Expanded(
                         child: Container(
                           height: 48,

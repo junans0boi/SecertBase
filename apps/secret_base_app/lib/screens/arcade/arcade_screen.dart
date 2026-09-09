@@ -114,7 +114,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
   Widget _buildWalletBar() {
     final balance = _balance;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+      padding: const EdgeInsets.only(bottom: 18),
       child: Row(
         children: [
           Container(
@@ -569,88 +569,83 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     _GameInfo game,
     bool connected,
   ) {
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Game info + start button
-          MainCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 64,
-                      height: 64,
-                      decoration: BoxDecoration(
-                        color: game.background,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Icon(game.icon, color: game.color, size: 32),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Game info + start button
+        MainCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      color: game.background,
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(game.title, style: mainTitle(size: 22)),
-                          const SizedBox(height: 4),
-                          Text(
-                            game.description,
-                            style: mainBody(size: 13, color: kMainSub),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 18),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: connected ? () => _open(context, game) : null,
-                    icon: const Icon(Icons.play_arrow_rounded, size: 22),
-                    label: const Text(
-                      '시작하기',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      backgroundColor: connected ? game.color : kMainMuted,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
+                    child: Icon(game.icon, color: game.color, size: 32),
                   ),
-                ),
-                if (!connected) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    '상대방 연결을 확인하고 있어요',
-                    textAlign: TextAlign.center,
-                    style: mainBody(size: 12, color: kMainMuted),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(game.title, style: mainTitle(size: 22)),
+                        const SizedBox(height: 4),
+                        Text(
+                          game.description,
+                          style: mainBody(size: 13, color: kMainSub),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 18),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: connected ? () => _open(context, game) : null,
+                  icon: const Icon(Icons.play_arrow_rounded, size: 22),
+                  label: const Text(
+                    '시작하기',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    backgroundColor: connected ? game.color : kMainMuted,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              if (!connected) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '상대방 연결을 확인하고 있어요',
+                  textAlign: TextAlign.center,
+                  style: mainBody(size: 12, color: kMainMuted),
+                ),
               ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          // Future: stats row
-          Row(
-            children: [
-              Expanded(child: _buildRecordCard(game.type)),
-              const SizedBox(width: 10),
-              Expanded(child: _buildWalletCard()),
             ],
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 12),
+        // Future: stats row
+        Row(
+          children: [
+            Expanded(child: _buildRecordCard(game.type)),
+            const SizedBox(width: 10),
+            Expanded(child: _buildWalletCard()),
+          ],
+        ),
+      ],
     );
   }
 
@@ -696,44 +691,66 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     final selected = _selectedIdx != null ? _games[_selectedIdx!] : null;
 
     return CozyPage(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 32),
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('함께 놀기', style: mainTitle(size: 32)),
-                const SizedBox(height: 4),
-                Text(
-                  connected ? '상대방과 실시간으로 시작할 수 있어요' : '상대방 연결을 확인하고 있어요',
-                  style: mainBody(size: 13, color: kMainSub),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('둘이서 놀기', style: mainTitle(size: 30)),
+                    const SizedBox(height: 4),
+                    Text(
+                      connected ? '오늘은 어떤 게임으로 놀아볼까요?' : '상대방 연결을 확인하고 있어요',
+                      style: mainBody(size: 13, color: kMainSub),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 10),
-              ],
-            ),
+              ),
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: kMainPaper,
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: const Icon(Icons.sports_esports_outlined),
+              ),
+            ],
           ),
+          const SizedBox(height: 20),
           _buildWalletBar(),
+          Row(
+            children: [
+              Expanded(child: Text('게임 고르기', style: mainTitle(size: 20))),
+              Text(
+                '${_games.length}가지',
+                style: mainBody(size: 12, color: kMainMuted),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           SizedBox(
             height: 88,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 18),
+              clipBehavior: Clip.none,
               itemCount: _games.length,
               separatorBuilder: (context, index) => const SizedBox(width: 8),
               itemBuilder: (context, i) => _buildStoryIcon(i),
             ),
           ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
-              child: selected == null
-                  ? _buildEmptyState()
-                  : _buildDetailCard(context, selected, connected),
-            ),
-          ),
+          const SizedBox(height: 20),
+          if (selected == null)
+            MainCard(
+              padding: const EdgeInsets.symmetric(vertical: 38),
+              child: _buildEmptyState(),
+            )
+          else
+            _buildDetailCard(context, selected, connected),
         ],
       ),
     );

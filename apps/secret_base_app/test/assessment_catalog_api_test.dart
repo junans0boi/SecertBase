@@ -30,6 +30,7 @@ void main() {
                   'candidateQuestionCount': 24,
                   'activeQuestionCount': 12,
                   'completionStatus': 'not_started',
+                  'hasResultHistory': true,
                   'dimensions': [
                     {'key': 'reassurance', 'title': '확인과 안심', 'order': 1},
                   ],
@@ -61,6 +62,7 @@ void main() {
     expect(assessments.single.version, 'v1');
     expect(assessments.single.candidateQuestionCount, 24);
     expect(assessments.single.activeQuestionCount, 12);
+    expect(assessments.single.hasResultHistory, isTrue);
     expect(assessments.single.questions.single.reverseScored, isTrue);
   });
 

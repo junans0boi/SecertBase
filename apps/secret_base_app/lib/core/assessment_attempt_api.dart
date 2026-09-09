@@ -263,12 +263,14 @@ class AssessmentHistoryItem {
   final String version;
   final String? createdAt;
   final AssessmentResult result;
+  final List<AssessmentHistoryAnswer> answers;
 
   const AssessmentHistoryItem({
     required this.id,
     required this.version,
     required this.createdAt,
     required this.result,
+    this.answers = const [],
   });
 
   factory AssessmentHistoryItem.fromJson(Map<String, dynamic> json) {
@@ -281,8 +283,48 @@ class AssessmentHistoryItem {
       version: '${json['version'] ?? ''}',
       createdAt: json['createdAt'] == null ? null : '${json['createdAt']}',
       result: AssessmentResult.fromJson(Map<String, dynamic>.from(rawResult)),
+      answers: (json['answers'] as List? ?? const [])
+          .map(
+            (answer) => AssessmentHistoryAnswer.fromJson(
+              Map<String, dynamic>.from(answer as Map),
+            ),
+          )
+          .toList(growable: false),
     );
   }
+}
+
+class AssessmentHistoryAnswer {
+  final String questionKey;
+  final String prompt;
+  final int order;
+  final String? dimensionTitle;
+  final int value;
+  final String label;
+  final bool reverseScored;
+
+  const AssessmentHistoryAnswer({
+    required this.questionKey,
+    required this.prompt,
+    required this.order,
+    required this.dimensionTitle,
+    required this.value,
+    required this.label,
+    required this.reverseScored,
+  });
+
+  factory AssessmentHistoryAnswer.fromJson(Map<String, dynamic> json) =>
+      AssessmentHistoryAnswer(
+        questionKey: '${json['questionKey'] ?? ''}',
+        prompt: '${json['prompt'] ?? ''}',
+        order: int.tryParse('${json['order']}') ?? 0,
+        dimensionTitle: json['dimensionTitle'] == null
+            ? null
+            : '${json['dimensionTitle']}',
+        value: int.tryParse('${json['value']}') ?? 0,
+        label: '${json['label'] ?? ''}',
+        reverseScored: json['reverseScored'] == true,
+      );
 }
 
 class ExplanationGeneration {

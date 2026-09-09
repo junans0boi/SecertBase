@@ -106,7 +106,7 @@ class _EntryScreenState extends State<EntryScreen>
         const SizedBox(height: 6),
         Text('두 분만의 비밀기지', style: mainTitle(size: 34)),
         const SizedBox(height: 28),
-        const CozyMascot(size: 100),
+        const BrandLogo(size: 100),
         const SizedBox(height: 20),
         Text(
           '오늘의 비밀기지로 들어가 볼까요?',

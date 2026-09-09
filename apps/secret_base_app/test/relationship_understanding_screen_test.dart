@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:secret_base_app/core/assessment_catalog_api.dart';
 import 'package:secret_base_app/core/birth_profile_api.dart';
 import 'package:secret_base_app/screens/relationship/relationship_understanding_screen.dart';
 
@@ -205,6 +206,57 @@ void main() {
     expect(find.byKey(const Key('relationship_personal_area')), findsOneWidget);
   });
 
+  testWidgets('shows result-ready status from the saved assessment catalog', (
+    tester,
+  ) async {
+    final profileApi = BirthProfileApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient((_) async => http.Response(_profileResponse, 200)),
+    );
+    final catalogApi = AssessmentCatalogApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient(
+        (_) async => http.Response.bytes(
+          utf8.encode(
+            jsonEncode({
+              'ok': true,
+              'assessments': [
+                {
+                  'code': 'attachment',
+                  'audience': 'individual',
+                  'title': '애착과 안정감',
+                  'description': '검사 설명',
+                  'version': 'v1',
+                  'candidateQuestionCount': 24,
+                  'activeQuestionCount': 12,
+                  'completionStatus': 'completed',
+                  'dimensions': const [],
+                  'questions': const [],
+                },
+              ],
+            }),
+          ),
+          200,
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RelationshipUnderstandingScreen(
+          api: profileApi,
+          assessmentCatalogApi: catalogApi,
+          assessmentStatus: RelationshipAssessmentStatus.notStarted,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('확인할 결과가 준비됐어요'), findsOneWidget);
+  });
+
   testWidgets('shows the birth profile form when it is not saved', (
     tester,
   ) async {
@@ -225,7 +277,7 @@ void main() {
     expect(find.widgetWithText(FilledButton, '저장하기'), findsOneWidget);
   });
 
-  testWidgets('hub keeps personal area available and explains missing couple', (
+  testWidgets('hub keeps personal area available and locks the couple tab', (
     tester,
   ) async {
     final api = BirthProfileApi(
@@ -247,7 +299,37 @@ void main() {
 
     expect(find.byKey(const Key('relationship_personal_area')), findsOneWidget);
     expect(find.text('파트너가 없어도 내 감정과 관계 패턴을 먼저 살펴볼 수 있어요.'), findsOneWidget);
-    expect(find.text('커플 영역은 잠겨 있어요'), findsOneWidget);
+    expect(find.byType(TabBar), findsOneWidget);
+    expect(find.text('커플'), findsOneWidget);
     expect(find.text('진행 중인 검사가 있어요'), findsOneWidget);
+  });
+
+  testWidgets('separates personal and couple areas with top tabs', (
+    tester,
+  ) async {
+    final api = BirthProfileApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient((_) async => http.Response(_profileResponse, 200)),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RelationshipUnderstandingScreen(api: api, hasActiveCouple: true),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TabBar), findsOneWidget);
+    expect(find.text('개인'), findsOneWidget);
+    expect(find.text('커플'), findsOneWidget);
+    expect(find.text('개인 검사 보기'), findsOneWidget);
+    expect(find.text('커플 검사 보기'), findsNothing);
+
+    await tester.tap(find.text('커플'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('개인 검사 보기'), findsNothing);
+    expect(find.text('커플 검사 보기'), findsOneWidget);
   });
 }
