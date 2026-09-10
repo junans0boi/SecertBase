@@ -10,6 +10,8 @@ import '../secret_base/secret_base_screen.dart';
 import '../relationship/relationship_understanding_screen.dart';
 import '../../core/fortune_api.dart';
 import '../relationship/fortune_screen.dart';
+import '../relationship/saju_screen.dart';
+import '../relationship/tarot_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final ValueChanged<int> onNavigate;
@@ -105,8 +107,6 @@ class _HomeScreenState extends State<HomeScreen> {
             _coupleCard(),
             const SizedBox(height: 14),
             _quickActions(),
-            const SizedBox(height: 22),
-            _fortuneCard(),
             const SizedBox(height: 18),
             _relationshipCard(),
             if (_memoryCard != null) ...[
@@ -151,28 +151,12 @@ class _HomeScreenState extends State<HomeScreen> {
         clipBehavior: Clip.none,
         children: [
           _QuickAction(
-            icon: Icons.auto_stories_rounded,
-            title: '오늘 기록',
-            subtitle: '우리의 순간',
-            color: kMainRose,
-            background: kMainRoseSoft,
-            onTap: () => widget.onNavigate(1),
-          ),
-          _QuickAction(
             icon: Icons.map_outlined,
             title: '비밀 지도',
             subtitle: '장소 남기기',
             color: kMainSage,
             background: kMainSageSoft,
             onTap: () => widget.onNavigate(2),
-          ),
-          _QuickAction(
-            icon: Icons.sports_esports_outlined,
-            title: '함께 놀기',
-            subtitle: '게임 한 판',
-            color: kMainSky,
-            background: kMainSkySoft,
-            onTap: () => widget.onNavigate(3),
           ),
           _QuickAction(
             icon: Icons.cottage_outlined,
@@ -188,6 +172,43 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
+          ),
+          _QuickAction(
+            icon: Icons.auto_awesome_outlined,
+            title: '운세',
+            subtitle: '오늘의 흐름',
+            color: kMainRose,
+            background: kMainRoseSoft,
+            onTap: () => Navigator.of(context).push<void>(
+              MaterialPageRoute(
+                builder: (_) => RelationshipFortuneScreen(
+                  api: FortuneApi(
+                    baseUrl: _auth.baseUrl,
+                    token: _auth.token ?? '',
+                  ),
+                ),
+              ),
+            ),
+          ),
+          _QuickAction(
+            icon: Icons.style_outlined,
+            title: '타로',
+            subtitle: '오늘의 카드',
+            color: kMainLilac,
+            background: kMainLilacSoft,
+            onTap: () => Navigator.of(context).push<void>(
+              MaterialPageRoute(builder: (_) => const TarotScreen()),
+            ),
+          ),
+          _QuickAction(
+            icon: Icons.auto_graph_rounded,
+            title: '사주',
+            subtitle: '나의 흐름',
+            color: kMainSage,
+            background: kMainSageSoft,
+            onTap: () => Navigator.of(
+              context,
+            ).push<void>(MaterialPageRoute(builder: (_) => const SajuScreen())),
           ),
         ],
       ),
@@ -239,59 +260,6 @@ class _HomeScreenState extends State<HomeScreen> {
           builder: (_) => RelationshipUnderstandingScreen(
             assessmentStatus: status,
             hasActiveCouple: _coupleInfo != null,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _fortuneCard() {
-    return MainCard(
-      padding: EdgeInsets.zero,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(22),
-        onTap: () => Navigator.of(context).push<void>(
-          MaterialPageRoute(
-            builder: (_) => RelationshipFortuneScreen(
-              api: FortuneApi(baseUrl: _auth.baseUrl, token: _auth.token ?? ''),
-            ),
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: kMainRoseSoft,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Icon(
-                  Icons.auto_awesome_outlined,
-                  color: kMainRose,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('오늘의 운세', style: mainBody(weight: FontWeight.w800)),
-                    const SizedBox(height: 4),
-                    Text(
-                      '오늘의 감정 흐름과 우리 사이의 신호를 확인해보세요',
-                      style: mainBody(size: 12, color: kMainSub),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.arrow_forward_ios_rounded,
-                size: 16,
-                color: kMainMuted,
-              ),
-            ],
           ),
         ),
       ),
