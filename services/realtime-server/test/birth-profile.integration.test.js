@@ -45,6 +45,7 @@ test(
       assert.deepEqual(initialBody.birthProfile, {
         calendarType: 'solar',
         birthDate: '2000-01-01',
+        lunarLeapMonth: false,
         birthTime: null,
         timezone: 'Asia/Seoul',
         birthPlace: null,
@@ -56,6 +57,7 @@ test(
         body: {
           calendarType: 'lunar',
           birthDate: '1999-12-31',
+          lunarLeapMonth: true,
           birthTime: '23:05',
           timezone: 'Asia/Tokyo',
           birthPlace: '서울특별시',
@@ -67,6 +69,7 @@ test(
       assert.deepEqual(updatedBody.birthProfile, {
         calendarType: 'lunar',
         birthDate: '1999-12-31',
+        lunarLeapMonth: true,
         birthTime: '23:05:00',
         timezone: 'Asia/Tokyo',
         birthPlace: '서울특별시',
@@ -83,6 +86,7 @@ test(
       assert.deepEqual((await bobProfile.json()).birthProfile, {
         calendarType: 'solar',
         birthDate: '2000-01-01',
+        lunarLeapMonth: false,
         birthTime: null,
         timezone: 'Asia/Seoul',
         birthPlace: null,
@@ -106,6 +110,7 @@ test(
         ['birthDate', '2999-01-01', 'future_birth_date'],
         ['birthTime', '25:00', 'invalid_birth_time'],
         ['timezone', 'not/a-timezone', 'invalid_timezone'],
+        ['lunarLeapMonth', 'yes', 'invalid_lunar_leap_month'],
       ];
 
       for (const [field, value, reason] of cases) {

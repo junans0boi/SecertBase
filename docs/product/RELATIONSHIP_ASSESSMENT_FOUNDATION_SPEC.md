@@ -1,10 +1,41 @@
 # Secret Base 관계 이해 기반 스펙
 
+## 문서 상태
+
+이 문서는 관계 이해 기능의 제품 스펙과 결정 사항을 보존한다. 현재 구현 현황, 파일 위치, 엔드포인트, 배포 주의사항은 [관계 이해 기능 구현 정리](./RELATIONSHIP_UNDERSTANDING_IMPLEMENTATION.md)를 기준으로 확인한다.
+운세 분리·마음관리·검사 UX 확장 요구사항은 [운세·마음관리 확장 스펙](./FORTUNE_AND_MINDCARE_EXPANSION_SPEC.md)에서 별도로 관리한다.
+
+## 초기 설계 브리프
+
+이 기능은 아래의 초기 협업 기준에서 출발했다. 이후 세부 결정이 바뀌더라도
+현재 적용된 결정은 이 문서의 `Implementation Decisions`와 ADR을 우선한다.
+
+### 기술 기준
+
+- 앱: Flutter
+- 백엔드: Node.js, Socket.IO, REST API
+- 데이터베이스: MariaDB
+- LLM: 무료 API를 검토하되, 핵심 기능은 LLM 없이 동작하고 provider는 고정하지 않음
+
+### 설계·구현 순서
+
+1. 기존 `routes.js`와 `schema.sql` 및 현재 운영 구조를 먼저 파악한다.
+2. 데이터 모델을 정한다.
+3. REST API 엔드포인트를 정한다.
+4. Flutter 연동을 구현한다.
+5. grilling으로 요구사항을 압박 검토하고 `CONTEXT.md`와 필요한 ADR을 갱신한다.
+6. 큰 작업은 스펙과 작은 티켓으로 분해한 뒤, 티켓 단위로 TDD·코드 리뷰·API 테스트·Playwright 검증을 반복한다.
+7. 구현 완료 후 전체 검증을 하고, 마지막으로 사용자가 실제 환경에서 직접 테스트한다.
+
+이 브리프의 `PostgreSQL`, 특정 Anthropic 모델, LLM 필수 처리 같은 초기 가정은
+현재 운영 구조와 합의된 결정에 따라 MariaDB, 선택적 무료 provider, 결정론적
+핵심 로직으로 정정되었다.
+
 ## Problem Statement
 
 Secret Base는 커플이 함께 사용하는 앱이지만, 두 사람이 자신의 감정·유대·의존·갈등 패턴을 안전하게 이해할 수 있는 공통 언어가 없다. 한 사용자의 개인적 경향과 두 사람의 관계 역학을 구분하지 않으면 개인 결과가 파트너에게 과도하게 노출되거나, 관계 문제를 누가 옳고 그른지의 판정으로 바꾸기 쉽다.
 
-현재 앱에는 사용자의 생년월일만 있고, 관계 이해를 위한 버전 있는 심리검사·결과·궁합 분석 흐름이 없다. LLM이 해석을 도울 수 있더라도 점수와 권한이 모델 출력에 종속되어서는 안 된다.
+초기 설계 시 앱에는 관계 이해를 위한 버전 있는 심리검사·결과·궁합 분석 흐름이 없었다. 이 기능은 LLM이 해석을 도울 수 있더라도 점수와 권한이 모델 출력에 종속되지 않아야 한다는 원칙에서 출발했다.
 
 ## Solution
 
@@ -32,30 +63,31 @@ LLM은 검사 결과와 궁합 분석의 자연어 설명을 보조하는 선택
 14. As a user, I want to retake an individual assessment, so that I can compare my current pattern with a later attempt.
 15. As a user, I want previous individual attempts to remain available to me, so that changes over time are not erased.
 16. As a user, I want the newest completed assessment result to be clearly identified as current, so that I know which result is used for relationship analysis.
-17. As a couple member, I want to see which couple assessments require my partner's completion, so that I understand why a shared result is not ready yet.
-18. As a user, I want to answer couple assessment questions privately, so that my raw answers are not exposed to my partner.
-19. As a couple member, I want a couple assessment result to appear only after both people complete the same version, so that the result represents both sides of the relationship.
-20. As a couple member, I want the shared couple result to describe relationship patterns rather than blame either person, so that we can use it as a conversation aid.
-21. As a couple member, I want the shared result to avoid showing my partner's raw answers or private individual result, so that the couple space does not bypass personal privacy.
-22. As a couple member, I want the shared compatibility screen to show which assessment-level analyses are ready, so that one unfinished assessment does not hide every completed result.
-23. As a couple member, I want a compatibility analysis to update when either person's current result changes, so that the shared result reflects the latest same-version inputs.
-24. As a couple member, I want the deterministic score and relationship interpretation to be reproducible, so that the same inputs produce the same core result.
-25. As a user, I want a natural-language explanation when the configured free LLM provider is available, so that the structured result is easier to understand.
-26. As a user, I want to receive a valid fixed-template explanation when the LLM provider is unavailable, so that a provider outage does not make my result unusable.
-27. As a user, I want the LLM to receive only dimension summaries and limited metadata, so that individual question wording and raw answers are not sent for optional explanation.
-28. As a user, I want an LLM explanation to be regenerated only when I explicitly request it, so that generation is predictable and does not silently change my result.
-29. As a user, I want the app to label results as non-clinical self-understanding content, so that I do not mistake them for hospital diagnosis or treatment.
-30. As a user, I want to enter the feature from a home card, so that I can find relationship understanding without changing the existing bottom navigation.
-31. As a user, I want one dedicated relationship understanding screen for profile, individual assessments, couple assessments, and compatibility, so that the feature has a coherent home.
-32. As a user, I want to resume an unfinished assessment from the dedicated screen, so that I do not have to search for it again.
-33. As a user, I want the app to explain why a shared result is pending, so that incomplete partner participation is not presented as an error.
-34. As an active couple member, I want shared results to be unavailable after separation, so that inactive couples cannot continue accessing the shared space.
-35. As a reunited couple member, I want the existing Couple identity and its data lifecycle to be respected, so that reunion does not accidentally create a second relationship record.
-36. As a user, I want account deletion and couple separation to preserve the distinction between my personal history and shared couple data, so that privacy behavior is understandable.
-37. As a maintainer, I want each assessment definition and question set to have an immutable version, so that old results remain interpretable after future question changes.
-38. As a maintainer, I want reverse-scored questions to be declared in the question definition, so that scoring rules are explicit and testable.
-39. As a maintainer, I want the LLM provider to be replaceable through a server adapter, so that a free provider's quota or availability does not force a product rewrite.
-40. As a maintainer, I want API and Flutter tests to exercise public behavior, so that refactoring internal scoring or storage does not invalidate tests unnecessarily.
+17. As a user, I want to open a previous result and see the questions and answers I selected at that time, so that a score can be understood from the original responses.
+18. As a couple member, I want to see which couple assessments require my partner's completion, so that I understand why a shared result is not ready yet.
+19. As a user, I want to answer couple assessment questions privately, so that my raw answers are not exposed to my partner.
+20. As a couple member, I want a couple assessment result to appear only after both people complete the same version, so that the result represents both sides of the relationship.
+21. As a couple member, I want the shared couple result to describe relationship patterns rather than blame either person, so that we can use it as a conversation aid.
+22. As a couple member, I want the shared result to avoid showing my partner's raw answers or private individual result, so that the couple space does not bypass personal privacy.
+23. As a couple member, I want the shared compatibility screen to show which assessment-level analyses are ready, so that one unfinished assessment does not hide every completed result.
+24. As a couple member, I want a compatibility analysis to update when either person's current result changes, so that the shared result reflects the latest same-version inputs.
+25. As a couple member, I want the deterministic score and relationship interpretation to be reproducible, so that the same inputs produce the same core result.
+26. As a user, I want a natural-language explanation when the configured free LLM provider is available, so that the structured result is easier to understand.
+27. As a user, I want to receive a valid fixed-template explanation when the LLM provider is unavailable, so that a provider outage does not make my result unusable.
+28. As a user, I want the LLM to receive only dimension summaries and limited metadata, so that individual question wording and raw answers are not sent for optional explanation.
+29. As a user, I want an LLM explanation to be regenerated only when I explicitly request it, so that generation is predictable and does not silently change my result.
+30. As a user, I want the app to label results as non-clinical self-understanding content, so that I do not mistake them for hospital diagnosis or treatment.
+31. As a user, I want to enter the feature from a home card, so that I can find relationship understanding without changing the existing bottom navigation.
+32. As a user, I want one dedicated relationship understanding screen for profile, individual assessments, couple assessments, and compatibility, so that the feature has a coherent home.
+33. As a user, I want to resume an unfinished assessment from the dedicated screen, so that I do not have to search for it again.
+34. As a user, I want the app to explain why a shared result is pending, so that incomplete partner participation is not presented as an error.
+35. As an active couple member, I want shared results to be unavailable after separation, so that inactive couples cannot continue accessing the shared space.
+36. As a reunited couple member, I want the existing Couple identity and its data lifecycle to be respected, so that reunion does not accidentally create a second relationship record.
+37. As a user, I want account deletion and couple separation to preserve the distinction between my personal history and shared couple data, so that privacy behavior is understandable.
+38. As a maintainer, I want each assessment definition and question set to have an immutable version, so that old results remain interpretable after future question changes.
+39. As a maintainer, I want reverse-scored questions to be declared in the question definition, so that scoring rules are explicit and testable.
+40. As a maintainer, I want the LLM provider to be replaceable through a server adapter, so that a free provider's quota or availability does not force a product rewrite.
+41. As a maintainer, I want API and Flutter tests to exercise public behavior, so that refactoring internal scoring or storage does not invalidate tests unnecessarily.
 
 ## Implementation Decisions
 
@@ -69,6 +101,7 @@ LLM은 검사 결과와 궁합 분석의 자연어 설명을 보조하는 선택
 - Question order is fixed for a version. The client may save progress and resume an attempt.
 - Each attempt stores its assessment version, user, optional Couple scope, status, answers, deterministic dimension scores, overall tendency, and timestamps. Attempts are append-only from the user's perspective; retakes create new attempts.
 - The newest completed attempt for a user and assessment version is the current personal result. Older completed attempts remain accessible only to that user.
+- Each completed personal result keeps the link to its source attempt and question answers. The history list opens a read-only detail view so users can inspect the questions, dimensions, and Likert choices that produced that result.
 - Individual attempt answers and personal results are user-scoped. They are never returned through a partner-facing or shared compatibility response.
 - Couple attempts are authored separately by each user. A shared couple result becomes ready only when both active Couple members have completed the same couple-assessment version. Each member's raw responses remain private.
 - Compatibility analysis is produced per assessment code/version as its source pair becomes complete, rather than blocking the entire compatibility area until all seven assessments are done. The screen aggregates ready and pending analysis cards.
@@ -88,6 +121,7 @@ LLM은 검사 결과와 궁합 분석의 자연어 설명을 보조하는 선택
 - Separation immediately removes access to shared compatibility and couple-assessment results through active-Couple authorization. Personal assessment history remains user-scoped according to existing account lifecycle policy.
 - Flutter adds a dedicated relationship-understanding flow reachable from a Home card. It does not add a bottom-navigation destination in this scope.
 - Flutter uses a dedicated API client with injectable `http.Client`, typed response models, progress/resume state, explicit privacy labels, and fallback rendering for unavailable explanations.
+- The personal assessment catalog uses explicit actions (`start`, `resume`, `retake`, and `view history`) instead of making the entire card an ambiguous new-assessment trigger. The relationship hub separates personal and couple areas with top tabs.
 - Private-counseling at-rest encryption and operator access audit logs are not in this release. The current operational policy allows DB operators to inspect raw private rows, while partner and general authenticated API paths remain blocked.
 - Streaming responses, background generation, push notification, premium gate, and clinical diagnosis are out of scope.
 
@@ -99,6 +133,7 @@ LLM은 검사 결과와 궁합 분석의 자연어 설명을 보조하는 선택
 - Server tests use a deterministic fake LLM provider at the provider boundary so explanation success, disabled, timeout, and failure behavior can be tested without a real external API.
 - Flutter API tests use an injected `http.Client` to assert request method, URL, authorization header, JSON payload, response parsing, and error reasons.
 - Flutter widget tests cover the relationship-understanding entry card, assessment progress/resume, personal result privacy labels, pending couple result state, ready couple result state, and fallback explanation state.
+- Flutter widget tests also cover read-only assessment history, opening a result row, and rendering the stored question-level answers.
 - Existing Node integration tests using `createApiTestServer` and existing Flutter API tests using mock HTTP clients are the prior art for these seams.
 - LLM output wording is not asserted as an exact string. Tests assert status, presence of a bounded explanation, deterministic fallback behavior, and that structured scores remain unchanged.
 
@@ -106,7 +141,7 @@ LLM은 검사 결과와 궁합 분석의 자연어 설명을 보조하는 선택
 
 - Medical diagnosis, clinical treatment, crisis assessment, or claims that the custom tests are equivalent to hospital counseling.
 - Adoption, licensing, or validation of an external clinical instrument.
-- Full astronomical/calendar saju calculation and claims of factual prediction.
+- Factual prediction, clinical diagnosis, or claims that the policy-versioned Four Pillars calculation is scientifically verified. The #127 Saju decision and its calculation boundary are recorded in [ADR 0011](../adr/0011-saju-and-tarot-page-contract.md); implementation remains a separate vertical slice.
 - Private-counseling at-rest encryption and operator audit logs.
 - Automatic use of MomentLoop, Today Loop, Secret Map, game, or other app history as LLM context.
 - Streaming LLM responses, autonomous app actions, notifications, and background generation.
@@ -118,4 +153,4 @@ LLM은 검사 결과와 궁합 분석의 자연어 설명을 보조하는 선택
 - The current implementation has both legacy bootstrap schema and runtime schema repair. New feature tables and columns should use ordered migrations and avoid adding new request-time schema creation.
 - The manual test accounts supplied during design are for human smoke testing only. Automated tests must use isolated test data.
 - The feature should visibly state that results are for non-clinical self-understanding and relationship conversation.
-- The first implementation should land as vertical slices: birth profile, one individual assessment, one couple assessment, compatibility gating, then the remaining assessment catalog and optional LLM explanation layer.
+- The vertical slices are now present in the repository: birth profile, four individual assessments, three couple assessments, compatibility gating, fortune, counseling, history detail, and optional explanation generation. Use the implementation document for the current release boundary instead of treating this spec as a deployment checklist.

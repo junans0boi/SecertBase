@@ -15,7 +15,8 @@ void main() {
         captured = request;
         return http.Response(
           '{"ok":true,"birthProfile":{"calendarType":"lunar",'
-          '"birthDate":"1999-12-31","birthTime":"23:05:00",'
+          '"birthDate":"1999-12-31","lunarLeapMonth":true,'
+          '"birthTime":"23:05:00",'
           '"timezone":"Asia/Tokyo","birthPlace":"서울특별시"}}',
           200,
           headers: {'content-type': 'application/json; charset=utf-8'},
@@ -32,6 +33,7 @@ void main() {
     );
     expect(captured.headers['authorization'], 'Bearer jwt-token');
     expect(profile.calendarType, BirthCalendarType.lunar);
+    expect(profile.lunarLeapMonth, isTrue);
     expect(profile.birthTime, '23:05:00');
     expect(profile.birthPlace, '서울특별시');
   });
@@ -45,7 +47,7 @@ void main() {
         captured = request;
         return http.Response(
           '{"ok":true,"birthProfile":{"calendarType":"solar",'
-          '"birthDate":"2000-01-01","birthTime":null,'
+          '"birthDate":"2000-01-01","lunarLeapMonth":false,"birthTime":null,'
           '"timezone":"Asia/Seoul","birthPlace":null}}',
           200,
         );
@@ -56,6 +58,7 @@ void main() {
       const BirthProfileInput(
         calendarType: BirthCalendarType.solar,
         birthDate: '2000-01-01',
+        lunarLeapMonth: false,
         timezone: 'Asia/Seoul',
       ),
     );
@@ -65,6 +68,7 @@ void main() {
     expect(jsonDecode(captured.body), {
       'calendarType': 'solar',
       'birthDate': '2000-01-01',
+      'lunarLeapMonth': false,
       'birthTime': null,
       'timezone': 'Asia/Seoul',
       'birthPlace': null,

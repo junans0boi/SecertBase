@@ -10,11 +10,11 @@ import 'package:secret_base_app/screens/relationship/relationship_understanding_
 
 const _profileResponse =
     '{"ok":true,"birthProfile":{"calendarType":"solar",'
-    '"birthDate":"2000-01-01","birthTime":null,'
+    '"birthDate":"2000-01-01","lunarLeapMonth":false,"birthTime":null,'
     '"timezone":"Asia/Seoul","birthPlace":null}}';
 const _emptyProfileResponse =
     '{"ok":true,"birthProfile":{"calendarType":"solar",'
-    '"birthDate":"","birthTime":null,'
+    '"birthDate":"","lunarLeapMonth":false,"birthTime":null,'
     '"timezone":"Asia/Seoul","birthPlace":null}}';
 
 void main() {
@@ -82,6 +82,7 @@ void main() {
 
       expect(find.text('출생 프로필을 저장했어요.'), findsOneWidget);
       expect(requests.map((request) => request.method), ['GET', 'PATCH']);
+      expect(jsonDecode(requests.last.body)['lunarLeapMonth'], isFalse);
     },
   );
 
@@ -204,6 +205,8 @@ void main() {
     expect(find.text('출생 프로필'), findsNothing);
     expect(find.text('관계 이해 허브'), findsWidgets);
     expect(find.byKey(const Key('relationship_personal_area')), findsOneWidget);
+    expect(find.byKey(const Key('open_saju')), findsOneWidget);
+    expect(find.byKey(const Key('open_tarot')), findsOneWidget);
   });
 
   testWidgets('shows result-ready status from the saved assessment catalog', (

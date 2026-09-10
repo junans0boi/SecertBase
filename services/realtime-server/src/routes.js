@@ -32,6 +32,28 @@ import {
   buildRelationshipFortune,
 } from './relationship-fortune.js';
 import {
+  SAJU_CALCULATION_VERSION,
+  buildRelationshipSaju,
+  calculatePersonalSaju,
+  fingerprintSajuInput,
+  fingerprintSajuPair,
+  getSajuProfileState,
+} from './relationship-saju.js';
+import {
+  TAROT_CATALOG_VERSION,
+  drawDailyTarot,
+} from './relationship-tarot.js';
+import {
+  MINDCARE_CONTENT_VERSION,
+  advanceMindcareState,
+  createMindcareState,
+  detectRiskCandidate,
+  mindcareStateView,
+  resolveMindcareSafety,
+} from './relationship-mindcare.js';
+import { buildSafetyResources } from './relationship-safety.js';
+import { buildAssessmentComparison } from './relationship-comparison.js';
+import {
   buildFortuneContext,
   buildPrivateCounselingContext,
   buildRelationshipContentAttempt,
@@ -537,6 +559,7 @@ const isValidTimezone = (value) => {
 const birthProfileFromRow = (user) => ({
   calendarType: user.BirthCalendarType,
   birthDate: dateOnly(user.BirthDate),
+  lunarLeapMonth: Boolean(user.BirthLunarLeapMonth),
   birthTime: user.BirthTime == null ? null : String(user.BirthTime),
   timezone: user.BirthTimezone,
   birthPlace: user.BirthPlace ?? null,
@@ -946,7 +969,7 @@ router.use(mvpRestFeatureGate(config.PUBLIC_FEATURE_SET));
 router.get('/relationship/birth-profile', async (req, res) => {
   try {
     const result = await query(
-      `SELECT BirthDate, BirthCalendarType, BirthTime, BirthTimezone, BirthPlace
+      `SELECT BirthDate, BirthCalendarType, BirthLunarLeapMonth, BirthTime, BirthTimezone, BirthPlace
        FROM Users WHERE UserId = ?`,
       [req.auth.userId],
     );
@@ -965,6 +988,8 @@ router.patch('/relationship/birth-profile', async (req, res) => {
   try {
     const calendarType = String(req.body?.calendarType ?? '').trim();
     const birthDate = String(req.body?.birthDate ?? '').trim();
+    const lunarLeapMonthValue = req.body?.lunarLeapMonth;
+    const lunarLeapMonth = lunarLeapMonthValue == null ? false : lunarLeapMonthValue;
     const timezone = String(req.body?.timezone ?? '').trim();
     const birthTime = normalizeBirthTime(req.body?.birthTime);
     const birthPlaceValue = req.body?.birthPlace;
@@ -977,6 +1002,12 @@ router.patch('/relationship/birth-profile', async (req, res) => {
     }
     if (!['solar', 'lunar'].includes(calendarType)) {
       return res.status(400).json({ ok: false, reason: 'invalid_calendar_type' });
+    }
+    if (typeof lunarLeapMonth !== 'boolean') {
+      return res.status(400).json({ ok: false, reason: 'invalid_lunar_leap_month' });
+    }
+    if (lunarLeapMonth && calendarType !== 'lunar') {
+      return res.status(400).json({ ok: false, reason: 'invalid_lunar_leap_month' });
     }
     if (!isValidIsoDate(birthDate)) {
       return res.status(400).json({ ok: false, reason: 'invalid_birth_date' });
@@ -996,13 +1027,13 @@ router.patch('/relationship/birth-profile', async (req, res) => {
 
     await query(
       `UPDATE Users
-       SET BirthCalendarType = ?, BirthDate = ?, BirthTime = ?,
+       SET BirthCalendarType = ?, BirthDate = ?, BirthLunarLeapMonth = ?, BirthTime = ?,
            BirthTimezone = ?, BirthPlace = ?
        WHERE UserId = ?`,
-      [calendarType, birthDate, birthTime, timezone, birthPlace, req.auth.userId],
+      [calendarType, birthDate, lunarLeapMonth ? 1 : 0, birthTime, timezone, birthPlace, req.auth.userId],
     );
     const updated = await query(
-      `SELECT BirthDate, BirthCalendarType, BirthTime, BirthTimezone, BirthPlace
+      `SELECT BirthDate, BirthCalendarType, BirthLunarLeapMonth, BirthTime, BirthTimezone, BirthPlace
        FROM Users WHERE UserId = ?`,
       [req.auth.userId],
     );
@@ -3067,6 +3098,78 @@ router.get('/relationship/assessment-results/:code/history', async (req, res) =>
     return res.json({ ok: true, history });
   } catch (error) {
     console.error('[API] /relationship/assessment-results/:code/history error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+const comparisonRecord = (row, idColumn = 'result_id') => ({
+  id: row[idColumn] == null ? null : Number(row[idColumn]),
+  createdAt: row.created_at instanceof Date
+    ? row.created_at.toISOString()
+    : row.created_at == null ? null : String(row.created_at),
+  result: parseRelationshipResult(row.result_json),
+});
+
+router.get('/relationship/assessment-results/:code/comparison', async (req, res) => {
+  try {
+    const code = String(req.params.code ?? '').trim();
+    const assessment = await getActiveRelationshipAssessment(code);
+    if (!assessment) return res.status(404).json({ ok: false, reason: 'assessment_not_found' });
+    if (assessment.audience !== 'individual') {
+      return res.status(400).json({ ok: false, reason: 'assessment_not_personal' });
+    }
+    const result = await query(
+      `SELECT r.result_id, r.result_json, r.created_at
+       FROM relationship_assessment_results r
+       WHERE r.user_id = ? AND r.version_id = ?
+       ORDER BY r.result_id DESC
+       LIMIT 2`,
+      [req.auth.userId, assessment.version_id],
+    );
+    return res.json({
+      ok: true,
+      ...buildAssessmentComparison({
+        scope: 'personal',
+        assessmentCode: code,
+        version: assessment.version_label,
+        records: result.rows.map((row) => comparisonRecord(row)),
+      }),
+    });
+  } catch (error) {
+    console.error('[API] personal assessment comparison GET error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.get('/relationship/couple-assessment-results/:code/comparison', async (req, res) => {
+  try {
+    const code = String(req.params.code ?? '').trim();
+    const assessment = await getActiveRelationshipAssessment(code);
+    if (!assessment) return res.status(404).json({ ok: false, reason: 'assessment_not_found' });
+    if (assessment.audience !== 'couple' || !coupleAssessmentCodes.has(code)) {
+      return res.status(400).json({ ok: false, reason: 'assessment_not_couple' });
+    }
+    const coupleId = await getCoupleIdForUser(req.auth.userId);
+    if (coupleId == null) return res.status(409).json({ ok: false, reason: 'active_couple_required' });
+    const result = await query(
+      `SELECT couple_result_id, result_json, created_at
+       FROM relationship_couple_assessment_results
+       WHERE couple_id = ? AND version_id = ?
+       ORDER BY couple_result_id DESC
+       LIMIT 2`,
+      [coupleId, assessment.version_id],
+    );
+    return res.json({
+      ok: true,
+      ...buildAssessmentComparison({
+        scope: 'couple',
+        assessmentCode: code,
+        version: assessment.version_label,
+        records: result.rows.map((row) => comparisonRecord(row, 'couple_result_id')),
+      }),
+    });
+  } catch (error) {
+    console.error('[API] couple assessment comparison GET error:', error);
     return res.status(500).json({ ok: false, reason: 'internal_error' });
   }
 });
@@ -7766,7 +7869,7 @@ const relationshipDateTime = (value) => value instanceof Date
 
 const getBirthProfileByUserId = async (userId) => {
   const result = await query(
-    `SELECT BirthDate, BirthCalendarType, BirthTime, BirthTimezone, BirthPlace
+    `SELECT BirthDate, BirthCalendarType, BirthLunarLeapMonth, BirthTime, BirthTimezone, BirthPlace
      FROM Users WHERE UserId = ? LIMIT 1`,
     [userId],
   );
@@ -7949,6 +8052,612 @@ const loadTodayFortunes = async (userId, { regenerate = false, types = null } = 
     fortunes,
   };
 };
+
+const sajuPayload = (row) => {
+  const result = parseRelationshipJson(row.result_json) ?? {};
+  return {
+    ...result,
+    scope: 'user',
+    status: row.status,
+    calculationVersion: row.calculation_version,
+    inputSummary: parseRelationshipJson(row.input_summary_json) ?? result.inputSummary ?? {},
+  };
+};
+
+const readStoredSaju = async ({ userId, fingerprint, mode }) => {
+  const result = await query(
+    `SELECT calculation_version, mode, status, input_summary_json, result_json
+     FROM relationship_saju_results
+     WHERE user_id = ? AND calculation_version = ? AND input_fingerprint = ? AND mode = ?
+     LIMIT 1`,
+    [userId, SAJU_CALCULATION_VERSION, fingerprint, mode],
+  );
+  return result.rows[0] ?? null;
+};
+
+const saveSaju = async ({ userId, result, fingerprint }) => {
+  await query(
+    `INSERT INTO relationship_saju_results
+       (user_id, calculation_version, input_fingerprint, mode, status,
+        input_summary_json, result_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       status = VALUES(status), input_summary_json = VALUES(input_summary_json),
+       result_json = VALUES(result_json), updated_at = CURRENT_TIMESTAMP`,
+    [
+      userId,
+      result.calculationVersion,
+      fingerprint,
+      result.mode,
+      result.status,
+      JSON.stringify(result.inputSummary),
+      JSON.stringify(result),
+    ],
+  );
+  const stored = await readStoredSaju({ userId, fingerprint, mode: result.mode });
+  if (!stored) throw new Error('saju_storage_failed');
+  return sajuPayload(stored);
+};
+
+const sendSajuError = (res, error) => {
+  if (!error?.code) return false;
+  if (error.code === 'saju_limited_confirmation_required') {
+    res.status(409).json({
+      ok: false,
+      status: 'limited',
+      reason: error.code,
+      missingFields: error.missingFields ?? [],
+      limitations: error.limitations ?? [],
+    });
+    return true;
+  }
+  if (
+    error.code === 'birth_profile_incomplete' ||
+    error.code === 'unsupported_birth_date_range' ||
+    error.code === 'relationship_saju_profile_incomplete' ||
+    error.code === 'relationship_saju_unsupported_range'
+  ) {
+    res.status(422).json({
+      ok: false,
+      status: error.code.includes('unsupported') ? 'unsupported_range' : 'requires_profile',
+      reason: error.code,
+    });
+    return true;
+  }
+  return false;
+};
+
+const calculateAndStorePersonalSaju = async (userId, mode) => {
+  const profile = await getBirthProfileByUserId(userId);
+  const result = calculatePersonalSaju({ profile, mode });
+  const fingerprint = fingerprintSajuInput(profile);
+  return saveSaju({ userId, result, fingerprint });
+};
+
+const relationshipSajuPayload = (row) => ({
+  ...(parseRelationshipJson(row.result_json) ?? {}),
+  scope: 'couple',
+  status: row.status,
+  calculationVersion: row.calculation_version,
+});
+
+const readStoredRelationshipSaju = async ({ coupleId, fingerprint, mode }) => {
+  const result = await query(
+    `SELECT calculation_version, mode, status, result_json
+     FROM relationship_saju_couple_results
+     WHERE couple_id = ? AND calculation_version = ? AND input_fingerprint = ? AND mode = ?
+     LIMIT 1`,
+    [coupleId, SAJU_CALCULATION_VERSION, fingerprint, mode],
+  );
+  return result.rows[0] ?? null;
+};
+
+const saveRelationshipSaju = async ({ coupleId, result, fingerprint }) => {
+  await query(
+    `INSERT INTO relationship_saju_couple_results
+       (couple_id, calculation_version, input_fingerprint, mode, status, result_json)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       status = VALUES(status), result_json = VALUES(result_json),
+       updated_at = CURRENT_TIMESTAMP`,
+    [
+      coupleId,
+      result.calculationVersion,
+      fingerprint,
+      result.mode,
+      result.status,
+      JSON.stringify(result),
+    ],
+  );
+  const stored = await readStoredRelationshipSaju({
+    coupleId,
+    fingerprint,
+    mode: result.mode,
+  });
+  if (!stored) throw new Error('relationship_saju_storage_failed');
+  return relationshipSajuPayload(stored);
+};
+
+const calculateAndStoreRelationshipSaju = async ({ couple, mode }) => {
+  if (!couple) return null;
+  const firstProfile = await getBirthProfileByUserId(Number(couple.User1Id));
+  const secondProfile = await getBirthProfileByUserId(Number(couple.User2Id));
+  const firstState = getSajuProfileState(firstProfile);
+  const secondState = getSajuProfileState(secondProfile);
+  const relationMode = mode === 'limited' || firstState.status !== 'ready' || secondState.status !== 'ready'
+    ? 'limited'
+    : 'complete';
+  const result = buildRelationshipSaju({
+    firstProfile,
+    secondProfile,
+    mode: relationMode,
+  });
+  const fingerprint = fingerprintSajuPair(firstProfile, secondProfile);
+  return saveRelationshipSaju({
+    coupleId: Number(couple.CoupleId),
+    result: { ...result, calculationVersion: SAJU_CALCULATION_VERSION },
+    fingerprint,
+  });
+};
+
+router.get('/relationship/saju', async (req, res) => {
+  try {
+    const profile = await getBirthProfileByUserId(req.auth.userId);
+    const state = getSajuProfileState(profile);
+    if (state.status === 'requires_profile') {
+      return res.status(422).json({
+        ok: false,
+        status: 'requires_profile',
+        reason: 'birth_profile_incomplete',
+      });
+    }
+    if (state.status === 'unsupported_range') {
+      return res.status(422).json({
+        ok: false,
+        status: 'unsupported_range',
+        reason: 'unsupported_birth_date_range',
+        limitations: state.limitations,
+      });
+    }
+    if (state.status !== 'ready') {
+      return res.status(409).json({
+        ok: false,
+        status: 'limited',
+        reason: 'saju_limited_confirmation_required',
+        missingFields: state.missingFields,
+        limitations: state.limitations,
+      });
+    }
+    const personal = await calculateAndStorePersonalSaju(req.auth.userId, 'complete');
+    const relationship = await calculateAndStoreRelationshipSaju({
+      couple: await getActiveCoupleRow(req.auth.userId),
+      mode: 'complete',
+    });
+    return res.json({
+      ok: true,
+      status: personal.status,
+      calculationVersion: personal.calculationVersion,
+      personal,
+      relationship,
+    });
+  } catch (error) {
+    if (sendSajuError(res, error)) return;
+    console.error('[API] /relationship/saju GET error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.post('/relationship/saju', async (req, res) => {
+  try {
+    const mode = String(req.body?.mode ?? '').trim();
+    if (!['complete', 'limited'].includes(mode)) {
+      return res.status(400).json({ ok: false, reason: 'invalid_saju_mode' });
+    }
+    const personal = await calculateAndStorePersonalSaju(req.auth.userId, mode);
+    const relationship = await calculateAndStoreRelationshipSaju({
+      couple: await getActiveCoupleRow(req.auth.userId),
+      mode,
+    });
+    return res.json({
+      ok: true,
+      status: personal.status,
+      calculationVersion: personal.calculationVersion,
+      personal,
+      relationship,
+    });
+  } catch (error) {
+    if (sendSajuError(res, error)) return;
+    console.error('[API] /relationship/saju POST error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+const tarotPayload = (row) => parseRelationshipJson(row.result_json) ?? {};
+
+const readStoredTarot = async ({ userId = null, coupleId = null, date }) => {
+  const scopeColumn = userId == null ? 'couple_id' : 'user_id';
+  const scopeId = userId == null ? coupleId : userId;
+  const result = await query(
+    `SELECT result_json
+     FROM relationship_tarot_contents
+     WHERE ${scopeColumn} = ? AND content_date = ? AND catalog_version = ?
+     LIMIT 1`,
+    [scopeId, date, TAROT_CATALOG_VERSION],
+  );
+  return result.rows[0] ?? null;
+};
+
+const saveTarot = async ({ userId = null, coupleId = null, date }) => {
+  const existing = await readStoredTarot({ userId, coupleId, date });
+  if (existing) return tarotPayload(existing);
+  const scope = userId == null ? 'couple' : 'user';
+  const scopeId = userId == null ? coupleId : userId;
+  const result = drawDailyTarot({ scope, scopeId, date });
+  await query(
+    `INSERT INTO relationship_tarot_contents
+       (user_id, couple_id, content_date, catalog_version, card_key, result_json)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       card_key = VALUES(card_key), result_json = VALUES(result_json),
+       updated_at = CURRENT_TIMESTAMP`,
+    [
+      userId,
+      coupleId,
+      date,
+      TAROT_CATALOG_VERSION,
+      result.card.key,
+      JSON.stringify(result),
+    ],
+  );
+  const stored = await readStoredTarot({ userId, coupleId, date });
+  if (!stored) throw new Error('tarot_storage_failed');
+  return tarotPayload(stored);
+};
+
+router.get('/relationship/tarot/today', async (req, res) => {
+  try {
+    const date = businessDate();
+    const couple = await getActiveCoupleRow(req.auth.userId);
+    const personal = await saveTarot({ userId: req.auth.userId, date });
+    const relationship = couple
+      ? await saveTarot({ coupleId: Number(couple.CoupleId), date })
+      : null;
+    return res.json({
+      ok: true,
+      date,
+      catalogVersion: TAROT_CATALOG_VERSION,
+      redrawAvailable: false,
+      personal,
+      relationship,
+    });
+  } catch (error) {
+    console.error('[API] /relationship/tarot/today GET error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+const mindcareSessionPayload = (row) => ({
+  id: Number(row.session_id),
+  status: row.status,
+  currentState: row.current_state,
+  stepIndex: Number(row.step_index ?? 0),
+  userResponseCount: Number(row.user_response_count ?? 0),
+  contentVersion: row.content_version,
+  ownerOnly: true,
+  createdAt: relationshipDateTime(row.created_at),
+  updatedAt: relationshipDateTime(row.updated_at),
+  lastMessageAt: relationshipDateTime(row.last_message_at),
+});
+
+const mindcareMessagePayload = (row) => ({
+  id: Number(row.message_id),
+  sequence: Number(row.sequence_no),
+  role: row.role,
+  inputType: row.input_type ?? null,
+  choiceKey: row.choice_key ?? null,
+  riskCandidate: row.risk_candidate ?? null,
+  content: row.content,
+  createdAt: relationshipDateTime(row.created_at),
+});
+
+const getMindcareMessages = async (sessionId) => {
+  const result = await query(
+    `SELECT message_id, sequence_no, role, input_type, choice_key,
+            risk_candidate, content, created_at
+     FROM relationship_mindcare_messages
+     WHERE session_id = ? ORDER BY sequence_no, message_id`,
+    [sessionId],
+  );
+  return result.rows.map(mindcareMessagePayload);
+};
+
+const getMindcareSession = async (sessionId, userId) => {
+  const result = await query(
+    `SELECT session_id, owner_user_id, content_version, status, current_state,
+            step_index, user_response_count, state_json,
+            created_at, updated_at, last_message_at
+     FROM relationship_mindcare_sessions
+     WHERE session_id = ? AND owner_user_id = ?
+     LIMIT 1`,
+    [sessionId, userId],
+  );
+  return result.rows[0] ?? null;
+};
+
+const getLatestMindcareSession = async (userId) => {
+  const result = await query(
+    `SELECT session_id, owner_user_id, content_version, status, current_state,
+            step_index, user_response_count, state_json,
+            created_at, updated_at, last_message_at
+     FROM relationship_mindcare_sessions
+     WHERE owner_user_id = ? AND status IN ('active', 'safety_pending', 'safety_support')
+     ORDER BY updated_at DESC, session_id DESC
+     LIMIT 1`,
+    [userId],
+  );
+  return result.rows[0] ?? null;
+};
+
+const insertMindcareMessage = async ({
+  sessionId,
+  role,
+  inputType = null,
+  choiceKey = null,
+  riskCandidate = null,
+  content,
+}) => {
+  const next = await query(
+    'SELECT COALESCE(MAX(sequence_no), 0) + 1 AS next_sequence FROM relationship_mindcare_messages WHERE session_id = ?',
+    [sessionId],
+  );
+  await query(
+    `INSERT INTO relationship_mindcare_messages
+       (session_id, sequence_no, role, input_type, choice_key, risk_candidate, content)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      sessionId,
+      Number(next.rows[0]?.next_sequence ?? 1),
+      role,
+      inputType,
+      choiceKey,
+      riskCandidate,
+      content,
+    ],
+  );
+};
+
+const mindcareStateFromRow = (row) => parseRelationshipJson(row.state_json) ?? createMindcareState();
+
+const mindcareConversation = async (session, state) => ({
+  session: mindcareSessionPayload(session),
+  messages: await getMindcareMessages(session.session_id),
+  choices: state.choices ?? [],
+  nextQuestion: state.nextQuestion ?? null,
+  state: mindcareStateView(state),
+});
+
+router.post('/relationship/mindcare/sessions', async (req, res) => {
+  try {
+    const existing = await getLatestMindcareSession(req.auth.userId);
+    if (existing) {
+      const state = mindcareStateFromRow(existing);
+      return res.status(200).json({
+        ok: true,
+        resumed: true,
+        ...(await mindcareConversation(existing, state)),
+      });
+    }
+    const state = createMindcareState();
+    const inserted = await query(
+      `INSERT INTO relationship_mindcare_sessions
+         (owner_user_id, content_version, status, current_state, step_index,
+          user_response_count, state_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        req.auth.userId,
+        MINDCARE_CONTENT_VERSION,
+        state.status,
+        state.currentState,
+        state.stepIndex,
+        state.userResponseCount,
+        JSON.stringify(state),
+      ],
+    );
+    const session = await getMindcareSession(inserted.rows.insertId, req.auth.userId);
+    await insertMindcareMessage({
+      sessionId: session.session_id,
+      role: 'assistant',
+      content: state.lastAssistantText,
+    });
+    return res.status(201).json({
+      ok: true,
+      created: true,
+      ...(await mindcareConversation(session, state)),
+    });
+  } catch (error) {
+    console.error('[API] mindcare session POST error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.get('/relationship/mindcare/safety-resources', async (req, res) => {
+  try {
+    if (['latitude', 'longitude', 'lat', 'lng'].some((key) => req.query[key] != null)) {
+      return res.status(400).json({ ok: false, reason: 'coordinates_not_supported' });
+    }
+    const resources = buildSafetyResources({
+      locationPermission: String(req.query.permission ?? 'denied'),
+      countryCode: req.query.country,
+      adminArea: req.query.adminArea,
+    });
+    return res.json({ ok: true, ...resources });
+  } catch (error) {
+    console.error('[API] mindcare safety resources GET error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.get('/relationship/mindcare/sessions', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT session_id, owner_user_id, content_version, status, current_state,
+              step_index, user_response_count, state_json,
+              created_at, updated_at, last_message_at
+       FROM relationship_mindcare_sessions
+       WHERE owner_user_id = ? AND status <> 'archived'
+       ORDER BY updated_at DESC, session_id DESC`,
+      [req.auth.userId],
+    );
+    const sessions = result.rows.map(mindcareSessionPayload);
+    const active = result.rows.find((row) =>
+      ['active', 'safety_pending', 'safety_support'].includes(row.status));
+    return res.json({
+      ok: true,
+      sessions,
+      current: active ? await mindcareConversation(active, mindcareStateFromRow(active)) : null,
+    });
+  } catch (error) {
+    console.error('[API] mindcare sessions GET error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.get('/relationship/mindcare/sessions/:sessionId', async (req, res) => {
+  try {
+    const session = await getMindcareSession(req.params.sessionId, req.auth.userId);
+    if (!session) return res.status(404).json({ ok: false, reason: 'mindcare_session_not_found' });
+    return res.json({ ok: true, ...(await mindcareConversation(session, mindcareStateFromRow(session))) });
+  } catch (error) {
+    console.error('[API] mindcare session GET error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.post('/relationship/mindcare/sessions/:sessionId/messages', async (req, res) => {
+  try {
+    const session = await getMindcareSession(req.params.sessionId, req.auth.userId);
+    if (!session) return res.status(404).json({ ok: false, reason: 'mindcare_session_not_found' });
+    if (session.status === 'safety_pending') {
+      return res.status(409).json({ ok: false, reason: 'mindcare_safety_confirmation_required' });
+    }
+    if (session.status !== 'active') {
+      return res.status(409).json({ ok: false, reason: 'mindcare_session_not_active' });
+    }
+    const hasChoice = typeof req.body?.choiceKey === 'string' && req.body.choiceKey.trim();
+    const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+    if ((hasChoice && text) || (!hasChoice && !text)) {
+      return res.status(400).json({ ok: false, reason: 'invalid_mindcare_input' });
+    }
+    const state = mindcareStateFromRow(session);
+    const input = hasChoice ? { choiceKey: req.body.choiceKey.trim() } : { text };
+    let next;
+    try {
+      next = advanceMindcareState(state, input);
+    } catch (error) {
+      if (['invalid_mindcare_choice', 'invalid_mindcare_input'].includes(error.message)) {
+        return res.status(400).json({ ok: false, reason: error.message });
+      }
+      throw error;
+    }
+    const selectedLabel = hasChoice
+      ? state.choices.find((item) => item.key === input.choiceKey)?.label ?? input.choiceKey
+      : text;
+    await insertMindcareMessage({
+      sessionId: session.session_id,
+      role: 'user',
+      inputType: hasChoice ? 'choice' : 'text',
+      choiceKey: hasChoice ? input.choiceKey : null,
+      riskCandidate: next.safety?.status === 'pending' ? next.safety.reason : null,
+      content: selectedLabel,
+    });
+    await insertMindcareMessage({
+      sessionId: session.session_id,
+      role: 'assistant',
+      content: next.lastAssistantText,
+    });
+    await query(
+      `UPDATE relationship_mindcare_sessions
+       SET status = ?, current_state = ?, step_index = ?, user_response_count = ?,
+           state_json = ?, last_message_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+       WHERE session_id = ? AND owner_user_id = ?`,
+      [
+        next.status,
+        next.currentState,
+        next.stepIndex,
+        next.userResponseCount,
+        JSON.stringify(next),
+        session.session_id,
+        req.auth.userId,
+      ],
+    );
+    const updated = await getMindcareSession(session.session_id, req.auth.userId);
+    return res.status(201).json({ ok: true, ...(await mindcareConversation(updated, next)) });
+  } catch (error) {
+    console.error('[API] mindcare message POST error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.post('/relationship/mindcare/sessions/:sessionId/safety', async (req, res) => {
+  try {
+    if (['latitude', 'longitude', 'lat', 'lng'].some((key) => req.body?.[key] != null)) {
+      return res.status(400).json({ ok: false, reason: 'coordinates_not_supported' });
+    }
+    const session = await getMindcareSession(req.params.sessionId, req.auth.userId);
+    if (!session) return res.status(404).json({ ok: false, reason: 'mindcare_session_not_found' });
+    if (!['safety_pending', 'safety_support'].includes(session.status)) {
+      return res.status(409).json({ ok: false, reason: 'mindcare_safety_not_required' });
+    }
+    if (typeof req.body?.safeNow !== 'boolean') {
+      return res.status(400).json({ ok: false, reason: 'invalid_mindcare_safety' });
+    }
+    const state = mindcareStateFromRow(session);
+    const next = resolveMindcareSafety(state, { safeNow: req.body.safeNow });
+    await insertMindcareMessage({
+      sessionId: session.session_id,
+      role: 'user',
+      inputType: 'safety',
+      choiceKey: req.body.safeNow ? 'safe_now' : 'need_help',
+      content: req.body.safeNow ? '지금은 안전해요' : '지금 도움이 필요해요',
+    });
+    await insertMindcareMessage({
+      sessionId: session.session_id,
+      role: 'assistant',
+      content: next.lastAssistantText,
+    });
+    await query(
+      `UPDATE relationship_mindcare_sessions
+       SET status = ?, current_state = ?, step_index = ?, user_response_count = ?,
+           state_json = ?, last_message_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+       WHERE session_id = ? AND owner_user_id = ?`,
+      [
+        next.status,
+        next.currentState,
+        next.stepIndex,
+        next.userResponseCount,
+        JSON.stringify(next),
+        session.session_id,
+        req.auth.userId,
+      ],
+    );
+    const updated = await getMindcareSession(session.session_id, req.auth.userId);
+    return res.json({
+      ok: true,
+      safety: next.safety,
+      ...(!req.body.safeNow
+        ? buildSafetyResources({
+            locationPermission: String(req.body.locationPermission ?? 'denied'),
+            countryCode: req.body.countryCode,
+            adminArea: req.body.adminArea,
+          })
+        : {}),
+      ...(await mindcareConversation(updated, next)),
+    });
+  } catch (error) {
+    console.error('[API] mindcare safety POST error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
 
 router.get('/relationship/fortune/today', async (req, res) => {
   try {

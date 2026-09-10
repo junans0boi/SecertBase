@@ -327,6 +327,143 @@ class AssessmentHistoryAnswer {
       );
 }
 
+class AssessmentComparisonDimension {
+  final String key;
+  final String title;
+  final int previous;
+  final int current;
+  final int delta;
+  final AssessmentComparisonAlignment? alignment;
+
+  const AssessmentComparisonDimension({
+    required this.key,
+    required this.title,
+    required this.previous,
+    required this.current,
+    required this.delta,
+    required this.alignment,
+  });
+
+  factory AssessmentComparisonDimension.fromJson(Map<String, dynamic> json) {
+    final rawAlignment = json['alignment'];
+    return AssessmentComparisonDimension(
+      key: '${json['key'] ?? ''}',
+      title: '${json['title'] ?? ''}',
+      previous: int.tryParse('${json['previous'] ?? 0}') ?? 0,
+      current: int.tryParse('${json['current'] ?? 0}') ?? 0,
+      delta: int.tryParse('${json['delta'] ?? 0}') ?? 0,
+      alignment: rawAlignment is Map
+          ? AssessmentComparisonAlignment.fromJson(
+              Map<String, dynamic>.from(rawAlignment),
+            )
+          : null,
+    );
+  }
+}
+
+class AssessmentComparisonAlignment {
+  final int previous;
+  final int current;
+  final int delta;
+
+  const AssessmentComparisonAlignment({
+    required this.previous,
+    required this.current,
+    required this.delta,
+  });
+
+  factory AssessmentComparisonAlignment.fromJson(Map<String, dynamic> json) =>
+      AssessmentComparisonAlignment(
+        previous: int.tryParse('${json['previous'] ?? 0}') ?? 0,
+        current: int.tryParse('${json['current'] ?? 0}') ?? 0,
+        delta: int.tryParse('${json['delta'] ?? 0}') ?? 0,
+      );
+}
+
+class AssessmentComparisonOverall {
+  final int previous;
+  final int current;
+  final int delta;
+  final AssessmentComparisonAlignment? alignment;
+
+  const AssessmentComparisonOverall({
+    required this.previous,
+    required this.current,
+    required this.delta,
+    required this.alignment,
+  });
+
+  factory AssessmentComparisonOverall.fromJson(Map<String, dynamic> json) {
+    final rawAlignment = json['alignment'];
+    return AssessmentComparisonOverall(
+      previous: int.tryParse('${json['previous'] ?? 0}') ?? 0,
+      current: int.tryParse('${json['current'] ?? 0}') ?? 0,
+      delta: int.tryParse('${json['delta'] ?? 0}') ?? 0,
+      alignment: rawAlignment is Map
+          ? AssessmentComparisonAlignment.fromJson(
+              Map<String, dynamic>.from(rawAlignment),
+            )
+          : null,
+    );
+  }
+}
+
+class AssessmentComparison {
+  final String status;
+  final bool available;
+  final String scope;
+  final String metric;
+  final String visualization;
+  final String message;
+  final AssessmentComparisonOverall? overall;
+  final List<AssessmentComparisonDimension> dimensions;
+  final String disclaimer;
+
+  const AssessmentComparison({
+    required this.status,
+    required this.available,
+    required this.scope,
+    required this.metric,
+    required this.visualization,
+    required this.message,
+    required this.overall,
+    required this.dimensions,
+    required this.disclaimer,
+  });
+
+  factory AssessmentComparison.fromJson(Map<String, dynamic> json) {
+    final rawOverall = json['overall'];
+    return AssessmentComparison(
+      status: '${json['status'] ?? ''}',
+      available: json['available'] == true,
+      scope: '${json['scope'] ?? 'personal'}',
+      metric: '${json['metric'] ?? 'dimensionScore'}',
+      visualization: '${json['visualization'] ?? 'bar_or_line'}',
+      message: '${json['message'] ?? '이 검사를 한 번 더 완료하면 최근 변화를 볼 수 있어요.'}',
+      overall: rawOverall is Map
+          ? AssessmentComparisonOverall.fromJson(
+              Map<String, dynamic>.from(rawOverall),
+            )
+          : null,
+      dimensions: (json['dimensions'] as List? ?? const [])
+          .map(
+            (item) => AssessmentComparisonDimension.fromJson(
+              Map<String, dynamic>.from(item as Map),
+            ),
+          )
+          .toList(growable: false),
+      disclaimer: '${json['disclaimer'] ?? ''}',
+    );
+  }
+
+  String get accessibleMessage {
+    final value = overall;
+    if (value == null) return message;
+    final sign = value.delta > 0 ? '+' : '';
+    return '$message 전체 점수 ${value.previous}점에서 ${value.current}점, 변화량 $sign${value.delta}점이에요.';
+  }
+}
+
 class ExplanationGeneration {
   final int id;
   final String status;
@@ -563,6 +700,26 @@ class AssessmentAttemptApi {
             ),
           )
           .toList(growable: false);
+    } on http.ClientException {
+      throw const AssessmentAttemptApiException('network_error');
+    } on FormatException {
+      throw const AssessmentAttemptApiException('invalid_response');
+    }
+  }
+
+  Future<AssessmentComparison> fetchComparison(
+    String code, {
+    bool couple = false,
+  }) async {
+    try {
+      final path = couple
+          ? '/api/relationship/couple-assessment-results/$code/comparison'
+          : '/api/relationship/assessment-results/$code/comparison';
+      final response = await _client.get(
+        Uri.parse('$baseUrl$path'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      return AssessmentComparison.fromJson(_successfulBody(response));
     } on http.ClientException {
       throw const AssessmentAttemptApiException('network_error');
     } on FormatException {

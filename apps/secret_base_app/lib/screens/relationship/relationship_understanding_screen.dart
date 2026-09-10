@@ -11,10 +11,16 @@ import '../../core/counseling_api.dart';
 import '../../core/birth_profile_api.dart';
 import '../../core/fortune_api.dart';
 import '../../core/main_design.dart';
+import '../../core/mindcare_api.dart';
+import '../../core/saju_api.dart';
+import '../../core/tarot_api.dart';
 import 'assessment_catalog_screen.dart';
 import 'compatibility_screen.dart';
 import 'counseling_screen.dart';
 import 'fortune_screen.dart';
+import 'saju_screen.dart';
+import 'tarot_screen.dart';
+import 'mindcare_screen.dart';
 
 enum RelationshipAssessmentStatus {
   profileIncomplete,
@@ -215,6 +221,7 @@ class _RelationshipUnderstandingScreenState
   final _timezoneController = TextEditingController(text: 'Asia/Seoul');
   final _birthPlaceController = TextEditingController();
   BirthCalendarType _calendarType = BirthCalendarType.solar;
+  bool _lunarLeapMonth = false;
   String? _birthCountry = '대한민국';
   BirthProfile? _profile;
   RelationshipAssessmentStatus? _loadedAssessmentStatus;
@@ -292,6 +299,7 @@ class _RelationshipUnderstandingScreenState
 
   void _setProfile(BirthProfile profile) {
     _calendarType = profile.calendarType;
+    _lunarLeapMonth = profile.lunarLeapMonth;
     _birthDateController.text = profile.birthDate;
     _birthTimeController.text = profile.birthTime ?? '';
     _timezoneController.text = profile.timezone;
@@ -565,6 +573,7 @@ class _RelationshipUnderstandingScreenState
         BirthProfileInput(
           calendarType: _calendarType,
           birthDate: birthDate,
+          lunarLeapMonth: _lunarLeapMonth,
           birthTime: _birthTimeController.text.trim().isEmpty
               ? null
               : _birthTimeController.text.trim(),
@@ -740,6 +749,72 @@ class _RelationshipUnderstandingScreenState
     );
   }
 
+  Widget _sajuArea() {
+    return MainCard(
+      key: const Key('relationship_saju_area'),
+      padding: const EdgeInsets.all(18),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.auto_awesome, color: kMainLilac),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('나의 사주', style: mainBody(weight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                Text(
+                  '어려운 용어보다 쉬운 설명부터 내 흐름을 살펴봐요.',
+                  style: mainBody(size: 13, color: kMainSub, height: 1.5),
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton(
+                  key: const Key('open_saju'),
+                  onPressed: _openSaju,
+                  child: const Text('사주 보기'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tarotArea() {
+    return MainCard(
+      key: const Key('relationship_tarot_area'),
+      padding: const EdgeInsets.all(18),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.style_outlined, color: kMainHoney),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('오늘의 타로', style: mainBody(weight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                Text(
+                  '오늘은 한 장만, 가볍게 마음을 비춰봐요.',
+                  style: mainBody(size: 13, color: kMainSub, height: 1.5),
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton(
+                  key: const Key('open_tarot'),
+                  onPressed: _openTarot,
+                  child: const Text('타로 보기'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _openCatalog(AssessmentAudience audience) {
     final auth = AuthService();
     Navigator.of(context).push<void>(
@@ -789,6 +864,46 @@ class _RelationshipUnderstandingScreenState
         builder: (_) => RelationshipCounselingScreen(
           api: CounselingApi(baseUrl: auth.baseUrl, token: auth.token ?? ''),
           shared: false,
+        ),
+      ),
+    );
+  }
+
+  void _openMindcare() {
+    final auth = AuthService();
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => MindcareScreen(
+          api: MindcareApi(baseUrl: auth.baseUrl, token: auth.token ?? ''),
+        ),
+      ),
+    );
+  }
+
+  void _openSaju() {
+    final auth = AuthService();
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => SajuScreen(
+          api: SajuApi(baseUrl: auth.baseUrl, token: auth.token ?? ''),
+          onEditProfile: () => Navigator.of(context).push<void>(
+            MaterialPageRoute(
+              builder: (_) => const RelationshipUnderstandingScreen(
+                editBirthProfileOnly: true,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openTarot() {
+    final auth = AuthService();
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => TarotScreen(
+          api: TarotApi(baseUrl: auth.baseUrl, token: auth.token ?? ''),
         ),
       ),
     );
@@ -890,6 +1005,39 @@ class _RelationshipUnderstandingScreenState
                 child: Text(shared ? '커플 상담 시작' : '프라이빗 상담 시작'),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _mindcareArea() {
+    return MainCard(
+      key: const Key('relationship_mindcare_area'),
+      padding: const EdgeInsets.all(18),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.chat_bubble_outline, color: kMainLilac),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('마음관리 가이드', style: mainBody(weight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                Text(
+                  '상담사와 채팅하듯 따뜻한 질문을 따라 감정과 작은 행동을 정리해요.',
+                  style: mainBody(size: 13, color: kMainSub, height: 1.5),
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton(
+                  key: const Key('open_mindcare'),
+                  onPressed: _openMindcare,
+                  child: const Text('마음관리 시작'),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -1069,10 +1217,30 @@ class _RelationshipUnderstandingScreenState
                               ],
                               onChanged: (value) {
                                 if (value != null) {
-                                  setState(() => _calendarType = value);
+                                  setState(() {
+                                    _calendarType = value;
+                                    if (value == BirthCalendarType.solar) {
+                                      _lunarLeapMonth = false;
+                                    }
+                                  });
                                 }
                               },
                             ),
+                            if (_calendarType == BirthCalendarType.lunar) ...[
+                              const SizedBox(height: 10),
+                              CheckboxListTile(
+                                key: const Key('lunar_leap_month_toggle'),
+                                contentPadding: EdgeInsets.zero,
+                                value: _lunarLeapMonth,
+                                onChanged: (value) => setState(
+                                  () => _lunarLeapMonth = value ?? false,
+                                ),
+                                title: const Text('윤달 생일이에요'),
+                                subtitle: const Text('음력 윤달이면 꼭 알려주세요.'),
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
+                              ),
+                            ],
                             const SizedBox(height: 14),
                             _pickerField(
                               _birthDateController,
@@ -1158,7 +1326,13 @@ class _RelationshipUnderstandingScreenState
                       if (_selectedArea == _RelationshipArea.personal) ...[
                         _fortuneArea(scope: FortuneScope.personal),
                         const SizedBox(height: 12),
+                        _sajuArea(),
+                        const SizedBox(height: 12),
+                        _tarotArea(),
+                        const SizedBox(height: 12),
                         _personalArea(),
+                        const SizedBox(height: 12),
+                        _mindcareArea(),
                         const SizedBox(height: 12),
                         _counselingArea(shared: false),
                       ] else ...[

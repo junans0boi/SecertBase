@@ -36,6 +36,19 @@
 | 그림 맞히기 | 직접 그린 그림 정답 맞히기 |
 | 제로 | 숫자+합계 예측 심리전 |
 
+### 관계 이해
+- 홈 카드에서 관계 이해 허브로 진입
+- 개인검사 4종과 커플검사 3종을 별도 탭으로 제공
+- 진행 저장·이어하기·재검사·읽기 전용 검사 기록
+- 결과 기록을 누르면 당시 문항별 선택 답변 확인
+- 출생 프로필, 운세, 궁합 분석, 프라이빗/공개 상담
+- 핵심 점수와 권한은 LLM 없이 결정론적으로 동작
+
+세부 구현과 API·마이그레이션·검증 기준은
+[`docs/product/RELATIONSHIP_UNDERSTANDING_IMPLEMENTATION.md`](docs/product/RELATIONSHIP_UNDERSTANDING_IMPLEMENTATION.md)를 참고하세요.
+다음 확장 범위인 운세 분리·마음관리·검사 UX 개선은
+[`docs/product/FORTUNE_AND_MINDCARE_EXPANSION_SPEC.md`](docs/product/FORTUNE_AND_MINDCARE_EXPANSION_SPEC.md)에 정리되어 있습니다.
+
 ---
 
 ## 기술 스택
@@ -60,6 +73,10 @@ git pull origin main
 ```
 
 배포 스크립트는 테스트 → Flutter 웹 빌드 → rsync → PM2 재시작 순으로 실행됩니다.
+
+운영 서버 SSH 접속, MariaDB/Redis Tailscale 터널, 백업 식별자를 요구하는
+마이그레이션 절차는 [`docs/deployment/LOCAL_DEV_AND_DEPLOY.md`](docs/deployment/LOCAL_DEV_AND_DEPLOY.md)와
+[`docs/deployment/SERVER_SETUP.md`](docs/deployment/SERVER_SETUP.md)에 정리되어 있습니다.
 
 ---
 

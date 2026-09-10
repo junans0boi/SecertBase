@@ -18,6 +18,7 @@ String _calendarTypeToJson(BirthCalendarType value) => switch (value) {
 class BirthProfile {
   final BirthCalendarType calendarType;
   final String birthDate;
+  final bool lunarLeapMonth;
   final String? birthTime;
   final String timezone;
   final String? birthPlace;
@@ -25,6 +26,7 @@ class BirthProfile {
   const BirthProfile({
     required this.calendarType,
     required this.birthDate,
+    required this.lunarLeapMonth,
     required this.birthTime,
     required this.timezone,
     required this.birthPlace,
@@ -33,6 +35,7 @@ class BirthProfile {
   factory BirthProfile.fromJson(Map<String, dynamic> json) => BirthProfile(
     calendarType: _calendarTypeFromJson(json['calendarType']),
     birthDate: '${json['birthDate'] ?? ''}',
+    lunarLeapMonth: json['lunarLeapMonth'] == true,
     birthTime: _optionalString(json['birthTime']),
     timezone: '${json['timezone'] ?? ''}',
     birthPlace: _optionalString(json['birthPlace']),
@@ -42,6 +45,7 @@ class BirthProfile {
 class BirthProfileInput {
   final BirthCalendarType calendarType;
   final String birthDate;
+  final bool lunarLeapMonth;
   final String? birthTime;
   final String timezone;
   final String? birthPlace;
@@ -49,6 +53,7 @@ class BirthProfileInput {
   const BirthProfileInput({
     required this.calendarType,
     required this.birthDate,
+    this.lunarLeapMonth = false,
     this.birthTime,
     required this.timezone,
     this.birthPlace,
@@ -57,6 +62,7 @@ class BirthProfileInput {
   Map<String, dynamic> toJson() => {
     'calendarType': _calendarTypeToJson(calendarType),
     'birthDate': birthDate,
+    'lunarLeapMonth': lunarLeapMonth,
     'birthTime': birthTime,
     'timezone': timezone,
     'birthPlace': birthPlace,

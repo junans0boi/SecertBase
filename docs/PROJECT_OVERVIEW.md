@@ -225,14 +225,16 @@ REST-backed archive screens include:
 
 ## Relationship Understanding
 
-관계 이해 기능은 홈 카드에서 진입하며, 허브 상단 탭으로 개인 영역과 커플 영역을 분리한다. 현재 기준의 제품 경계·API·마이그레이션·검증 기준은 [`docs/product/RELATIONSHIP_UNDERSTANDING_IMPLEMENTATION.md`](product/RELATIONSHIP_UNDERSTANDING_IMPLEMENTATION.md)에 정리되어 있다.
+관계 이해 기능은 홈 카드에서 진입하며, 허브 상단 탭으로 개인 영역과 커플 영역을 분리한다. 현재 기준의 제품 경계·API·마이그레이션·검증 기준은 [`docs/product/RELATIONSHIP_UNDERSTANDING_IMPLEMENTATION.md`](product/RELATIONSHIP_UNDERSTANDING_IMPLEMENTATION.md)에 정리되어 있다. 다음 확장 범위는 [`FORTUNE_AND_MINDCARE_EXPANSION_SPEC.md`](product/FORTUNE_AND_MINDCARE_EXPANSION_SPEC.md)와 [Wayfinder Map #124](https://github.com/junans0boi/SecertBase/issues/124)를 따른다.
 
 - 출생 프로필: 양력/음력, 날짜, nullable 출생 시각, 시간대, nullable 출생지
 - 개인검사 4종: 애착, 사회적 유대, 감정 해소, 관계 결핍 인식
 - 커플검사 3종: 갈등 회복, 함께 있음과 개인 시간, 애정 표현과 기대
 - 개인검사: 진행 저장·이어하기·재검사·읽기 전용 결과 history·문항별 선택 답변 상세
 - 커플검사: 두 사람의 같은 버전 완료 후 공유 결과와 분석 생성
-- 운세·상담: 날짜/범위 저장, 명시적 재생성, private/shared 세션과 승인된 공유 힌트
+- 운세: 관계 이해 허브와 분리된 홈 독립 화면에서 사주·타로와 오늘 하루의 흐름 제공
+- 마음관리: 선택지 기반 개인 체크인·작은 행동·완료 기록, 위험 신호별 안전 안내
+- 상담: 날짜/범위 저장, 명시적 재생성, private/shared 세션과 승인된 공유 힌트
 - 핵심 점수와 권한: LLM과 분리된 결정론적 처리
 
 관계 이해 데이터베이스는 기존 MariaDB/MySQL 마이그레이션 체계를 사용한다. PostgreSQL로 전환하지 않는다.

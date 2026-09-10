@@ -12,6 +12,52 @@ Use the local PC for development and Git commits. Use the server only for pullin
 4. SSH into the server, preferably through Tailscale.
 5. Run the server deploy script.
 
+## 운영 SSH·DB·배포 빠른 참고
+
+운영 서버와 MariaDB/Redis는 Tailscale 네트워크 안에서만 접근한다. SSH 키의
+내용, 비밀번호, `.env` 값은 문서나 Git에 저장하지 않는다.
+
+서버 셸에 접속:
+
+```bash
+ssh -i /Users/junzzang/Downloads/ssh-key-2026-07-06.key -t ubuntu@100.97.58.29 \
+  'cd ~/SecertBase && exec bash -l'
+```
+
+로컬에서 운영 DB/Redis를 점검해야 할 때만 터널을 연다. 이 터널은 로컬 개발을
+운영 데이터에 연결하므로, 테스트나 마이그레이션 전에 대상과 백업 여부를 다시
+확인한다.
+
+```bash
+ssh -i /Users/junzzang/Downloads/ssh-key-2026-07-06.key \
+  -L 3307:127.0.0.1:3306 \
+  -L 6380:127.0.0.1:6379 \
+  ubuntu@100.97.58.29
+```
+
+운영 배포는 서버의 깨끗한 `main` 작업 트리에서 실행한다.
+
+```bash
+cd /home/ubuntu/SecertBase
+./scripts/deploy_server.sh
+```
+
+배포 스크립트가 최신 커밋을 가져오고 백엔드 검증, Flutter 웹 빌드, 정적 파일
+동기화, PM2 재시작, health check를 수행한다. DB 변경이 포함되면 먼저
+`status`와 `up --dry-run`을 확인하고, 운영 백업 식별자를 준비한 뒤 아래처럼
+명시적으로 마이그레이션한다.
+
+```bash
+cd services/realtime-server
+npm run migrate -- status
+npm run migrate -- up --dry-run
+NODE_ENV=production npm run migrate -- up --backup-ref '<backup-id>'
+```
+
+테스터 도메인은 `./scripts/deploy_test_server.sh`를 사용한다. 상세한 서버 경로,
+PM2 프로세스, 도메인, 롤백 주의사항은 [SERVER_SETUP.md](./SERVER_SETUP.md)를
+기준으로 한다.
+
 ## Local PC Setup
 
 ```bash
