@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 export const TAROT_CATALOG_VERSION = 'tarot-major-v1';
 
 const cardDefinitions = [
@@ -35,17 +33,41 @@ export const majorArcanaCatalog = cardDefinitions.map(([key, title, plain]) => (
   reflection: '오늘 이 메시지가 내 마음과 만나는 지점을 한 문장으로 적어보세요.',
 }));
 
-export const drawDailyTarot = ({ scope, scopeId, date }) => {
-  const seed = createHash('sha256')
-    .update(`${TAROT_CATALOG_VERSION}|${scope}|${scopeId}|${date}`)
-    .digest();
-  const index = seed.readUInt32BE(0) % majorArcanaCatalog.length;
+export const tarotSelectionCatalog = majorArcanaCatalog.map((card, index) => ({
+  key: card.key,
+  position: index + 1,
+}));
+
+const disclaimer = '타로는 자기 성찰을 돕는 참고 콘텐츠이며 사실 예측이나 진단이 아니에요.';
+
+export const undrawnTarot = ({ scope, date }) => ({
+  scope,
+  date,
+  catalogVersion: TAROT_CATALOG_VERSION,
+  drawn: false,
+  drawRequired: true,
+  cards: tarotSelectionCatalog.map((card) => ({ ...card })),
+  redrawAvailable: false,
+  disclaimer,
+});
+
+export const drawSelectedTarot = ({ scope, date, cardKey }) => {
+  const card = majorArcanaCatalog.find((candidate) => candidate.key === cardKey);
+  if (!card) {
+    const error = new Error('invalid_tarot_card');
+    error.code = 'invalid_tarot_card';
+    error.status = 422;
+    throw error;
+  }
   return {
     scope,
     date,
     catalogVersion: TAROT_CATALOG_VERSION,
+    drawn: true,
+    drawRequired: false,
+    selectedByUser: true,
     redrawAvailable: false,
-    card: { ...majorArcanaCatalog[index] },
-    disclaimer: '타로는 자기 성찰을 돕는 참고 콘텐츠이며 사실 예측이나 진단이 아니에요.',
+    card: { ...card },
+    disclaimer,
   };
 };

@@ -8,6 +8,78 @@ import 'package:secret_base_app/core/tarot_api.dart';
 import 'package:secret_base_app/screens/relationship/tarot_screen.dart';
 
 void main() {
+  testWidgets('lets the user pick a face-down card before revealing it', (
+    tester,
+  ) async {
+    var picked = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TarotScreen(
+          api: TarotApi(
+            baseUrl: 'https://secretbase.example',
+            token: 'jwt-token',
+            client: MockClient((request) async {
+              if (request.method == 'GET') {
+                return http.Response(
+                  jsonEncode({
+                    'ok': true,
+                    'date': '2026-09-10',
+                    'catalogVersion': 'tarot-major-v1',
+                    'redrawAvailable': false,
+                    'personal': {
+                      'scope': 'user',
+                      'drawn': false,
+                      'drawRequired': true,
+                      'cards': [
+                        {'key': 'the_fool', 'position': 1},
+                      ],
+                    },
+                  }),
+                  200,
+                  headers: {'content-type': 'application/json; charset=utf-8'},
+                );
+              }
+              picked = true;
+              return http.Response(
+                jsonEncode({
+                  'ok': true,
+                  'date': '2026-09-10',
+                  'catalogVersion': 'tarot-major-v1',
+                  'redrawAvailable': false,
+                  'personal': {
+                    'scope': 'user',
+                    'drawn': true,
+                    'drawRequired': false,
+                    'card': {
+                      'key': 'the_fool',
+                      'title': '바보',
+                      'orientation': 'upright',
+                      'plain': '새로운 시작을 살펴봐요.',
+                      'reflection': '오늘의 첫 걸음을 적어보세요.',
+                    },
+                  },
+                }),
+                200,
+                headers: {'content-type': 'application/json; charset=utf-8'},
+              );
+            }),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('tarot_user_pick_help')), findsOneWidget);
+    expect(find.byKey(const Key('tarot_pick_user_the_fool')), findsOneWidget);
+    expect(find.text('바보'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('tarot_pick_user_the_fool')));
+    await tester.pumpAndSettle();
+
+    expect(picked, isTrue);
+    expect(find.text('바보'), findsOneWidget);
+  });
+
   testWidgets('shows personal and couple Tarot cards without a redraw action', (
     tester,
   ) async {

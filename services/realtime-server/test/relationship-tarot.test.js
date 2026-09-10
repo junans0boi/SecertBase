@@ -3,7 +3,9 @@ import test from 'node:test';
 import {
   TAROT_CATALOG_VERSION,
   majorArcanaCatalog,
-  drawDailyTarot,
+  tarotSelectionCatalog,
+  drawSelectedTarot,
+  undrawnTarot,
 } from '../src/relationship-tarot.js';
 
 test('Tarot catalog contains 22 upright Major Arcana cards', () => {
@@ -13,16 +15,36 @@ test('Tarot catalog contains 22 upright Major Arcana cards', () => {
   assert.ok(majorArcanaCatalog.every((card) => card.plain && card.reflection));
 });
 
-test('daily Tarot is deterministic per date, scope, and catalog version', () => {
-  const personal = drawDailyTarot({ scope: 'user', scopeId: 12, date: '2026-09-10' });
-  const personalAgain = drawDailyTarot({ scope: 'user', scopeId: 12, date: '2026-09-10' });
-  const couple = drawDailyTarot({ scope: 'couple', scopeId: 99, date: '2026-09-10' });
-  const nextDay = drawDailyTarot({ scope: 'user', scopeId: 12, date: '2026-09-11' });
+test('Tarot shows a face-down selection catalog before the first draw', () => {
+  const waiting = undrawnTarot({ scope: 'user', date: '2026-09-10' });
 
-  assert.equal(personal.catalogVersion, TAROT_CATALOG_VERSION);
-  assert.deepEqual(personal, personalAgain);
-  assert.notEqual(personal.card.key, nextDay.card.key);
-  assert.equal(personal.scope, 'user');
-  assert.equal(couple.scope, 'couple');
-  assert.equal('reversed' in personal.card, false);
+  assert.equal(waiting.drawn, false);
+  assert.equal(waiting.drawRequired, true);
+  assert.equal(waiting.catalogVersion, TAROT_CATALOG_VERSION);
+  assert.equal(waiting.cards.length, 22);
+  assert.equal(waiting.cards[0].position, 1);
+  assert.equal('plain' in waiting.cards[0], false);
+});
+
+test('user-selected Tarot card is fixed for the date and cannot be replaced', () => {
+  const selected = drawSelectedTarot({
+    scope: 'user',
+    date: '2026-09-10',
+    cardKey: 'the_star',
+  });
+
+  assert.equal(selected.drawn, true);
+  assert.equal(selected.drawRequired, false);
+  assert.equal(selected.card.key, 'the_star');
+  assert.equal(selected.redrawAvailable, false);
+  assert.equal(tarotSelectionCatalog.length, 22);
+  assert.equal('reversed' in selected.card, false);
+  assert.throws(
+    () => drawSelectedTarot({
+      scope: 'user',
+      date: '2026-09-10',
+      cardKey: 'not-a-card',
+    }),
+    /invalid_tarot_card/,
+  );
 });

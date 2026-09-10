@@ -94,6 +94,29 @@ test('limited mode keeps a known birth time while marking the missing place', ()
   assert.ok(result.limitations.includes('birthPlaceMissing'));
 });
 
+test('personal Saju plain reading exposes a full, readable chart overview', () => {
+  const result = calculatePersonalSaju({ profile: profile() });
+
+  assert.equal(result.plain.pillars.length, 4);
+  assert.deepEqual(result.plain.pillars.map((pillar) => pillar.key), [
+    'year',
+    'month',
+    'day',
+    'hour',
+  ]);
+  assert.ok(result.plain.pillars.every((pillar) => pillar.hanja && pillar.korean));
+  assert.equal(result.plain.elements.entries.length, 5);
+  assert.deepEqual(
+    result.plain.elements.entries.map((entry) => entry.key),
+    ['木', '火', '土', '金', '水'],
+  );
+  assert.equal(result.plain.sipseong.entries.length, 5);
+  assert.ok(result.plain.dayMaster.label.includes(result.plain.dayMaster.stem));
+  assert.ok(result.plain.dayMaster.summary.length > 20);
+  assert.ok(result.plain.ilju.summary.length > 20);
+  assert.equal(result.plain.disclaimer.includes('예측'), true);
+});
+
 test('relationship Saju returns pattern cards and questions without scores or raw partner charts', () => {
   const result = buildRelationshipSaju({
     firstProfile: profile({ birthDate: '1995-03-16' }),

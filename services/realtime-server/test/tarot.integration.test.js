@@ -29,21 +29,41 @@ const registerAndLogin = async (server, name) => {
 };
 
 test(
-  'Tarot REST keeps the personal card stable and does not expose redraw',
+  'Tarot REST lets the user choose one daily card and then keeps it stable',
   { skip: !adminUrl || !redisUrl },
   async () => {
     const server = await createApiTestServer({ adminUrl, redisUrl });
     try {
       const user = await registerAndLogin(server, 'tarot-personal');
-      const first = await server.request('/relationship/tarot/today', { token: user.token });
-      const firstBody = await first.json();
-      assert.equal(first.status, 200, JSON.stringify(firstBody));
-      assert.equal(firstBody.personal.scope, 'user');
-      assert.equal(firstBody.personal.card.orientation, 'upright');
-      assert.equal(firstBody.redrawAvailable, false);
+      const waiting = await server.request('/relationship/tarot/today', { token: user.token });
+      const waitingBody = await waiting.json();
+      assert.equal(waiting.status, 200, JSON.stringify(waitingBody));
+      assert.equal(waitingBody.personal.drawn, false);
+      assert.equal(waitingBody.personal.drawRequired, true);
+      assert.equal(waitingBody.personal.cards.length, 22);
+
+      const draw = await server.request('/relationship/tarot/today/draw', {
+        token: user.token,
+        method: 'POST',
+        body: { scope: 'user', cardKey: 'the_star' },
+      });
+      const drawBody = await draw.json();
+      assert.equal(draw.status, 200, JSON.stringify(drawBody));
+      assert.equal(drawBody.personal.drawn, true);
+      assert.equal(drawBody.personal.card.key, 'the_star');
+      assert.equal(drawBody.redrawAvailable, false);
+
       const second = await server.request('/relationship/tarot/today', { token: user.token });
       const secondBody = await second.json();
-      assert.deepEqual(secondBody.personal.card, firstBody.personal.card);
+      assert.deepEqual(secondBody.personal.card, drawBody.personal.card);
+      assert.equal(secondBody.personal.drawRequired, false);
+
+      const secondDraw = await server.request('/relationship/tarot/today/draw', {
+        token: user.token,
+        method: 'POST',
+        body: { scope: 'user', cardKey: 'the_sun' },
+      });
+      assert.equal(secondDraw.status, 409);
       const redraw = await server.request('/relationship/tarot/today/redraw', {
         token: user.token,
         method: 'POST',

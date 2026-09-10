@@ -14,7 +14,7 @@
 - 개인검사와 커플검사는 상단 탭으로 분리한다. 하단 네비게이션에 새 탭을 추가하지 않는다.
 - 개인검사 기록은 최신 결과와 과거 결과를 모두 보존하며, 기록 항목을 누르면 문항별 선택 답변을 읽기 전용으로 확인할 수 있다.
 - 검사 변화 비교는 인증 REST가 같은 버전의 최근 두 개인·커플 기록만 계산하고, Flutter 기록 화면이 중립적인 변화 카드와 접근성 문장을 표시한다. 기록이 한 건뿐이면 재검사 안내를 보여준다. 계약은 [ADR 0010](../adr/0010-assessment-change-comparison-contract.md)을 따른다.
-- 개인 사주 첫 vertical slice와 관계 사주 요약이 들어왔다. 서버는 `k-saju@0.1.4`와 고정 규칙 세트로 1900–2050년 한국 표준시 입력을 계산하고, 윤달 여부·출생지 문자열·입춘/절기·자시 경계를 결과에 보존한다. Flutter는 쉬운 설명을 먼저 보여주고 같은 계산 결과의 전문 용어를 펼쳐 볼 수 있다. 활성 Couple이 있으면 원본 명식이나 점수 없이 오행·일간 패턴 카드와 대화 질문만 함께 반환한다. 타로는 메이저 22장 정방향 카탈로그를 개인·Couple 범위와 날짜에 고정해 하루 한 장을 저장하고, 같은 날 재추첨 endpoint 없이 Flutter에서 개인·관계 카드를 보여준다. 마음관리 가이드는 고정 taxonomy와 10단계 개인 비공개 대화, 빠른 선택지·선택적 자유 입력, 위험 표현 후보의 명시적 안전 확인까지 구현했다. 계산 참고 원문은 [프로젝트 참조 PDF](./reference/saju/23-saju-120-day-challenge.pdf)로 고정한다.
+- 개인 사주 첫 vertical slice와 관계 사주 요약이 들어왔다. 서버는 `k-saju@0.1.4`와 고정 규칙 세트로 1900–2050년 한국 표준시 입력을 계산하고, 윤달 여부·출생지 문자열·입춘/절기·자시 경계를 결과에 보존한다. Flutter는 네 기둥·일간·오행·십신·일주·성찰 질문을 쉬운 설명으로 먼저 보여주고 같은 계산 결과의 전문 용어를 펼쳐 볼 수 있다. 활성 Couple이 있으면 원본 명식이나 점수 없이 오행·일간 패턴 카드와 대화 질문만 함께 반환한다. 타로는 메이저 22장 정방향 카탈로그를 개인·Couple 범위로 보여주고 사용자가 직접 고른 카드를 날짜에 고정해 저장하며, 선택 전에는 카드 뒷면 선택 UI를 제공한다. 마음관리 가이드는 고정 taxonomy와 10단계 개인 비공개 대화, 빠른 선택지·선택적 자유 입력, 위험 표현 후보의 명시적 안전 확인까지 구현했다. 계산 참고 원문은 [프로젝트 참조 PDF](./reference/saju/23-saju-120-day-challenge.pdf)로 고정한다.
 - 출생 프로필이 저장된 사용자는 관계 이해 허브에서 입력 폼을 보지 않는다. 수정은 설정의 프로필 수정에서 한다.
 - `main`에는 기능 코드와 테스트가 합쳐져 있다. 운영 배포 및 운영 DB 마이그레이션 적용 여부는 별도 배포 확인이 필요하다.
 
@@ -151,6 +151,8 @@ POST   /api/relationship/mindcare/sessions/:sessionId/safety
 GET    /api/relationship/mindcare/safety-resources
 GET    /api/relationship/assessment-results/:code/comparison
 GET    /api/relationship/couple-assessment-results/:code/comparison
+GET    /api/relationship/tarot/today
+POST   /api/relationship/tarot/today/draw
 ```
 
 개인 사주 첫 slice는 기존 운세 저장소와 별도의 결과 저장소를 사용한다.
@@ -198,6 +200,7 @@ POST   /api/relationship/saju
 | `0036` | Couple 범위 관계 사주 요약 결과 |
 | `0037` | 개인·Couple 날짜 고정 타로 카드 |
 | `0038` | 개인 비공개 마음관리 guided chat 상태와 메시지 |
+| `0039` | 타로 자동 생성 row와 사용자 선택 row 구분 |
 
 운영 배포 시 기존 migration runner를 사용한다. 요청 처리 중 테이블을 새로 만드는 방식으로 확장하지 않는다.
 

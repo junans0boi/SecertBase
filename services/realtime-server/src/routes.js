@@ -41,7 +41,8 @@ import {
 } from './relationship-saju.js';
 import {
   TAROT_CATALOG_VERSION,
-  drawDailyTarot,
+  drawSelectedTarot,
+  undrawnTarot,
 } from './relationship-tarot.js';
 import {
   MINDCARE_CONTENT_VERSION,
@@ -8272,13 +8273,25 @@ router.post('/relationship/saju', async (req, res) => {
   }
 });
 
-const tarotPayload = (row) => parseRelationshipJson(row.result_json) ?? {};
+const tarotPayload = (row, { scope, date }) => {
+  const payload = parseRelationshipJson(row.result_json);
+  const selectedByUser = Number(row.selected_by_user) === 1 || payload?.selectedByUser === true;
+  if (!selectedByUser || !payload?.card) {
+    return undrawnTarot({ scope, date });
+  }
+  return {
+    ...payload,
+    drawn: true,
+    drawRequired: false,
+    selectedByUser: true,
+  };
+};
 
 const readStoredTarot = async ({ userId = null, coupleId = null, date }) => {
   const scopeColumn = userId == null ? 'couple_id' : 'user_id';
   const scopeId = userId == null ? coupleId : userId;
   const result = await query(
-    `SELECT result_json
+    `SELECT result_json, selected_by_user
      FROM relationship_tarot_contents
      WHERE ${scopeColumn} = ? AND content_date = ? AND catalog_version = ?
      LIMIT 1`,
@@ -8287,18 +8300,32 @@ const readStoredTarot = async ({ userId = null, coupleId = null, date }) => {
   return result.rows[0] ?? null;
 };
 
-const saveTarot = async ({ userId = null, coupleId = null, date }) => {
-  const existing = await readStoredTarot({ userId, coupleId, date });
-  if (existing) return tarotPayload(existing);
+const readCurrentTarot = async ({ userId = null, coupleId = null, date }) => {
   const scope = userId == null ? 'couple' : 'user';
-  const scopeId = userId == null ? coupleId : userId;
-  const result = drawDailyTarot({ scope, scopeId, date });
+  const existing = await readStoredTarot({ userId, coupleId, date });
+  return existing
+    ? tarotPayload(existing, { scope, date })
+    : undrawnTarot({ scope, date });
+};
+
+const saveSelectedTarot = async ({ userId = null, coupleId = null, date, cardKey }) => {
+  const scope = userId == null ? 'couple' : 'user';
+  const existing = await readStoredTarot({ userId, coupleId, date });
+  if (existing && Number(existing.selected_by_user) === 1) {
+    const error = new Error('tarot_already_drawn');
+    error.code = 'tarot_already_drawn';
+    error.status = 409;
+    throw error;
+  }
+  const result = drawSelectedTarot({ scope, date, cardKey });
   await query(
     `INSERT INTO relationship_tarot_contents
-       (user_id, couple_id, content_date, catalog_version, card_key, result_json)
-     VALUES (?, ?, ?, ?, ?, ?)
+       (user_id, couple_id, content_date, catalog_version, card_key, result_json, selected_by_user)
+     VALUES (?, ?, ?, ?, ?, ?, 1)
      ON DUPLICATE KEY UPDATE
-       card_key = VALUES(card_key), result_json = VALUES(result_json),
+       card_key = IF(selected_by_user = 1, card_key, VALUES(card_key)),
+       result_json = IF(selected_by_user = 1, result_json, VALUES(result_json)),
+       selected_by_user = IF(selected_by_user = 1, selected_by_user, VALUES(selected_by_user)),
        updated_at = CURRENT_TIMESTAMP`,
     [
       userId,
@@ -8311,27 +8338,59 @@ const saveTarot = async ({ userId = null, coupleId = null, date }) => {
   );
   const stored = await readStoredTarot({ userId, coupleId, date });
   if (!stored) throw new Error('tarot_storage_failed');
-  return tarotPayload(stored);
+  if (Number(stored.selected_by_user) !== 1) throw new Error('tarot_storage_failed');
+  return tarotPayload(stored, { scope, date });
+};
+
+const readTarotToday = async (userId, date) => {
+  const couple = await getActiveCoupleRow(userId);
+  const personal = await readCurrentTarot({ userId, date });
+  const relationship = couple
+    ? await readCurrentTarot({ coupleId: Number(couple.CoupleId), date })
+    : null;
+  return { date, catalogVersion: TAROT_CATALOG_VERSION, redrawAvailable: false, personal, relationship };
 };
 
 router.get('/relationship/tarot/today', async (req, res) => {
   try {
     const date = businessDate();
-    const couple = await getActiveCoupleRow(req.auth.userId);
-    const personal = await saveTarot({ userId: req.auth.userId, date });
-    const relationship = couple
-      ? await saveTarot({ coupleId: Number(couple.CoupleId), date })
-      : null;
     return res.json({
       ok: true,
-      date,
-      catalogVersion: TAROT_CATALOG_VERSION,
-      redrawAvailable: false,
-      personal,
-      relationship,
+      ...(await readTarotToday(req.auth.userId, date)),
     });
   } catch (error) {
     console.error('[API] /relationship/tarot/today GET error:', error);
+    return res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.post('/relationship/tarot/today/draw', async (req, res) => {
+  try {
+    const scope = String(req.body?.scope ?? 'user').trim();
+    const cardKey = String(req.body?.cardKey ?? '').trim();
+    if (!['user', 'couple'].includes(scope) || !cardKey) {
+      return res.status(400).json({ ok: false, reason: 'invalid_tarot_selection' });
+    }
+    const date = businessDate();
+    if (scope === 'couple') {
+      const couple = await getActiveCoupleRow(req.auth.userId);
+      if (!couple) {
+        return res.status(404).json({ ok: false, reason: 'tarot_couple_unavailable' });
+      }
+      await saveSelectedTarot({
+        coupleId: Number(couple.CoupleId),
+        date,
+        cardKey,
+      });
+    } else {
+      await saveSelectedTarot({ userId: req.auth.userId, date, cardKey });
+    }
+    return res.json({ ok: true, ...(await readTarotToday(req.auth.userId, date)) });
+  } catch (error) {
+    if (error.code === 'invalid_tarot_card' || error.code === 'tarot_already_drawn') {
+      return res.status(error.status ?? 409).json({ ok: false, reason: error.code });
+    }
+    console.error('[API] /relationship/tarot/today/draw error:', error);
     return res.status(500).json({ ok: false, reason: 'internal_error' });
   }
 });
