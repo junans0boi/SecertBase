@@ -159,13 +159,9 @@ Use the smallest useful context set:
 - Deployment: `HANDOFF.md`, `scripts/deploy_server.sh`, `docs/deployment/*`
 - Database: `schema.sql`, `routes.js` table creation helpers, `db.js`
 
-Avoid loading old broad logs unless needed:
-
-- `PROGRESS_SUMMARY.md`
-- `DEVELOPMENT_LOG.md`
-- `docs/WORKLOG.md`
-
-Those are useful history, but some DB details are stale.
+Use `HANDOFF.md` and `docs/PROJECT_OVERVIEW.md` for current context. Treat
+date-stamped files under `docs/handoff/` as historical records and load them
+only when the task concerns that session.
 
 ## 5. Claude And Codex Usage
 

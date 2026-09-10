@@ -4,11 +4,12 @@
 
 The public MVP is the mobile-web Couple core: consent-based pairing, persistent
 separation/reunion, D-day, MomentLoop text/photo/10-second clips, Secret Map,
-Yut/Bomb/RPS, and author-only inactive-history export. REST and Socket identity
-come from JWT, and a user can have only one active Couple. Deferred Archive and
-game surfaces remain feature-gated; UNO is absent from the public UI/assets.
+relationship understanding, and realtime games. REST and Socket identity come
+from JWT, and a user can have only one active Couple. Extended archive and game
+surfaces remain feature-gated while the five-tab shell stays focused on the
+couple's daily loop.
 
-Last updated: 2026-06-20
+Last updated: 2026-09-10
 
 ## What This Project Is
 
@@ -85,6 +86,33 @@ Current screen flow:
 3. If logged in but not paired, app shows `PartnerScreen`.
 4. If paired, app auto-connects Socket.IO using `RoomCode`, `RoomSecret`, and `UserCode`.
 5. When socket is connected, app shows `HomeShell`.
+
+## Current Navigation And Account Surface
+
+The signed-in shell has five persistent destinations:
+
+```text
+홈 | MomentLoop | 지도 | 놀이 | 더보기
+```
+
+Home is the daily entry surface. Its `오늘 기록` action is the canonical shortcut
+to MomentLoop; map and play shortcuts open their dedicated tabs. MomentLoop is
+also a permanent bottom tab so the same destination is not repeated through
+several competing Home buttons.
+
+`더보기` opens a screen titled `전체`. It groups the shared spaces and account
+management in one place. Its `내 공간` screen contains the profile summary,
+profile editing, birth profile entry, social-login status, connected partner,
+anniversary, profile emoji, connection state, presence, logout, account deletion,
+and developer information. Detail navigation stays inside the shell so the
+bottom navigation remains available.
+
+Profile editing covers name, nickname, and birth date. Detailed birth profile
+information for fortune and relationship understanding is edited from the same
+flow and may include birth time, calendar type, timezone, and birth place.
+
+Couple start date is the app's primary anniversary. It is saved against the
+authenticated active Couple and is reused by Home for D-day display.
 
 Important client services:
 
@@ -195,12 +223,26 @@ REST-backed archive screens include:
 - Couple info and D-day: `/api/couple/info`
 - Time capsules: `/api/capsules`
 
+## Relationship Understanding
+
+관계 이해 기능은 홈 카드에서 진입하며, 허브 상단 탭으로 개인 영역과 커플 영역을 분리한다. 현재 기준의 제품 경계·API·마이그레이션·검증 기준은 [`docs/product/RELATIONSHIP_UNDERSTANDING_IMPLEMENTATION.md`](product/RELATIONSHIP_UNDERSTANDING_IMPLEMENTATION.md)에 정리되어 있다.
+
+- 출생 프로필: 양력/음력, 날짜, nullable 출생 시각, 시간대, nullable 출생지
+- 개인검사 4종: 애착, 사회적 유대, 감정 해소, 관계 결핍 인식
+- 커플검사 3종: 갈등 회복, 함께 있음과 개인 시간, 애정 표현과 기대
+- 개인검사: 진행 저장·이어하기·재검사·읽기 전용 결과 history·문항별 선택 답변 상세
+- 커플검사: 두 사람의 같은 버전 완료 후 공유 결과와 분석 생성
+- 운세·상담: 날짜/범위 저장, 명시적 재생성, private/shared 세션과 승인된 공유 힌트
+- 핵심 점수와 권한: LLM과 분리된 결정론적 처리
+
+관계 이해 데이터베이스는 기존 MariaDB/MySQL 마이그레이션 체계를 사용한다. PostgreSQL로 전환하지 않는다.
+
 ## Deployment Flow
 
 Normal server deployment:
 
 ```bash
-cd /home/junzzang/SecertBase
+cd /home/ubuntu/SecertBase
 ./scripts/deploy_server.sh
 ```
 
@@ -237,7 +279,7 @@ flutter run -d chrome --dart-define=SOCKET_URL=http://localhost:4100
 Using the production DB/Redis from a local Mac should be done through Tailscale + SSH tunnel:
 
 ```bash
-ssh -L 3307:127.0.0.1:3306 -L 6380:127.0.0.1:6379 junzzang@100.82.126.57
+ssh -i /Volumes/WorkSpace/Personal/Key/ssh-key-2026-07-06.key -L 3307:127.0.0.1:3306 -L 6380:127.0.0.1:6379 ubuntu@100.97.58.29
 ```
 
 Then local `.env` can point to:
