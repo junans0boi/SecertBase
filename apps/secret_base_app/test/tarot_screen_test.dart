@@ -70,6 +70,7 @@ void main() {
 
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('tarot_user_pick_help')), findsOneWidget);
+    expect(find.byKey(const Key('tarot_user_arc_deck')), findsOneWidget);
     expect(find.byKey(const Key('tarot_pick_user_the_fool')), findsOneWidget);
     expect(find.text('바보'), findsNothing);
 
@@ -129,8 +130,58 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('나의 타로'), findsOneWidget);
     expect(find.text('별'), findsOneWidget);
+    expect(find.byKey(const Key('tarot_user_result_message')), findsOneWidget);
+    expect(find.byKey(const Key('tarot_user_result_question')), findsOneWidget);
     expect(find.text('우리의 관계 타로'), findsOneWidget);
     expect(find.text('태양'), findsOneWidget);
+    expect(find.text('메이저 아르카나 22장 · tarot-major-v1'), findsOneWidget);
     expect(find.text('다시 뽑기'), findsNothing);
+  });
+
+  testWidgets('keeps the full major arcana deck in the fan layout', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final cards = List.generate(
+      22,
+      (index) => {'key': 'card_$index', 'position': index + 1},
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TarotScreen(
+          api: TarotApi(
+            baseUrl: 'https://secretbase.example',
+            token: 'jwt-token',
+            client: MockClient(
+              (_) async => http.Response(
+                jsonEncode({
+                  'ok': true,
+                  'date': '2026-09-10',
+                  'catalogVersion': 'tarot-major-v1',
+                  'redrawAvailable': false,
+                  'personal': {
+                    'scope': 'user',
+                    'drawn': false,
+                    'drawRequired': true,
+                    'cards': cards,
+                  },
+                }),
+                200,
+                headers: {'content-type': 'application/json; charset=utf-8'},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('tarot_user_arc_deck')), findsOneWidget);
+    expect(find.byKey(const Key('tarot_pick_user_card_21')), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

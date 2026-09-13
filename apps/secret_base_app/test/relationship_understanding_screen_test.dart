@@ -205,6 +205,7 @@ void main() {
     expect(find.text('출생 프로필'), findsNothing);
     expect(find.text('관계 이해 허브'), findsWidgets);
     expect(find.byKey(const Key('relationship_personal_area')), findsOneWidget);
+    expect(find.byKey(const Key('relationship_fortune_area')), findsNothing);
     expect(find.byKey(const Key('open_saju')), findsOneWidget);
     expect(find.byKey(const Key('open_tarot')), findsOneWidget);
   });

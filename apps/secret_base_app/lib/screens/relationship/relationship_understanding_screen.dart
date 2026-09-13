@@ -9,7 +9,6 @@ import '../../core/assessment_catalog_api.dart';
 import '../../core/compatibility_api.dart';
 import '../../core/counseling_api.dart';
 import '../../core/birth_profile_api.dart';
-import '../../core/fortune_api.dart';
 import '../../core/main_design.dart';
 import '../../core/mindcare_api.dart';
 import '../../core/saju_api.dart';
@@ -17,7 +16,6 @@ import '../../core/tarot_api.dart';
 import 'assessment_catalog_screen.dart';
 import 'compatibility_screen.dart';
 import 'counseling_screen.dart';
-import 'fortune_screen.dart';
 import 'saju_screen.dart';
 import 'tarot_screen.dart';
 import 'mindcare_screen.dart';
@@ -842,21 +840,6 @@ class _RelationshipUnderstandingScreenState
     );
   }
 
-  void _openFortune(FortuneScope scope) {
-    final auth = AuthService();
-    Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => RelationshipFortuneScreen(
-          api: FortuneApi(baseUrl: auth.baseUrl, token: auth.token ?? ''),
-          onOpenCounseling: scope == FortuneScope.personal
-              ? _openPrivateCounseling
-              : _openSharedCounseling,
-          scope: scope,
-        ),
-      ),
-    );
-  }
-
   void _openPrivateCounseling() {
     final auth = AuthService();
     Navigator.of(context).push<void>(
@@ -917,47 +900,6 @@ class _RelationshipUnderstandingScreenState
           api: CounselingApi(baseUrl: auth.baseUrl, token: auth.token ?? ''),
           shared: true,
         ),
-      ),
-    );
-  }
-
-  Widget _fortuneArea({required FortuneScope scope}) {
-    final isCouple = scope == FortuneScope.couple;
-    return MainCard(
-      key: const Key('relationship_fortune_area'),
-      padding: const EdgeInsets.all(18),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.auto_awesome_outlined, color: kMainRose),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isCouple ? '오늘의 관계 운세' : '오늘의 운세',
-                  style: mainBody(weight: FontWeight.w800),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  isCouple
-                      ? '두 사람의 관계 흐름과 오늘 확인해볼 대화 신호를 살펴봐요.'
-                      : '출생 프로필을 바탕으로 오늘의 감정 흐름을 살펴봐요.',
-                  style: mainBody(size: 13, color: kMainSub, height: 1.5),
-                ),
-                const SizedBox(height: 10),
-                OutlinedButton(
-                  key: Key(
-                    isCouple ? 'open_relationship_fortune' : 'open_fortune',
-                  ),
-                  onPressed: () => _openFortune(scope),
-                  child: Text(isCouple ? '관계 운세 보기' : '오늘의 운세 보기'),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -1324,8 +1266,6 @@ class _RelationshipUnderstandingScreenState
                     if (!widget.editBirthProfileOnly) ...[
                       const SizedBox(height: 18),
                       if (_selectedArea == _RelationshipArea.personal) ...[
-                        _fortuneArea(scope: FortuneScope.personal),
-                        const SizedBox(height: 12),
                         _sajuArea(),
                         const SizedBox(height: 12),
                         _tarotArea(),
@@ -1336,8 +1276,6 @@ class _RelationshipUnderstandingScreenState
                         const SizedBox(height: 12),
                         _counselingArea(shared: false),
                       ] else ...[
-                        _fortuneArea(scope: FortuneScope.couple),
-                        const SizedBox(height: 12),
                         _coupleArea(),
                         const SizedBox(height: 12),
                         _counselingArea(shared: true),
