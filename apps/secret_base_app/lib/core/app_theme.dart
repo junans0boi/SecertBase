@@ -91,19 +91,16 @@ ThemeData buildAppTheme() {
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     ),
     filledButtonTheme: const FilledButtonThemeData(
-      style: ButtonStyle(
-        minimumSize: WidgetStatePropertyAll(Size(44, 44)),
-      ),
+      style: ButtonStyle(minimumSize: WidgetStatePropertyAll(Size(44, 44))),
     ),
     outlinedButtonTheme: const OutlinedButtonThemeData(
-      style: ButtonStyle(
-        minimumSize: WidgetStatePropertyAll(Size(44, 44)),
-      ),
+      style: ButtonStyle(minimumSize: WidgetStatePropertyAll(Size(44, 44))),
     ),
     elevatedButtonTheme: const ElevatedButtonThemeData(
-      style: ButtonStyle(
-        minimumSize: WidgetStatePropertyAll(Size(44, 44)),
-      ),
+      style: ButtonStyle(minimumSize: WidgetStatePropertyAll(Size(44, 44))),
+    ),
+    textButtonTheme: const TextButtonThemeData(
+      style: ButtonStyle(minimumSize: WidgetStatePropertyAll(Size(44, 44))),
     ),
     dividerColor: kMainLine,
     cardColor: kMainPaper,
