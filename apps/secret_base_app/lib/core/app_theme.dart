@@ -56,6 +56,7 @@ ThemeData buildAppTheme() {
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: kMainPaper,
       indicatorColor: kMainPaperSoft,
+      elevation: 0,
       shadowColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
       iconTheme: WidgetStateProperty.resolveWith((s) {

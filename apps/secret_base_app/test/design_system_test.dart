@@ -32,6 +32,7 @@ void main() {
       expect(theme.colorScheme.primary, kMainRose);
       expect(focusedBorder.borderSide.color, kMainRose);
       expect(theme.navigationBarTheme.indicatorColor, kMainPaperSoft);
+      expect(theme.navigationBarTheme.elevation, 0);
       expect(selectedLabel!.color, kMainInk);
       expect(
         theme.filledButtonTheme.style?.minimumSize?.resolve({}),
