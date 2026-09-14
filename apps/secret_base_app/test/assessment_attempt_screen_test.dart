@@ -84,6 +84,38 @@ final _coupleAssessment = AssessmentCatalogItem(
   ],
 );
 
+final _twoQuestionAssessment = AssessmentCatalogItem(
+  code: 'attachment',
+  audience: AssessmentAudience.individual,
+  title: '애착과 안정감',
+  description: '설명',
+  version: 'v1',
+  candidateQuestionCount: 24,
+  activeQuestionCount: 2,
+  completionStatus: AssessmentCompletionStatus.notStarted,
+  dimensions: const [
+    AssessmentDimension(key: 'reassurance', title: '확인과 안심', order: 1),
+  ],
+  questions: const [
+    AssessmentQuestion(
+      key: 'q01',
+      prompt: '첫 번째 질문',
+      dimensionKey: 'reassurance',
+      reverseScored: false,
+      order: 1,
+      likertScale: [LikertOption(value: 1, label: '전혀 그렇지 않다')],
+    ),
+    AssessmentQuestion(
+      key: 'q02',
+      prompt: '두 번째 질문',
+      dimensionKey: 'reassurance',
+      reverseScored: false,
+      order: 2,
+      likertScale: [LikertOption(value: 1, label: '전혀 그렇지 않다')],
+    ),
+  ],
+);
+
 void main() {
   testWidgets('attempt screen resumes progress and saves a selected answer', (
     tester,
@@ -416,4 +448,55 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets(
+    'shows one question at a time with fixed previous and next controls',
+    (tester) async {
+      final api = AssessmentAttemptApi(
+        baseUrl: 'https://secretbase.example',
+        token: 'jwt-token',
+        client: MockClient(
+          (_) async => http.Response.bytes(
+            utf8.encode(
+              jsonEncode({
+                'ok': true,
+                'attempt': {
+                  ..._attemptResponse,
+                  'progress': {
+                    'answeredCount': 0,
+                    'totalCount': 2,
+                    'percentage': 0,
+                    'lastSavedAt': null,
+                  },
+                },
+              }),
+            ),
+            201,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AssessmentAttemptScreen(
+            assessment: _twoQuestionAssessment,
+            api: api,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('첫 번째 질문'), findsOneWidget);
+      expect(find.text('두 번째 질문'), findsNothing);
+      expect(find.byKey(const Key('assessment_previous')), findsOneWidget);
+      expect(find.byKey(const Key('assessment_next')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('assessment_next')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('첫 번째 질문'), findsNothing);
+      expect(find.text('두 번째 질문'), findsOneWidget);
+    },
+  );
 }

@@ -198,6 +198,8 @@ void main() {
 
     expect(find.text('검사 시작하기'), findsOneWidget);
     expect(find.text('검사 이어하기'), findsOneWidget);
-    expect(find.text('다시 검사하기'), findsOneWidget);
+    expect(find.text('결과 보기'), findsOneWidget);
+    expect(find.text('다시 하기'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '결과 보기'), findsOneWidget);
   });
 }

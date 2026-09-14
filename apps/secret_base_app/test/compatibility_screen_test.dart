@@ -260,6 +260,29 @@ void main() {
     expect(find.text('애착 요약 1/2명'), findsOneWidget);
   });
 
+  testWidgets('explains the active-couple permission restriction', (
+    tester,
+  ) async {
+    final api = CompatibilityApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient(
+        (_) async => http.Response(
+          '{"ok":false,"reason":"active_couple_required"}',
+          403,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(MaterialApp(home: CompatibilityScreen(api: api)));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('compatibility_restricted')), findsOneWidget);
+    expect(find.text('활성 커플 연결 후 궁합을 볼 수 있어요.'), findsOneWidget);
+    expect(find.text('파트너 연결하기'), findsOneWidget);
+  });
+
   testWidgets('renders ready compatibility without member scores', (
     tester,
   ) async {

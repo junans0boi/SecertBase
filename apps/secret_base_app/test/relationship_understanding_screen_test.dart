@@ -302,7 +302,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('relationship_personal_area')), findsOneWidget);
-    expect(find.text('파트너가 없어도 내 감정과 관계 패턴을 먼저 살펴볼 수 있어요.'), findsOneWidget);
+    expect(find.text('저장된 답변부터 이어서 마무리할 수 있어요.'), findsOneWidget);
     expect(find.byType(TabBar), findsOneWidget);
     expect(find.text('커플'), findsOneWidget);
     expect(find.text('진행 중인 검사가 있어요'), findsOneWidget);
@@ -327,13 +327,120 @@ void main() {
     expect(find.byType(TabBar), findsOneWidget);
     expect(find.text('개인'), findsOneWidget);
     expect(find.text('커플'), findsOneWidget);
-    expect(find.text('개인 검사 보기'), findsOneWidget);
-    expect(find.text('커플 검사 보기'), findsNothing);
+    expect(find.text('검사 시작하기'), findsOneWidget);
+    expect(find.text('커플 검사 확인하기'), findsNothing);
 
     await tester.tap(find.text('커플'));
     await tester.pumpAndSettle();
 
-    expect(find.text('개인 검사 보기'), findsNothing);
-    expect(find.text('커플 검사 보기'), findsOneWidget);
+    expect(find.text('검사 시작하기'), findsNothing);
+    expect(find.text('커플 검사 확인하기'), findsOneWidget);
+  });
+
+  testWidgets('announces the selected relationship scope tab', (tester) async {
+    final api = BirthProfileApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient((_) async => http.Response(_profileResponse, 200)),
+    );
+    final handle = tester.ensureSemantics();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RelationshipUnderstandingScreen(api: api, hasActiveCouple: true),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final personalTab = find.bySemanticsLabel(RegExp('개인 영역 탭'));
+    expect(personalTab, findsOneWidget);
+    expect(
+      tester.getSemantics(personalTab),
+      matchesSemantics(
+        isSelected: true,
+        hasSelectedState: true,
+        isFocusable: true,
+        hasTapAction: true,
+        hasFocusAction: true,
+      ),
+    );
+
+    await tester.tap(find.text('커플'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.getSemantics(find.bySemanticsLabel(RegExp('커플 영역 탭'))),
+      matchesSemantics(
+        isSelected: true,
+        hasSelectedState: true,
+        isFocusable: true,
+        hasTapAction: true,
+        hasFocusAction: true,
+      ),
+    );
+    handle.dispose();
+  });
+
+  testWidgets('orders personal next actions before reflection content', (
+    tester,
+  ) async {
+    final api = BirthProfileApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient((_) async => http.Response(_profileResponse, 200)),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RelationshipUnderstandingScreen(
+          api: api,
+          assessmentStatus: RelationshipAssessmentStatus.inProgress,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('relationship_mindcare_area')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    double top(Key key) => tester.getTopLeft(find.byKey(key)).dy;
+    expect(
+      top(const Key('relationship_personal_area')),
+      lessThan(top(const Key('relationship_saju_area'))),
+    );
+    expect(
+      top(const Key('relationship_saju_area')),
+      lessThan(top(const Key('relationship_tarot_area'))),
+    );
+    expect(
+      top(const Key('relationship_tarot_area')),
+      lessThan(top(const Key('relationship_mindcare_area'))),
+    );
+    expect(find.byKey(const Key('relationship_status_action')), findsOneWidget);
+    expect(find.text('검사 이어하기'), findsOneWidget);
+  });
+
+  testWidgets('explains the locked couple area and provides a connection CTA', (
+    tester,
+  ) async {
+    final api = BirthProfileApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient((_) async => http.Response(_profileResponse, 200)),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: RelationshipUnderstandingScreen(api: api)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('relationship_couple_restricted')),
+      findsOneWidget,
+    );
+    expect(find.text('파트너 연결하기'), findsOneWidget);
   });
 }

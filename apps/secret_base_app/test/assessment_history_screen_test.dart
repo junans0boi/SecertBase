@@ -23,37 +23,54 @@ void main() {
     final api = AssessmentAttemptApi(
       baseUrl: 'https://secretbase.example',
       token: 'jwt-token',
-      client: MockClient(
-        (_) async => http.Response.bytes(
-          utf8.encode(
-            jsonEncode({
-              'ok': true,
-              'history': [
-                {
-                  'id': 2,
-                  'version': 'v1',
-                  'createdAt': '오늘',
-                  'answers': [
-                    {
-                      'questionKey': 'q01',
-                      'prompt': '가까운 사람에게 마음을 표현할 수 있다.',
-                      'order': 1,
-                      'dimensionTitle': '확인과 안심',
-                      'value': 4,
-                      'label': '그렇다',
-                      'reverseScored': false,
-                    },
-                  ],
-                  'result': result,
-                },
-                {'id': 1, 'version': 'v1', 'createdAt': '어제', 'result': result},
-              ],
-            }),
-          ),
+      client: MockClient((request) async {
+        final body = request.url.path.endsWith('/comparison')
+            ? {
+                'ok': true,
+                'status': 'ready',
+                'available': true,
+                'scope': 'personal',
+                'metric': 'dimensionScore',
+                'visualization': 'bar_or_line',
+                'message': '최근 두 기록을 비교해요.',
+                'overall': {'previous': 45, 'current': 50, 'delta': 5},
+                'dimensions': const [],
+                'disclaimer': '자기이해용 비교예요.',
+              }
+            : {
+                'ok': true,
+                'history': [
+                  {
+                    'id': 2,
+                    'version': 'v1',
+                    'createdAt': '오늘',
+                    'answers': [
+                      {
+                        'questionKey': 'q01',
+                        'prompt': '가까운 사람에게 마음을 표현할 수 있다.',
+                        'order': 1,
+                        'dimensionTitle': '확인과 안심',
+                        'value': 4,
+                        'label': '그렇다',
+                        'reverseScored': false,
+                      },
+                    ],
+                    'result': result,
+                  },
+                  {
+                    'id': 1,
+                    'version': 'v1',
+                    'createdAt': '어제',
+                    'result': result,
+                  },
+                ],
+              };
+        return http.Response.bytes(
+          utf8.encode(jsonEncode(body)),
           200,
           headers: {'content-type': 'application/json; charset=utf-8'},
-        ),
-      ),
+        );
+      }),
     );
 
     await tester.pumpWidget(
@@ -70,6 +87,14 @@ void main() {
     expect(find.text('현재 결과'), findsOneWidget);
     expect(find.text('이전 결과 1'), findsOneWidget);
     expect(find.textContaining('가장 최근 결과가 현재 결과로 사용돼요'), findsOneWidget);
+    expect(
+      find.byKey(const Key('assessment_history_current_meta')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('assessment_history_compare_action')),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byKey(const Key('assessment_history_open_2')));
     await tester.pumpAndSettle();

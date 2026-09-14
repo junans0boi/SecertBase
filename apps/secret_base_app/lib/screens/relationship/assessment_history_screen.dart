@@ -130,48 +130,51 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
         ),
       );
     }
-    return MainCard(
-      key: const Key('assessment_comparison_card'),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.auto_graph_rounded, color: kMainLilac),
-              const SizedBox(width: 8),
-              Text('최근 변화', style: mainBody(weight: FontWeight.w800)),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            comparison.accessibleMessage,
-            style: mainBody(size: 13, color: kMainSub, height: 1.5),
-          ),
-          const SizedBox(height: 12),
-          ...comparison.dimensions.map(
-            (dimension) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      dimension.title,
-                      style: mainBody(size: 12, color: kMainSub),
+    return KeyedSubtree(
+      key: const Key('assessment_history_compare_action'),
+      child: MainCard(
+        key: const Key('assessment_comparison_card'),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.auto_graph_rounded, color: kMainLilac),
+                const SizedBox(width: 8),
+                Text('최근 변화', style: mainBody(weight: FontWeight.w800)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              comparison.accessibleMessage,
+              style: mainBody(size: 13, color: kMainSub, height: 1.5),
+            ),
+            const SizedBox(height: 12),
+            ...comparison.dimensions.map(
+              (dimension) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        dimension.title,
+                        style: mainBody(size: 12, color: kMainSub),
+                      ),
                     ),
-                  ),
-                  Text(
-                    '${dimension.previous} → ${dimension.current} (${dimension.delta >= 0 ? '+' : ''}${dimension.delta})',
-                    style: mainBody(size: 12, weight: FontWeight.w700),
-                  ),
-                ],
+                    Text(
+                      '${dimension.previous} → ${dimension.current} (${dimension.delta >= 0 ? '+' : ''}${dimension.delta})',
+                      style: mainBody(size: 12, weight: FontWeight.w700),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          Text(
-            comparison.disclaimer,
-            style: mainBody(size: 11, color: kMainMuted, height: 1.4),
-          ),
-        ],
+            Text(
+              comparison.disclaimer,
+              style: mainBody(size: 11, color: kMainMuted, height: 1.4),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -189,7 +192,9 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
           borderRadius: BorderRadius.circular(18),
           onTap: () => _openDetail(index, item),
           child: MainCard(
-            key: Key('assessment_history_${item.id}'),
+            key: index == 0
+                ? const Key('assessment_history_current_meta')
+                : Key('assessment_history_${item.id}'),
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

@@ -2,6 +2,40 @@ import 'package:flutter/material.dart';
 
 import '../../core/compatibility_api.dart';
 import '../../core/main_design.dart';
+import '../auth/partner_screen.dart';
+
+Widget _compatibilityRestrictedState(BuildContext context) => Center(
+  child: Padding(
+    padding: const EdgeInsets.all(24),
+    child: MainCard(
+      key: const Key('compatibility_restricted'),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.lock_outline, color: kMainMuted),
+          const SizedBox(height: 12),
+          Text(
+            '활성 커플 연결 후 궁합을 볼 수 있어요.',
+            style: mainBody(weight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '커플 검사와 궁합은 현재 연결된 두 사람에게만 보여요.',
+            textAlign: TextAlign.center,
+            style: mainBody(size: 13, color: kMainSub, height: 1.5),
+          ),
+          const SizedBox(height: 14),
+          OutlinedButton(
+            onPressed: () => Navigator.of(context).push<void>(
+              MaterialPageRoute(builder: (_) => const PartnerScreen()),
+            ),
+            child: const Text('파트너 연결하기'),
+          ),
+        ],
+      ),
+    ),
+  ),
+);
 
 class CompatibilityDashboardScreen extends StatefulWidget {
   final CompatibilityApi api;
@@ -17,6 +51,7 @@ class _CompatibilityDashboardScreenState
     extends State<CompatibilityDashboardScreen> {
   CompatibilityDashboard? _dashboard;
   String? _errorMessage;
+  bool _restricted = false;
   bool _loading = true;
 
   @override
@@ -35,6 +70,7 @@ class _CompatibilityDashboardScreenState
     setState(() {
       _loading = true;
       _errorMessage = null;
+      _restricted = false;
     });
     try {
       final dashboard = await widget.api.fetchDashboard();
@@ -47,10 +83,15 @@ class _CompatibilityDashboardScreenState
       if (!mounted) return;
       setState(() {
         _loading = false;
+        _restricted =
+            error is CompatibilityApiException &&
+            error.reason == 'active_couple_required';
         _errorMessage =
             error is CompatibilityApiException &&
                 error.reason == 'network_error'
             ? '네트워크 연결을 확인하고 다시 시도해주세요.'
+            : _restricted
+            ? '활성 커플 연결 후 궁합을 볼 수 있어요.'
             : '궁합 분석을 불러오지 못했어요.';
       });
     }
@@ -66,6 +107,8 @@ class _CompatibilityDashboardScreenState
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: kMainRose))
+          : _restricted
+          ? _restrictedState()
           : _errorMessage != null
           ? _errorState()
           : ListView(
@@ -204,6 +247,8 @@ class _CompatibilityDashboardScreenState
       ),
     ),
   );
+
+  Widget _restrictedState() => _compatibilityRestrictedState(context);
 }
 
 class CompatibilityScreen extends StatefulWidget {
@@ -224,6 +269,7 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
   CompatibilityState? _state;
   CompatibilityExplanationState? _explanationState;
   String? _errorMessage;
+  bool _restricted = false;
   bool _loading = true;
   bool _loadingExplanation = false;
 
@@ -243,6 +289,7 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
     setState(() {
       _loading = true;
       _errorMessage = null;
+      _restricted = false;
     });
     try {
       final state = widget.analysisCode == 'conflict-repair'
@@ -268,10 +315,15 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
       if (!mounted) return;
       setState(() {
         _loading = false;
+        _restricted =
+            error is CompatibilityApiException &&
+            error.reason == 'active_couple_required';
         _errorMessage =
             error is CompatibilityApiException &&
                 error.reason == 'network_error'
             ? '네트워크 연결을 확인하고 다시 시도해주세요.'
+            : _restricted
+            ? '활성 커플 연결 후 궁합을 볼 수 있어요.'
             : '궁합 분석을 불러오지 못했어요.';
       });
     }
@@ -310,6 +362,8 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: kMainRose))
+          : _restricted
+          ? _restrictedState()
           : _errorMessage != null
           ? _errorState()
           : _state?.result == null
@@ -502,4 +556,6 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
       ),
     ),
   );
+
+  Widget _restrictedState() => _compatibilityRestrictedState(context);
 }

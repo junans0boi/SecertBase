@@ -32,6 +32,7 @@ class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
   bool _submitting = false;
   bool _loadingExplanation = false;
   bool _loading = true;
+  int _questionIndex = 0;
 
   @override
   void initState() {
@@ -193,6 +194,13 @@ class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
           : _result != null
           ? _resultContent()
           : _content(),
+      bottomNavigationBar:
+          !_loading &&
+              _attempt != null &&
+              _result == null &&
+              _coupleState == null
+          ? _questionNavigation()
+          : null,
     );
   }
 
@@ -255,28 +263,62 @@ class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
           ),
         ],
         const SizedBox(height: 18),
-        ...widget.assessment.questions.asMap().entries.map(
-          (entry) =>
-              _questionCard(entry.key, entry.value, selected[entry.value.key]),
+        _questionCard(
+          _questionIndex,
+          widget.assessment.questions[_questionIndex],
+          selected[widget.assessment.questions[_questionIndex].key],
         ),
-        if (progress.answeredCount >= progress.totalCount) ...[
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              key: const Key('assessment_submit'),
-              onPressed: _submitting ? null : _submit,
-              child: _submitting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('검사 제출하기'),
-            ),
-          ),
-        ],
       ],
+    );
+  }
+
+  Widget _questionNavigation() {
+    final isLast = _questionIndex == widget.assessment.questions.length - 1;
+    final progress = _attempt!.progress;
+    final canSubmit = progress.answeredCount >= progress.totalCount;
+    return SafeArea(
+      top: false,
+      child: Material(
+        color: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 10, 18, 14),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  key: const Key('assessment_previous'),
+                  onPressed: _questionIndex == 0
+                      ? null
+                      : () => setState(() => _questionIndex--),
+                  child: const Text('이전'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton(
+                  key: isLast
+                      ? const Key('assessment_submit')
+                      : const Key('assessment_next'),
+                  onPressed: _submitting
+                      ? null
+                      : isLast
+                      ? canSubmit
+                            ? _submit
+                            : null
+                      : () => setState(() => _questionIndex++),
+                  child: _submitting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(isLast ? '검사 제출하기' : '다음'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -491,7 +533,7 @@ class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '문항 ${index + 1}',
+              '문항 ${index + 1} / ${widget.assessment.questions.length}',
               style: mainBody(size: 12, color: kMainLilac),
             ),
             const SizedBox(height: 8),

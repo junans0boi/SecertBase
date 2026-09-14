@@ -4,6 +4,7 @@ import '../../core/assessment_attempt_api.dart';
 import '../../core/assessment_catalog_api.dart';
 import '../../core/auth_service.dart';
 import '../../core/main_design.dart';
+import '../auth/partner_screen.dart';
 import 'assessment_attempt_screen.dart';
 import 'assessment_history_screen.dart';
 
@@ -265,28 +266,38 @@ class _AssessmentCatalogScreenState extends State<AssessmentCatalogScreen> {
                   ),
               ],
             ),
-            if (enabled) ...[
+            if (!enabled) ...[
+              const SizedBox(height: 10),
+              OutlinedButton(
+                onPressed: _openPartnerConnection,
+                child: const Text('파트너 연결하기'),
+              ),
+            ] else ...[
               const SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,
-                child: OutlinedButton.icon(
+                child: FilledButton.icon(
                   key: Key('assessment_action_${assessment.code}'),
-                  onPressed: () => _openAssessment(assessment),
+                  onPressed: () => _openPrimaryAction(assessment),
                   icon: Icon(
                     assessment.completionStatus ==
                             AssessmentCompletionStatus.completed
-                        ? Icons.refresh_rounded
+                        ? Icons.insights_outlined
                         : Icons.play_arrow_rounded,
                     size: 18,
                   ),
                   label: Text(_actionLabel(assessment)),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: kMainInk,
-                    side: const BorderSide(color: kMainLine),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
                 ),
               ),
+              if (assessment.completionStatus ==
+                  AssessmentCompletionStatus.completed) ...[
+                const SizedBox(height: 4),
+                TextButton(
+                  key: Key('assessment_retake_${assessment.code}'),
+                  onPressed: () => _openAssessment(assessment),
+                  child: const Text('다시 하기'),
+                ),
+              ],
             ],
           ],
         ),
@@ -298,8 +309,22 @@ class _AssessmentCatalogScreenState extends State<AssessmentCatalogScreen> {
       switch (assessment.completionStatus) {
         AssessmentCompletionStatus.notStarted => '검사 시작하기',
         AssessmentCompletionStatus.inProgress => '검사 이어하기',
-        AssessmentCompletionStatus.completed => '다시 검사하기',
+        AssessmentCompletionStatus.completed => '결과 보기',
       };
+
+  void _openPrimaryAction(AssessmentCatalogItem assessment) {
+    if (assessment.completionStatus == AssessmentCompletionStatus.completed) {
+      _openHistory(assessment);
+      return;
+    }
+    _openAssessment(assessment);
+  }
+
+  void _openPartnerConnection() {
+    Navigator.of(
+      context,
+    ).push<void>(MaterialPageRoute(builder: (_) => const PartnerScreen()));
+  }
 
   void _openAssessment(AssessmentCatalogItem assessment) {
     final auth = AuthService();

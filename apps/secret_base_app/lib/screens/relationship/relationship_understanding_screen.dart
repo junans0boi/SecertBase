@@ -13,6 +13,7 @@ import '../../core/main_design.dart';
 import '../../core/mindcare_api.dart';
 import '../../core/saju_api.dart';
 import '../../core/tarot_api.dart';
+import '../auth/partner_screen.dart';
 import 'assessment_catalog_screen.dart';
 import 'compatibility_screen.dart';
 import 'counseling_screen.dart';
@@ -659,6 +660,13 @@ class _RelationshipUnderstandingScreenState
     RelationshipAssessmentStatus.resultReady => '점수와 관계 패턴을 함께 확인해보세요.',
   };
 
+  String? get _statusActionLabel => switch (_effectiveStatus) {
+    RelationshipAssessmentStatus.profileIncomplete => null,
+    RelationshipAssessmentStatus.notStarted => '검사 시작하기',
+    RelationshipAssessmentStatus.inProgress => '검사 이어하기',
+    RelationshipAssessmentStatus.resultReady => '결과 보기',
+  };
+
   Widget _errorState() {
     return Center(
       child: Padding(
@@ -710,6 +718,15 @@ class _RelationshipUnderstandingScreenState
                   _statusDescription,
                   style: mainBody(size: 13, color: kMainSub, height: 1.4),
                 ),
+                if (_statusActionLabel != null) ...[
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    key: const Key('relationship_status_action'),
+                    onPressed: () =>
+                        _openCatalog(AssessmentAudience.individual),
+                    child: Text(_statusActionLabel!),
+                  ),
+                ],
               ],
             ),
           ),
@@ -719,6 +736,22 @@ class _RelationshipUnderstandingScreenState
   }
 
   Widget _personalArea() {
+    final status = _effectiveStatus;
+    final title = switch (status) {
+      RelationshipAssessmentStatus.profileIncomplete => '나의 검사 준비하기',
+      RelationshipAssessmentStatus.notStarted => '나를 이해하는 검사',
+      RelationshipAssessmentStatus.inProgress => '진행 중인 검사',
+      RelationshipAssessmentStatus.resultReady => '최근 검사 결과',
+    };
+    final description = switch (status) {
+      RelationshipAssessmentStatus.profileIncomplete =>
+        '출생 프로필을 저장한 뒤 나의 검사와 기록을 살펴볼 수 있어요.',
+      RelationshipAssessmentStatus.notStarted =>
+        '내 답변은 나에게만 보이며, 원하는 검사부터 시작할 수 있어요.',
+      RelationshipAssessmentStatus.inProgress => '저장된 답변부터 이어서 마무리할 수 있어요.',
+      RelationshipAssessmentStatus.resultReady =>
+        '가장 최근 결과와 이전 기록을 함께 확인할 수 있어요.',
+    };
     return MainCard(
       key: const Key('relationship_personal_area'),
       padding: const EdgeInsets.all(18),
@@ -729,27 +762,24 @@ class _RelationshipUnderstandingScreenState
             children: [
               const Icon(Icons.person_outline, color: kMainRose),
               const SizedBox(width: 8),
-              Text('개인 영역', style: mainBody(weight: FontWeight.w800)),
+              Text(title, style: mainBody(weight: FontWeight.w800)),
             ],
           ),
           const SizedBox(height: 10),
           Text(
-            '파트너가 없어도 내 감정과 관계 패턴을 먼저 살펴볼 수 있어요.',
+            description,
             style: mainBody(size: 13, color: kMainSub, height: 1.5),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton(
-            onPressed: () => _openCatalog(AssessmentAudience.individual),
-            child: const Text('개인 검사 보기'),
           ),
         ],
       ),
     );
   }
 
-  Widget _sajuArea() {
+  Widget _sajuArea({bool couple = false}) {
     return MainCard(
-      key: const Key('relationship_saju_area'),
+      key: Key(
+        couple ? 'relationship_couple_saju_area' : 'relationship_saju_area',
+      ),
       padding: const EdgeInsets.all(18),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -760,17 +790,22 @@ class _RelationshipUnderstandingScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('나의 사주', style: mainBody(weight: FontWeight.w800)),
+                Text(
+                  couple ? '우리의 관계 사주' : '나의 사주',
+                  style: mainBody(weight: FontWeight.w800),
+                ),
                 const SizedBox(height: 6),
                 Text(
-                  '어려운 용어보다 쉬운 설명부터 내 흐름을 살펴봐요.',
+                  couple
+                      ? '두 사람의 흐름은 개인 결과와 분리해, 쉬운 설명부터 살펴봐요.'
+                      : '어려운 용어보다 쉬운 설명부터 내 흐름을 살펴봐요.',
                   style: mainBody(size: 13, color: kMainSub, height: 1.5),
                 ),
                 const SizedBox(height: 10),
                 OutlinedButton(
-                  key: const Key('open_saju'),
+                  key: Key(couple ? 'open_couple_saju' : 'open_saju'),
                   onPressed: _openSaju,
-                  child: const Text('사주 보기'),
+                  child: Text(couple ? '관계 사주 보기' : '사주 보기'),
                 ),
               ],
             ),
@@ -780,9 +815,11 @@ class _RelationshipUnderstandingScreenState
     );
   }
 
-  Widget _tarotArea() {
+  Widget _tarotArea({bool couple = false}) {
     return MainCard(
-      key: const Key('relationship_tarot_area'),
+      key: Key(
+        couple ? 'relationship_couple_tarot_area' : 'relationship_tarot_area',
+      ),
       padding: const EdgeInsets.all(18),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -793,17 +830,22 @@ class _RelationshipUnderstandingScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('오늘의 타로', style: mainBody(weight: FontWeight.w800)),
+                Text(
+                  couple ? '우리의 관계 타로' : '오늘의 타로',
+                  style: mainBody(weight: FontWeight.w800),
+                ),
                 const SizedBox(height: 6),
                 Text(
-                  '오늘은 한 장만, 가볍게 마음을 비춰봐요.',
+                  couple
+                      ? '오늘은 두 사람의 마음을 비추는 한 장을 함께 골라봐요.'
+                      : '오늘은 한 장만, 가볍게 마음을 비춰봐요.',
                   style: mainBody(size: 13, color: kMainSub, height: 1.5),
                 ),
                 const SizedBox(height: 10),
                 OutlinedButton(
-                  key: const Key('open_tarot'),
+                  key: Key(couple ? 'open_couple_tarot' : 'open_tarot'),
                   onPressed: _openTarot,
-                  child: const Text('타로 보기'),
+                  child: Text(couple ? '관계 타로 보기' : '타로 보기'),
                 ),
               ],
             ),
@@ -838,6 +880,12 @@ class _RelationshipUnderstandingScreenState
         ),
       ),
     );
+  }
+
+  void _openPartnerConnection() {
+    Navigator.of(
+      context,
+    ).push<void>(MaterialPageRoute(builder: (_) => const PartnerScreen()));
   }
 
   void _openPrivateCounseling() {
@@ -987,9 +1035,9 @@ class _RelationshipUnderstandingScreenState
   }
 
   Widget _coupleArea() {
-    final title = widget.hasActiveCouple ? '커플 영역' : '커플 영역은 잠겨 있어요';
+    final title = widget.hasActiveCouple ? '커플 검사' : '커플 영역은 잠겨 있어요';
     final description = widget.hasActiveCouple
-        ? '두 사람이 검사를 완료하면 함께 보는 궁합 결과가 준비돼요.'
+        ? '각자의 답변은 비공개로 저장되고, 완료 신호가 모이면 함께 볼 결과가 준비돼요.'
         : '파트너를 연결하면 두 사람의 관계 패턴을 함께 살펴볼 수 있어요.';
     return MainCard(
       key: const Key('relationship_couple_area'),
@@ -1014,16 +1062,10 @@ class _RelationshipUnderstandingScreenState
                 ),
                 if (widget.hasActiveCouple) ...[
                   const SizedBox(height: 12),
-                  OutlinedButton(
+                  FilledButton(
                     key: const Key('open_couple_catalog'),
                     onPressed: () => _openCatalog(AssessmentAudience.couple),
-                    child: const Text('커플 검사 보기'),
-                  ),
-                  const SizedBox(height: 8),
-                  OutlinedButton(
-                    key: const Key('open_compatibility'),
-                    onPressed: _openCompatibility,
-                    child: const Text('궁합 분석 보기'),
+                    child: const Text('커플 검사 확인하기'),
                   ),
                 ],
               ],
@@ -1033,6 +1075,56 @@ class _RelationshipUnderstandingScreenState
       ),
     );
   }
+
+  Widget _compatibilityArea() => MainCard(
+    key: const Key('relationship_compatibility_area'),
+    padding: const EdgeInsets.all(18),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.favorite_outline, color: kMainRose),
+            const SizedBox(width: 8),
+            Text('우리의 궁합', style: mainBody(weight: FontWeight.w800)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '준비된 검사 결과만 사용해 두 사람의 관계 패턴을 함께 살펴봐요.',
+          style: mainBody(size: 13, color: kMainSub, height: 1.5),
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton(
+          key: const Key('open_compatibility'),
+          onPressed: _openCompatibility,
+          child: const Text('궁합 분석 보기'),
+        ),
+      ],
+    ),
+  );
+
+  Widget _coupleRestrictedArea() => MainCard(
+    key: const Key('relationship_couple_restricted'),
+    color: kMainPaperSoft,
+    padding: const EdgeInsets.all(16),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('커플 기능은 연결 후 열려요', style: mainBody(weight: FontWeight.w800)),
+        const SizedBox(height: 6),
+        Text(
+          '개인 검사와 기록은 계속 내 공간에 남고, 커플 검사와 궁합은 활성 커플에게만 보여요.',
+          style: mainBody(size: 13, color: kMainSub, height: 1.5),
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton(
+          onPressed: _openPartnerConnection,
+          child: const Text('파트너 연결하기'),
+        ),
+      ],
+    ),
+  );
 
   void _selectArea(int index) {
     final area = index == 0
@@ -1084,8 +1176,18 @@ class _RelationshipUnderstandingScreenState
                   ),
                   labelPadding: const EdgeInsets.symmetric(horizontal: 28),
                   tabs: [
-                    const Tab(text: '개인'),
-                    const Tab(text: '커플'),
+                    Semantics(
+                      container: true,
+                      label: '개인 영역 탭',
+                      selected: _selectedArea == _RelationshipArea.personal,
+                      child: const Tab(text: '개인'),
+                    ),
+                    Semantics(
+                      container: true,
+                      label: '커플 영역 탭',
+                      selected: _selectedArea == _RelationshipArea.couple,
+                      child: const Tab(text: '커플'),
+                    ),
                   ],
                 ),
               ),
@@ -1266,17 +1368,27 @@ class _RelationshipUnderstandingScreenState
                     if (!widget.editBirthProfileOnly) ...[
                       const SizedBox(height: 18),
                       if (_selectedArea == _RelationshipArea.personal) ...[
+                        _personalArea(),
+                        const SizedBox(height: 12),
                         _sajuArea(),
                         const SizedBox(height: 12),
                         _tarotArea(),
                         const SizedBox(height: 12),
-                        _personalArea(),
-                        const SizedBox(height: 12),
                         _mindcareArea(),
                         const SizedBox(height: 12),
                         _counselingArea(shared: false),
+                        if (!widget.hasActiveCouple) ...[
+                          const SizedBox(height: 12),
+                          _coupleRestrictedArea(),
+                        ],
                       ] else ...[
                         _coupleArea(),
+                        const SizedBox(height: 12),
+                        _compatibilityArea(),
+                        const SizedBox(height: 12),
+                        _sajuArea(couple: true),
+                        const SizedBox(height: 12),
+                        _tarotArea(couple: true),
                         const SizedBox(height: 12),
                         _counselingArea(shared: true),
                       ],
