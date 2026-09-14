@@ -33,6 +33,11 @@ void main() {
     // (설명은 아이콘 선택 시 상세 카드에 노출된다.)
     await tester.tap(find.text('가위바위보'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('단판, 3판, 묵찌빠 세 가지 모드'),
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('단판, 3판, 묵찌빠 세 가지 모드'), findsOneWidget);
     // 상표 노출 금지 (ADR 0001) — 사용자 노출명은 원카드만.
     expect(find.text('UNO'), findsNothing);
