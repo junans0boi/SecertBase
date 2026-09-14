@@ -29,13 +29,23 @@ class TodayLoopViewer extends StatelessWidget {
           Text(
             '오늘의 기록',
             textAlign: TextAlign.center,
-            style: mainBody(size: 12, color: kMainMuted, weight: FontWeight.w800),
+            style: mainBody(
+              size: 12,
+              color: kMainMuted,
+              weight: FontWeight.w800,
+            ),
           ),
           const SizedBox(height: 2),
           Text(
             _longDate(state.date),
             textAlign: TextAlign.center,
             style: mainBody(size: 15, color: kMainInk, weight: FontWeight.w900),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            '두 사람이 남긴 오늘의 순간을 한곳에서 살펴봐요.',
+            textAlign: TextAlign.center,
+            style: mainBody(size: 12, color: kMainSub),
           ),
           const SizedBox(height: 16),
           _TodayMomentPanel(

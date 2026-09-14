@@ -15,7 +15,11 @@ import 'map_screen.dart';
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 class MomentLoopScreen extends StatefulWidget {
-  const MomentLoopScreen({super.key});
+  final http.Client? client;
+  final String? baseUrl;
+  final int? userId;
+
+  const MomentLoopScreen({super.key, this.client, this.baseUrl, this.userId});
 
   @override
   State<MomentLoopScreen> createState() => _MomentLoopScreenState();
@@ -23,6 +27,8 @@ class MomentLoopScreen extends StatefulWidget {
 
 class _MomentLoopScreenState extends State<MomentLoopScreen> {
   final _auth = AuthService();
+  late final http.Client _client;
+  late final bool _ownsClient;
   List<Map<String, dynamic>> _posts = [];
   bool _loading = true;
   String? _error;
@@ -30,6 +36,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
   final Set<String> _seenSessionIds = {};
 
   int? get _userId {
+    if (widget.userId != null) return widget.userId;
     final value = _auth.user?['UserId'] ?? _auth.user?['id'];
     if (value is int) return value;
     return int.tryParse('$value');
@@ -38,9 +45,17 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
   @override
   void initState() {
     super.initState();
+    _ownsClient = widget.client == null;
+    _client = widget.client ?? http.Client();
     final now = DateTime.now();
     _weekStart = _mondayOf(now);
-    _loadPosts();
+    _loadPosts(initial: true);
+  }
+
+  @override
+  void dispose() {
+    if (_ownsClient) _client.close();
+    super.dispose();
   }
 
   static DateTime _mondayOf(DateTime d) {
@@ -95,7 +110,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     return map;
   }
 
-  Future<void> _loadPosts() async {
+  Future<void> _loadPosts({bool initial = false}) async {
     final userId = _userId;
     if (userId == null) {
       if (mounted) {
@@ -108,16 +123,16 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     }
     if (mounted) {
       setState(() {
-        _loading = true;
+        if (initial) _loading = true;
         _error = null;
       });
     }
 
     try {
       final uri = Uri.parse(
-        '${_auth.baseUrl}/api/setlog',
+        '${widget.baseUrl ?? _auth.baseUrl}/api/setlog',
       ).replace(queryParameters: {'user_id': '$userId'});
-      final response = await http.get(
+      final response = await _client.get(
         uri,
         headers: {'Authorization': 'Bearer ${_auth.token}'},
       );
@@ -186,7 +201,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     );
     controller.dispose();
     if (caption == null || caption.isEmpty) return;
-    final response = await http.patch(
+    final response = await _client.patch(
       Uri.parse('${_auth.baseUrl}/api/setlog/${post['id']}'),
       headers: {
         'Authorization': 'Bearer ${_auth.token}',
@@ -216,7 +231,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
       ),
     );
     if (confirmed != true) return;
-    final response = await http.delete(
+    final response = await _client.delete(
       Uri.parse('${_auth.baseUrl}/api/setlog/${post['id']}'),
       headers: {'Authorization': 'Bearer ${_auth.token}'},
     );
@@ -281,6 +296,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
       backgroundColor: kMainBg,
       floatingActionButton: FloatingActionButton(
         onPressed: _startCreatePostFlow,
+        tooltip: '순간 남기기',
         backgroundColor: kMainRose,
         foregroundColor: Colors.white,
         elevation: 4,
@@ -298,10 +314,14 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
                 children: [
                   GestureDetector(
                     onTap: () => Navigator.maybePop(context),
-                    child: const Icon(
-                      Icons.arrow_back_ios_new_rounded,
-                      size: 20,
-                      color: kMainSub,
+                    child: Semantics(
+                      button: true,
+                      label: '뒤로가기',
+                      child: const Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        size: 20,
+                        color: kMainSub,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 14),
@@ -352,6 +372,18 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
               onPickWeek: _pickWeek,
             ),
 
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
+              child: Text(
+                _isCurrentWeek ? '이번 주의 순간' : '선택한 주의 순간',
+                style: mainBody(
+                  size: 13,
+                  color: kMainSub,
+                  weight: FontWeight.w800,
+                ),
+              ),
+            ),
+
             const SizedBox(height: 4),
 
             // ── Day list ─────────────────────────────────────────────────────
@@ -384,6 +416,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
       return _WeekEmptyState(
         isCurrentWeek: _isCurrentWeek,
         onRefresh: _loadPosts,
+        onCreate: _startCreatePostFlow,
       );
     }
 
@@ -933,39 +966,68 @@ class _StoryViewerState extends State<_StoryViewer>
 class _WeekEmptyState extends StatelessWidget {
   final bool isCurrentWeek;
   final VoidCallback onRefresh;
-  const _WeekEmptyState({required this.isCurrentWeek, required this.onRefresh});
+  final VoidCallback onCreate;
+  const _WeekEmptyState({
+    required this.isCurrentWeek,
+    required this.onRefresh,
+    required this.onCreate,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 72,
-            height: 72,
-            decoration: BoxDecoration(
-              color: kMainRoseSoft,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Icon(
-              Icons.photo_album_outlined,
-              size: 34,
-              color: kMainRose,
-            ),
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(24, 48, 24, 120),
+      children: [
+        ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 300),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: kMainRoseSoft,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Icon(
+                  Icons.photo_album_outlined,
+                  size: 34,
+                  color: kMainRose,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                isCurrentWeek ? '이번 주 첫 순간을 남겨보세요' : '이 주에 남긴 순간이 없어요',
+                textAlign: TextAlign.center,
+                style: mainBody(
+                  size: 17,
+                  color: kMainInk,
+                  weight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 7),
+              Text(
+                isCurrentWeek
+                    ? '사진·짧은 영상·한 문장 중 하나면 충분해요.'
+                    : '다른 주를 탐색하거나 새로운 순간을 남겨보세요.',
+                textAlign: TextAlign.center,
+                style: mainBody(size: 13, color: kMainMuted, height: 1.5),
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                key: const Key('moment_empty_create'),
+                onPressed: onCreate,
+                icon: const Icon(Icons.add_photo_alternate_outlined),
+                label: const Text('순간 남기기'),
+              ),
+              const SizedBox(height: 8),
+              TextButton(onPressed: onRefresh, child: const Text('새로고침')),
+            ],
           ),
-          const SizedBox(height: 16),
-          Text(
-            isCurrentWeek ? '이번 주 첫 순간을 남겨보세요' : '이 주에 남긴 순간이 없어요',
-            style: mainBody(size: 15, color: kMainSub, weight: FontWeight.w700),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            isCurrentWeek ? '오른쪽 아래 + 버튼으로 추가해요' : '다른 주를 탐색해보세요',
-            style: mainBody(size: 13, color: kMainMuted),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -995,63 +1057,67 @@ class _WeekNavigator extends StatelessWidget {
         ? '${weekStart.month}월 ${weekStart.day}일 — ${weekEnd.day}일'
         : '${weekStart.month}월 ${weekStart.day}일 — ${weekEnd.month}월 ${weekEnd.day}일';
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18),
-      child: Container(
-        height: 48,
-        decoration: BoxDecoration(
-          color: kMainPaper,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: kMainLine),
-        ),
-        child: Row(
-          children: [
-            _NavBtn(icon: Icons.chevron_left_rounded, onTap: onPrev),
-            Expanded(
-              child: GestureDetector(
-                onTap: onPickWeek,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          label,
-                          textAlign: TextAlign.center,
-                          style: mainBody(
+    return Semantics(
+      container: true,
+      label: isCurrentWeek ? '이번 주 기록 기간' : '선택한 주 기록 기간',
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        child: Container(
+          height: 48,
+          decoration: BoxDecoration(
+            color: kMainPaper,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: kMainLine),
+          ),
+          child: Row(
+            children: [
+              _NavBtn(icon: Icons.chevron_left_rounded, onTap: onPrev),
+              Expanded(
+                child: GestureDetector(
+                  onTap: onPickWeek,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            label,
+                            textAlign: TextAlign.center,
+                            style: mainBody(
+                              size: 14,
+                              color: kMainInk,
+                              weight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(
+                            Icons.calendar_month_outlined,
                             size: 14,
-                            color: kMainInk,
-                            weight: FontWeight.w800,
+                            color: kMainSub,
+                          ),
+                        ],
+                      ),
+                      if (isCurrentWeek)
+                        Text(
+                          '이번 주',
+                          style: mainBody(
+                            size: 10,
+                            color: kMainRose,
+                            weight: FontWeight.w700,
                           ),
                         ),
-                        const SizedBox(width: 4),
-                        const Icon(
-                          Icons.calendar_month_outlined,
-                          size: 14,
-                          color: kMainSub,
-                        ),
-                      ],
-                    ),
-                    if (isCurrentWeek)
-                      Text(
-                        '이번 주',
-                        style: mainBody(
-                          size: 10,
-                          color: kMainRose,
-                          weight: FontWeight.w700,
-                        ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-            _NavBtn(
-              icon: Icons.chevron_right_rounded,
-              onTap: onNext,
-              disabled: onNext == null,
-            ),
-          ],
+              _NavBtn(
+                icon: Icons.chevron_right_rounded,
+                onTap: onNext,
+                disabled: onNext == null,
+              ),
+            ],
+          ),
         ),
       ),
     );

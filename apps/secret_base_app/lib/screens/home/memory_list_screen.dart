@@ -22,6 +22,7 @@ class MemoryListScreen extends StatefulWidget {
 class _MemoryListScreenState extends State<MemoryListScreen> {
   List<Map<String, dynamic>> _posts = [];
   bool _loading = true;
+  String? _error;
   String? _businessDate;
 
   @override
@@ -45,9 +46,11 @@ class _MemoryListScreenState extends State<MemoryListScreen> {
               .toList();
           _businessDate = data['business_date'] as String?;
         });
+      } else {
+        setState(() => _error = '기억을 불러오지 못했어요.');
       }
     } catch (_) {
-      // Resilient — show empty state on error
+      if (mounted) setState(() => _error = '네트워크 연결을 확인해주세요.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -77,6 +80,22 @@ class _MemoryListScreenState extends State<MemoryListScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: kMainRose))
+          : _error != null
+          ? Center(
+              child: MainCard(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(_error!, style: mainBody(color: kMainSub)),
+                    const SizedBox(height: 12),
+                    OutlinedButton(
+                      onPressed: _load,
+                      child: const Text('다시 시도'),
+                    ),
+                  ],
+                ),
+              ),
+            )
           : _posts.isEmpty
           ? Center(
               child: Padding(
@@ -86,7 +105,10 @@ class _MemoryListScreenState extends State<MemoryListScreen> {
                   children: [
                     const CozyMascot(size: 72),
                     const SizedBox(height: 14),
-                    Text('아직 되짚어볼 기억이 없어요', style: mainBody(weight: FontWeight.w900)),
+                    Text(
+                      '아직 되짚어볼 기억이 없어요',
+                      style: mainBody(weight: FontWeight.w900),
+                    ),
                     const SizedBox(height: 4),
                     Text(
                       '오늘의 순간을 남기면 다음 해에 다시 만날 수 있어요',
