@@ -38,6 +38,9 @@ const _emotionTags = [
 
 final _koreaCenter = LatLng(36.35, 127.85);
 
+const mapTileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+const mapFallbackTileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+
 class MapScreen extends StatefulWidget {
   final bool closeAsModal;
 
@@ -61,6 +64,9 @@ class _MapScreenState extends State<MapScreen> {
   bool _showSearchResults = false;
   bool _locatingUser = false;
   bool _locationDenied = false;
+  bool _mapTileError = false;
+  String? _mapLoadError;
+  bool _searchFailed = false;
   String? _activeCategory;
   String _activeStatus = 'all';
   LatLng? _userLatLng;
@@ -99,7 +105,11 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _mapLoadError = null;
+      _mapTileError = false;
+    });
     try {
       final userId = _currentUserId;
       final mapUrl = '${_auth.baseUrl}/api/map';
@@ -139,7 +149,7 @@ class _MapScreenState extends State<MapScreen> {
         }
       }
     } catch (_) {
-      debugPrint('map load error');
+      if (mounted) setState(() => _mapLoadError = '지도를 불러오지 못했어요.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -164,6 +174,7 @@ class _MapScreenState extends State<MapScreen> {
     if (query.trim().isEmpty) return;
     setState(() {
       _isSearching = true;
+      _searchFailed = false;
       _showSearchResults = true;
       _tempSelectedLatLng = null;
       _tempSelectedName = null;
@@ -189,26 +200,28 @@ class _MapScreenState extends State<MapScreen> {
               .toList();
         });
       } else {
-        await _searchAddressFallback(query);
+        final found = await _searchAddressFallback(query);
+        if (!found && mounted) setState(() => _searchFailed = true);
       }
     } catch (e) {
       debugPrint('Search error: $e');
-      await _searchAddressFallback(query);
+      final found = await _searchAddressFallback(query);
+      if (!found && mounted) setState(() => _searchFailed = true);
     } finally {
       if (mounted) setState(() => _isSearching = false);
     }
   }
 
-  Future<void> _searchAddressFallback(String query) async {
+  Future<bool> _searchAddressFallback(String query) async {
     try {
       final center = _searchOrigin();
       final url = Uri.parse(
         'https://nominatim.openstreetmap.org/search?q=${Uri.encodeComponent(query)}&format=json&limit=6&countrycodes=kr',
       );
       final res = await http.get(url, headers: {'User-Agent': 'SecretBaseApp'});
-      if (res.statusCode != 200) return;
+      if (res.statusCode != 200) return false;
       final data = jsonDecode(res.body) as List;
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _searchResults =
             data
@@ -244,8 +257,10 @@ class _MapScreenState extends State<MapScreen> {
                 return aDistance.compareTo(bDistance);
               });
       });
+      return true;
     } catch (e) {
       debugPrint('Fallback search error: $e');
+      return false;
     }
   }
 
@@ -2254,9 +2269,15 @@ class _MapScreenState extends State<MapScreen> {
                   ),
                   children: [
                     TileLayer(
-                      urlTemplate:
-                          'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+                      urlTemplate: mapTileUrl,
+                      fallbackUrl: mapFallbackTileUrl,
+                      subdomains: const ['a', 'b', 'c'],
                       userAgentPackageName: 'com.secretbase.app',
+                      errorTileCallback: (_, _, _) {
+                        if (mounted && !_mapTileError) {
+                          setState(() => _mapTileError = true);
+                        }
+                      },
                     ),
                     MarkerLayer(
                       markers: [
@@ -2304,6 +2325,18 @@ class _MapScreenState extends State<MapScreen> {
                               size: 52,
                             ),
                           ),
+                      ],
+                    ),
+                    RichAttributionWidget(
+                      attributions: [
+                        TextSourceAttribution(
+                          'OpenStreetMap contributors',
+                          onTap: () => launchUrl(
+                            Uri.parse(
+                              'https://www.openstreetmap.org/copyright',
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -2435,6 +2468,7 @@ class _MapScreenState extends State<MapScreen> {
                     const SizedBox(height: 8),
                     _SearchResultPanel(
                       isSearching: _isSearching,
+                      failed: _searchFailed,
                       results: _searchResults,
                       onTap: (item) {
                         final pos = LatLng(item['lat'], item['lon']);
@@ -2449,6 +2483,23 @@ class _MapScreenState extends State<MapScreen> {
                         });
                         _mapController.move(pos, 15.0);
                       },
+                    ),
+                  ],
+                  if (_mapLoadError != null || _mapTileError) ...[
+                    const SizedBox(height: 8),
+                    _MapFallbackBanner(
+                      message: _mapTileError ? '지도를 불러올 수 없어요' : _mapLoadError!,
+                      detail: _mapTileError
+                          ? '장소 목록과 검색은 계속 사용할 수 있어요.'
+                          : '장소 검색이나 목록에서 다음 행동을 선택해보세요.',
+                      onRetry: _load,
+                    ),
+                  ],
+                  if (_locationDenied) ...[
+                    const SizedBox(height: 8),
+                    const _MapInfoBanner(
+                      icon: Icons.location_disabled_outlined,
+                      text: '위치 권한 없이도 장소 검색과 저장을 사용할 수 있어요.',
                     ),
                   ],
                   const SizedBox(height: 10),
@@ -2613,6 +2664,12 @@ class _MapScreenState extends State<MapScreen> {
                           Text(
                             '검색하거나 지도 위를 눌러 첫 장소를 남겨봐요',
                             style: mainBody(size: 12, color: kMainMuted),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            '장소 검색 → 결과 선택 → 저장 순서로 기록할 수 있어요.',
+                            style: mainBody(size: 11, color: kMainMuted),
                             textAlign: TextAlign.center,
                           ),
                         ],
@@ -2986,13 +3043,72 @@ class _StatusChip extends StatelessWidget {
   }
 }
 
+class _MapFallbackBanner extends StatelessWidget {
+  final String message;
+  final String detail;
+  final VoidCallback onRetry;
+
+  const _MapFallbackBanner({
+    required this.message,
+    required this.detail,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) => MainCard(
+    color: kMainPaper.withAlpha(248),
+    borderColor: kMainPeach.withAlpha(130),
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+    child: Row(
+      children: [
+        const Icon(Icons.map_outlined, color: kMainPeach),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(message, style: mainBody(weight: FontWeight.w800)),
+              Text(detail, style: mainBody(size: 11, color: kMainMuted)),
+            ],
+          ),
+        ),
+        TextButton(onPressed: onRetry, child: const Text('다시 시도')),
+      ],
+    ),
+  );
+}
+
+class _MapInfoBanner extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _MapInfoBanner({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) => MainCard(
+    color: kMainPaper.withAlpha(248),
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+    child: Row(
+      children: [
+        Icon(icon, color: kMainSky),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Text(text, style: mainBody(size: 12, color: kMainSub)),
+        ),
+      ],
+    ),
+  );
+}
+
 class _SearchResultPanel extends StatelessWidget {
   final bool isSearching;
+  final bool failed;
   final List<Map<String, dynamic>> results;
   final ValueChanged<Map<String, dynamic>> onTap;
 
   const _SearchResultPanel({
     required this.isSearching,
+    required this.failed,
     required this.results,
     required this.onTap,
   });
@@ -3015,7 +3131,9 @@ class _SearchResultPanel extends StatelessWidget {
             ? Padding(
                 padding: const EdgeInsets.all(18),
                 child: Text(
-                  '검색 결과가 없어요',
+                  failed
+                      ? '검색을 불러오지 못했어요. 장소명을 다시 확인하거나 지도에서 위치를 눌러보세요.'
+                      : '검색 결과가 없어요',
                   style: mainBody(size: 13, color: kMainMuted),
                 ),
               )

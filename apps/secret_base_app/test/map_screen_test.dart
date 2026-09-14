@@ -2,6 +2,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:secret_base_app/screens/archive/map_screen.dart';
 
 void main() {
+  test('map tiles use a keyless primary and fallback provider', () {
+    expect(mapTileUrl, contains('openstreetmap.org'));
+    expect(mapFallbackTileUrl, contains('openstreetmap.org'));
+    expect(mapTileUrl.toLowerCase(), isNot(contains('api_key')));
+    expect(mapTileUrl.toLowerCase(), isNot(contains('apikey')));
+  });
+
   test('normalizePlaceResultForMap accepts Kakao string coordinates', () {
     final result = normalizePlaceResultForMap({
       'provider': 'kakao',
