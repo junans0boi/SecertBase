@@ -38,65 +38,66 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('home keeps today entry, refresh, and relationship continuation explicit', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: HomeScreen(
-            onNavigate: (_) {},
-            relationshipStatus: RelationshipAssessmentStatus.inProgress,
-          ),
-        ),
-      ),
-    );
-
-    expect(find.byType(RefreshIndicator), findsOneWidget);
-    expect(
-      tester.widget<RefreshIndicator>(find.byType(RefreshIndicator)).onRefresh,
-      isNotNull,
-    );
-    expect(find.text('오늘의 루프를 준비하고 있어요'), findsOneWidget);
-    expect(find.text('관계 이해 이어보기'), findsOneWidget);
-    expect(find.text('검사 이어가기'), findsOneWidget);
-  });
-
-  testWidgets('quick action semantics tap keeps its existing navigation target', (
-    tester,
-  ) async {
-    var navigationTarget = -1;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: HomeScreen(
-            onNavigate: (target) => navigationTarget = target,
-            todayStateLoader: () async => const TodayState(
-              date: '2026-09-14',
-              status: TodayStatus.empty,
+  testWidgets(
+    'home keeps today entry, refresh, and relationship continuation explicit',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HomeScreen(
+              onNavigate: (_) {},
+              relationshipStatus: RelationshipAssessmentStatus.inProgress,
             ),
           ),
         ),
-      ),
-    );
+      );
 
-    tester.semantics.tap(
-      find.semantics.byLabel('비밀 지도: 장소 남기기'),
-    );
-    await tester.pump();
+      expect(find.byType(RefreshIndicator), findsOneWidget);
+      expect(
+        tester
+            .widget<RefreshIndicator>(find.byType(RefreshIndicator))
+            .onRefresh,
+        isNotNull,
+      );
+      expect(find.text('오늘의 루프를 준비하고 있어요'), findsOneWidget);
+      expect(find.text('관계 이해 이어보기'), findsOneWidget);
+      expect(find.text('검사 이어가기'), findsOneWidget);
+    },
+  );
 
-    expect(navigationTarget, 2);
-  });
+  testWidgets(
+    'quick action semantics tap keeps its existing navigation target',
+    (tester) async {
+      var navigationTarget = -1;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HomeScreen(
+              onNavigate: (target) => navigationTarget = target,
+              todayStateLoader: () async => const TodayState(
+                date: '2026-09-14',
+                status: TodayStatus.empty,
+              ),
+            ),
+          ),
+        ),
+      );
 
-  testWidgets('home shows a retry entry when Today loading fails', (tester) async {
+      tester.semantics.tap(find.semantics.byLabel('비밀 지도: 장소 남기기'));
+      await tester.pump();
+
+      expect(navigationTarget, 2);
+    },
+  );
+
+  testWidgets('home shows a retry entry when Today loading fails', (
+    tester,
+  ) async {
     var attempts = 0;
     Future<TodayState> loadToday() async {
       attempts++;
       if (attempts == 1) throw StateError('unavailable');
-      return const TodayState(
-        date: '2026-09-14',
-        status: TodayStatus.empty,
-      );
+      return const TodayState(date: '2026-09-14', status: TodayStatus.empty);
     }
 
     await tester.pumpWidget(
@@ -118,23 +119,24 @@ void main() {
     expect(find.text('오늘의 순간을 남겨볼까요?'), findsOneWidget);
   });
 
-  testWidgets('home gives a short relationship entry when no assessment is active', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: HomeScreen(
-            onNavigate: (_) {},
-            relationshipStatus: RelationshipAssessmentStatus.notStarted,
+  testWidgets(
+    'home gives a short relationship entry when no assessment is active',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HomeScreen(
+              onNavigate: (_) {},
+              relationshipStatus: RelationshipAssessmentStatus.notStarted,
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    expect(find.text('관계 이해 알아보기'), findsOneWidget);
-    expect(find.text('관계 이해 살펴보기'), findsOneWidget);
-  });
+      expect(find.text('관계 이해 알아보기'), findsOneWidget);
+      expect(find.text('관계 이해 살펴보기'), findsOneWidget);
+    },
+  );
 
   testWidgets('relationship quick actions open their dedicated screens', (
     tester,

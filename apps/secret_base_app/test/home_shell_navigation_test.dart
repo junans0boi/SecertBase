@@ -73,23 +73,26 @@ void main() {
     expect(find.text('전체'), findsOneWidget);
   });
 
-  testWidgets('bottom navigation keeps labels visible without a narrow-screen overflow', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
+  testWidgets(
+    'bottom navigation keeps labels visible without a narrow-screen overflow',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(
-      MaterialApp(theme: buildAppTheme(), home: const HomeShell()),
-    );
-    await tester.pump();
+      await tester.pumpWidget(
+        MaterialApp(theme: buildAppTheme(), home: const HomeShell()),
+      );
+      await tester.pump();
 
-    final navigation = tester.widget<NavigationBar>(find.byType(NavigationBar));
-    expect(
-      navigation.labelBehavior,
-      NavigationDestinationLabelBehavior.alwaysShow,
-    );
-    expect(tester.takeException(), isNull);
-  });
+      final navigation = tester.widget<NavigationBar>(
+        find.byType(NavigationBar),
+      );
+      expect(
+        navigation.labelBehavior,
+        NavigationDestinationLabelBehavior.alwaysShow,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
