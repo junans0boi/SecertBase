@@ -20,6 +20,8 @@ class _TarotScreenState extends State<TarotScreen> {
   TarotApiException? _error;
   bool _loading = true;
   String? _drawingScope;
+  final Map<String, PageController> _deckControllers = {};
+  final Map<String, int> _selectedDeckIndex = {};
 
   @override
   void initState() {
@@ -33,6 +35,9 @@ class _TarotScreenState extends State<TarotScreen> {
 
   @override
   void dispose() {
+    for (final controller in _deckControllers.values) {
+      controller.dispose();
+    }
     if (_ownsApi) _api.close();
     super.dispose();
   }
@@ -177,24 +182,13 @@ class _TarotScreenState extends State<TarotScreen> {
           const SizedBox(height: 12),
           if (busy)
             const SizedBox(
-              height: 238,
+              height: 260,
               child: Center(
                 child: CircularProgressIndicator(color: kMainLilac),
               ),
             )
           else
             _fanDeck(reading),
-          const SizedBox(height: 2),
-          Center(
-            child: Text(
-              '카드를 눌러 한 장 뽑기',
-              style: mainBody(
-                size: 12,
-                color: kMainLilac,
-                weight: FontWeight.w800,
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -203,80 +197,136 @@ class _TarotScreenState extends State<TarotScreen> {
   Widget _fanDeck(TarotReading reading) {
     final count = reading.cards.length;
     if (count == 0) {
-      return const SizedBox(height: 238);
+      return const SizedBox(height: 260);
     }
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final cardWidth = (width * 0.14).clamp(44.0, 52.0).toDouble();
-        final cardHeight = cardWidth * 1.42;
-        final step = count == 1 ? 0.0 : (width - cardWidth) / (count - 1);
-        final startLeft = count == 1 ? (width - cardWidth) / 2 : 0.0;
-        return SizedBox(
-          key: Key('tarot_${reading.scope}_arc_deck'),
-          height: 238,
-          child: Stack(
+    final controller = _deckControllers.putIfAbsent(
+      reading.scope,
+      () => PageController(viewportFraction: 0.26),
+    );
+    final selectedIndex = _selectedDeckIndex[reading.scope] ?? 0;
+    return Column(
+      key: Key('tarot_${reading.scope}_arc_deck'),
+      children: [
+        SizedBox(
+          key: Key('tarot_${reading.scope}_card_strip'),
+          height: 190,
+          child: PageView.builder(
+            controller: controller,
+            itemCount: count,
+            padEnds: true,
             clipBehavior: Clip.none,
-            children: [
-              Positioned(
-                left: 8,
-                right: 8,
-                bottom: 7,
-                child: Container(
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: kMainLilacSoft,
-                    borderRadius: BorderRadius.circular(24),
-                  ),
+            onPageChanged: (index) {
+              if (!mounted) return;
+              setState(() => _selectedDeckIndex[reading.scope] = index);
+            },
+            itemBuilder: (context, index) {
+              final choice = reading.cards[index];
+              return AnimatedBuilder(
+                animation: controller,
+                child: _faceDownCard(
+                  reading: reading,
+                  choice: choice,
+                  selected: selectedIndex == index,
+                  onTap: () {
+                    if (selectedIndex != index) {
+                      _moveDeck(reading.scope, index);
+                    } else {
+                      _draw(reading, choice);
+                    }
+                  },
+                ),
+                builder: (context, child) {
+                  final page = controller.hasClients && controller.page != null
+                      ? controller.page!
+                      : selectedIndex.toDouble();
+                  final distance = (page - index).abs().clamp(0.0, 1.0);
+                  final scale = 1.22 - (distance * 0.40);
+                  final opacity = 1.0 - (distance * 0.22);
+                  return Center(
+                    child: Opacity(
+                      opacity: opacity,
+                      child: Transform.scale(scale: scale, child: child),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            IconButton(
+              key: Key('tarot_${reading.scope}_previous'),
+              tooltip: '이전 카드',
+              onPressed: selectedIndex == 0
+                  ? null
+                  : () => _moveDeck(reading.scope, selectedIndex - 1),
+              icon: const Icon(Icons.chevron_left_rounded),
+              color: kMainLilac,
+            ),
+            SizedBox(
+              width: 92,
+              child: Text(
+                '카드 ${selectedIndex + 1} / $count',
+                textAlign: TextAlign.center,
+                style: mainBody(
+                  size: 12,
+                  color: kMainSub,
+                  weight: FontWeight.w800,
                 ),
               ),
-              ...reading.cards.asMap().entries.map((entry) {
-                final index = entry.key;
-                final choice = entry.value;
-                final progress = count == 1 ? 0.0 : index / (count - 1);
-                final curve = (progress * 2) - 1;
-                final angle = curve * 0.78;
-                final top = 20 + curve.abs() * 67;
-                return Positioned(
-                  left: startLeft + step * index,
-                  top: top,
-                  child: Transform.rotate(
-                    angle: angle,
-                    alignment: Alignment.bottomCenter,
-                    child: _faceDownCard(
-                      reading: reading,
-                      choice: choice,
-                      width: cardWidth,
-                      height: cardHeight,
-                    ),
-                  ),
-                );
-              }),
-            ],
-          ),
-        );
-      },
+            ),
+            IconButton(
+              key: Key('tarot_${reading.scope}_next'),
+              tooltip: '다음 카드',
+              onPressed: selectedIndex == count - 1
+                  ? null
+                  : () => _moveDeck(reading.scope, selectedIndex + 1),
+              icon: const Icon(Icons.chevron_right_rounded),
+              color: kMainLilac,
+            ),
+          ],
+        ),
+        Text(
+          '가운데 카드를 눌러 선택하세요',
+          textAlign: TextAlign.center,
+          style: mainBody(size: 12, color: kMainLilac, weight: FontWeight.w800),
+        ),
+      ],
+    );
+  }
+
+  void _moveDeck(String scope, int index) {
+    final controller = _deckControllers[scope];
+    if (controller == null || !controller.hasClients) return;
+    controller.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
     );
   }
 
   Widget _faceDownCard({
     required TarotReading reading,
     required TarotDeckCard choice,
-    required double width,
-    required double height,
+    required bool selected,
+    required VoidCallback onTap,
   }) {
     return Semantics(
       button: true,
-      label: '타로 카드 ${choice.position}번 선택',
+      label: selected
+          ? '타로 카드 ${choice.position}번 선택'
+          : '타로 카드 ${choice.position}번을 가운데로 이동',
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           key: Key('tarot_pick_${reading.scope}_${choice.key}'),
           borderRadius: BorderRadius.circular(14),
-          onTap: () => _draw(reading, choice),
+          onTap: onTap,
           child: Ink(
-            width: width,
-            height: height,
+            width: 82,
+            height: 118,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
               gradient: const LinearGradient(
@@ -285,14 +335,16 @@ class _TarotScreenState extends State<TarotScreen> {
                 end: Alignment.bottomRight,
               ),
               border: Border.all(
-                color: Colors.white.withAlpha(170),
-                width: 1.2,
+                color: Colors.white.withAlpha(selected ? 230 : 150),
+                width: selected ? 1.8 : 1.2,
               ),
-              boxShadow: const [
+              boxShadow: [
                 BoxShadow(
-                  color: Color(0x22000000),
-                  blurRadius: 8,
-                  offset: Offset(0, 4),
+                  color: selected
+                      ? kMainLilac.withAlpha(90)
+                      : const Color(0x22000000),
+                  blurRadius: selected ? 16 : 8,
+                  offset: const Offset(0, 5),
                 ),
               ],
             ),
@@ -304,15 +356,25 @@ class _TarotScreenState extends State<TarotScreen> {
                   border: Border.all(color: Colors.white.withAlpha(110)),
                 ),
                 child: Center(
-                  child: Text(
-                    '✦\n${choice.position.toString().padLeft(2, '0')}',
-                    textAlign: TextAlign.center,
-                    style: mainBody(
-                      size: 12,
-                      color: Colors.white,
-                      weight: FontWeight.w800,
-                      height: 1.45,
-                    ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.auto_awesome,
+                        size: 18,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        choice.position.toString().padLeft(2, '0'),
+                        textAlign: TextAlign.center,
+                        style: mainBody(
+                          size: 12,
+                          color: Colors.white,
+                          weight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),

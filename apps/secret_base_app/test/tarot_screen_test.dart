@@ -71,6 +71,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('tarot_user_pick_help')), findsOneWidget);
     expect(find.byKey(const Key('tarot_user_arc_deck')), findsOneWidget);
+    expect(find.byKey(const Key('tarot_user_card_strip')), findsOneWidget);
+    expect(find.text('가운데 카드를 눌러 선택하세요'), findsOneWidget);
     expect(find.byKey(const Key('tarot_pick_user_the_fool')), findsOneWidget);
     expect(find.text('바보'), findsNothing);
 
@@ -138,7 +140,7 @@ void main() {
     expect(find.text('다시 뽑기'), findsNothing);
   });
 
-  testWidgets('keeps the full major arcana deck in the fan layout', (
+  testWidgets('lets the user move through the full major arcana deck', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -181,6 +183,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('tarot_user_arc_deck')), findsOneWidget);
+    expect(find.byKey(const Key('tarot_pick_user_card_0')), findsOneWidget);
+    await tester.drag(
+      find.byKey(const Key('tarot_user_card_strip')),
+      const Offset(-5000, 0),
+    );
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('tarot_pick_user_card_21')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
