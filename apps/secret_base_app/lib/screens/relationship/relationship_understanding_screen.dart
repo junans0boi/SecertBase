@@ -193,6 +193,7 @@ class RelationshipUnderstandingScreen extends StatefulWidget {
   final AssessmentCatalogApi? assessmentCatalogApi;
   final RelationshipAssessmentStatus assessmentStatus;
   final bool? hasActiveCouple;
+  final http.Client? coupleInfoClient;
   final bool editBirthProfileOnly;
 
   const RelationshipUnderstandingScreen({
@@ -201,6 +202,7 @@ class RelationshipUnderstandingScreen extends StatefulWidget {
     this.assessmentCatalogApi,
     this.assessmentStatus = RelationshipAssessmentStatus.notStarted,
     this.hasActiveCouple,
+    this.coupleInfoClient,
     this.editBirthProfileOnly = false,
   });
 
@@ -226,7 +228,8 @@ class _RelationshipUnderstandingScreenState
   String? _birthCountry = '대한민국';
   BirthProfile? _profile;
   RelationshipAssessmentStatus? _loadedAssessmentStatus;
-  bool _hasActiveCouple = false;
+  bool? _hasActiveCouple;
+  bool _coupleLoadFailed = false;
   String? _errorMessage;
   bool _loading = true;
   bool _saving = false;
@@ -255,10 +258,12 @@ class _RelationshipUnderstandingScreenState
                 token: AuthService().token ?? '',
               )
             : null);
-    _hasActiveCouple = widget.hasActiveCouple ?? false;
+    _hasActiveCouple =
+        widget.hasActiveCouple ??
+        (widget.api != null && widget.coupleInfoClient == null ? false : null);
     _loadProfile();
     if (widget.hasActiveCouple == null &&
-        widget.api == null &&
+        (widget.api == null || widget.coupleInfoClient != null) &&
         !widget.editBirthProfileOnly) {
       _loadActiveCouple();
     }
@@ -266,8 +271,11 @@ class _RelationshipUnderstandingScreenState
 
   Future<void> _loadActiveCouple() async {
     final auth = AuthService();
+    final client = widget.coupleInfoClient ?? http.Client();
+    final ownsClient = widget.coupleInfoClient == null;
+    if (mounted) setState(() => _coupleLoadFailed = false);
     try {
-      final response = await http.get(
+      final response = await client.get(
         Uri.parse('${auth.baseUrl}/api/couple/info'),
         headers: {
           if (auth.token != null) 'Authorization': 'Bearer ${auth.token}',
@@ -278,11 +286,23 @@ class _RelationshipUnderstandingScreenState
           response.statusCode == 200 &&
           body is Map<String, dynamic> &&
           body['ok'] == true;
+      final knownResponse =
+          response.statusCode == 200 ||
+          response.statusCode == 404 ||
+          response.statusCode == 409;
+      if (!knownResponse) {
+        throw const FormatException('couple_info_unavailable');
+      }
       if (!mounted) return;
-      setState(() => _hasActiveCouple = active);
+      setState(() {
+        _hasActiveCouple = active;
+        _coupleLoadFailed = false;
+      });
     } catch (_) {
       if (!mounted) return;
-      setState(() => _hasActiveCouple = false);
+      setState(() => _coupleLoadFailed = true);
+    } finally {
+      if (ownsClient) client.close();
     }
   }
 
@@ -895,7 +915,7 @@ class _RelationshipUnderstandingScreenState
             baseUrl: auth.baseUrl,
             token: auth.token ?? '',
           ),
-          hasActiveCouple: _hasActiveCouple,
+          hasActiveCouple: _hasActiveCouple == true,
           audienceFilter: audience,
         ),
       ),
@@ -1068,9 +1088,17 @@ class _RelationshipUnderstandingScreenState
   }
 
   Widget _coupleArea() {
-    final title = _hasActiveCouple ? '커플 검사' : '커플 영역은 잠겨 있어요';
-    final description = _hasActiveCouple
+    final active = _hasActiveCouple == true;
+    final resolving = _hasActiveCouple == null;
+    final title = active
+        ? '커플 검사'
+        : resolving
+        ? '커플 연결 상태를 확인하는 중이에요'
+        : '커플 영역은 잠겨 있어요';
+    final description = active
         ? '각자의 답변은 비공개로 저장되고, 완료 신호가 모이면 함께 볼 결과가 준비돼요.'
+        : resolving
+        ? '잠시만 기다려주세요. 연결된 커플 정보를 확인하고 있어요.'
         : '파트너를 연결하면 두 사람의 관계 패턴을 함께 살펴볼 수 있어요.';
     return MainCard(
       key: const Key('relationship_couple_area'),
@@ -1079,8 +1107,8 @@ class _RelationshipUnderstandingScreenState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(
-            _hasActiveCouple ? Icons.favorite_border : Icons.lock_outline,
-            color: _hasActiveCouple ? kMainRose : kMainMuted,
+            active ? Icons.favorite_border : Icons.hourglass_empty_rounded,
+            color: active ? kMainRose : kMainMuted,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1093,12 +1121,18 @@ class _RelationshipUnderstandingScreenState
                   description,
                   style: mainBody(size: 13, color: kMainSub, height: 1.5),
                 ),
-                if (_hasActiveCouple) ...[
+                if (active) ...[
                   const SizedBox(height: 12),
                   FilledButton(
                     key: const Key('open_couple_catalog'),
                     onPressed: () => _openCatalog(AssessmentAudience.couple),
                     child: const Text('커플 검사 확인하기'),
+                  ),
+                ] else if (_coupleLoadFailed) ...[
+                  const SizedBox(height: 12),
+                  OutlinedButton(
+                    onPressed: _loadActiveCouple,
+                    child: const Text('다시 확인'),
                   ),
                 ],
               ],
@@ -1159,14 +1193,65 @@ class _RelationshipUnderstandingScreenState
     ),
   );
 
+  Widget _coupleCheckStateArea() => MainCard(
+    key: const Key('relationship_couple_check_state'),
+    color: kMainPaperSoft,
+    padding: const EdgeInsets.all(16),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          _coupleLoadFailed
+              ? Icons.cloud_off_outlined
+              : Icons.hourglass_empty_rounded,
+          color: kMainMuted,
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _coupleLoadFailed
+                    ? '커플 연결 상태를 확인하지 못했어요'
+                    : '커플 연결 상태를 확인하는 중이에요',
+                style: mainBody(weight: FontWeight.w800),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                _coupleLoadFailed
+                    ? '잠시 후 다시 확인해주세요. 연결 전으로 확정하지 않았어요.'
+                    : '연결 상태를 확인한 뒤 커플 기능을 보여드릴게요.',
+                style: mainBody(size: 13, color: kMainSub, height: 1.5),
+              ),
+              if (_coupleLoadFailed) ...[
+                const SizedBox(height: 10),
+                OutlinedButton(
+                  onPressed: _loadActiveCouple,
+                  child: const Text('다시 확인'),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+
   void _selectArea(int index) {
     final area = index == 0
         ? _RelationshipArea.personal
         : _RelationshipArea.couple;
-    if (area == _RelationshipArea.couple && !_hasActiveCouple) {
+    if (area == _RelationshipArea.couple && _hasActiveCouple != true) {
       _areaTabController.animateTo(0);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('파트너를 연결하면 커플 영역을 이용할 수 있어요.')),
+        SnackBar(
+          content: Text(
+            _hasActiveCouple == null
+                ? '커플 연결 상태를 확인하고 있어요.'
+                : '파트너를 연결하면 커플 영역을 이용할 수 있어요.',
+          ),
+        ),
       );
       return;
     }
@@ -1410,9 +1495,12 @@ class _RelationshipUnderstandingScreenState
                         _mindcareArea(),
                         const SizedBox(height: 12),
                         _counselingArea(shared: false),
-                        if (!_hasActiveCouple) ...[
+                        if (_hasActiveCouple == false) ...[
                           const SizedBox(height: 12),
                           _coupleRestrictedArea(),
+                        ] else if (_hasActiveCouple == null) ...[
+                          const SizedBox(height: 12),
+                          _coupleCheckStateArea(),
                         ],
                       ] else ...[
                         _coupleArea(),

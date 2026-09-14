@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -355,6 +356,52 @@ void main() {
       find.byKey(const Key('relationship_couple_restricted')),
       findsNothing,
     );
+    await tester.tap(find.text('커플'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('relationship_couple_area')), findsOneWidget);
+  });
+
+  testWidgets('does not show a connection CTA while couple status is unknown', (
+    tester,
+  ) async {
+    final firstLookup = Completer<http.Response>();
+    var lookupCount = 0;
+    final coupleClient = MockClient((_) async {
+      lookupCount += 1;
+      if (lookupCount == 1) return firstLookup.future;
+      return http.Response('{"ok":true}', 200);
+    });
+    final api = BirthProfileApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient((_) async => http.Response(_profileResponse, 200)),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RelationshipUnderstandingScreen(
+          api: api,
+          coupleInfoClient: coupleClient,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.byKey(const Key('relationship_couple_check_state')),
+      findsOneWidget,
+    );
+    expect(find.text('파트너 연결하기'), findsNothing);
+
+    firstLookup.complete(http.Response('not available', 503));
+    await tester.pumpAndSettle();
+    expect(find.text('커플 연결 상태를 확인하지 못했어요'), findsOneWidget);
+    expect(find.text('파트너 연결하기'), findsNothing);
+
+    await tester.ensureVisible(find.text('다시 확인'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('다시 확인'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('커플'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('relationship_couple_area')), findsOneWidget);

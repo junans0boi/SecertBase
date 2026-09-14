@@ -100,10 +100,6 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
                   style: mainBody(size: 13, color: kMainSub, height: 1.5),
                 ),
                 const SizedBox(height: 16),
-                if (_comparison != null) ...[
-                  _comparisonCard(_comparison!),
-                  const SizedBox(height: 14),
-                ],
                 ..._history!.asMap().entries.map(
                   (entry) => _historyCard(entry.key, entry.value),
                 ),
@@ -118,9 +114,13 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
         container: true,
         excludeSemantics: true,
         label: '최근 변화 비교',
-        child: MainCard(
+        child: Container(
           key: const Key('assessment_comparison_card'),
-          color: kMainPaperSoft,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: kMainPaperSoft,
+            borderRadius: BorderRadius.circular(14),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -139,8 +139,13 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
       container: true,
       excludeSemantics: true,
       label: '최근 변화 비교',
-      child: MainCard(
+      child: Container(
         key: const Key('assessment_comparison_card'),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: kMainPaperSoft,
+          borderRadius: BorderRadius.circular(14),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -236,6 +241,10 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
                   '전체 점수 ${item.result.overallScore}점$dateLabel · 전체 ${_history?.length ?? 0}회 기록',
                   style: mainBody(size: 12, color: kMainSub),
                 ),
+                if (index == 0 && _comparison != null) ...[
+                  const SizedBox(height: 12),
+                  _comparisonCard(_comparison!),
+                ],
                 if (item.result.dimensions.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   Wrap(
