@@ -21,11 +21,6 @@ void main() {
 
     expect(find.text('프로필 이모지'), findsOneWidget);
     expect(find.text('기념일 추가'), findsOneWidget);
-    expect(find.text('보이는 범위'), findsOneWidget);
-    expect(
-      find.text('내 공간과 프로필은 나만 볼 수 있어요. 연결된 기록만 두 사람에게 보여요.'),
-      findsOneWidget,
-    );
     expect(find.byType(NavigationBar), findsOneWidget);
     expect(find.byTooltip('뒤로가기'), findsOneWidget);
 
@@ -60,7 +55,9 @@ void main() {
         findsOneWidget,
       );
 
-      await tester.tap(find.text('MomentLoop'));
+      tester.semantics.tap(
+        find.semantics.byLabel('MomentLoop: 우리의 순간을 기록하고 돌아봐요'),
+      );
       await tester.tap(find.text('비밀 지도'));
       await tester.tap(find.text('함께 놀기'));
       expect(destinations, [1, 2, 3]);

@@ -483,8 +483,6 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
             const SizedBox(height: 14),
             _profileSummary(sock),
             const SizedBox(height: 14),
-            _privacyCard(),
-            const SizedBox(height: 14),
             _accountCard(),
             const SizedBox(height: 12),
             _profileCard(sock),
@@ -818,34 +816,6 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
       ),
     );
   }
-
-  Widget _privacyCard() => MainCard(
-    color: kMainSkySoft,
-    padding: const EdgeInsets.all(16),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Icon(Icons.shield_outlined, color: kMainSky, size: 21),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '보이는 범위',
-                style: mainBody(size: 13, weight: FontWeight.w800),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                '내 공간과 프로필은 나만 볼 수 있어요. 연결된 기록만 두 사람에게 보여요.',
-                style: mainBody(size: 12, color: kMainSub, height: 1.45),
-              ),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
 
   Widget _profileCard(SocketService sock) => _Card(
     title: '프로필 이모지',
@@ -1796,15 +1766,7 @@ class _MoreSection extends StatelessWidget {
         const SizedBox(height: 9),
         MainCard(
           padding: EdgeInsets.zero,
-          child: Column(
-            children: [
-              for (var index = 0; index < children.length; index++) ...[
-                children[index],
-                if (index < children.length - 1)
-                  const Divider(height: 1, indent: 68, endIndent: 16),
-              ],
-            ],
-          ),
+          child: Column(children: children),
         ),
       ],
     );
@@ -1839,38 +1801,35 @@ class _MoreRow extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             onTap: onTap,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 72),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
-                child: Row(
-                  children: [
-                    DoodleBadge(
-                      color: iconColor,
-                      backgroundColor: iconBackground,
-                      size: 40,
-                      child: Icon(icon, color: iconColor, size: 21),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+              child: Row(
+                children: [
+                  DoodleBadge(
+                    color: iconColor,
+                    backgroundColor: iconBackground,
+                    size: 40,
+                    child: Icon(icon, color: iconColor, size: 21),
+                  ),
+                  const SizedBox(width: 13),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: mainBody(size: 15, weight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          subtitle,
+                          style: mainBody(size: 11, color: kMainMuted),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 13),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            style: mainBody(size: 15, weight: FontWeight.w800),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            subtitle,
-                            style: mainBody(size: 11, color: kMainMuted),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.chevron_right_rounded, color: kMainMuted),
-                  ],
-                ),
+                  ),
+                  const Icon(Icons.chevron_right_rounded, color: kMainMuted),
+                ],
               ),
             ),
           ),
