@@ -201,7 +201,7 @@ class _TarotScreenState extends State<TarotScreen> {
     }
     final controller = _deckControllers.putIfAbsent(
       reading.scope,
-      () => PageController(viewportFraction: 0.26),
+      () => PageController(viewportFraction: 0.22),
     );
     final selectedIndex = _selectedDeckIndex[reading.scope] ?? 0;
     return Column(
