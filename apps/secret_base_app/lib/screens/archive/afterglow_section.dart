@@ -28,7 +28,26 @@ class AfterglowSection extends StatelessWidget {
           style: mainBody(size: 12, color: kMainMuted),
         ),
         const SizedBox(height: 10),
-        ...state.contributions.map(_card),
+        if (state.contributions.isEmpty)
+          MainCard(
+            color: kMainRoseSoft,
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.photo_camera_back_outlined, color: kMainRose),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '아직 서로의 장면이 없어요. 한 장 남기면 이 데이트의 다른 표정이 여기에 모여요.',
+                    style: mainBody(size: 13, color: kMainSub, height: 1.45),
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          ...state.contributions.map(_card),
         if (onContribute != null)
           SizedBox(
             width: double.infinity,

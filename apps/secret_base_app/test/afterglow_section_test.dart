@@ -93,5 +93,11 @@ void main() {
       ),
     ]);
     expect(find.text('삭제된 순간이에요'), findsOneWidget);
+
+    await pump(const []);
+    expect(
+      find.text('아직 서로의 장면이 없어요. 한 장 남기면 이 데이트의 다른 표정이 여기에 모여요.'),
+      findsOneWidget,
+    );
   });
 }
