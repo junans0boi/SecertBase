@@ -35,7 +35,10 @@ const _statLabels = statLabels;
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 class ShopScreen extends StatefulWidget {
-  const ShopScreen({super.key});
+  final http.Client? client;
+  final String? baseUrl;
+
+  const ShopScreen({super.key, this.client, this.baseUrl});
   @override
   State<ShopScreen> createState() => _ShopScreenState();
 }
@@ -57,6 +60,12 @@ class _ShopScreenState extends State<ShopScreen>
   int _xpNeeded = 100;
   bool _loading = true;
   String? _error;
+  int? _buyingItemId;
+  String? _purchaseFeedback;
+  bool _purchaseFeedbackError = false;
+
+  late final http.Client _client;
+  late final bool _ownsClient;
 
   late final TabController _tabCtrl;
 
@@ -70,6 +79,8 @@ class _ShopScreenState extends State<ShopScreen>
   @override
   void initState() {
     super.initState();
+    _ownsClient = widget.client == null;
+    _client = widget.client ?? http.Client();
     _tabCtrl = TabController(
       length: _mainTabs.length,
       vsync: this,
@@ -84,8 +95,11 @@ class _ShopScreenState extends State<ShopScreen>
   void dispose() {
     _tabCtrl.dispose();
     _socket.removeListener(_onWallet);
+    if (_ownsClient) _client.close();
     super.dispose();
   }
+
+  String get _baseUrl => widget.baseUrl ?? _socket.serverUrl ?? '';
 
   void _onWallet() {
     final b = _socket.walletBalance;
@@ -99,20 +113,20 @@ class _ShopScreenState extends State<ShopScreen>
     });
     try {
       final token = _auth.token;
-      final base = _socket.serverUrl ?? '';
+      final base = _baseUrl;
       final headers = {
         'Authorization': 'Bearer $token',
         'Content-Type': 'application/json',
       };
 
       final results = await Future.wait([
-        http.get(Uri.parse('$base/api/shop/items'), headers: headers),
-        http.get(Uri.parse('$base/api/wallet/balance'), headers: headers),
-        http.get(Uri.parse('$base/api/shop/coupons'), headers: headers),
-        http.get(Uri.parse('$base/api/shop/owned'), headers: headers),
-        http.get(Uri.parse('$base/api/shop/equipped'), headers: headers),
-        http.get(Uri.parse('$base/api/user/level'), headers: headers),
-        http.get(Uri.parse('$base/api/missions'), headers: headers),
+        _client.get(Uri.parse('$base/api/shop/items'), headers: headers),
+        _client.get(Uri.parse('$base/api/wallet/balance'), headers: headers),
+        _client.get(Uri.parse('$base/api/shop/coupons'), headers: headers),
+        _client.get(Uri.parse('$base/api/shop/owned'), headers: headers),
+        _client.get(Uri.parse('$base/api/shop/equipped'), headers: headers),
+        _client.get(Uri.parse('$base/api/user/level'), headers: headers),
+        _client.get(Uri.parse('$base/api/missions'), headers: headers),
       ]);
 
       final itemsRes = jsonDecode(results[0].body) as Map;
@@ -161,8 +175,10 @@ class _ShopScreenState extends State<ShopScreen>
   // ── Actions ─────────────────────────────────────────────────────────────────
 
   Future<void> _preview(Map<String, dynamic> item) async {
-    final owned = _ownedItemIds.contains((item['id'] as num).toInt());
-    final equipped = _equippedItemIds.contains((item['id'] as num).toInt());
+    final itemId = (item['id'] as num).toInt();
+    final owned = _ownedItemIds.contains(itemId);
+    final equipped = _equippedItemIds.contains(itemId);
+    final buying = _buyingItemId == itemId;
     final grade = item['grade'] as String? ?? 'B';
     final isGachaOnly = ['S', 'SS', 'SSS'].contains(grade);
     final stats = (item['stats'] as List? ?? []).cast<Map<String, dynamic>>();
@@ -178,9 +194,10 @@ class _ShopScreenState extends State<ShopScreen>
         equipped: equipped,
         isGachaOnly: isGachaOnly,
         balance: _balance,
+        buying: buying,
         gradeColor: _gradeColor(grade),
         gradeGradient: _gradeGradient(grade),
-        onBuy: isGachaOnly || owned
+        onBuy: isGachaOnly || owned || buying
             ? null
             : () {
                 Navigator.pop(ctx);
@@ -194,11 +211,17 @@ class _ShopScreenState extends State<ShopScreen>
   }
 
   Future<void> _buy(Map<String, dynamic> item) async {
+    final itemId = (item['id'] as num).toInt();
+    if (_buyingItemId != null) return;
+    setState(() {
+      _buyingItemId = itemId;
+      _purchaseFeedback = null;
+    });
+
     try {
       final token = _auth.token;
-      final base = _socket.serverUrl ?? '';
-      final res = await http.post(
-        Uri.parse('$base/api/shop/buy'),
+      final res = await _client.post(
+        Uri.parse('$_baseUrl/api/shop/buy'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -207,14 +230,30 @@ class _ShopScreenState extends State<ShopScreen>
       );
       final body = jsonDecode(res.body) as Map;
       if (body['ok'] == true) {
-        setState(() => _balance = (body['new_balance'] as num).toInt());
-        _showSnack('${item['name']} 획득! 🎉');
+        final newBalance = (body['new_balance'] as num?)?.toInt() ?? _balance;
+        setState(() {
+          _balance = newBalance;
+          _purchaseFeedback =
+              '${item['name']}을 보관함에 넣었어요 · ${_formatCoins(newBalance)}코인 남음';
+          _purchaseFeedbackError = false;
+        });
         await _load();
       } else {
-        _showSnack(_buyErrorMsg(body['reason'] as String?));
+        setState(() {
+          _purchaseFeedback =
+              '구매하지 못했어요 · ${_buyErrorMsg(body['reason'] as String?)}';
+          _purchaseFeedbackError = true;
+        });
       }
-    } catch (e) {
-      _showSnack('오류: $e');
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _purchaseFeedback = '구매하지 못했어요 · 네트워크를 확인하고 다시 시도해주세요.';
+          _purchaseFeedbackError = true;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _buyingItemId = null);
     }
   }
 
@@ -258,9 +297,8 @@ class _ShopScreenState extends State<ShopScreen>
 
     try {
       final token = _auth.token;
-      final base = _socket.serverUrl ?? '';
-      final res = await http.post(
-        Uri.parse('$base/api/shop/coupons/issue'),
+      final res = await _client.post(
+        Uri.parse('$_baseUrl/api/shop/coupons/issue'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -314,9 +352,8 @@ class _ShopScreenState extends State<ShopScreen>
 
     try {
       final token = _auth.token;
-      final base = _socket.serverUrl ?? '';
-      final res = await http.post(
-        Uri.parse('$base/api/shop/coupons/redeem'),
+      final res = await _client.post(
+        Uri.parse('$_baseUrl/api/shop/coupons/redeem'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -388,9 +425,8 @@ class _ShopScreenState extends State<ShopScreen>
     if (confirmed != true || !mounted) return;
 
     try {
-      final base = _socket.serverUrl ?? '';
-      final res = await http.post(
-        Uri.parse('$base/api/shop/gacha'),
+      final res = await _client.post(
+        Uri.parse('$_baseUrl/api/shop/gacha'),
         headers: {
           'Authorization': 'Bearer ${_auth.token}',
           'Content-Type': 'application/json',
@@ -429,8 +465,9 @@ class _ShopScreenState extends State<ShopScreen>
   String _buyErrorMsg(String? reason) => switch (reason) {
     'insufficient_coins' => '코인이 부족해요',
     'item_not_found' => '아이템을 찾을 수 없어요',
+    'already_owned' => '이미 보유한 아이템이에요',
     'gacha_only' => 'S등급 이상은 뽑기로만 획득 가능해요',
-    _ => '구매 실패',
+    _ => '잠시 후 다시 시도해주세요',
   };
 
   void _showSnack(String msg) {
@@ -577,7 +614,12 @@ class _ShopScreenState extends State<ShopScreen>
                 if (t.$2 == 'coupon') return _buildCouponsTab();
                 if (t.$2 == 'mission') return _buildMissionsTab();
                 if (t.$2 == 'inventory') {
-                  return InventoryTab(onBalanceChanged: _load);
+                  return InventoryTab(
+                    client: _client,
+                    baseUrl: widget.baseUrl,
+                    onBalanceChanged: _load,
+                    onOpenShop: () => _tabCtrl.animateTo(0),
+                  );
                 }
                 return _buildShopTab(); // 상점 탭
               }).toList(),
@@ -593,6 +635,94 @@ class _ShopScreenState extends State<ShopScreen>
       child: ListView(
         padding: const EdgeInsets.fromLTRB(0, 12, 0, 40),
         children: [
+          Container(
+            key: const Key('shop_balance_card'),
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: kSurface,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: kMainHoney.withValues(alpha: 0.22)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: kMainHoney.withValues(alpha: 0.14),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Text('🪙', style: TextStyle(fontSize: 22)),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '현재 사용할 수 있는 코인',
+                        style: TextStyle(fontSize: 12, color: kMainMuted),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _formatCoins(_balance),
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          color: kMainHoney,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  '구매 후\n잔액 반영',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(fontSize: 11, color: kMainMuted),
+                ),
+              ],
+            ),
+          ),
+          if (_purchaseFeedback != null)
+            Container(
+              key: const Key('shop_purchase_feedback'),
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: (_purchaseFeedbackError ? kMainRose : kMainSage)
+                    .withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    _purchaseFeedbackError
+                        ? Icons.info_outline_rounded
+                        : Icons.check_circle_outline_rounded,
+                    size: 20,
+                    color: _purchaseFeedbackError ? kMainRose : kMainSage,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _purchaseFeedback!,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 0, 16, 10),
+            child: Text(
+              '구매 가능한 아이템',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+            ),
+          ),
           _GameSection(
             title: '윷놀이',
             icon: '🎲',
@@ -628,9 +758,8 @@ class _ShopScreenState extends State<ShopScreen>
   Future<void> _claimMission(int missionId) async {
     try {
       final token = _auth.token;
-      final base = _socket.serverUrl ?? '';
-      final res = await http.post(
-        Uri.parse('$base/api/missions/$missionId/claim'),
+      final res = await _client.post(
+        Uri.parse('$_baseUrl/api/missions/$missionId/claim'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -982,6 +1111,7 @@ class _ItemPreviewSheet extends StatelessWidget {
   final bool owned;
   final bool equipped;
   final bool isGachaOnly;
+  final bool buying;
   final int balance;
   final Color gradeColor;
   final LinearGradient gradeGradient;
@@ -996,6 +1126,7 @@ class _ItemPreviewSheet extends StatelessWidget {
     required this.owned,
     required this.equipped,
     required this.isGachaOnly,
+    required this.buying,
     required this.balance,
     required this.gradeColor,
     required this.gradeGradient,
@@ -1121,6 +1252,7 @@ class _ItemPreviewSheet extends StatelessWidget {
           ],
           // Action button
           SizedBox(
+            key: ValueKey('shop_purchase_button_${item['id']}'),
             width: double.infinity,
             child: _actionButton(grade, price, canAfford),
           ),
@@ -1130,6 +1262,18 @@ class _ItemPreviewSheet extends StatelessWidget {
   }
 
   Widget _actionButton(String grade, int price, bool canAfford) {
+    if (buying) {
+      return ElevatedButton(
+        onPressed: null,
+        style: ElevatedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+        ),
+        child: const Text(
+          '구매 중...',
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+        ),
+      );
+    }
     if (equipped) {
       return OutlinedButton(
         style: OutlinedButton.styleFrom(
@@ -1521,6 +1665,7 @@ class _HorizItemCard extends StatelessWidget {
     final isGachaOnly = ['S', 'SS', 'SSS'].contains(grade);
 
     return GestureDetector(
+      key: ValueKey('shop_item_${item['id']}'),
       onTap: onTap,
       child: Container(
         width: 90,

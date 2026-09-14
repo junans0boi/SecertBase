@@ -54,7 +54,17 @@ const statLabels = {
 
 class InventoryTab extends StatefulWidget {
   final VoidCallback onBalanceChanged;
-  const InventoryTab({super.key, required this.onBalanceChanged});
+  final http.Client? client;
+  final String? baseUrl;
+  final VoidCallback? onOpenShop;
+
+  const InventoryTab({
+    super.key,
+    required this.onBalanceChanged,
+    this.client,
+    this.baseUrl,
+    this.onOpenShop,
+  });
 
   @override
   State<InventoryTab> createState() => _InventoryTabState();
@@ -70,11 +80,17 @@ class _InventoryTabState extends State<InventoryTab> {
       {}; // slot → {item_id, name, icon, grade, stats:{}}
   int _balance = 0;
   bool _loading = true;
+  String? _error;
   String? _filterGame; // 인벤토리 필터 (null=전체)
+
+  late final http.Client _client;
+  late final bool _ownsClient;
 
   @override
   void initState() {
     super.initState();
+    _ownsClient = widget.client == null;
+    _client = widget.client ?? http.Client();
     _load();
     _socket.addListener(_onWallet);
   }
@@ -82,8 +98,11 @@ class _InventoryTabState extends State<InventoryTab> {
   @override
   void dispose() {
     _socket.removeListener(_onWallet);
+    if (_ownsClient) _client.close();
     super.dispose();
   }
+
+  String get _baseUrl => widget.baseUrl ?? _socket.serverUrl ?? '';
 
   void _onWallet() {
     final b = _socket.walletBalance;
@@ -92,14 +111,19 @@ class _InventoryTabState extends State<InventoryTab> {
 
   Future<void> _load() async {
     if (!mounted) return;
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
-      final base = _socket.serverUrl ?? '';
       final headers = {'Authorization': 'Bearer ${_auth.token}'};
       final results = await Future.wait([
-        http.get(Uri.parse('$base/api/shop/owned'), headers: headers),
-        http.get(Uri.parse('$base/api/shop/equipped'), headers: headers),
-        http.get(Uri.parse('$base/api/wallet/balance'), headers: headers),
+        _client.get(Uri.parse('$_baseUrl/api/shop/owned'), headers: headers),
+        _client.get(Uri.parse('$_baseUrl/api/shop/equipped'), headers: headers),
+        _client.get(
+          Uri.parse('$_baseUrl/api/wallet/balance'),
+          headers: headers,
+        ),
       ]);
       if (!mounted) return;
       final ownedData = jsonDecode(results[0].body) as Map;
@@ -120,15 +144,19 @@ class _InventoryTabState extends State<InventoryTab> {
         _loading = false;
       });
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _error = '인벤토리를 불러오지 못했어요.';
+          _loading = false;
+        });
+      }
     }
   }
 
   Future<void> _equip(Map<String, dynamic> item) async {
     try {
-      final base = _socket.serverUrl ?? '';
-      final res = await http.post(
-        Uri.parse('$base/api/shop/equip'),
+      final res = await _client.post(
+        Uri.parse('$_baseUrl/api/shop/equip'),
         headers: {
           'Authorization': 'Bearer ${_auth.token}',
           'Content-Type': 'application/json',
@@ -149,9 +177,8 @@ class _InventoryTabState extends State<InventoryTab> {
 
   Future<void> _unequip(String slot) async {
     try {
-      final base = _socket.serverUrl ?? '';
-      final res = await http.post(
-        Uri.parse('$base/api/shop/unequip'),
+      final res = await _client.post(
+        Uri.parse('$_baseUrl/api/shop/unequip'),
         headers: {
           'Authorization': 'Bearer ${_auth.token}',
           'Content-Type': 'application/json',
@@ -228,6 +255,8 @@ class _InventoryTabState extends State<InventoryTab> {
     final slot = item['slot'] as String? ?? '';
     final id = (item['item_id'] as num).toInt();
     final equipped = _equippedIds.contains(id);
+    final usable = item['usable'] != false;
+    final description = item['description'] as String?;
 
     // 이 아이템의 스탯
     Map<String, dynamic> itemStats = {};
@@ -343,19 +372,22 @@ class _InventoryTabState extends State<InventoryTab> {
                   ),
                   if (!equipped)
                     ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        _equip(item);
-                      },
+                      key: const Key('inventory_use_cta'),
+                      onPressed: usable
+                          ? () {
+                              Navigator.pop(ctx);
+                              _equip(item);
+                            }
+                          : null,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: kMainHoney,
+                        backgroundColor: usable ? kMainHoney : kMainMuted,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 14,
                           vertical: 8,
                         ),
                       ),
-                      child: const Text(
-                        '장착',
+                      child: Text(
+                        usable ? '장착하기' : '사용할 수 없음',
                         style: TextStyle(
                           fontSize: 13,
                           color: Colors.white,
@@ -365,6 +397,20 @@ class _InventoryTabState extends State<InventoryTab> {
                     ),
                 ],
               ),
+              if (description != null && description.trim().isNotEmpty)
+                Container(
+                  key: const Key('inventory_item_description'),
+                  margin: const EdgeInsets.only(top: 16),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: kMainLilac.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    description,
+                    style: mainBody(size: 13, color: kMainSub),
+                  ),
+                ),
               if (itemStats.isNotEmpty) ...[
                 const SizedBox(height: 20),
                 if (equippedStats.isNotEmpty)
@@ -511,11 +557,10 @@ class _InventoryTabState extends State<InventoryTab> {
   }
 
   Future<void> _showCompendium() async {
-    final base = _socket.serverUrl ?? '';
     final gameParam = _filterGame != null ? '?game=$_filterGame' : '';
     try {
-      final res = await http.get(
-        Uri.parse('$base/api/shop/catalog$gameParam'),
+      final res = await _client.get(
+        Uri.parse('$_baseUrl/api/shop/catalog$gameParam'),
         headers: {'Authorization': 'Bearer ${_auth.token}'},
       );
       final body = jsonDecode(res.body) as Map;
@@ -550,7 +595,38 @@ class _InventoryTabState extends State<InventoryTab> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) {
+      return const Center(
+        key: Key('inventory_loading_state'),
+        child: CircularProgressIndicator(),
+      );
+    }
+    if (_error != null) {
+      return ListView(
+        key: const Key('inventory_error_state'),
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(24, 100, 24, 24),
+        children: [
+          const Icon(Icons.cloud_off_rounded, size: 42, color: kMainMuted),
+          const SizedBox(height: 12),
+          Text(
+            _error!,
+            textAlign: TextAlign.center,
+            style: mainTitle(size: 16),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '잠시 후 다시 불러오거나 네트워크를 확인해주세요.',
+            textAlign: TextAlign.center,
+            style: mainBody(size: 13, color: kMainMuted),
+          ),
+          const SizedBox(height: 18),
+          Center(
+            child: ElevatedButton(onPressed: _load, child: const Text('다시 시도')),
+          ),
+        ],
+      );
+    }
 
     final filteredOwned = _filterGame == null
         ? _owned
@@ -653,6 +729,45 @@ class _InventoryTabState extends State<InventoryTab> {
           ),
           const SizedBox(height: 16),
 
+          if (filteredOwned.isEmpty)
+            Container(
+              key: const Key('inventory_empty_state'),
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: kSurface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: kMainLine),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('아직 보유한 아이템이 없어요.', style: mainTitle(size: 15)),
+                  const SizedBox(height: 6),
+                  Text(
+                    '상점에서 산 아이템은 여기서 자세히 보고 장착할 수 있어요.',
+                    style: mainBody(size: 12, color: kMainMuted),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      TextButton(
+                        onPressed: _load,
+                        child: const Text('다시 불러오기'),
+                      ),
+                      if (widget.onOpenShop != null) ...[
+                        const SizedBox(width: 8),
+                        OutlinedButton(
+                          onPressed: widget.onOpenShop,
+                          child: const Text('상점에서 둘러보기'),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
           // 보유 아이템 (기본 포함)
           Text(
             '아이템 (${filteredOwned.length}개 보유)',
@@ -722,6 +837,7 @@ class _InventoryItemCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final grade = item['grade'] as String? ?? 'B';
     final gc = gradeColor(grade);
+    final usable = item['usable'] != false;
 
     return GestureDetector(
       onTap: onTap,
@@ -806,6 +922,25 @@ class _InventoryItemCard extends StatelessWidget {
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
                       color: kMainSage,
+                    ),
+                  ),
+                ),
+              )
+            else if (!usable)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                decoration: BoxDecoration(
+                  color: kMainMuted.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Center(
+                  child: Text(
+                    '사용할 수 없음',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: kMainMuted,
                     ),
                   ),
                 ),

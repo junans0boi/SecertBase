@@ -51,105 +51,108 @@ class _MoreOverview extends StatelessWidget {
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(18, 18, 18, 32),
           child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('전체', style: mainTitle(size: 32)),
-                      const SizedBox(height: 4),
-                      Text(
-                        '우리의 공간과 기능을 한 곳에서 관리해요',
-                        style: mainBody(size: 13, color: kMainSub),
-                      ),
-                    ],
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('전체', style: mainTitle(size: 32)),
+                        const SizedBox(height: 4),
+                        Text(
+                          '우리의 공간과 기능을 한 곳에서 관리해요',
+                          style: mainBody(size: 13, color: kMainSub),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                IconButton(
-                  tooltip: '고객센터',
-                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('고객센터 준비 중이에요.')),
+                  IconButton(
+                    tooltip: '고객센터',
+                    onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('고객센터 준비 중이에요.')),
+                    ),
+                    icon: const Icon(
+                      Icons.headset_mic_outlined,
+                      color: kMainSky,
+                    ),
                   ),
-                  icon: const Icon(Icons.headset_mic_outlined, color: kMainSky),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            _MoreProfileEntry(
-              onTap: () => Navigator.of(context).push<void>(
-                MaterialPageRoute(builder: (_) => const MySpaceScreen()),
+                ],
               ),
-            ),
-            const SizedBox(height: 28),
-            _MoreSection(
-              title: '우리의 공간',
-              children: [
-                _MoreRow(
-                  icon: Icons.auto_stories_outlined,
-                  iconColor: kMainRose,
-                  iconBackground: kMainRoseSoft,
-                  title: 'MomentLoop',
-                  subtitle: '우리의 순간을 기록하고 돌아봐요',
-                  onTap: () => _goToTab(1),
+              const SizedBox(height: 24),
+              _MoreProfileEntry(
+                onTap: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute(builder: (_) => const MySpaceScreen()),
                 ),
-                _MoreRow(
-                  icon: Icons.map_outlined,
-                  iconColor: kMainSage,
-                  iconBackground: kMainSageSoft,
-                  title: '비밀 지도',
-                  subtitle: '함께 다녀온 장소와 가고 싶은 곳',
-                  onTap: () => _goToTab(2),
-                ),
-                _MoreRow(
-                  icon: Icons.sports_esports_outlined,
-                  iconColor: kMainSky,
-                  iconBackground: kMainSkySoft,
-                  title: '함께 놀기',
-                  subtitle: '둘이서 즐기는 게임',
-                  onTap: () => _goToTab(3),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            _MoreSection(
-              title: '기록과 이해',
-              children: [
-                _MoreRow(
-                  icon: Icons.cottage_outlined,
-                  iconColor: kMainLilac,
-                  iconBackground: kMainLilacSoft,
-                  title: '우리의 비밀기지',
-                  subtitle: '우리의 기록과 기념일을 돌아봐요',
-                  onTap: () => Navigator.of(context).push<void>(
-                    MaterialPageRoute(
-                      builder: (_) => SecretBaseScreen(
-                        baseUrl: auth.baseUrl,
-                        authHeaders: {
-                          if (auth.token != null)
-                            'Authorization': 'Bearer ${auth.token}',
-                        },
+              ),
+              const SizedBox(height: 28),
+              _MoreSection(
+                title: '우리의 공간',
+                children: [
+                  _MoreRow(
+                    icon: Icons.auto_stories_outlined,
+                    iconColor: kMainRose,
+                    iconBackground: kMainRoseSoft,
+                    title: 'MomentLoop',
+                    subtitle: '우리의 순간을 기록하고 돌아봐요',
+                    onTap: () => _goToTab(1),
+                  ),
+                  _MoreRow(
+                    icon: Icons.map_outlined,
+                    iconColor: kMainSage,
+                    iconBackground: kMainSageSoft,
+                    title: '비밀 지도',
+                    subtitle: '함께 다녀온 장소와 가고 싶은 곳',
+                    onTap: () => _goToTab(2),
+                  ),
+                  _MoreRow(
+                    icon: Icons.sports_esports_outlined,
+                    iconColor: kMainSky,
+                    iconBackground: kMainSkySoft,
+                    title: '함께 놀기',
+                    subtitle: '둘이서 즐기는 게임',
+                    onTap: () => _goToTab(3),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              _MoreSection(
+                title: '기록과 이해',
+                children: [
+                  _MoreRow(
+                    icon: Icons.cottage_outlined,
+                    iconColor: kMainLilac,
+                    iconBackground: kMainLilacSoft,
+                    title: '우리의 비밀기지',
+                    subtitle: '우리의 기록과 기념일을 돌아봐요',
+                    onTap: () => Navigator.of(context).push<void>(
+                      MaterialPageRoute(
+                        builder: (_) => SecretBaseScreen(
+                          baseUrl: auth.baseUrl,
+                          authHeaders: {
+                            if (auth.token != null)
+                              'Authorization': 'Bearer ${auth.token}',
+                          },
+                        ),
                       ),
                     ),
                   ),
-                ),
-                _MoreRow(
-                  icon: Icons.psychology_outlined,
-                  iconColor: kMainHoney,
-                  iconBackground: kMainHoneySoft,
-                  title: '관계 이해',
-                  subtitle: '우리의 대화와 관계를 살펴봐요',
-                  onTap: () => Navigator.of(context).push<void>(
-                    MaterialPageRoute(
-                      builder: (_) => const RelationshipUnderstandingScreen(),
+                  _MoreRow(
+                    icon: Icons.psychology_outlined,
+                    iconColor: kMainHoney,
+                    iconBackground: kMainHoneySoft,
+                    title: '관계 이해',
+                    subtitle: '우리의 대화와 관계를 살펴봐요',
+                    onTap: () => Navigator.of(context).push<void>(
+                      MaterialPageRoute(
+                        builder: (_) => const RelationshipUnderstandingScreen(),
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
           ),
         ),
       ),
@@ -479,6 +482,8 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
             _header(),
             const SizedBox(height: 14),
             _profileSummary(sock),
+            const SizedBox(height: 14),
+            _privacyCard(),
             const SizedBox(height: 14),
             _accountCard(),
             const SizedBox(height: 12),
@@ -813,6 +818,34 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
       ),
     );
   }
+
+  Widget _privacyCard() => MainCard(
+    color: kMainSkySoft,
+    padding: const EdgeInsets.all(16),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.shield_outlined, color: kMainSky, size: 21),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '보이는 범위',
+                style: mainBody(size: 13, weight: FontWeight.w800),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                '내 공간과 프로필은 나만 볼 수 있어요. 연결된 기록만 두 사람에게 보여요.',
+                style: mainBody(size: 12, color: kMainSub, height: 1.45),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _profileCard(SocketService sock) => _Card(
     title: '프로필 이모지',
@@ -1706,36 +1739,36 @@ class _MoreProfileEntry extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.all(18),
               child: Row(
-            children: [
-              DoodleBadge(
-                color: kMainLilac,
-                backgroundColor: kMainLilacSoft,
-                size: 54,
-                child: const Icon(
-                  Icons.person_outline_rounded,
-                  color: kMainLilac,
-                  size: 27,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '내 공간',
-                      style: mainBody(size: 17, weight: FontWeight.w800),
+                children: [
+                  DoodleBadge(
+                    color: kMainLilac,
+                    backgroundColor: kMainLilacSoft,
+                    size: 54,
+                    child: const Icon(
+                      Icons.person_outline_rounded,
+                      color: kMainLilac,
+                      size: 27,
                     ),
-                    const SizedBox(height: 3),
-                    Text(
-                      '프로필, 연결, 기념일을 관리해요',
-                      style: mainBody(size: 12, color: kMainSub),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '내 공간',
+                          style: mainBody(size: 17, weight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          '프로필, 연결, 기념일을 관리해요',
+                          style: mainBody(size: 12, color: kMainSub),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_right_rounded, color: kMainMuted),
-            ],
+                  ),
+                  const Icon(Icons.chevron_right_rounded, color: kMainMuted),
+                ],
               ),
             ),
           ),
@@ -1811,29 +1844,32 @@ class _MoreRow extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
                 child: Row(
-          children: [
-            DoodleBadge(
-              color: iconColor,
-              backgroundColor: iconBackground,
-              size: 40,
-              child: Icon(icon, color: iconColor, size: 21),
-            ),
-            const SizedBox(width: 13),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: mainBody(size: 15, weight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(subtitle, style: mainBody(size: 11, color: kMainMuted)),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right_rounded, color: kMainMuted),
-          ],
+                  children: [
+                    DoodleBadge(
+                      color: iconColor,
+                      backgroundColor: iconBackground,
+                      size: 40,
+                      child: Icon(icon, color: iconColor, size: 21),
+                    ),
+                    const SizedBox(width: 13),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: mainBody(size: 15, weight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            subtitle,
+                            style: mainBody(size: 11, color: kMainMuted),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.chevron_right_rounded, color: kMainMuted),
+                  ],
                 ),
               ),
             ),

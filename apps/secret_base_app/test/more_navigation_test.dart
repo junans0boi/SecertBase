@@ -21,6 +21,11 @@ void main() {
 
     expect(find.text('프로필 이모지'), findsOneWidget);
     expect(find.text('기념일 추가'), findsOneWidget);
+    expect(find.text('보이는 범위'), findsOneWidget);
+    expect(
+      find.text('내 공간과 프로필은 나만 볼 수 있어요. 연결된 기록만 두 사람에게 보여요.'),
+      findsOneWidget,
+    );
     expect(find.byType(NavigationBar), findsOneWidget);
     expect(find.byTooltip('뒤로가기'), findsOneWidget);
 
@@ -31,68 +36,73 @@ void main() {
     expect(find.byType(NavigationBar), findsOneWidget);
   });
 
-  testWidgets('more keeps every exposed row reachable through its existing route', (
-    tester,
-  ) async {
-    final destinations = <int>[];
-    await tester.pumpWidget(
-      MaterialApp(
-        home: SettingsScreen(onNavigate: destinations.add),
-      ),
-    );
-    await tester.pump();
+  testWidgets(
+    'more keeps every exposed row reachable through its existing route',
+    (tester) async {
+      final destinations = <int>[];
+      await tester.pumpWidget(
+        MaterialApp(home: SettingsScreen(onNavigate: destinations.add)),
+      );
+      await tester.pump();
 
-    for (final label in ['내 공간', 'MomentLoop', '비밀 지도', '함께 놀기', '우리의 비밀기지', '관계 이해']) {
-      expect(find.text(label), findsOneWidget);
-    }
-    expect(
-      find.bySemanticsLabel('MomentLoop: 우리의 순간을 기록하고 돌아봐요'),
-      findsOneWidget,
-    );
+      for (final label in [
+        '내 공간',
+        'MomentLoop',
+        '비밀 지도',
+        '함께 놀기',
+        '우리의 비밀기지',
+        '관계 이해',
+      ]) {
+        expect(find.text(label), findsOneWidget);
+      }
+      expect(
+        find.bySemanticsLabel('MomentLoop: 우리의 순간을 기록하고 돌아봐요'),
+        findsOneWidget,
+      );
 
-    await tester.tap(find.text('MomentLoop'));
-    await tester.tap(find.text('비밀 지도'));
-    await tester.tap(find.text('함께 놀기'));
-    expect(destinations, [1, 2, 3]);
+      await tester.tap(find.text('MomentLoop'));
+      await tester.tap(find.text('비밀 지도'));
+      await tester.tap(find.text('함께 놀기'));
+      expect(destinations, [1, 2, 3]);
 
-    await tester.tap(find.text('우리의 비밀기지'));
-    await tester.pump();
-    expect(find.byType(SecretBaseScreen), findsOneWidget);
-    await tester.pageBack();
-    await tester.pump();
+      await tester.tap(find.text('우리의 비밀기지'));
+      await tester.pump();
+      expect(find.byType(SecretBaseScreen), findsOneWidget);
+      await tester.pageBack();
+      await tester.pump();
 
-    await tester.ensureVisible(find.text('관계 이해'));
-    await tester.pump();
-    await tester.tap(find.text('관계 이해'));
-    await tester.pump();
-    expect(find.byType(RelationshipUnderstandingScreen), findsOneWidget);
-  });
+      await tester.ensureVisible(find.text('관계 이해'));
+      await tester.pump();
+      await tester.tap(find.text('관계 이해'));
+      await tester.pump();
+      expect(find.byType(RelationshipUnderstandingScreen), findsOneWidget);
+    },
+  );
 
-  testWidgets('more semantic entries perform their existing navigation actions', (
-    tester,
-  ) async {
-    await tester.pumpWidget(const MaterialApp(home: HomeShell()));
-    await tester.pump();
-    await tester.tap(find.text('더보기'));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'more semantic entries perform their existing navigation actions',
+    (tester) async {
+      await tester.pumpWidget(const MaterialApp(home: HomeShell()));
+      await tester.pump();
+      await tester.tap(find.text('더보기'));
+      await tester.pumpAndSettle();
 
-    tester.semantics.tap(
-      find.semantics.byLabel('MomentLoop: 우리의 순간을 기록하고 돌아봐요'),
-    );
-    await tester.pump();
+      tester.semantics.tap(
+        find.semantics.byLabel('MomentLoop: 우리의 순간을 기록하고 돌아봐요'),
+      );
+      await tester.pump();
 
-    expect(
-      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
-      1,
-    );
+      expect(
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        1,
+      );
 
-    await tester.tap(find.text('더보기'));
-    await tester.pumpAndSettle();
-    tester.semantics.tap(
-      find.semantics.byLabel('내 공간: 프로필, 연결, 기념일 관리'),
-    );
-    await tester.pump();
+      await tester.tap(find.text('더보기'));
+      await tester.pumpAndSettle();
+      tester.semantics.tap(find.semantics.byLabel('내 공간: 프로필, 연결, 기념일 관리'));
+      await tester.pump();
 
-    expect(find.text('프로필 이모지'), findsOneWidget);
-  });
+      expect(find.text('프로필 이모지'), findsOneWidget);
+    },
+  );
 }

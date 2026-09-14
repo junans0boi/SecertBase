@@ -85,7 +85,12 @@ class AuthPage extends StatelessWidget {
             child: SingleChildScrollView(
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
+                padding: EdgeInsets.fromLTRB(
+                  24,
+                  12,
+                  24,
+                  20 + MediaQuery.viewInsetsOf(context).bottom,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -147,36 +152,43 @@ class AuthButton extends StatelessWidget {
   final bool loading;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    width: double.infinity,
-    child: FilledButton(
-      onPressed: loading ? null : onPressed,
-      style: FilledButton.styleFrom(
-        minimumSize: const Size.fromHeight(56),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        backgroundColor: authPrimary,
-        foregroundColor: Colors.white,
-        disabledBackgroundColor: authLine,
-        disabledForegroundColor: authSecondary,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(17)),
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    enabled: !loading && onPressed != null,
+    label: loading ? '$label, 처리 중' : label,
+    child: SizedBox(
+      width: double.infinity,
+      child: FilledButton(
+        onPressed: loading ? null : onPressed,
+        style: FilledButton.styleFrom(
+          minimumSize: const Size.fromHeight(56),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          backgroundColor: authPrimary,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: authLine,
+          disabledForegroundColor: authSecondary,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(17),
+          ),
+        ),
+        child: loading
+            ? const SizedBox.square(
+                dimension: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: authSecondary,
+                  semanticsLabel: '처리 중',
+                ),
+              )
+            : Text(
+                label,
+                style: authText(
+                  size: 16,
+                  weight: FontWeight.w700,
+                  color: onPressed == null ? authSecondary : Colors.white,
+                ),
+              ),
       ),
-      child: loading
-          ? const SizedBox.square(
-              dimension: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: authSecondary,
-                semanticsLabel: '처리 중',
-              ),
-            )
-          : Text(
-              label,
-              style: authText(
-                size: 16,
-                weight: FontWeight.w700,
-                color: onPressed == null ? authSecondary : Colors.white,
-              ),
-            ),
     ),
   );
 }

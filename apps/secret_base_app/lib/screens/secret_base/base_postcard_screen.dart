@@ -27,7 +27,8 @@ class _BasePostcardScreenState extends State<BasePostcardScreen> {
   late int _year;
   late int _month;
   Map<String, dynamic>? _postcard;
-  bool _loading = false;
+  bool _loading = true;
+  String? _loadError;
 
   @override
   void initState() {
@@ -42,8 +43,10 @@ class _BasePostcardScreenState extends State<BasePostcardScreen> {
       setState(() {
         _loading = true;
         _postcard = null;
+        _loadError = null;
       });
     }
+    String? reason;
     try {
       final res = await http.get(
         Uri.parse(
@@ -53,18 +56,32 @@ class _BasePostcardScreenState extends State<BasePostcardScreen> {
       );
       if (!mounted) return;
       final data = jsonDecode(res.body) as Map<String, dynamic>;
-      if (data['ok'] == true && data['postcard'] != null) {
-        setState(
-          () => _postcard = Map<String, dynamic>.from(data['postcard'] as Map),
-        );
+      reason = data['reason'] as String?;
+      if (res.statusCode < 200 || res.statusCode >= 300 || data['ok'] != true) {
+        throw const FormatException();
       }
+      final postcard = data['postcard'];
+      if (postcard is! Map) throw const FormatException();
+      setState(() {
+        _postcard = Map<String, dynamic>.from(postcard);
+        _loadError = null;
+      });
     } catch (_) {
+      if (mounted) {
+        setState(() => _loadError = _loadErrorMessage(reason));
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
+  String _loadErrorMessage(String? reason) => switch (reason) {
+    'active_couple_required' => '활성 커플을 연결하면 둘만의 엽서를 볼 수 있어요.',
+    _ => '엽서를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.',
+  };
+
   void _prevMonth() {
+    if (_loading) return;
     setState(() {
       if (_month == 1) {
         _year--;
@@ -78,7 +95,11 @@ class _BasePostcardScreenState extends State<BasePostcardScreen> {
 
   void _nextMonth() {
     final now = DateTime.now();
-    if (_year > now.year || (_year == now.year && _month >= now.month)) return;
+    if (_loading ||
+        _year > now.year ||
+        (_year == now.year && _month >= now.month)) {
+      return;
+    }
     setState(() {
       if (_month == 12) {
         _year++;
@@ -92,7 +113,16 @@ class _BasePostcardScreenState extends State<BasePostcardScreen> {
 
   bool get _canGoNext {
     final now = DateTime.now();
-    return !(_year >= now.year && _month >= now.month);
+    return !_loading && !(_year >= now.year && _month >= now.month);
+  }
+
+  bool get _hasRecords {
+    final postcard = _postcard;
+    if (postcard == null) return false;
+    final moments = (postcard['moments_count'] as num?)?.toInt() ?? 0;
+    final visited = (postcard['visited_count'] as num?)?.toInt() ?? 0;
+    final places = postcard['visited_places'];
+    return moments > 0 || visited > 0 || places is List && places.isNotEmpty;
   }
 
   @override
@@ -104,7 +134,7 @@ class _BasePostcardScreenState extends State<BasePostcardScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         title: Text(
-          '기지 엽서',
+          '우리의 기지 엽서',
           style: mainBody(size: 17, weight: FontWeight.w900),
         ),
         leading: const BackButton(color: kMainInk),
@@ -117,7 +147,9 @@ class _BasePostcardScreenState extends State<BasePostcardScreen> {
                 ? const Center(
                     child: CircularProgressIndicator(color: kMainRose),
                   )
-                : _postcard == null
+                : _loadError != null
+                ? _errorState()
+                : _postcard == null || !_hasRecords
                 ? _emptyState()
                 : _postcardContent(),
           ),
@@ -134,12 +166,20 @@ class _BasePostcardScreenState extends State<BasePostcardScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           IconButton(
-            onPressed: _prevMonth,
+            onPressed: _loading ? null : _prevMonth,
             icon: const Icon(Icons.chevron_left_rounded, color: kMainInk),
+            tooltip: '이전 달',
           ),
-          Text(
-            '$_year년 $_month월',
-            style: mainBody(size: 16, weight: FontWeight.w800, color: kMainInk),
+          Semantics(
+            label: '현재 보고 있는 달 $_year년 $_month월',
+            child: Text(
+              '$_year년 $_month월',
+              style: mainBody(
+                size: 16,
+                weight: FontWeight.w800,
+                color: kMainInk,
+              ),
+            ),
           ),
           IconButton(
             onPressed: _canGoNext ? _nextMonth : null,
@@ -147,6 +187,7 @@ class _BasePostcardScreenState extends State<BasePostcardScreen> {
               Icons.chevron_right_rounded,
               color: _canGoNext ? kMainInk : kMainLine,
             ),
+            tooltip: '다음 달',
           ),
         ],
       ),
@@ -154,19 +195,113 @@ class _BasePostcardScreenState extends State<BasePostcardScreen> {
   }
 
   Widget _emptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.mail_outline_rounded, size: 48, color: kMainLine),
-          const SizedBox(height: 12),
-          Text('이달의 기록이 없어요', style: mainBody(color: kMainMuted, size: 15)),
-          const SizedBox(height: 4),
-          Text(
-            '순간을 남기면 엽서가 만들어져요',
-            style: mainBody(color: kMainMuted, size: 13),
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(18, 20, 18, 40),
+      children: [
+        _scopeCard(),
+        const SizedBox(height: 20),
+        MainCard(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              const Icon(
+                Icons.mail_outline_rounded,
+                size: 48,
+                color: kMainLilac,
+              ),
+              const SizedBox(height: 12),
+              Text('이달의 기록이 없어요', style: mainTitle(size: 20)),
+              const SizedBox(height: 6),
+              Text(
+                '이번 달에 남긴 순간과 방문 기록이 모이면\n우리의 엽서가 만들어져요.',
+                textAlign: TextAlign.center,
+                style: mainBody(size: 13),
+              ),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: _prevMonth,
+                icon: const Icon(Icons.chevron_left_rounded),
+                label: const Text('지난달 기록 보기'),
+              ),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: _load,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('다시 확인'),
+              ),
+            ],
           ),
-        ],
+        ),
+      ],
+    );
+  }
+
+  Widget _errorState() {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(18, 20, 18, 40),
+      children: [
+        _scopeCard(),
+        const SizedBox(height: 20),
+        MainCard(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              const Icon(Icons.cloud_off_rounded, size: 44, color: kMainRose),
+              const SizedBox(height: 12),
+              Text('엽서를 열 수 없어요', style: mainTitle(size: 20)),
+              const SizedBox(height: 6),
+              Text(
+                _loadError!,
+                textAlign: TextAlign.center,
+                style: mainBody(size: 13),
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: _load,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('다시 불러오기'),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _scopeCard() {
+    return Semantics(
+      container: true,
+      label: '우리의 기지 엽서. 활성 커플만 함께 보는 월간 기록',
+      child: MainCard(
+        color: kMainRoseSoft,
+        borderColor: kMainRose.withValues(alpha: 0.18),
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            const Icon(Icons.lock_outline_rounded, color: kMainRose, size: 24),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '우리 둘만 보는 월간 기록',
+                    style: mainBody(
+                      size: 13,
+                      color: kMainInk,
+                      weight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '활성 커플의 순간과 방문 기록을 한 장에 모아요.',
+                    style: mainBody(size: 12, color: kMainSub),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -188,6 +323,8 @@ class _BasePostcardScreenState extends State<BasePostcardScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 20, 18, 40),
       children: [
+        _scopeCard(),
+        const SizedBox(height: 18),
         MainCard(
           gradient: kRoseGrad,
           padding: const EdgeInsets.all(20),
@@ -195,10 +332,15 @@ class _BasePostcardScreenState extends State<BasePostcardScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '$_year년 $_month월 엽서',
+                '$_year년 $_month월 · 우리의 기록',
                 style: mainBody(size: 13, color: Colors.white70),
               ),
               const SizedBox(height: 8),
+              Text(
+                '이번 달, 우리가 남긴 장면',
+                style: mainTitle(size: 23, color: Colors.white),
+              ),
+              const SizedBox(height: 10),
               Row(
                 children: [
                   _statChip(

@@ -4,16 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../../core/main_design.dart';
+import '../archive/moment_loop_screen.dart';
 import 'base_postcard_screen.dart';
 
 class SecretBaseScreen extends StatefulWidget {
   final String baseUrl;
   final Map<String, String> authHeaders;
+  final http.Client? client;
 
   const SecretBaseScreen({
     super.key,
     required this.baseUrl,
     required this.authHeaders,
+    this.client,
   });
 
   @override
@@ -23,7 +26,10 @@ class SecretBaseScreen extends StatefulWidget {
 class _SecretBaseScreenState extends State<SecretBaseScreen> {
   List<Map<String, dynamic>> _milestones = [];
   bool _loading = true;
+  String? _loadError;
   final Set<String> _claiming = {};
+  late final http.Client _client;
+  late final bool _ownsClient;
 
   static const _milestoneIcons = <String, IconData>{
     'first_moment': Icons.photo_camera_outlined,
@@ -84,36 +90,63 @@ class _SecretBaseScreenState extends State<SecretBaseScreen> {
   @override
   void initState() {
     super.initState();
+    _ownsClient = widget.client == null;
+    _client = widget.client ?? http.Client();
     _load();
   }
 
+  @override
+  void dispose() {
+    if (_ownsClient) _client.close();
+    super.dispose();
+  }
+
   Future<void> _load() async {
-    if (mounted) setState(() => _loading = true);
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _loadError = null;
+      });
+    }
+    String? reason;
     try {
-      final res = await http.get(
+      final res = await _client.get(
         Uri.parse('${widget.baseUrl}/api/retention/secret-base/milestones'),
         headers: widget.authHeaders,
       );
       if (!mounted) return;
       final data = jsonDecode(res.body) as Map<String, dynamic>;
-      if (data['ok'] == true) {
-        setState(() {
-          _milestones = (data['milestones'] as List? ?? [])
-              .map((m) => Map<String, dynamic>.from(m as Map))
-              .toList();
-        });
+      reason = data['reason'] as String?;
+      if (res.statusCode < 200 || res.statusCode >= 300 || data['ok'] != true) {
+        throw const FormatException();
       }
+      final rawMilestones = data['milestones'];
+      if (rawMilestones is! List) throw const FormatException();
+      setState(() {
+        _milestones = rawMilestones
+            .map((m) => Map<String, dynamic>.from(m as Map))
+            .toList();
+        _loadError = null;
+      });
     } catch (_) {
+      if (mounted) {
+        setState(() => _loadError = _loadErrorMessage(reason));
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
+  String _loadErrorMessage(String? reason) => switch (reason) {
+    'active_couple_required' => '활성 커플을 연결하면 둘만의 비밀기지를 볼 수 있어요.',
+    _ => '비밀기지를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.',
+  };
+
   Future<void> _claimReward(String type) async {
     if (_claiming.contains(type)) return;
     setState(() => _claiming.add(type));
     try {
-      final res = await http.post(
+      final res = await _client.post(
         Uri.parse(
           '${widget.baseUrl}/api/retention/secret-base/milestones/$type/claim',
         ),
@@ -146,7 +179,7 @@ class _SecretBaseScreenState extends State<SecretBaseScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('네트워크 오류')));
+      ).showSnackBar(const SnackBar(content: Text('보상을 받지 못했어요. 다시 시도해 주세요.')));
     } finally {
       if (mounted) setState(() => _claiming.remove(type));
     }
@@ -170,6 +203,12 @@ class _SecretBaseScreenState extends State<SecretBaseScreen> {
         ),
       ),
     );
+  }
+
+  void _openMomentLoop() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const MomentLoopScreen()));
   }
 
   @override
@@ -199,38 +238,16 @@ class _SecretBaseScreenState extends State<SecretBaseScreen> {
         actions: [
           if (claimable > 0)
             Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: Stack(
-                alignment: Alignment.topRight,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.card_giftcard, color: kMainRose),
-                    onPressed: null,
-                    tooltip: '받을 보상이 있어요',
+              padding: const EdgeInsets.only(right: 8),
+              child: Center(
+                child: Text(
+                  '보상 $claimable개',
+                  style: mainBody(
+                    size: 12,
+                    color: kMainRose,
+                    weight: FontWeight.w800,
                   ),
-                  Positioned(
-                    right: 6,
-                    top: 6,
-                    child: Container(
-                      width: 16,
-                      height: 16,
-                      decoration: const BoxDecoration(
-                        color: kMainRose,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(
-                        child: Text(
-                          '$claimable',
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           TextButton.icon(
@@ -251,22 +268,163 @@ class _SecretBaseScreenState extends State<SecretBaseScreen> {
           ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: kMainRose))
+      body: _loading && _milestones.isEmpty
+          ? _loadingState()
+          : _loadError != null && _milestones.isEmpty
+          ? _errorState()
           : RefreshIndicator(
               onRefresh: _load,
               color: kMainRose,
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(18, 20, 18, 40),
                 children: [
-                  _headerCard(achieved, total),
-                  const SizedBox(height: 24),
-                  Text('마일스톤', style: mainTitle(size: 20)),
-                  const SizedBox(height: 12),
-                  ..._milestones.map((m) => _milestoneRow(m)),
+                  _scopeCard(),
+                  if (_loading) ...[
+                    const SizedBox(height: 12),
+                    const LinearProgressIndicator(color: kMainRose),
+                  ],
+                  if (_loadError != null) ...[
+                    const SizedBox(height: 12),
+                    _inlineError(),
+                  ],
+                  const SizedBox(height: 20),
+                  if (_milestones.isEmpty)
+                    _emptyState()
+                  else ...[
+                    _headerCard(achieved, total),
+                    const SizedBox(height: 24),
+                    Text('함께 쌓은 기록', style: mainTitle(size: 20)),
+                    const SizedBox(height: 4),
+                    Text(
+                      '달성한 기록은 보상으로 바꿀 수 있어요.',
+                      style: mainBody(size: 13, color: kMainSub),
+                    ),
+                    const SizedBox(height: 12),
+                    ..._milestones.map((m) => _milestoneRow(m)),
+                  ],
                 ],
               ),
             ),
+    );
+  }
+
+  Widget _loadingState() {
+    return const Center(child: CircularProgressIndicator(color: kMainRose));
+  }
+
+  Widget _errorState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: MainCard(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_off_rounded, size: 42, color: kMainRose),
+              const SizedBox(height: 14),
+              Text('비밀기지를 열 수 없어요', style: mainTitle(size: 20)),
+              const SizedBox(height: 6),
+              Text(
+                _loadError!,
+                textAlign: TextAlign.center,
+                style: mainBody(size: 13),
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: _load,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('다시 불러오기'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _inlineError() {
+    return MainCard(
+      color: kMainPeachSoft,
+      borderColor: kMainPeach.withValues(alpha: 0.35),
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline_rounded, color: kMainPeach),
+          const SizedBox(width: 10),
+          Expanded(child: Text(_loadError!, style: mainBody(size: 12))),
+          TextButton(onPressed: _load, child: const Text('재시도')),
+        ],
+      ),
+    );
+  }
+
+  Widget _scopeCard() {
+    return Semantics(
+      container: true,
+      label: '우리의 비밀기지. 활성 커플만 함께 보는 공유 공간',
+      child: MainCard(
+        color: kMainRoseSoft,
+        borderColor: kMainRose.withValues(alpha: 0.18),
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            const Icon(Icons.lock_outline_rounded, color: kMainRose, size: 24),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '우리 둘만 보는 공간',
+                    style: mainBody(
+                      size: 13,
+                      color: kMainInk,
+                      weight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '활성 커플의 순간과 기념 기록을 함께 모아요.',
+                    style: mainBody(size: 12, color: kMainSub),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _emptyState() {
+    return MainCard(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        children: [
+          const Icon(Icons.home_work_outlined, size: 44, color: kMainLilac),
+          const SizedBox(height: 12),
+          Text('아직 쌓인 기록이 없어요', style: mainTitle(size: 20)),
+          const SizedBox(height: 6),
+          Text(
+            'MomentLoop에 둘만의 순간을 남기면\n비밀기지가 하나씩 채워져요.',
+            textAlign: TextAlign.center,
+            style: mainBody(size: 13),
+          ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: _openMomentLoop,
+            icon: const Icon(Icons.add_a_photo_outlined),
+            label: const Text('순간 남기러 가기'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _openPostcard,
+            icon: const Icon(Icons.mail_outline_rounded),
+            label: const Text('기지 엽서 둘러보기'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -370,18 +528,7 @@ class _SecretBaseScreenState extends State<SecretBaseScreen> {
                     ],
                   ),
                 ),
-                if (claimed)
-                  const Icon(
-                    Icons.check_circle_rounded,
-                    color: kMainSage,
-                    size: 22,
-                  )
-                else if (!achieved)
-                  const Icon(
-                    Icons.radio_button_unchecked_rounded,
-                    color: kMainLine,
-                    size: 22,
-                  ),
+                _statusChip(achieved: achieved, claimed: claimed),
               ],
             ),
             if (reward != null) ...[
@@ -433,6 +580,30 @@ class _SecretBaseScreenState extends State<SecretBaseScreen> {
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _statusChip({required bool achieved, required bool claimed}) {
+    final label = claimed
+        ? '수령 완료'
+        : achieved
+        ? '보상 가능'
+        : '진행 중';
+    final color = claimed
+        ? kMainSage
+        : achieved
+        ? kMainRose
+        : kMainMuted;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: mainBody(size: 10, color: color, weight: FontWeight.w800),
       ),
     );
   }

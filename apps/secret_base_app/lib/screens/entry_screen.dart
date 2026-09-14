@@ -113,6 +113,13 @@ class _EntryScreenState extends State<EntryScreen>
           style: mainBody(size: 13),
           textAlign: TextAlign.center,
         ),
+        const SizedBox(height: 8),
+        Text(
+          '계정으로 로그인한 뒤 서버에 연결하면\n'
+          '둘만의 기록과 놀이를 이어갈 수 있어요.',
+          style: mainBody(size: 12, color: kMainMuted, height: 1.45),
+          textAlign: TextAlign.center,
+        ),
       ],
     );
   }
@@ -127,6 +134,7 @@ class _EntryScreenState extends State<EntryScreen>
           const SizedBox(height: 6),
           TextField(
             controller: _urlCtrl,
+            textInputAction: TextInputAction.next,
             style: mainBody(size: 14, color: kMainInk),
             decoration: _inputDecoration(
               'http://192.168.x.x:4100',
@@ -138,6 +146,7 @@ class _EntryScreenState extends State<EntryScreen>
           const SizedBox(height: 6),
           TextField(
             controller: _roomCtrl,
+            textInputAction: TextInputAction.next,
             style: mainBody(size: 14, color: kMainInk),
             decoration: _inputDecoration(
               'secret-room',
@@ -150,6 +159,8 @@ class _EntryScreenState extends State<EntryScreen>
           TextField(
             controller: _secretCtrl,
             obscureText: true,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _connect(),
             style: mainBody(size: 14, color: kMainInk),
             decoration: _inputDecoration('비밀 단어', Icons.lock_outline),
           ),
