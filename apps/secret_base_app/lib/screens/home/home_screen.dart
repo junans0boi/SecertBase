@@ -19,11 +19,13 @@ import '../relationship/tarot_screen.dart';
 class HomeScreen extends StatefulWidget {
   final ValueChanged<int> onNavigate;
   final RelationshipAssessmentStatus? relationshipStatus;
+  final Future<TodayState> Function()? todayStateLoader;
 
   const HomeScreen({
     super.key,
     required this.onNavigate,
     this.relationshipStatus,
+    this.todayStateLoader,
   });
 
   @override
@@ -38,6 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
   RelationshipAssessmentStatus? _loadedRelationshipStatus;
   TodayState? _todayState;
   bool _todayLoading = true;
+  bool _todayLoadFailed = false;
 
   Map<String, String> get _authHeaders => {
     if (_auth.token != null) 'Authorization': 'Bearer ${_auth.token}',
@@ -50,8 +53,19 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _load() async {
-    if (mounted) setState(() => _todayLoading = true);
-    final today = _loadTodayState();
+    if (mounted) {
+      setState(() {
+        _todayLoading = true;
+        _todayLoadFailed = false;
+      });
+    }
+    final today = _loadTodayState().then<({TodayState? state, bool failed})>(
+      (state) => (state: state, failed: false),
+      onError: (Object error, StackTrace stackTrace) => (
+        state: null,
+        failed: true,
+      ),
+    );
     try {
       final responses = await Future.wait([
         http.get(
@@ -100,19 +114,22 @@ class _HomeScreenState extends State<HomeScreen> {
     final loadedToday = await today;
     if (!mounted) return;
     setState(() {
-      _todayState = loadedToday;
+      _todayState = loadedToday.state;
       _todayLoading = false;
+      _todayLoadFailed = loadedToday.failed;
     });
   }
 
-  Future<TodayState?> _loadTodayState() async {
+  Future<TodayState> _loadTodayState() async {
+    final loader = widget.todayStateLoader;
+    if (loader != null) return loader();
     final token = _auth.token;
-    if (token == null || token.isEmpty) return null;
+    if (token == null || token.isEmpty) {
+      throw StateError('Today entry requires an authenticated user');
+    }
     final api = TodayApi(baseUrl: _auth.baseUrl, token: token);
     try {
       return await api.fetchState();
-    } catch (_) {
-      return null;
     } finally {
       api.close();
     }
@@ -265,8 +282,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _todayEntry() {
     if (_todayLoading) return const _TodayLoadingCard();
-    final state = _todayState ??
-        const TodayState(date: '', status: TodayStatus.empty);
+    if (_todayLoadFailed) return _TodayFailureCard(onRetry: _load);
+    final state = _todayState!;
     return TodayCard(
       state: state,
       onCreateMoment: () => widget.onNavigate(1),
@@ -527,6 +544,7 @@ class _QuickAction extends StatelessWidget {
     return Semantics(
       label: '$title: $subtitle',
       button: true,
+      onTap: onTap,
       child: ExcludeSemantics(
         child: Padding(
           padding: const EdgeInsets.only(right: 10),
@@ -606,6 +624,52 @@ class _TodayLoadingCard extends StatelessWidget {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TodayFailureCard extends StatelessWidget {
+  final VoidCallback onRetry;
+
+  const _TodayFailureCard({required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return MainCard(
+      color: kMainPaperSoft,
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          const IconBadge(
+            color: kMainRose,
+            backgroundColor: Colors.white,
+            size: 44,
+            child: Icon(Icons.refresh_rounded, color: kMainRose),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '오늘의 루프를 불러오지 못했어요',
+                  style: mainBody(
+                    size: 14,
+                    color: kMainInk,
+                    weight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '잠시 후 다시 시도해주세요',
+                  style: mainBody(size: 12, color: kMainSub),
+                ),
+              ],
+            ),
+          ),
+          TextButton(onPressed: onRetry, child: const Text('다시 시도')),
         ],
       ),
     );

@@ -1696,6 +1696,7 @@ class _MoreProfileEntry extends StatelessWidget {
     return Semantics(
       label: '내 공간: 프로필, 연결, 기념일 관리',
       button: true,
+      onTap: onTap,
       child: ExcludeSemantics(
         child: MainCard(
           padding: EdgeInsets.zero,
@@ -1799,6 +1800,7 @@ class _MoreRow extends StatelessWidget {
     return Semantics(
       label: '$title: $subtitle',
       button: true,
+      onTap: onTap,
       child: ExcludeSemantics(
         child: Material(
           color: Colors.transparent,

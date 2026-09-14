@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:secret_base_app/core/today_api.dart';
 import 'package:secret_base_app/screens/relationship/fortune_screen.dart';
 import 'package:secret_base_app/screens/home/home_screen.dart';
 import 'package:secret_base_app/screens/relationship/relationship_understanding_screen.dart';
@@ -59,6 +60,62 @@ void main() {
     expect(find.text('오늘의 루프를 준비하고 있어요'), findsOneWidget);
     expect(find.text('관계 이해 이어보기'), findsOneWidget);
     expect(find.text('검사 이어가기'), findsOneWidget);
+  });
+
+  testWidgets('quick action semantics tap keeps its existing navigation target', (
+    tester,
+  ) async {
+    var navigationTarget = -1;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HomeScreen(
+            onNavigate: (target) => navigationTarget = target,
+            todayStateLoader: () async => const TodayState(
+              date: '2026-09-14',
+              status: TodayStatus.empty,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    tester.semantics.tap(
+      find.semantics.byLabel('비밀 지도: 장소 남기기'),
+    );
+    await tester.pump();
+
+    expect(navigationTarget, 2);
+  });
+
+  testWidgets('home shows a retry entry when Today loading fails', (tester) async {
+    var attempts = 0;
+    Future<TodayState> loadToday() async {
+      attempts++;
+      if (attempts == 1) throw StateError('unavailable');
+      return const TodayState(
+        date: '2026-09-14',
+        status: TodayStatus.empty,
+      );
+    }
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HomeScreen(onNavigate: (_) {}, todayStateLoader: loadToday),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('오늘의 루프를 불러오지 못했어요'), findsOneWidget);
+    expect(find.text('다시 시도'), findsOneWidget);
+
+    await tester.tap(find.text('다시 시도'));
+    await tester.pump();
+
+    expect(attempts, 2);
+    expect(find.text('오늘의 순간을 남겨볼까요?'), findsOneWidget);
   });
 
   testWidgets('home gives a short relationship entry when no assessment is active', (

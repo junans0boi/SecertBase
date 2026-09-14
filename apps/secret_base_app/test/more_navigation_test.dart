@@ -67,4 +67,32 @@ void main() {
     await tester.pump();
     expect(find.byType(RelationshipUnderstandingScreen), findsOneWidget);
   });
+
+  testWidgets('more semantic entries perform their existing navigation actions', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: HomeShell()));
+    await tester.pump();
+    await tester.tap(find.text('더보기'));
+    await tester.pumpAndSettle();
+
+    tester.semantics.tap(
+      find.semantics.byLabel('MomentLoop: 우리의 순간을 기록하고 돌아봐요'),
+    );
+    await tester.pump();
+
+    expect(
+      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+      1,
+    );
+
+    await tester.tap(find.text('더보기'));
+    await tester.pumpAndSettle();
+    tester.semantics.tap(
+      find.semantics.byLabel('내 공간: 프로필, 연결, 기념일 관리'),
+    );
+    await tester.pump();
+
+    expect(find.text('프로필 이모지'), findsOneWidget);
+  });
 }
