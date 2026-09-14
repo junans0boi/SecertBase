@@ -204,6 +204,33 @@ void main() {
     },
   );
 
+  testWidgets(
+    'offers profile repair when the required birth profile is missing',
+    (tester) async {
+      var edited = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SajuScreen(
+            onEditProfile: () => edited = true,
+            api: SajuApi(
+              baseUrl: 'https://secretbase.example',
+              token: 'jwt-token',
+              client: MockClient(
+                (_) async => http.Response(
+                  '{"ok":false,"reason":"birth_profile_incomplete"}',
+                  409,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('출생정보 수정하기'));
+      expect(edited, isTrue);
+    },
+  );
+
   testWidgets('shows the couple Saju pattern cards without a score', (
     tester,
   ) async {

@@ -7,8 +7,14 @@ import '../../core/tarot_api.dart';
 class TarotScreen extends StatefulWidget {
   final TarotApi? api;
   final bool relationshipFirst;
+  final VoidCallback? onOpenPartner;
 
-  const TarotScreen({super.key, this.api, this.relationshipFirst = false});
+  const TarotScreen({
+    super.key,
+    this.api,
+    this.relationshipFirst = false,
+    this.onOpenPartner,
+  });
 
   @override
   State<TarotScreen> createState() => _TarotScreenState();
@@ -120,6 +126,13 @@ class _TarotScreenState extends State<TarotScreen> {
                       weight: FontWeight.w700,
                     ),
                   ),
+                  const SizedBox(height: 10),
+                  _scopeBadge(
+                    label: widget.relationshipFirst
+                        ? '우리 둘의 관계 타로'
+                        : '나만 보는 타로',
+                    couple: widget.relationshipFirst,
+                  ),
                   const SizedBox(height: 5),
                   Text('오늘의 한 장', style: mainTitle(size: 30)),
                   const SizedBox(height: 5),
@@ -146,6 +159,8 @@ class _TarotScreenState extends State<TarotScreen> {
                   const SizedBox(height: 8),
                   if (_today!.personal != null)
                     _readingSection(_today!.personal!),
+                  if (_today!.personal == null)
+                    _missingReading('개인 타로를 준비하지 못했어요.'),
                   if (!widget.relationshipFirst &&
                       _today!.relationship != null) ...[
                     const SizedBox(height: 28),
@@ -209,7 +224,14 @@ class _TarotScreenState extends State<TarotScreen> {
   Widget _fanDeck(TarotReading reading) {
     final count = reading.cards.length;
     if (count == 0) {
-      return const SizedBox(height: 260);
+      return MainCard(
+        key: Key('tarot_${reading.scope}_empty_deck'),
+        color: kMainPaperSoft,
+        child: Text(
+          '오늘 선택할 카드 뭉치를 준비하지 못했어요. 잠시 후 다시 시도해주세요.',
+          style: mainBody(size: 13, color: kMainSub, height: 1.5),
+        ),
+      );
     }
     final controller = _deckControllers.putIfAbsent(
       reading.scope,
@@ -407,6 +429,11 @@ class _TarotScreenState extends State<TarotScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _scopeBadge(
+            label: isCouple ? '우리 둘의 관계 카드' : '나만 보는 카드',
+            couple: isCouple,
+          ),
+          const SizedBox(height: 12),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -579,10 +606,61 @@ class _TarotScreenState extends State<TarotScreen> {
               style: mainBody(size: 14, height: 1.5),
             ),
             const SizedBox(height: 14),
-            OutlinedButton(onPressed: _load, child: const Text('다시 시도')),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                OutlinedButton(onPressed: _load, child: const Text('다시 시도')),
+                if (_error?.reason == 'active_couple_required' &&
+                    widget.onOpenPartner != null)
+                  FilledButton(
+                    onPressed: widget.onOpenPartner,
+                    child: const Text('파트너 연결하기'),
+                  ),
+              ],
+            ),
           ],
         ),
       ),
     ),
   );
+
+  Widget _missingReading(String text) => MainCard(
+    key: const Key('tarot_missing_reading'),
+    color: kMainPaperSoft,
+    child: Text(text, style: mainBody(size: 13, color: kMainSub, height: 1.5)),
+  );
+
+  Widget _scopeBadge({required String label, required bool couple}) =>
+      Semantics(
+        container: true,
+        label: '타로 범위: $label',
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: couple ? kMainLilacSoft : kMainRoseSoft,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                couple ? Icons.favorite_border_rounded : Icons.person_outline,
+                size: 15,
+                color: couple ? kMainLilac : kMainRose,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: mainBody(
+                  size: 12,
+                  color: couple ? kMainLilac : kMainRose,
+                  weight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
 }

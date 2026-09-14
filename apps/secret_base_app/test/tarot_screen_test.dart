@@ -138,6 +138,8 @@ void main() {
     expect(find.text('태양'), findsOneWidget);
     expect(find.text('메이저 아르카나 22장 · tarot-major-v1'), findsOneWidget);
     expect(find.text('다시 뽑기'), findsNothing);
+    expect(find.text('나만 보는 타로'), findsOneWidget);
+    expect(find.text('우리 둘의 관계 카드'), findsOneWidget);
   });
 
   testWidgets('lets the user move through the full major arcana deck', (

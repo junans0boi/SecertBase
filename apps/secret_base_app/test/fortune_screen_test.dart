@@ -89,7 +89,45 @@ void main() {
     expect(find.byKey(const Key('fortune_technical')), findsOneWidget);
     expect(find.text('해석 문장 다시 받기'), findsNothing);
     expect(find.text('오늘의 전체 흐름'), findsOneWidget);
+    expect(find.text('나만 보는 흐름'), findsOneWidget);
+    expect(find.text('오늘의 한 줄'), findsWidgets);
+    expect(find.text('조심할 흐름'), findsWidgets);
+    expect(find.text('힘이 되는 행동'), findsWidgets);
     expect(find.text('감정이 올라오는 속도와 잠깐 살펴볼 신호'), findsOneWidget);
     expect(find.text('생년월일·출생 정보 + 오늘 날짜'), findsOneWidget);
+  });
+
+  testWidgets('offers a profile repair action when personal fortune is empty', (
+    tester,
+  ) async {
+    var edited = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RelationshipFortuneScreen(
+          onEditProfile: () => edited = true,
+          api: FortuneApi(
+            baseUrl: 'https://secretbase.example',
+            token: 'jwt-token',
+            client: MockClient(
+              (_) async => http.Response(
+                jsonEncode({
+                  'ok': true,
+                  'date': '2026-09-14',
+                  'contentVersion': 'v1',
+                  'profileReady': false,
+                  'fortunes': {},
+                }),
+                200,
+                headers: {'content-type': 'application/json'},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('출생 프로필을 저장하면 개인 운세가 준비돼요.'), findsOneWidget);
+    await tester.tap(find.text('출생 프로필 수정하기'));
+    expect(edited, isTrue);
   });
 }

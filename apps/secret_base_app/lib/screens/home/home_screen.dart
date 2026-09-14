@@ -15,6 +15,7 @@ import '../../core/fortune_api.dart';
 import '../relationship/fortune_screen.dart';
 import '../relationship/saju_screen.dart';
 import '../relationship/tarot_screen.dart';
+import '../auth/partner_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final ValueChanged<int> onNavigate;
@@ -61,10 +62,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     final today = _loadTodayState().then<({TodayState? state, bool failed})>(
       (state) => (state: state, failed: false),
-      onError: (Object error, StackTrace stackTrace) => (
-        state: null,
-        failed: true,
-      ),
+      onError: (Object error, StackTrace stackTrace) =>
+          (state: null, failed: true),
     );
     try {
       final responses = await Future.wait([
@@ -200,10 +199,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: mainBody(size: 15, weight: FontWeight.w900),
               ),
             ),
-            Text(
-              '좌우로 밀어 더 보기',
-              style: mainBody(size: 11, color: kMainMuted),
-            ),
+            Text('좌우로 밀어 더 보기', style: mainBody(size: 11, color: kMainMuted)),
           ],
         ),
         const SizedBox(height: 10),
@@ -248,6 +244,18 @@ class _HomeScreenState extends State<HomeScreen> {
                       api: FortuneApi(
                         baseUrl: _auth.baseUrl,
                         token: _auth.token ?? '',
+                      ),
+                      onEditProfile: () => Navigator.of(context).push<void>(
+                        MaterialPageRoute(
+                          builder: (_) => const RelationshipUnderstandingScreen(
+                            editBirthProfileOnly: true,
+                          ),
+                        ),
+                      ),
+                      onOpenPartner: () => Navigator.of(context).push<void>(
+                        MaterialPageRoute(
+                          builder: (_) => const PartnerScreen(),
+                        ),
                       ),
                     ),
                   ),
@@ -614,7 +622,11 @@ class _TodayLoadingCard extends StatelessWidget {
               children: [
                 Text(
                   '오늘의 루프를 준비하고 있어요',
-                  style: mainBody(size: 14, color: kMainInk, weight: FontWeight.w900),
+                  style: mainBody(
+                    size: 14,
+                    color: kMainInk,
+                    weight: FontWeight.w900,
+                  ),
                 ),
                 const SizedBox(height: 3),
                 Text(
@@ -738,9 +750,15 @@ class _RelationshipHomeEntry extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(copy.title, style: mainBody(size: 15, weight: FontWeight.w900)),
+                    Text(
+                      copy.title,
+                      style: mainBody(size: 15, weight: FontWeight.w900),
+                    ),
                     const SizedBox(height: 3),
-                    Text(copy.subtitle, style: mainBody(size: 12, color: kMainSub)),
+                    Text(
+                      copy.subtitle,
+                      style: mainBody(size: 12, color: kMainSub),
+                    ),
                   ],
                 ),
               ),

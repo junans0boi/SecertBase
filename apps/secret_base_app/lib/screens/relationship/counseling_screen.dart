@@ -7,11 +7,13 @@ import '../../core/main_design.dart';
 class RelationshipCounselingScreen extends StatefulWidget {
   final CounselingApi? api;
   final bool shared;
+  final VoidCallback? onOpenPartner;
 
   const RelationshipCounselingScreen({
     super.key,
     this.api,
     required this.shared,
+    this.onOpenPartner,
   });
 
   @override
@@ -201,6 +203,7 @@ class _RelationshipCounselingScreenState
               padding: const EdgeInsets.fromLTRB(18, 12, 18, 28),
               children: [
                 MainCard(
+                  key: const Key('counseling_scope_card'),
                   child: Text(
                     widget.shared
                         ? '두 사람이 함께 볼 수 있는 내용만 사용해요. 개인 상담 원문은 이 공간으로 이동하지 않아요.'
@@ -212,9 +215,32 @@ class _RelationshipCounselingScreenState
                 if (_error != null)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
-                    child: Text(
-                      _error!,
-                      style: mainBody(size: 13, color: kMainRose),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _error!,
+                          style: mainBody(size: 13, color: kMainRose),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            OutlinedButton(
+                              onPressed: _load,
+                              child: const Text('다시 시도'),
+                            ),
+                            if (widget.shared &&
+                                _error!.contains('파트너') &&
+                                widget.onOpenPartner != null)
+                              FilledButton(
+                                onPressed: widget.onOpenPartner,
+                                child: const Text('파트너 연결하기'),
+                              ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 if (_sessions.isNotEmpty)

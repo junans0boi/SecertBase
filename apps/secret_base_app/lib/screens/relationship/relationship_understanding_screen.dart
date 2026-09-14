@@ -988,6 +988,7 @@ class _RelationshipUnderstandingScreenState
         builder: (_) => TarotScreen(
           api: TarotApi(baseUrl: auth.baseUrl, token: auth.token ?? ''),
           relationshipFirst: relationshipFirst,
+          onOpenPartner: _openPartnerConnection,
         ),
       ),
     );
@@ -1000,6 +1001,7 @@ class _RelationshipUnderstandingScreenState
         builder: (_) => RelationshipCounselingScreen(
           api: CounselingApi(baseUrl: auth.baseUrl, token: auth.token ?? ''),
           shared: true,
+          onOpenPartner: _openPartnerConnection,
         ),
       ),
     );

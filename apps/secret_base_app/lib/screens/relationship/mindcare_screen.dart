@@ -268,6 +268,51 @@ class _MindcareScreenState extends State<MindcareScreen> {
     );
   }
 
+  String _stateLabel(String state) => switch (state) {
+    'emotion' || 'emotion_detail' => '감정 알아차리기',
+    'situation' || 'situation_detail' => '상황 바라보기',
+    'need' || 'need_detail' => '필요한 것 찾기',
+    'action' || 'action_detail' => '작은 행동 고르기',
+    'safety' || 'safety_support' => '안전 먼저 확인하기',
+    _ => '천천히 마음 살펴보기',
+  };
+
+  Widget _flowHeader(MindcareConversation conversation) => MainCard(
+    key: const Key('mindcare_flow_header'),
+    color: conversation.session.currentState == 'safety'
+        ? kMainPeachSoft
+        : kMainLilacSoft,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              conversation.session.currentState == 'safety'
+                  ? Icons.health_and_safety_outlined
+                  : Icons.route_outlined,
+              color: conversation.session.currentState == 'safety'
+                  ? kMainRose
+                  : kMainLilac,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              _stateLabel(conversation.session.currentState),
+              style: mainBody(weight: FontWeight.w800),
+            ),
+          ],
+        ),
+        const SizedBox(height: 7),
+        Text(
+          conversation.session.currentState == 'safety'
+              ? '일반적인 마음관리보다 지금 안전을 확인하는 일이 먼저예요.'
+              : '감정 → 상황 → 필요한 것 → 작은 행동 순서로 천천히 살펴봐요.',
+          style: mainBody(size: 12, color: kMainSub, height: 1.45),
+        ),
+      ],
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final conversation = _conversation;
@@ -299,12 +344,8 @@ class _MindcareScreenState extends State<MindcareScreen> {
                   Text('마음관리 세션을 열 수 없어요.', style: mainTitle(size: 20)),
                 ] else ...[
                   const SizedBox(height: 16),
-                  ...conversation.messages.map(_bubble),
-                  if (conversation.session.status == 'completed')
-                    Text(
-                      '오늘의 마음관리를 마쳤어요. 작은 행동 하나만 기억해두세요.',
-                      style: mainBody(size: 13, color: kMainSub, height: 1.5),
-                    ),
+                  _flowHeader(conversation),
+                  const SizedBox(height: 12),
                   if (conversation.session.status == 'safety_support') ...[
                     Text(
                       '지금은 안전을 먼저 챙겨주세요. 가까운 사람이나 즉시 도움을 받을 곳에 연락해 주세요.',
@@ -314,7 +355,14 @@ class _MindcareScreenState extends State<MindcareScreen> {
                       const SizedBox(height: 12),
                       _safetyResourceCard(_safetyResources!),
                     ],
+                    const SizedBox(height: 12),
                   ],
+                  ...conversation.messages.map(_bubble),
+                  if (conversation.session.status == 'completed')
+                    Text(
+                      '오늘의 마음관리를 마쳤어요. 작은 행동 하나만 기억해두세요.',
+                      style: mainBody(size: 13, color: kMainSub, height: 1.5),
+                    ),
                   if (conversation.choices.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text(

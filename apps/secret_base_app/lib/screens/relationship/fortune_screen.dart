@@ -9,12 +9,16 @@ enum FortuneScope { personal, couple }
 class RelationshipFortuneScreen extends StatefulWidget {
   final FortuneApi? api;
   final VoidCallback? onOpenCounseling;
+  final VoidCallback? onEditProfile;
+  final VoidCallback? onOpenPartner;
   final FortuneScope scope;
 
   const RelationshipFortuneScreen({
     super.key,
     this.api,
     this.onOpenCounseling,
+    this.onEditProfile,
+    this.onOpenPartner,
     this.scope = FortuneScope.personal,
   });
 
@@ -72,6 +76,8 @@ class _RelationshipFortuneScreenState extends State<RelationshipFortuneScreen> {
     FortuneApiException(reason: 'network_error') => '네트워크 연결을 확인해주세요.',
     FortuneApiException(reason: 'active_couple_required') =>
       '파트너를 연결하면 관계 운세를 볼 수 있어요.',
+    FortuneApiException(reason: 'profile_incomplete') =>
+      '출생 프로필을 저장하면 개인 운세를 볼 수 있어요.',
     FortuneApiException() => '오늘의 운세를 불러오지 못했어요.',
     _ => '오늘의 운세를 불러오지 못했어요.',
   };
@@ -84,17 +90,12 @@ class _RelationshipFortuneScreenState extends State<RelationshipFortuneScreen> {
       backgroundColor: kMainBg,
       appBar: AppBar(
         backgroundColor: kMainBg,
-        title: Text(
-          isCouple ? '오늘의 관계 운세' : '오늘의 개인 운세',
-          style: mainTitle(size: 22),
-        ),
+        title: Text('오늘의 운세', style: mainTitle(size: 22)),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: kMainRose))
           : _error != null && _today == null
-          ? Center(
-              child: Text(_error!, style: mainBody(color: kMainSub)),
-            )
+          ? _errorState(isCouple: isCouple)
           : RefreshIndicator(
               onRefresh: _load,
               color: kMainRose,
@@ -116,6 +117,7 @@ class _RelationshipFortuneScreenState extends State<RelationshipFortuneScreen> {
                     _fortuneCard(
                       current,
                       isCouple: isCouple,
+                      expectedType: isCouple ? 'relationship' : 'personal',
                       emptyText: isCouple
                           ? '커플을 연결하면 관계 운세가 준비돼요.'
                           : '출생 프로필을 저장하면 개인 운세가 준비돼요.',
@@ -125,6 +127,7 @@ class _RelationshipFortuneScreenState extends State<RelationshipFortuneScreen> {
                       _fortuneCard(
                         _today?.emotionalFlow,
                         isCouple: false,
+                        expectedType: 'emotional_flow',
                         emptyText: '오늘의 감정 흐름이 아직 없어요.',
                       ),
                       if (_today?.relationship != null) ...[
@@ -132,6 +135,7 @@ class _RelationshipFortuneScreenState extends State<RelationshipFortuneScreen> {
                         _fortuneCard(
                           _today!.relationship!,
                           isCouple: true,
+                          expectedType: 'relationship',
                           emptyText: '커플을 연결하면 관계 운세가 준비돼요.',
                         ),
                       ],
@@ -157,10 +161,8 @@ class _RelationshipFortuneScreenState extends State<RelationshipFortuneScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          _today?.date ?? '',
-          style: mainBody(size: 12, color: kMainSub, weight: FontWeight.w700),
-        ),
+        _scopeBadge(isCouple: isCouple),
+        const SizedBox(height: 12),
         const SizedBox(height: 5),
         Text(
           isCouple ? '오늘 우리 사이에 필요한 건' : '오늘 나에게 필요한 건',
@@ -183,9 +185,13 @@ class _RelationshipFortuneScreenState extends State<RelationshipFortuneScreen> {
   Widget _fortuneCard(
     FortuneContent? content, {
     required bool isCouple,
+    required String expectedType,
     required String emptyText,
   }) {
-    final isEmotional = content?.type == 'emotional_flow';
+    final type = content?.type.isNotEmpty == true
+        ? content!.type
+        : expectedType;
+    final isEmotional = type == 'emotional_flow';
     final sectionKey = isEmotional
         ? 'fortune_emotional_flow'
         : isCouple
@@ -220,9 +226,10 @@ class _RelationshipFortuneScreenState extends State<RelationshipFortuneScreen> {
           const SizedBox(height: 10),
           if (content == null)
             MainCard(
-              child: Text(
+              child: _emptyContent(
                 emptyText,
-                style: mainBody(size: 13, color: kMainSub),
+                isCouple: isCouple,
+                actionable: !isEmotional,
               ),
             )
           else
@@ -285,6 +292,11 @@ class _RelationshipFortuneScreenState extends State<RelationshipFortuneScreen> {
           ),
           const SizedBox(height: 10),
           Text(
+            '오늘의 한 줄',
+            style: mainBody(size: 12, color: accent, weight: FontWeight.w800),
+          ),
+          const SizedBox(height: 4),
+          Text(
             content.summary,
             style: mainBody(size: 15, color: kMainInk, height: 1.65),
           ),
@@ -292,7 +304,7 @@ class _RelationshipFortuneScreenState extends State<RelationshipFortuneScreen> {
           if (content.signals.isNotEmpty)
             _insightRow(
               icon: Icons.visibility_outlined,
-              label: '잠깐 살펴볼 신호',
+              label: '조심할 흐름',
               text: content.signals.join(' '),
               color: kMainPeach,
             ),
@@ -301,7 +313,7 @@ class _RelationshipFortuneScreenState extends State<RelationshipFortuneScreen> {
             key: Key(_actionKey(content)),
             child: _insightRow(
               icon: Icons.touch_app_outlined,
-              label: '오늘 잘 맞는 작은 행동',
+              label: '힘이 되는 행동',
               text: content.suggestion,
               color: kMainSage,
             ),
@@ -413,6 +425,10 @@ class _RelationshipFortuneScreenState extends State<RelationshipFortuneScreen> {
             ),
           ),
           const SizedBox(height: 9),
+          if (_today?.date.isNotEmpty == true) ...[
+            _technicalRow('날짜', _today!.date),
+            const SizedBox(height: 3),
+          ],
           Text(
             '매일 조건이 같으면 같은 흐름이 나오도록 계산하고, 결과는 날짜별로 저장해요. 무작위 문구를 매번 바꾸는 방식이 아니라 오늘의 마음을 살피는 자기성찰용 힌트예요.',
             style: mainBody(size: 12, color: kMainSub, height: 1.55),
@@ -453,7 +469,7 @@ class _RelationshipFortuneScreenState extends State<RelationshipFortuneScreen> {
           if (_today?.contentVersion.isNotEmpty == true) ...[
             const SizedBox(height: 8),
             Text(
-              '콘텐츠 버전 ${_today!.contentVersion}',
+              '콘텐츠 버전 ${_today!.contentVersion} · 결과는 예언·진단·치료가 아닌 자기성찰용 안내예요.',
               style: mainBody(size: 11, color: kMainMuted),
             ),
           ],
@@ -482,4 +498,105 @@ class _RelationshipFortuneScreenState extends State<RelationshipFortuneScreen> {
       ),
     );
   }
+
+  Widget _scopeBadge({required bool isCouple}) => Semantics(
+    container: true,
+    label: isCouple ? '범위: 우리 둘의 관계 운세' : '범위: 나만 보는 개인 운세',
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: isCouple ? kMainLilacSoft : kMainRoseSoft,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isCouple ? Icons.favorite_border_rounded : Icons.person_outline,
+            size: 15,
+            color: isCouple ? kMainLilac : kMainRose,
+          ),
+          const SizedBox(width: 5),
+          Text(
+            isCouple ? '우리 둘의 흐름' : '나만 보는 흐름',
+            style: mainBody(
+              size: 12,
+              color: isCouple ? kMainLilac : kMainRose,
+              weight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _emptyContent(
+    String text, {
+    required bool isCouple,
+    required bool actionable,
+  }) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(text, style: mainBody(size: 13, color: kMainSub, height: 1.5)),
+      if (actionable &&
+          (widget.onEditProfile != null || widget.onOpenPartner != null)) ...[
+        const SizedBox(height: 12),
+        if (isCouple && widget.onOpenPartner != null)
+          FilledButton.icon(
+            onPressed: widget.onOpenPartner,
+            icon: const Icon(Icons.person_add_alt_1_outlined),
+            label: const Text('파트너 연결하기'),
+          )
+        else if (!isCouple && widget.onEditProfile != null)
+          OutlinedButton.icon(
+            onPressed: widget.onEditProfile,
+            icon: const Icon(Icons.edit_outlined),
+            label: const Text('출생 프로필 수정하기'),
+          ),
+      ],
+    ],
+  );
+
+  Widget _errorState({required bool isCouple}) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: MainCard(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.cloud_off_outlined, color: kMainSub, size: 34),
+            const SizedBox(height: 10),
+            Text(
+              _error ?? '오늘의 운세를 불러오지 못했어요.',
+              textAlign: TextAlign.center,
+              style: mainBody(size: 14, height: 1.5),
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                OutlinedButton(onPressed: _load, child: const Text('다시 시도')),
+                if (isCouple &&
+                    _error?.contains('파트너') == true &&
+                    widget.onOpenPartner != null)
+                  FilledButton(
+                    onPressed: widget.onOpenPartner,
+                    child: const Text('파트너 연결하기'),
+                  ),
+                if (!isCouple &&
+                    _error?.contains('출생 프로필') == true &&
+                    widget.onEditProfile != null)
+                  FilledButton(
+                    onPressed: widget.onEditProfile,
+                    child: const Text('출생 프로필 수정하기'),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }

@@ -127,6 +127,14 @@ void main() {
 
       expect(find.text('서울특별시 기준 안내'), findsOneWidget);
       expect(find.text('112 / 119'), findsOneWidget);
+      expect(
+        tester
+            .getTopLeft(
+              find.text('지금은 안전을 먼저 챙겨주세요. 가까운 사람이나 즉시 도움을 받을 곳에 연락해 주세요.'),
+            )
+            .dy,
+        lessThan(tester.getTopLeft(find.text('서울특별시 기준 안내')).dy),
+      );
       expect(requests, hasLength(2));
     },
   );

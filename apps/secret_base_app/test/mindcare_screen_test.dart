@@ -64,5 +64,7 @@ void main() {
     expect(find.text('지금 마음을 안전한 속도로 살펴볼게요.'), findsOneWidget);
     expect(find.text('불안해요'), findsOneWidget);
     expect(find.textContaining('파트너와 자동으로 공유되지 않아요.'), findsOneWidget);
+    expect(find.byKey(const Key('mindcare_flow_header')), findsOneWidget);
+    expect(find.textContaining('감정 → 상황 → 필요한 것 → 작은 행동'), findsOneWidget);
   });
 }

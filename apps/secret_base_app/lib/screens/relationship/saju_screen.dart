@@ -204,6 +204,8 @@ class _SajuScreenState extends State<SajuScreen> {
           style: mainBody(size: 13, color: kMainSub),
         ),
         const SizedBox(height: 18),
+        Text('쉽게 읽기', style: mainBody(size: 14, weight: FontWeight.w800)),
+        const SizedBox(height: 8),
         if (widget.relationshipFirst && _result?.relationship != null) ...[
           _relationshipReading(_result!.relationship!),
           const SizedBox(height: 12),
@@ -287,6 +289,18 @@ class _SajuScreenState extends State<SajuScreen> {
                   style: mainBody(size: 12, color: kMainSub),
                 ),
               ],
+              if (personal.inputSummary.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(
+                  '사용한 출생 정보: ${personal.inputSummary.values.where((value) => '$value'.isNotEmpty).join(' · ')}',
+                  style: mainBody(size: 11, color: kMainMuted, height: 1.45),
+                ),
+              ],
+              const SizedBox(height: 8),
+              Text(
+                '계산 버전 ${_result?.calculationVersion.isNotEmpty == true ? _result!.calculationVersion : '확인 중'}',
+                style: mainBody(size: 11, color: kMainMuted),
+              ),
             ],
           ),
         ),
@@ -744,6 +758,15 @@ class _SajuScreenState extends State<SajuScreen> {
               style: mainBody(size: 14, height: 1.5),
             ),
             const SizedBox(height: 14),
+            if (_error?.reason == 'birth_profile_incomplete' &&
+                widget.onEditProfile != null)
+              FilledButton(
+                onPressed: widget.onEditProfile,
+                child: const Text('출생정보 수정하기'),
+              ),
+            if (_error?.reason == 'birth_profile_incomplete' &&
+                widget.onEditProfile != null)
+              const SizedBox(height: 8),
             OutlinedButton(onPressed: _load, child: const Text('다시 시도')),
           ],
         ),
