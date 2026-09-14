@@ -7,6 +7,8 @@ import 'package:http/testing.dart';
 import 'package:secret_base_app/core/assessment_catalog_api.dart';
 import 'package:secret_base_app/core/birth_profile_api.dart';
 import 'package:secret_base_app/screens/relationship/relationship_understanding_screen.dart';
+import 'package:secret_base_app/screens/relationship/saju_screen.dart';
+import 'package:secret_base_app/screens/relationship/tarot_screen.dart';
 
 const _profileResponse =
     '{"ok":true,"birthProfile":{"calendarType":"solar",'
@@ -308,6 +310,56 @@ void main() {
     expect(find.text('진행 중인 검사가 있어요'), findsOneWidget);
   });
 
+  testWidgets('uses the injected disconnected couple state in the hub', (
+    tester,
+  ) async {
+    final api = BirthProfileApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient((_) async => http.Response(_profileResponse, 200)),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RelationshipUnderstandingScreen(api: api, hasActiveCouple: false),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('relationship_couple_restricted')),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('커플'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('relationship_couple_area')), findsNothing);
+  });
+
+  testWidgets('uses the injected connected couple state in the hub', (
+    tester,
+  ) async {
+    final api = BirthProfileApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient((_) async => http.Response(_profileResponse, 200)),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RelationshipUnderstandingScreen(api: api, hasActiveCouple: true),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('relationship_couple_restricted')),
+      findsNothing,
+    );
+    await tester.tap(find.text('커플'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('relationship_couple_area')), findsOneWidget);
+  });
+
   testWidgets('separates personal and couple areas with top tabs', (
     tester,
   ) async {
@@ -442,5 +494,42 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('파트너 연결하기'), findsOneWidget);
+  });
+
+  testWidgets('opens relationship-first Saju and Tarot from the couple tab', (
+    tester,
+  ) async {
+    final api = BirthProfileApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient((_) async => http.Response(_profileResponse, 200)),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RelationshipUnderstandingScreen(api: api, hasActiveCouple: true),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('커플'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('open_couple_saju')));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<SajuScreen>(find.byType(SajuScreen)).relationshipFirst,
+      isTrue,
+    );
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.byKey(const Key('open_couple_tarot')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('open_couple_tarot')));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TarotScreen>(find.byType(TarotScreen)).relationshipFirst,
+      isTrue,
+    );
   });
 }

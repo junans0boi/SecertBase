@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:secret_base_app/core/assessment_attempt_api.dart';
 import 'package:secret_base_app/core/assessment_catalog_api.dart';
+import 'package:secret_base_app/screens/auth/partner_screen.dart';
 import 'package:secret_base_app/screens/relationship/assessment_attempt_screen.dart';
 
 const _attemptResponse = {
@@ -499,4 +500,40 @@ void main() {
       expect(find.text('두 번째 질문'), findsOneWidget);
     },
   );
+
+  testWidgets('routes a restricted couple attempt to partner connection', (
+    tester,
+  ) async {
+    final api = AssessmentAttemptApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient(
+        (_) async => http.Response(
+          '{"ok":false,"reason":"active_couple_required"}',
+          403,
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AssessmentAttemptScreen(
+          assessment: _coupleAssessment,
+          api: api,
+          isCouple: true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('assessment_attempt_couple_restricted')),
+      findsOneWidget,
+    );
+    expect(find.bySemanticsLabel('파트너 연결하기'), findsOneWidget);
+    expect(find.text('다시 시도'), findsNothing);
+    await tester.tap(find.bySemanticsLabel('파트너 연결하기'));
+    await tester.pumpAndSettle();
+    expect(find.byType(PartnerScreen), findsOneWidget);
+  });
 }

@@ -252,18 +252,6 @@ class _AssessmentCatalogScreenState extends State<AssessmentCatalogScreen> {
                     ),
                   ),
                 ),
-                if (assessment.audience == AssessmentAudience.individual)
-                  TextButton.icon(
-                    key: Key('assessment_history_${assessment.code}'),
-                    onPressed: enabled ? () => _openHistory(assessment) : null,
-                    icon: const Icon(Icons.history_rounded, size: 17),
-                    label: const Text('기록 보기'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: kMainInk,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
               ],
             ),
             if (!enabled) ...[
@@ -289,15 +277,6 @@ class _AssessmentCatalogScreenState extends State<AssessmentCatalogScreen> {
                   label: Text(_actionLabel(assessment)),
                 ),
               ),
-              if (assessment.completionStatus ==
-                  AssessmentCompletionStatus.completed) ...[
-                const SizedBox(height: 4),
-                TextButton(
-                  key: Key('assessment_retake_${assessment.code}'),
-                  onPressed: () => _openAssessment(assessment),
-                  child: const Text('다시 하기'),
-                ),
-              ],
             ],
           ],
         ),

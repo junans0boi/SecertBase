@@ -7,8 +7,14 @@ import '../../core/saju_api.dart';
 class SajuScreen extends StatefulWidget {
   final SajuApi? api;
   final VoidCallback? onEditProfile;
+  final bool relationshipFirst;
 
-  const SajuScreen({super.key, this.api, this.onEditProfile});
+  const SajuScreen({
+    super.key,
+    this.api,
+    this.onEditProfile,
+    this.relationshipFirst = false,
+  });
 
   @override
   State<SajuScreen> createState() => _SajuScreenState();
@@ -98,7 +104,10 @@ class _SajuScreenState extends State<SajuScreen> {
       backgroundColor: kMainBg,
       appBar: AppBar(
         backgroundColor: kMainBg,
-        title: Text('나의 사주', style: mainTitle(size: 22)),
+        title: Text(
+          widget.relationshipFirst ? '우리의 관계 사주' : '나의 사주',
+          style: mainTitle(size: 22),
+        ),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: kMainRose))
@@ -195,6 +204,10 @@ class _SajuScreenState extends State<SajuScreen> {
           style: mainBody(size: 13, color: kMainSub),
         ),
         const SizedBox(height: 18),
+        if (widget.relationshipFirst && _result?.relationship != null) ...[
+          _relationshipReading(_result!.relationship!),
+          const SizedBox(height: 12),
+        ],
         MainCard(
           key: const Key('saju_plain_card'),
           padding: const EdgeInsets.all(20),
@@ -252,7 +265,7 @@ class _SajuScreenState extends State<SajuScreen> {
           const SizedBox(height: 12),
           _reflectionCard(personal.plain['reflectionPrompts'] as List),
         ],
-        if (_result?.relationship != null) ...[
+        if (!widget.relationshipFirst && _result?.relationship != null) ...[
           const SizedBox(height: 12),
           _relationshipReading(_result!.relationship!),
         ],

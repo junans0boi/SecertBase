@@ -78,10 +78,10 @@ void main() {
     expect(find.text('갈등과 회복 방식'), findsOneWidget);
     expect(find.text('후보 24문항 · 실제 12문항'), findsNWidgets(2));
     expect(find.text('파트너 연결 후 이용할 수 있어요'), findsOneWidget);
-    expect(find.text('기록 보기'), findsOneWidget);
+    expect(find.text('기록 보기'), findsNothing);
   });
 
-  testWidgets('keeps result history reachable while a retake is in progress', (
+  testWidgets('keeps one primary action while a retake is in progress', (
     tester,
   ) async {
     final api = AssessmentCatalogApi(
@@ -114,7 +114,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('기록 보기'), findsOneWidget);
+    expect(find.text('검사 이어하기'), findsOneWidget);
+    expect(find.text('기록 보기'), findsNothing);
   });
 
   testWidgets(
@@ -149,7 +150,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('기록 보기'), findsOneWidget);
+      expect(find.text('기록 보기'), findsNothing);
     },
   );
 
@@ -199,7 +200,52 @@ void main() {
     expect(find.text('검사 시작하기'), findsOneWidget);
     expect(find.text('검사 이어하기'), findsOneWidget);
     expect(find.text('결과 보기'), findsOneWidget);
-    expect(find.text('다시 하기'), findsOneWidget);
+    expect(find.text('다시 하기'), findsNothing);
     expect(find.widgetWithText(FilledButton, '결과 보기'), findsOneWidget);
+  });
+
+  testWidgets('keeps all four personal and three couple fixtures at 390px', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final assessments = [
+      for (var index = 0; index < 4; index++)
+        _assessment(
+          code: 'personal_$index',
+          audience: 'individual',
+          title: '개인 검사 $index',
+        ),
+      for (var index = 0; index < 3; index++)
+        _assessment(
+          code: 'couple_$index',
+          audience: 'couple',
+          title: '커플 검사 $index',
+        ),
+    ];
+    final api = AssessmentCatalogApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient(
+        (_) async => http.Response.bytes(
+          utf8.encode(jsonEncode({'ok': true, 'assessments': assessments})),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AssessmentCatalogScreen(api: api, hasActiveCouple: true),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('개인 검사 '), findsNWidgets(4));
+    await tester.scrollUntilVisible(find.text('커플 검사 2'), 300);
+    expect(find.textContaining('커플 검사 '), findsNWidgets(3));
+    expect(tester.takeException(), isNull);
   });
 }

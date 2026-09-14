@@ -4,6 +4,7 @@ import '../../core/app_theme.dart';
 import '../../core/assessment_attempt_api.dart';
 import '../../core/assessment_catalog_api.dart';
 import '../../core/main_design.dart';
+import '../auth/partner_screen.dart';
 
 class AssessmentAttemptScreen extends StatefulWidget {
   final AssessmentCatalogItem assessment;
@@ -32,6 +33,7 @@ class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
   bool _submitting = false;
   bool _loadingExplanation = false;
   bool _loading = true;
+  bool _requiresCoupleConnection = false;
   int _questionIndex = 0;
 
   @override
@@ -50,6 +52,7 @@ class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
     setState(() {
       _loading = true;
       _errorMessage = null;
+      _requiresCoupleConnection = false;
     });
     try {
       final attempt = widget.isCouple
@@ -64,6 +67,9 @@ class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
       if (!mounted) return;
       setState(() {
         _loading = false;
+        _requiresCoupleConnection =
+            error is AssessmentAttemptApiException &&
+            error.reason == 'active_couple_required';
         _errorMessage = _messageFor(error);
       });
     }
@@ -571,7 +577,11 @@ class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
     child: Padding(
       padding: const EdgeInsets.all(24),
       child: MainCard(
-        key: const Key('assessment_attempt_load_error'),
+        key: Key(
+          _requiresCoupleConnection
+              ? 'assessment_attempt_couple_restricted'
+              : 'assessment_attempt_load_error',
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -583,10 +593,18 @@ class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
               style: mainBody(size: 13, color: kMainSub),
             ),
             const SizedBox(height: 14),
-            OutlinedButton(
-              onPressed: _startOrResume,
-              child: const Text('다시 시도'),
-            ),
+            if (_requiresCoupleConnection)
+              OutlinedButton(
+                onPressed: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute(builder: (_) => const PartnerScreen()),
+                ),
+                child: const Text('파트너 연결하기'),
+              )
+            else
+              OutlinedButton(
+                onPressed: _startOrResume,
+                child: const Text('다시 시도'),
+              ),
           ],
         ),
       ),

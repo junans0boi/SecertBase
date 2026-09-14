@@ -6,8 +6,9 @@ import '../../core/tarot_api.dart';
 
 class TarotScreen extends StatefulWidget {
   final TarotApi? api;
+  final bool relationshipFirst;
 
-  const TarotScreen({super.key, this.api});
+  const TarotScreen({super.key, this.api, this.relationshipFirst = false});
 
   @override
   State<TarotScreen> createState() => _TarotScreenState();
@@ -97,7 +98,10 @@ class _TarotScreenState extends State<TarotScreen> {
       backgroundColor: kMainBg,
       appBar: AppBar(
         backgroundColor: kMainBg,
-        title: Text('오늘의 타로', style: mainTitle(size: 22)),
+        title: Text(
+          widget.relationshipFirst ? '우리의 관계 타로' : '오늘의 타로',
+          style: mainTitle(size: 22),
+        ),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: kMainLilac))
@@ -131,11 +135,19 @@ class _TarotScreenState extends State<TarotScreen> {
                     ),
                   ],
                   const SizedBox(height: 22),
+                  if (widget.relationshipFirst &&
+                      _today!.relationship != null) ...[
+                    Text('우리의 관계 타로', style: mainTitle(size: 25)),
+                    const SizedBox(height: 8),
+                    _readingSection(_today!.relationship!),
+                    const SizedBox(height: 28),
+                  ],
                   Text('나의 타로', style: mainTitle(size: 25)),
                   const SizedBox(height: 8),
                   if (_today!.personal != null)
                     _readingSection(_today!.personal!),
-                  if (_today!.relationship != null) ...[
+                  if (!widget.relationshipFirst &&
+                      _today!.relationship != null) ...[
                     const SizedBox(height: 28),
                     Text('우리의 관계 타로', style: mainTitle(size: 23)),
                     const SizedBox(height: 8),

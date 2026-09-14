@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 import '../../core/auth_service.dart';
 import '../../core/app_theme.dart';
@@ -190,7 +192,7 @@ class RelationshipUnderstandingScreen extends StatefulWidget {
   final BirthProfileApi? api;
   final AssessmentCatalogApi? assessmentCatalogApi;
   final RelationshipAssessmentStatus assessmentStatus;
-  final bool hasActiveCouple;
+  final bool? hasActiveCouple;
   final bool editBirthProfileOnly;
 
   const RelationshipUnderstandingScreen({
@@ -198,7 +200,7 @@ class RelationshipUnderstandingScreen extends StatefulWidget {
     this.api,
     this.assessmentCatalogApi,
     this.assessmentStatus = RelationshipAssessmentStatus.notStarted,
-    this.hasActiveCouple = false,
+    this.hasActiveCouple,
     this.editBirthProfileOnly = false,
   });
 
@@ -224,6 +226,7 @@ class _RelationshipUnderstandingScreenState
   String? _birthCountry = '대한민국';
   BirthProfile? _profile;
   RelationshipAssessmentStatus? _loadedAssessmentStatus;
+  bool _hasActiveCouple = false;
   String? _errorMessage;
   bool _loading = true;
   bool _saving = false;
@@ -252,7 +255,35 @@ class _RelationshipUnderstandingScreenState
                 token: AuthService().token ?? '',
               )
             : null);
+    _hasActiveCouple = widget.hasActiveCouple ?? false;
     _loadProfile();
+    if (widget.hasActiveCouple == null &&
+        widget.api == null &&
+        !widget.editBirthProfileOnly) {
+      _loadActiveCouple();
+    }
+  }
+
+  Future<void> _loadActiveCouple() async {
+    final auth = AuthService();
+    try {
+      final response = await http.get(
+        Uri.parse('${auth.baseUrl}/api/couple/info'),
+        headers: {
+          if (auth.token != null) 'Authorization': 'Bearer ${auth.token}',
+        },
+      );
+      final body = response.body.isEmpty ? null : jsonDecode(response.body);
+      final active =
+          response.statusCode == 200 &&
+          body is Map<String, dynamic> &&
+          body['ok'] == true;
+      if (!mounted) return;
+      setState(() => _hasActiveCouple = active);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _hasActiveCouple = false);
+    }
   }
 
   @override
@@ -804,7 +835,7 @@ class _RelationshipUnderstandingScreenState
                 const SizedBox(height: 10),
                 OutlinedButton(
                   key: Key(couple ? 'open_couple_saju' : 'open_saju'),
-                  onPressed: _openSaju,
+                  onPressed: () => _openSaju(relationshipFirst: couple),
                   child: Text(couple ? '관계 사주 보기' : '사주 보기'),
                 ),
               ],
@@ -844,7 +875,7 @@ class _RelationshipUnderstandingScreenState
                 const SizedBox(height: 10),
                 OutlinedButton(
                   key: Key(couple ? 'open_couple_tarot' : 'open_tarot'),
-                  onPressed: _openTarot,
+                  onPressed: () => _openTarot(relationshipFirst: couple),
                   child: Text(couple ? '관계 타로 보기' : '타로 보기'),
                 ),
               ],
@@ -864,7 +895,7 @@ class _RelationshipUnderstandingScreenState
             baseUrl: auth.baseUrl,
             token: auth.token ?? '',
           ),
-          hasActiveCouple: widget.hasActiveCouple,
+          hasActiveCouple: _hasActiveCouple,
           audienceFilter: audience,
         ),
       ),
@@ -911,12 +942,13 @@ class _RelationshipUnderstandingScreenState
     );
   }
 
-  void _openSaju() {
+  void _openSaju({bool relationshipFirst = false}) {
     final auth = AuthService();
     Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => SajuScreen(
           api: SajuApi(baseUrl: auth.baseUrl, token: auth.token ?? ''),
+          relationshipFirst: relationshipFirst,
           onEditProfile: () => Navigator.of(context).push<void>(
             MaterialPageRoute(
               builder: (_) => const RelationshipUnderstandingScreen(
@@ -929,12 +961,13 @@ class _RelationshipUnderstandingScreenState
     );
   }
 
-  void _openTarot() {
+  void _openTarot({bool relationshipFirst = false}) {
     final auth = AuthService();
     Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => TarotScreen(
           api: TarotApi(baseUrl: auth.baseUrl, token: auth.token ?? ''),
+          relationshipFirst: relationshipFirst,
         ),
       ),
     );
@@ -1035,8 +1068,8 @@ class _RelationshipUnderstandingScreenState
   }
 
   Widget _coupleArea() {
-    final title = widget.hasActiveCouple ? '커플 검사' : '커플 영역은 잠겨 있어요';
-    final description = widget.hasActiveCouple
+    final title = _hasActiveCouple ? '커플 검사' : '커플 영역은 잠겨 있어요';
+    final description = _hasActiveCouple
         ? '각자의 답변은 비공개로 저장되고, 완료 신호가 모이면 함께 볼 결과가 준비돼요.'
         : '파트너를 연결하면 두 사람의 관계 패턴을 함께 살펴볼 수 있어요.';
     return MainCard(
@@ -1046,8 +1079,8 @@ class _RelationshipUnderstandingScreenState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(
-            widget.hasActiveCouple ? Icons.favorite_border : Icons.lock_outline,
-            color: widget.hasActiveCouple ? kMainRose : kMainMuted,
+            _hasActiveCouple ? Icons.favorite_border : Icons.lock_outline,
+            color: _hasActiveCouple ? kMainRose : kMainMuted,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1060,7 +1093,7 @@ class _RelationshipUnderstandingScreenState
                   description,
                   style: mainBody(size: 13, color: kMainSub, height: 1.5),
                 ),
-                if (widget.hasActiveCouple) ...[
+                if (_hasActiveCouple) ...[
                   const SizedBox(height: 12),
                   FilledButton(
                     key: const Key('open_couple_catalog'),
@@ -1130,7 +1163,7 @@ class _RelationshipUnderstandingScreenState
     final area = index == 0
         ? _RelationshipArea.personal
         : _RelationshipArea.couple;
-    if (area == _RelationshipArea.couple && !widget.hasActiveCouple) {
+    if (area == _RelationshipArea.couple && !_hasActiveCouple) {
       _areaTabController.animateTo(0);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('파트너를 연결하면 커플 영역을 이용할 수 있어요.')),
@@ -1377,7 +1410,7 @@ class _RelationshipUnderstandingScreenState
                         _mindcareArea(),
                         const SizedBox(height: 12),
                         _counselingArea(shared: false),
-                        if (!widget.hasActiveCouple) ...[
+                        if (!_hasActiveCouple) ...[
                           const SizedBox(height: 12),
                           _coupleRestrictedArea(),
                         ],

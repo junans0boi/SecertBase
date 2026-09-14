@@ -11,6 +11,7 @@ void main() {
   testWidgets('history screen labels current and previous results', (
     tester,
   ) async {
+    final semantics = tester.ensureSemantics();
     final result = {
       'assessmentCode': 'attachment',
       'version': 'v1',
@@ -91,10 +92,12 @@ void main() {
       find.byKey(const Key('assessment_history_current_meta')),
       findsOneWidget,
     );
+    expect(find.bySemanticsLabel('최근 변화 비교'), findsOneWidget);
     expect(
       find.byKey(const Key('assessment_history_compare_action')),
-      findsOneWidget,
+      findsNothing,
     );
+    semantics.dispose();
 
     await tester.tap(find.byKey(const Key('assessment_history_open_2')));
     await tester.pumpAndSettle();

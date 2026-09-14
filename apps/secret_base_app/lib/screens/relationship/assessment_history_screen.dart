@@ -114,24 +114,31 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
 
   Widget _comparisonCard(AssessmentComparison comparison) {
     if (!comparison.available || comparison.overall == null) {
-      return MainCard(
-        key: const Key('assessment_comparison_card'),
-        color: kMainPaperSoft,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('최근 변화', style: mainBody(weight: FontWeight.w800)),
-            const SizedBox(height: 6),
-            Text(
-              comparison.message,
-              style: mainBody(size: 13, color: kMainSub, height: 1.5),
-            ),
-          ],
+      return Semantics(
+        container: true,
+        excludeSemantics: true,
+        label: '최근 변화 비교',
+        child: MainCard(
+          key: const Key('assessment_comparison_card'),
+          color: kMainPaperSoft,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('최근 변화', style: mainBody(weight: FontWeight.w800)),
+              const SizedBox(height: 6),
+              Text(
+                comparison.message,
+                style: mainBody(size: 13, color: kMainSub, height: 1.5),
+              ),
+            ],
+          ),
         ),
       );
     }
-    return KeyedSubtree(
-      key: const Key('assessment_history_compare_action'),
+    return Semantics(
+      container: true,
+      excludeSemantics: true,
+      label: '최근 변화 비교',
       child: MainCard(
         key: const Key('assessment_comparison_card'),
         child: Column(
@@ -226,7 +233,7 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '전체 점수 ${item.result.overallScore}점$dateLabel',
+                  '전체 점수 ${item.result.overallScore}점$dateLabel · 전체 ${_history?.length ?? 0}회 기록',
                   style: mainBody(size: 12, color: kMainSub),
                 ),
                 if (item.result.dimensions.isNotEmpty) ...[
