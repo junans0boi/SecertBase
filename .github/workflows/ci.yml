@@ -54,6 +54,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          flutter-version: '3.47.1'
           cache: true
           cache-key: "flutter-:os:-:channel:-:version:-:arch:-:hash:"
 
@@ -76,4 +77,3 @@ jobs:
       - name: Build web check
         working-directory: apps/secret_base_app
         run: flutter build web --release --base-href "/SecertBase/" --no-wasm-dry-run
-
