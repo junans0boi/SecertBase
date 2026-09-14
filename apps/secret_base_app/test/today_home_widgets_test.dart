@@ -33,6 +33,7 @@ void main() {
     );
 
     expect(find.text('상대가 오늘의 순간을 남겼어요'), findsOneWidget);
+    expect(find.text('7월 29일'), findsOneWidget);
     expect(find.text('내 순간 남기기'), findsOneWidget);
     expect(find.byType(FilledButton), findsOneWidget);
     expect(find.textContaining('광고'), findsNothing);
@@ -129,6 +130,9 @@ void main() {
     );
 
     expect(find.text('오늘의 루프'), findsOneWidget);
+    expect(find.text('2026년 7월 29일'), findsOneWidget);
+    expect(find.text('나의 순간'), findsOneWidget);
+    expect(find.text('상대의 순간'), findsOneWidget);
     expect(find.text('한강 산책'), findsOneWidget);
     expect(find.text('한강공원'), findsOneWidget);
     expect(find.text('삭제된 오늘의 순간이에요'), findsOneWidget);

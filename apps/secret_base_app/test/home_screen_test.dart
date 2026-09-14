@@ -2,15 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secret_base_app/screens/relationship/fortune_screen.dart';
 import 'package:secret_base_app/screens/home/home_screen.dart';
+import 'package:secret_base_app/screens/relationship/relationship_understanding_screen.dart';
 import 'package:secret_base_app/screens/relationship/saju_screen.dart';
 import 'package:secret_base_app/screens/relationship/tarot_screen.dart';
 import 'package:secret_base_app/screens/secret_base/secret_base_screen.dart';
 
 void main() {
-  testWidgets('home quick actions expose the requested relationship entries', (
+  testWidgets('home makes every quick action discoverable on a narrow screen', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(1000, 1600);
+    tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
@@ -20,14 +21,62 @@ void main() {
       ),
     );
 
-    expect(find.text('비밀 지도'), findsOneWidget);
-    expect(find.text('비밀기지'), findsOneWidget);
-    expect(find.text('운세'), findsOneWidget);
-    expect(find.text('타로'), findsOneWidget);
-    expect(find.text('사주'), findsOneWidget);
+    for (final label in ['비밀 지도', '비밀기지', '운세', '타로', '사주']) {
+      expect(find.text(label, skipOffstage: false), findsOneWidget);
+    }
+    expect(find.text('함께 해볼까요?'), findsOneWidget);
+    expect(find.text('좌우로 밀어 더 보기'), findsOneWidget);
+    expect(find.bySemanticsLabel('비밀 지도: 장소 남기기'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel('사주: 나의 흐름', skipOffstage: false),
+      findsOneWidget,
+    );
 
     expect(find.text('오늘 기록'), findsNothing);
     expect(find.text('함께 놀기'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('home keeps today entry, refresh, and relationship continuation explicit', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HomeScreen(
+            onNavigate: (_) {},
+            relationshipStatus: RelationshipAssessmentStatus.inProgress,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(RefreshIndicator), findsOneWidget);
+    expect(
+      tester.widget<RefreshIndicator>(find.byType(RefreshIndicator)).onRefresh,
+      isNotNull,
+    );
+    expect(find.text('오늘의 루프를 준비하고 있어요'), findsOneWidget);
+    expect(find.text('관계 이해 이어보기'), findsOneWidget);
+    expect(find.text('검사 이어가기'), findsOneWidget);
+  });
+
+  testWidgets('home gives a short relationship entry when no assessment is active', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HomeScreen(
+            onNavigate: (_) {},
+            relationshipStatus: RelationshipAssessmentStatus.notStarted,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('관계 이해 알아보기'), findsOneWidget);
+    expect(find.text('관계 이해 살펴보기'), findsOneWidget);
   });
 
   testWidgets('relationship quick actions open their dedicated screens', (

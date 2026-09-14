@@ -55,19 +55,23 @@ class _MemoryListScreenState extends State<MemoryListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final dateLabel = _businessDate != null
-        ? '${_businessDate!.substring(5, 7)}월 ${_businessDate!.substring(8, 10)}일의 기억들'
-        : '이 날의 기억들';
+    final date = DateTime.tryParse(_businessDate ?? '');
+    final dateLabel = date == null
+        ? '이 날의 기억들'
+        : '${date.month}월 ${date.day}일의 기억들';
 
     return Scaffold(
       backgroundColor: kMainBg,
       appBar: AppBar(
-        backgroundColor: kMainPaper,
+        backgroundColor: kMainBg,
         elevation: 0,
         scrolledUnderElevation: 0,
-        title: Text(
-          dateLabel,
-          style: mainBody(size: 17, weight: FontWeight.w900),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('추억 되짚기', style: mainBody(size: 16, weight: FontWeight.w900)),
+            Text(dateLabel, style: mainBody(size: 11, color: kMainMuted)),
+          ],
         ),
         leading: const BackButton(color: kMainInk),
       ),
@@ -75,7 +79,23 @@ class _MemoryListScreenState extends State<MemoryListScreen> {
           ? const Center(child: CircularProgressIndicator(color: kMainRose))
           : _posts.isEmpty
           ? Center(
-              child: Text('아직 기억이 없어요', style: mainBody(color: kMainMuted)),
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CozyMascot(size: 72),
+                    const SizedBox(height: 14),
+                    Text('아직 되짚어볼 기억이 없어요', style: mainBody(weight: FontWeight.w900)),
+                    const SizedBox(height: 4),
+                    Text(
+                      '오늘의 순간을 남기면 다음 해에 다시 만날 수 있어요',
+                      textAlign: TextAlign.center,
+                      style: mainBody(size: 12, color: kMainMuted),
+                    ),
+                  ],
+                ),
+              ),
             )
           : ListView.separated(
               padding: const EdgeInsets.all(18),
@@ -134,7 +154,7 @@ class _MemoryListScreenState extends State<MemoryListScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '$yearsAgo년 전',
+                              '$yearsAgo년 전 오늘',
                               style: mainBody(size: 11, color: kMainMuted),
                             ),
                             if (placeName != null) ...[

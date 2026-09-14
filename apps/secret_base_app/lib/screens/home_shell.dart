@@ -45,6 +45,7 @@ class _HomeShellState extends State<HomeShell> {
       body: SafeArea(bottom: false, child: _pages[_index]),
       bottomNavigationBar: NavigationBar(
         height: 72,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         selectedIndex: _index,
         onDestinationSelected: (index) => setState(() => _index = index),
         destinations: const [

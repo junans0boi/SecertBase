@@ -5,6 +5,9 @@ import 'package:http/http.dart' as http;
 
 import '../../core/auth_service.dart';
 import '../../core/main_design.dart';
+import '../../core/today_api.dart';
+import 'today_card.dart';
+import 'today_loop_viewer.dart';
 import 'memory_list_screen.dart';
 import '../secret_base/secret_base_screen.dart';
 import '../relationship/relationship_understanding_screen.dart';
@@ -33,6 +36,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Map<String, dynamic>? _memoryCard;
   int _memoryCardTotal = 0;
   RelationshipAssessmentStatus? _loadedRelationshipStatus;
+  TodayState? _todayState;
+  bool _todayLoading = true;
 
   Map<String, String> get _authHeaders => {
     if (_auth.token != null) 'Authorization': 'Bearer ${_auth.token}',
@@ -45,6 +50,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _load() async {
+    if (mounted) setState(() => _todayLoading = true);
+    final today = _loadTodayState();
     try {
       final responses = await Future.wait([
         http.get(
@@ -90,6 +97,25 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {
       // Home remains resilient
     }
+    final loadedToday = await today;
+    if (!mounted) return;
+    setState(() {
+      _todayState = loadedToday;
+      _todayLoading = false;
+    });
+  }
+
+  Future<TodayState?> _loadTodayState() async {
+    final token = _auth.token;
+    if (token == null || token.isEmpty) return null;
+    final api = TodayApi(baseUrl: _auth.baseUrl, token: token);
+    try {
+      return await api.fetchState();
+    } catch (_) {
+      return null;
+    } finally {
+      api.close();
+    }
   }
 
   @override
@@ -103,9 +129,11 @@ class _HomeScreenState extends State<HomeScreen> {
           padding: const EdgeInsets.fromLTRB(18, 16, 18, 32),
           children: [
             _homeHeader(),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
             _coupleCard(),
             const SizedBox(height: 14),
+            _todayEntry(),
+            const SizedBox(height: 22),
             _quickActions(),
             const SizedBox(height: 18),
             _relationshipCard(),
@@ -144,73 +172,108 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _quickActions() {
-    return SizedBox(
-      height: 104,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        clipBehavior: Clip.none,
-        children: [
-          _QuickAction(
-            icon: Icons.map_outlined,
-            title: '비밀 지도',
-            subtitle: '장소 남기기',
-            color: kMainSage,
-            background: kMainSageSoft,
-            onTap: () => widget.onNavigate(2),
-          ),
-          _QuickAction(
-            icon: Icons.cottage_outlined,
-            title: '비밀기지',
-            subtitle: '우리의 기록',
-            color: kMainLilac,
-            background: kMainLilacSoft,
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => SecretBaseScreen(
-                  baseUrl: _auth.baseUrl,
-                  authHeaders: _authHeaders,
-                ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '함께 해볼까요?',
+                style: mainBody(size: 15, weight: FontWeight.w900),
               ),
             ),
-          ),
-          _QuickAction(
-            icon: Icons.auto_awesome_outlined,
-            title: '운세',
-            subtitle: '오늘의 흐름',
-            color: kMainRose,
-            background: kMainRoseSoft,
-            onTap: () => Navigator.of(context).push<void>(
-              MaterialPageRoute(
-                builder: (_) => RelationshipFortuneScreen(
-                  api: FortuneApi(
-                    baseUrl: _auth.baseUrl,
-                    token: _auth.token ?? '',
+            Text(
+              '좌우로 밀어 더 보기',
+              style: mainBody(size: 11, color: kMainMuted),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 112,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            clipBehavior: Clip.none,
+            children: [
+              _QuickAction(
+                icon: Icons.map_outlined,
+                title: '비밀 지도',
+                subtitle: '장소 남기기',
+                color: kMainSage,
+                background: kMainSageSoft,
+                onTap: () => widget.onNavigate(2),
+              ),
+              _QuickAction(
+                icon: Icons.cottage_outlined,
+                title: '비밀기지',
+                subtitle: '우리의 기록',
+                color: kMainLilac,
+                background: kMainLilacSoft,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => SecretBaseScreen(
+                      baseUrl: _auth.baseUrl,
+                      authHeaders: _authHeaders,
+                    ),
                   ),
                 ),
               ),
-            ),
+              _QuickAction(
+                icon: Icons.auto_awesome_outlined,
+                title: '운세',
+                subtitle: '오늘의 흐름',
+                color: kMainRose,
+                background: kMainRoseSoft,
+                onTap: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute(
+                    builder: (_) => RelationshipFortuneScreen(
+                      api: FortuneApi(
+                        baseUrl: _auth.baseUrl,
+                        token: _auth.token ?? '',
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              _QuickAction(
+                icon: Icons.style_outlined,
+                title: '타로',
+                subtitle: '오늘의 카드',
+                color: kMainLilac,
+                background: kMainLilacSoft,
+                onTap: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute(builder: (_) => const TarotScreen()),
+                ),
+              ),
+              _QuickAction(
+                icon: Icons.auto_graph_rounded,
+                title: '사주',
+                subtitle: '나의 흐름',
+                color: kMainSage,
+                background: kMainSageSoft,
+                onTap: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute(builder: (_) => const SajuScreen()),
+                ),
+              ),
+            ],
           ),
-          _QuickAction(
-            icon: Icons.style_outlined,
-            title: '타로',
-            subtitle: '오늘의 카드',
-            color: kMainLilac,
-            background: kMainLilacSoft,
-            onTap: () => Navigator.of(context).push<void>(
-              MaterialPageRoute(builder: (_) => const TarotScreen()),
-            ),
-          ),
-          _QuickAction(
-            icon: Icons.auto_graph_rounded,
-            title: '사주',
-            subtitle: '나의 흐름',
-            color: kMainSage,
-            background: kMainSageSoft,
-            onTap: () => Navigator.of(
-              context,
-            ).push<void>(MaterialPageRoute(builder: (_) => const SajuScreen())),
-          ),
-        ],
+        ),
+      ],
+    );
+  }
+
+  Widget _todayEntry() {
+    if (_todayLoading) return const _TodayLoadingCard();
+    final state = _todayState ??
+        const TodayState(date: '', status: TodayStatus.empty);
+    return TodayCard(
+      state: state,
+      onCreateMoment: () => widget.onNavigate(1),
+      onOpenLoop: () => Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => TodayLoopViewer(state: state, baseUrl: _auth.baseUrl),
+        ),
       ),
     );
   }
@@ -226,6 +289,15 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text(
+            '우리의 오늘',
+            style: mainBody(
+              size: 12,
+              color: Colors.white.withAlpha(220),
+              weight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 5),
           Text(
             '$myName & $partnerName',
             maxLines: 1,
@@ -253,7 +325,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _relationshipCard() {
     final status = widget.relationshipStatus ?? _defaultRelationshipStatus;
-    return RelationshipEntryCard(
+    return _RelationshipHomeEntry(
       status: status,
       onTap: () => Navigator.of(context).push<void>(
         MaterialPageRoute(
@@ -318,6 +390,11 @@ class _MemoryCardWidget extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text(
+            '추억 되짚기',
+            style: mainBody(size: 14, color: kMainInk, weight: FontWeight.w900),
+          ),
+          const SizedBox(height: 5),
           Row(
             children: [
               const Icon(Icons.history_rounded, size: 14, color: kMainMuted),
@@ -400,8 +477,8 @@ class _MemoryCardWidget extends StatelessWidget {
                   totalCount > 1 ? '이 날 $totalCount개의 기억이 있어요' : '이 날의 기억',
                   style: mainBody(size: 12, color: kMainMuted),
                 ),
-                GestureDetector(
-                  onTap: () => Navigator.of(context).push(
+                TextButton.icon(
+                  onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => MemoryListScreen(
                         baseUrl: baseUrl,
@@ -409,8 +486,9 @@ class _MemoryCardWidget extends StatelessWidget {
                       ),
                     ),
                   ),
-                  child: Text(
-                    '보러가기 →',
+                  icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+                  label: Text(
+                    '모든 기억 보기',
                     style: mainBody(
                       size: 12,
                       color: kMainRose,
@@ -446,41 +524,167 @@ class _QuickAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 10),
-      child: SizedBox(
-        width: 118,
-        child: Material(
-          color: kMainPaper,
-          borderRadius: BorderRadius.circular(20),
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(20),
-            child: Padding(
-              padding: const EdgeInsets.all(13),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: background,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(icon, color: color, size: 19),
+    return Semantics(
+      label: '$title: $subtitle',
+      button: true,
+      child: ExcludeSemantics(
+        child: Padding(
+          padding: const EdgeInsets.only(right: 10),
+          child: SizedBox(
+            width: 124,
+            child: Material(
+              color: kMainPaper,
+              borderRadius: BorderRadius.circular(20),
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(20),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: background,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(icon, color: color, size: 20),
+                      ),
+                      const Spacer(),
+                      Text(
+                        title,
+                        style: mainBody(size: 13, weight: FontWeight.w800),
+                      ),
+                      Text(
+                        subtitle,
+                        style: mainBody(size: 11, color: kMainMuted),
+                      ),
+                    ],
                   ),
-                  const Spacer(),
-                  Text(
-                    title,
-                    style: mainBody(size: 13, weight: FontWeight.w800),
-                  ),
-                  Text(subtitle, style: mainBody(size: 11, color: kMainMuted)),
-                ],
+                ),
               ),
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _TodayLoadingCard extends StatelessWidget {
+  const _TodayLoadingCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return MainCard(
+      color: kMainSkySoft,
+      padding: const EdgeInsets.all(18),
+      child: Row(
+        children: [
+          const IconBadge(
+            color: kMainSky,
+            backgroundColor: Colors.white,
+            size: 44,
+            child: Icon(Icons.auto_stories_outlined, color: kMainSky),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '오늘의 루프를 준비하고 있어요',
+                  style: mainBody(size: 14, color: kMainInk, weight: FontWeight.w900),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '오늘의 순간을 함께 열어볼게요',
+                  style: mainBody(size: 12, color: kMainSub),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RelationshipHomeEntry extends StatelessWidget {
+  final RelationshipAssessmentStatus status;
+  final VoidCallback onTap;
+
+  const _RelationshipHomeEntry({required this.status, required this.onTap});
+
+  ({String title, String subtitle, String action, IconData icon, bool primary})
+  get _copy => switch (status) {
+    RelationshipAssessmentStatus.profileIncomplete => (
+      title: '관계 이해 준비하기',
+      subtitle: '출생 프로필을 먼저 완성해주세요',
+      action: '준비 상태 확인하기',
+      icon: Icons.edit_note_outlined,
+      primary: false,
+    ),
+    RelationshipAssessmentStatus.notStarted => (
+      title: '관계 이해 알아보기',
+      subtitle: '우리의 대화와 관계를 천천히 살펴봐요',
+      action: '관계 이해 살펴보기',
+      icon: Icons.psychology_outlined,
+      primary: false,
+    ),
+    RelationshipAssessmentStatus.inProgress => (
+      title: '관계 이해 이어보기',
+      subtitle: '진행 중인 검사를 이어가세요',
+      action: '검사 이어가기',
+      icon: Icons.play_circle_outline,
+      primary: true,
+    ),
+    RelationshipAssessmentStatus.resultReady => (
+      title: '관계 이해 결과가 있어요',
+      subtitle: '최근 결과와 다음 질문을 확인해보세요',
+      action: '결과 살펴보기',
+      icon: Icons.insights_outlined,
+      primary: false,
+    ),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final copy = _copy;
+    final action = copy.primary
+        ? FilledButton(onPressed: onTap, child: Text(copy.action))
+        : OutlinedButton(onPressed: onTap, child: Text(copy.action));
+    return MainCard(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              IconBadge(
+                color: kMainLilac,
+                backgroundColor: kMainLilacSoft,
+                size: 44,
+                child: Icon(copy.icon, color: kMainLilac, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(copy.title, style: mainBody(size: 15, weight: FontWeight.w900)),
+                    const SizedBox(height: 3),
+                    Text(copy.subtitle, style: mainBody(size: 12, color: kMainSub)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          SizedBox(width: double.infinity, child: action),
+        ],
       ),
     );
   }

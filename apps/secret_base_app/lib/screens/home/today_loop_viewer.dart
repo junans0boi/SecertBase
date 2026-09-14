@@ -27,9 +27,15 @@ class TodayLoopViewer extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(18, 10, 18, 32),
         children: [
           Text(
-            state.date,
+            '오늘의 기록',
             textAlign: TextAlign.center,
-            style: mainBody(size: 13, color: kMainMuted),
+            style: mainBody(size: 12, color: kMainMuted, weight: FontWeight.w800),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            _longDate(state.date),
+            textAlign: TextAlign.center,
+            style: mainBody(size: 15, color: kMainInk, weight: FontWeight.w900),
           ),
           const SizedBox(height: 16),
           _TodayMomentPanel(
@@ -67,13 +73,34 @@ class _TodayMomentPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final value = moment;
     final name = value?.userName ?? fallbackName;
+    final title = fallbackName == '나' ? '나의 순간' : '상대의 순간';
     return MainCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            name,
-            style: mainBody(weight: FontWeight.w900, color: kMainInk),
+          Row(
+            children: [
+              Icon(
+                fallbackName == '나'
+                    ? Icons.person_outline_rounded
+                    : Icons.favorite_border_rounded,
+                size: 18,
+                color: kMainSky,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                title,
+                style: mainBody(weight: FontWeight.w900, color: kMainInk),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  name,
+                  textAlign: TextAlign.end,
+                  style: mainBody(size: 12, color: kMainMuted),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           if (waiting && value == null)
@@ -124,6 +151,11 @@ class _TodayMomentPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+String _longDate(String value) {
+  final date = DateTime.tryParse(value);
+  return date == null ? '오늘' : '${date.year}년 ${date.month}월 ${date.day}일';
 }
 
 class _NeutralState extends StatelessWidget {

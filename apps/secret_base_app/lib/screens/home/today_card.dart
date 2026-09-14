@@ -74,12 +74,26 @@ class TodayCard extends StatelessWidget {
             children: [
               Icon(icon, color: Colors.white, size: 22),
               const SizedBox(width: 8),
-              Text(
-                '오늘의 루프',
-                style: mainBody(
-                  size: 13,
-                  color: Colors.white,
-                  weight: FontWeight.w900,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '오늘의 루프',
+                      style: mainBody(
+                        size: 13,
+                        color: Colors.white,
+                        weight: FontWeight.w900,
+                      ),
+                    ),
+                    Text(
+                      _shortDate(state.date),
+                      style: mainBody(
+                        size: 11,
+                        color: Colors.white.withAlpha(210),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -129,4 +143,9 @@ class TodayCard extends StatelessWidget {
       ),
     );
   }
+}
+
+String _shortDate(String value) {
+  final date = DateTime.tryParse(value);
+  return date == null ? '오늘' : '${date.month}월 ${date.day}일';
 }

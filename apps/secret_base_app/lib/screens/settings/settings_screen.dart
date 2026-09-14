@@ -45,10 +45,12 @@ class _MoreOverview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CozyPage(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 32),
-        child: Column(
+    return Material(
+      color: kMainBg,
+      child: CozyPage(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 32),
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
@@ -148,6 +150,7 @@ class _MoreOverview extends StatelessWidget {
               ],
             ),
           ],
+          ),
         ),
       ),
     );
@@ -1690,14 +1693,18 @@ class _MoreProfileEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MainCard(
-      padding: EdgeInsets.zero,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(22),
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Row(
+    return Semantics(
+      label: '내 공간: 프로필, 연결, 기념일 관리',
+      button: true,
+      child: ExcludeSemantics(
+        child: MainCard(
+          padding: EdgeInsets.zero,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(22),
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Row(
             children: [
               DoodleBadge(
                 color: kMainLilac,
@@ -1728,6 +1735,8 @@ class _MoreProfileEntry extends StatelessWidget {
               ),
               const Icon(Icons.chevron_right_rounded, color: kMainMuted),
             ],
+              ),
+            ),
           ),
         ),
       ),
@@ -1753,7 +1762,15 @@ class _MoreSection extends StatelessWidget {
         const SizedBox(height: 9),
         MainCard(
           padding: EdgeInsets.zero,
-          child: Column(children: children),
+          child: Column(
+            children: [
+              for (var index = 0; index < children.length; index++) ...[
+                children[index],
+                if (index < children.length - 1)
+                  const Divider(height: 1, indent: 68, endIndent: 16),
+              ],
+            ],
+          ),
         ),
       ],
     );
@@ -1779,11 +1796,19 @@ class _MoreRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
-        child: Row(
+    return Semantics(
+      label: '$title: $subtitle',
+      button: true,
+      child: ExcludeSemantics(
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 72),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+                child: Row(
           children: [
             DoodleBadge(
               color: iconColor,
@@ -1807,6 +1832,10 @@ class _MoreRow extends StatelessWidget {
             ),
             const Icon(Icons.chevron_right_rounded, color: kMainMuted),
           ],
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );
