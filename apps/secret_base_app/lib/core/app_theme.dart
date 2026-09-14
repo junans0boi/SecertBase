@@ -1,29 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-// ─── Color palette ─────────────────────────────────────────────────
-const kBg = Color(0xFFFFFBFD);
-const kSurface = Color(0xFFFFFFFF);
-const kCard = Color(0xFFFFFFFF);
-const kBorder = Color(0xFFF3DCE6);
-const kPrimary = Color(0xFFFF6F9F);
-const kPrimaryL = Color(0xFFFFA7C3);
-const kAccent = Color(0xFFFF9670);
-const kGold = Color(0xFFFFBE32);
-const kTeal = Color(0xFF55BF8A);
-const kText = Color(0xFF1E1E2E);
-const kTextSub = Color(0xFF5A5A78);
-const kTextMuted = Color(0xFFABABBC);
-const kSuccess = Color(0xFF2EB872);
-const kError = Color(0xFFE53935);
+import 'main_design.dart';
 
-final kPrimaryGrad = const LinearGradient(
-  colors: [Color(0xFFFF6F9F), Color(0xFFFF9670)],
-  begin: Alignment.topLeft,
-  end: Alignment.bottomRight,
-);
-final kWarmGrad = const LinearGradient(
-  colors: [Color(0xFFFF9670), Color(0xFFFFBE32)],
+// Legacy names remain available for game and settings screens. Shared values
+// intentionally resolve to main_design.dart so app-wide meaning cannot drift.
+const kBg = kMainBg;
+const kSurface = kMainPaper;
+const kCard = kMainPaper;
+const kBorder = kMainLine;
+const kPrimary = kMainRose;
+const kPrimaryL = Color(0xFFFFA7C3);
+const kAccent = kMainPeach;
+const kGold = kMainHoney;
+const kTeal = kMainSage;
+const kText = kMainInk;
+const kTextSub = kMainSub;
+const kTextMuted = kMainMuted;
+const kSuccess = kMainSuccess;
+const kError = kMainError;
+
+const kPrimaryGrad = kRoseGrad;
+const kWarmGrad = LinearGradient(
+  colors: [kMainPeach, kMainHoney],
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
 );
@@ -31,13 +30,13 @@ final kWarmGrad = const LinearGradient(
 ThemeData buildAppTheme() {
   return ThemeData(
     brightness: Brightness.light,
-    scaffoldBackgroundColor: kBg,
+    scaffoldBackgroundColor: kMainBg,
     colorScheme: const ColorScheme.light(
-      primary: kPrimary,
-      secondary: kAccent,
-      surface: kSurface,
-      onSurface: kText,
-      outline: kBorder,
+      primary: kMainRose,
+      secondary: kMainPeach,
+      surface: kMainPaper,
+      onSurface: kMainInk,
+      outline: kMainLine,
     ),
     textTheme: GoogleFonts.notoSansTextTheme().apply(
       bodyColor: kText,
@@ -55,43 +54,58 @@ ThemeData buildAppTheme() {
       ),
     ),
     navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: kSurface,
-      indicatorColor: kPrimary.withAlpha(24),
+      backgroundColor: kMainPaper,
+      indicatorColor: kMainPaperSoft,
       shadowColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
       iconTheme: WidgetStateProperty.resolveWith((s) {
         final sel = s.contains(WidgetState.selected);
-        return IconThemeData(color: sel ? kPrimary : kTextMuted, size: 24);
+        return IconThemeData(color: sel ? kMainInk : kMainMuted, size: 24);
       }),
       labelTextStyle: WidgetStateProperty.resolveWith((s) {
         final sel = s.contains(WidgetState.selected);
-        return GoogleFonts.notoSans(
-          color: sel ? kPrimary : kTextMuted,
-          fontSize: 11,
-          fontWeight: sel ? FontWeight.w700 : FontWeight.normal,
+        return mainBody(
+          size: 11,
+          color: sel ? kMainInk : kMainMuted,
+          weight: sel ? FontWeight.w800 : FontWeight.w500,
         );
       }),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: const Color(0xFFFFF5F8),
+      fillColor: kMainPaperSoft,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: kBorder),
+        borderSide: const BorderSide(color: kMainLine),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: kBorder),
+        borderSide: const BorderSide(color: kMainLine),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: kPrimary, width: 1.5),
+        borderSide: const BorderSide(color: kMainRose, width: 1.5),
       ),
       labelStyle: GoogleFonts.notoSans(color: kTextMuted, fontSize: 14),
       hintStyle: GoogleFonts.notoSans(color: kTextMuted, fontSize: 14),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     ),
-    dividerColor: kBorder,
-    cardColor: kCard,
+    filledButtonTheme: const FilledButtonThemeData(
+      style: ButtonStyle(
+        minimumSize: WidgetStatePropertyAll(Size(44, 44)),
+      ),
+    ),
+    outlinedButtonTheme: const OutlinedButtonThemeData(
+      style: ButtonStyle(
+        minimumSize: WidgetStatePropertyAll(Size(44, 44)),
+      ),
+    ),
+    elevatedButtonTheme: const ElevatedButtonThemeData(
+      style: ButtonStyle(
+        minimumSize: WidgetStatePropertyAll(Size(44, 44)),
+      ),
+    ),
+    dividerColor: kMainLine,
+    cardColor: kMainPaper,
   );
 }

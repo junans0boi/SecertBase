@@ -24,6 +24,10 @@ const kMainPeachSoft = Color(0xFFFFF1EC);
 const kMainLilac = Color(0xFF9D83FF);
 const kMainLilacSoft = Color(0xFFF4F0FF);
 
+// ─── Status ────────────────────────────────────────────────────────
+const kMainSuccess = Color(0xFF2EB872);
+const kMainError = Color(0xFFE53935);
+
 // ─── Gradients ─────────────────────────────────────────────────────
 const kRoseGrad = LinearGradient(
   colors: [Color(0xFFFF6F9F), Color(0xFFFF9670)],
