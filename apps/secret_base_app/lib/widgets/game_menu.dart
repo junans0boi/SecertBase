@@ -21,6 +21,7 @@ class GameMenuButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return IconButton(
+      tooltip: '게임 메뉴',
       icon: Icon(Icons.more_vert, color: iconColor),
       onPressed: () => _showMenu(context),
     );

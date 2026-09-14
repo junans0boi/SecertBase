@@ -500,57 +500,6 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     );
   }
 
-  Widget _buildStoryIcon(int idx) {
-    final game = _games[idx];
-    final isSelected = _selectedIdx == idx;
-    return GestureDetector(
-      onTap: () => setState(() => _selectedIdx = isSelected ? null : idx),
-      child: SizedBox(
-        width: 66,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              width: 54,
-              height: 54,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: game.background,
-                border: Border.all(
-                  color: isSelected ? game.color : Colors.transparent,
-                  width: 2.5,
-                ),
-                boxShadow: isSelected
-                    ? [
-                        BoxShadow(
-                          color: game.color.withValues(alpha: 0.35),
-                          blurRadius: 10,
-                          spreadRadius: 1,
-                        ),
-                      ]
-                    : null,
-              ),
-              child: Icon(game.icon, color: game.color, size: 26),
-            ),
-            const SizedBox(height: 5),
-            Text(
-              game.title,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
-                color: isSelected ? game.color : kMainSub,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildEmptyState() {
     return Center(
       child: Column(
@@ -558,8 +507,68 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
         children: [
           Icon(Icons.sports_esports_rounded, size: 60, color: kMainMuted),
           const SizedBox(height: 14),
-          Text('위에서 게임을 골라보세요', style: mainBody(size: 15, color: kMainSub)),
+          Text('게임을 고르면 여기에서 시작해요', style: mainTitle(size: 19)),
+          const SizedBox(height: 6),
+          Text(
+            '게임 선택 → 시작하기 → 상대방과 함께 플레이',
+            textAlign: TextAlign.center,
+            style: mainBody(size: 13, color: kMainSub, height: 1.5),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildGameTile(int idx) {
+    final game = _games[idx];
+    final selected = _selectedIdx == idx;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '${game.title}${selected ? ' 선택됨' : ''}',
+      child: GestureDetector(
+        key: ValueKey('arcade_game_${game.type}'),
+        onTap: () => setState(() => _selectedIdx = selected ? null : idx),
+        child: MainCard(
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+          color: selected ? game.background : kMainPaper,
+          borderColor: selected ? game.color : kMainLine,
+          radius: 16,
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: game.background,
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(game.icon, color: game.color, size: 19),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  game.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: mainBody(
+                    size: 12,
+                    color: selected ? game.color : kMainInk,
+                    weight: FontWeight.w800,
+                    height: 1.25,
+                  ),
+                ),
+              ),
+              Icon(
+                selected
+                    ? Icons.check_circle_rounded
+                    : Icons.chevron_right_rounded,
+                size: 16,
+                color: selected ? game.color : kMainMuted,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -721,8 +730,6 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          _buildWalletBar(),
           Row(
             children: [
               Expanded(child: Text('게임 고르기', style: mainTitle(size: 20))),
@@ -733,19 +740,30 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          SizedBox(
-            height: 88,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              clipBehavior: Clip.none,
-              itemCount: _games.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 8),
-              itemBuilder: (context, i) => _buildStoryIcon(i),
-            ),
+          Text(
+            '15개 게임을 둘이서 골라보세요. 선택하면 시작 방법이 나타나요.',
+            style: mainBody(size: 12, color: kMainSub),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 10),
+          GridView.builder(
+            key: const Key('arcade_game_grid'),
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _games.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              childAspectRatio: 2.25,
+            ),
+            itemBuilder: (context, i) => _buildGameTile(i),
+          ),
+          const SizedBox(height: 14),
+          _buildWalletBar(),
+          const SizedBox(height: 16),
           if (selected == null)
             MainCard(
+              key: const Key('arcade_empty_selection'),
               padding: const EdgeInsets.symmetric(vertical: 38),
               child: _buildEmptyState(),
             )

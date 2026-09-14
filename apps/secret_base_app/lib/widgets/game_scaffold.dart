@@ -31,6 +31,7 @@ class GameScaffold extends StatelessWidget {
               shadowColor: Colors.transparent,
               surfaceTintColor: Colors.transparent,
               leading: IconButton(
+                tooltip: '게임 나가기',
                 icon: const Icon(
                   Icons.arrow_back_ios_new,
                   size: 18,
