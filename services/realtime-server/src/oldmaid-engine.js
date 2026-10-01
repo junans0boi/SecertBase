@@ -134,7 +134,9 @@ export function drawCard(game, playerId, targetCardId) {
   const insertAt = Math.floor(Math.random() * (myHand.length + 1));
   myHand.splice(insertAt, 0, drawnCard);
 
-  const { updatedHand: newMyHand, removedCount } = removePairs(myHand);
+  const { updatedHand: pairedHand, removedCount } = removePairs(myHand);
+  // removePairs 후에도 조커가 배열 뒤쪽에 몰리는 패턴이 생기므로 재셔플.
+  const newMyHand = shuffle(pairedHand);
 
   const updatedGame = {
     ...game,
