@@ -53,8 +53,17 @@ class _RouletteScreenState extends State<RouletteScreen>
 
   void _rebuild() {
     if (!mounted) return;
-    setState(() => _spinning = false);
-    _spinCtrl.forward(from: 0);
+    final opts = _socket.lastRouletteOptions;
+    if (opts != null && opts.isNotEmpty) {
+      setState(() => _options
+        ..clear()
+        ..addAll(opts));
+    } else {
+      setState(() {});
+    }
+    _spinCtrl.forward(from: 0).then((_) {
+      if (mounted) setState(() => _spinning = false);
+    });
   }
 
   void _spin2() {

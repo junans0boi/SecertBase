@@ -3898,17 +3898,19 @@ export const registerSocketHandlers = (io) => {
 
       if (result.state.winner) {
         const winnerId = result.state.winner;
-        const loserId = result.state.players.find(p => p.id !== winnerId)?.id;
-        const stake = result.state.stake ?? 0;
         await redis.del(tankGameKey(roomCode));
         io.to(roomCode).emit("game:tank:shot", result.shotResult);
         io.to(roomCode).emit("game:tank:ended", { winner: winnerId });
-        if (loserId) {
-          await Promise.all([
-            settleAndEmitWallet(io, roomCode, winnerId, loserId, stake, `tank:${roomCode}:${Date.now()}`),
-            saveGameResult(roomCode, winnerId, loserId, 'tank', stake),
-            grantGameXpAndMissions(winnerId, loserId, 'tank'),
-          ]);
+        if (winnerId !== 'draw') {
+          const loserId = result.state.players.find(p => p.id !== winnerId)?.id;
+          const stake = result.state.stake ?? 0;
+          if (loserId) {
+            await Promise.all([
+              settleAndEmitWallet(io, roomCode, winnerId, loserId, stake, `tank:${roomCode}:${Date.now()}`),
+              saveGameResult(roomCode, winnerId, loserId, 'tank', stake),
+              grantGameXpAndMissions(winnerId, loserId, 'tank'),
+            ]);
+          }
         }
       } else {
         await redis.set(tankGameKey(roomCode), JSON.stringify(result.state), "EX", 7200);

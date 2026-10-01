@@ -34,7 +34,14 @@ class _DiceScreenState extends State<DiceScreen>
     );
     _rollCtrl.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
-        setState(() => _rolling = false);
+        // If the server result has already arrived, commit it now.
+        // Otherwise stay in rolling state — _rebuild() will commit it
+        // when the response eventually lands.
+        if (_socket.lastDice != null) {
+          setState(() => _rolling = false);
+        } else {
+          setState(() {});
+        }
       }
     });
     _rollCtrl.value = 1.0;
@@ -50,10 +57,14 @@ class _DiceScreenState extends State<DiceScreen>
 
   void _rebuild() {
     if (!mounted) return;
-    // Keep the cube animation running until its landing frame. The socket
-    // result can arrive before that frame and should only update the target
-    // face, not cut the animation short.
-    setState(() {});
+    // Server result arrived. If the animation is still running let it finish
+    // and show the correct face; the builder reads _socket.lastDice once
+    // _rolling becomes false.
+    if (_socket.lastDice != null && !_rollCtrl.isAnimating) {
+      setState(() => _rolling = false);
+    } else {
+      setState(() {});
+    }
   }
 
   void _roll() {

@@ -448,6 +448,9 @@ function _afterDeckResolved(state, playerId, events) {
   if (st.deck.length === 0 && scores[playerId].total < 7) {
     const otherId = st.players.find(p => p !== playerId);
     if (scores[otherId].total < 7) return _checkNageori(st);
+    // 상대가 7점 이상: 상대 go_stop_choice
+    const otherIdx = st.players.indexOf(otherId);
+    return { ...st, phase: 'go_stop_choice', currentPlayerIdx: otherIdx };
   }
 
   // 7점 이상이면 고/스톱 선택

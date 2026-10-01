@@ -381,7 +381,7 @@ export function fireTank(state, playerId) {
   let winner = null;
   if (loserIdx >= 0 && selfDeadIdx < 0) winner = nextState.players[idx].id;
   else if (selfDeadIdx >= 0 && loserIdx < 0) winner = nextState.players[1 - idx].id;
-  // mutual destruction → no winner (turnNumber increment will handle sudden death)
+  else if (loserIdx >= 0 && selfDeadIdx >= 0) winner = 'draw'; // 상호전멸 무승부
 
   const shotResult = {
     paths: allPaths,

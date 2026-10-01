@@ -67,6 +67,7 @@ class SocketService extends ChangeNotifier {
   // simple game results
   int? lastDice;
   String? lastRoulette;
+  List<String>? lastRouletteOptions;
   String? rpsResult;
   Map<String, String>? rpsChoices;
   bool? telepathySuccess;
@@ -260,6 +261,7 @@ class SocketService extends ChangeNotifier {
   void _resetGameState() {
     lastDice = null;
     lastRoulette = null;
+    lastRouletteOptions = null;
     rpsResult = null;
     rpsChoices = null;
     telepathySuccess = null;
@@ -543,7 +545,12 @@ class SocketService extends ChangeNotifier {
     });
 
     socket.on('game:roulette:result', (data) {
-      lastRoulette = _m(data)['selected'] as String?;
+      final map = _m(data);
+      lastRoulette = map['selected'] as String?;
+      final rawOptions = map['options'];
+      if (rawOptions is List) {
+        lastRouletteOptions = rawOptions.whereType<String>().toList();
+      }
       _log('룰렛: $lastRoulette');
       notifyListeners();
     });
