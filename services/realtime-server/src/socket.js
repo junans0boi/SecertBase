@@ -914,13 +914,12 @@ export const registerSocketHandlers = (io) => {
         if (bombGame) {
           const game = JSON.parse(bombGame);
           const elapsed = Math.floor((Date.now() - game.startTime) / 1000);
-          const remaining = Math.max(0, game.duration - elapsed);
-          
+          const remaining = Math.max(0, Math.round(game.duration / 1000) - elapsed);
+
           activeGames.bomb = {
-            gameId: game.gameId,
-            holder: game.holder,
+            currentPlayer: game.currentPlayer,
             timer: remaining,
-            category: game.category,
+            category: game.currentQuiz?.category,
           };
         }
 
@@ -1261,8 +1260,17 @@ export const registerSocketHandlers = (io) => {
     socket.on("game:rps:reset", async (payload, ackRaw) => {
       const ack = normalizeAck(ackRaw);
       const roomCode = socket.data.roomCode;
-      if (!roomCode) { ack({ ok: false, reason: "not_joined" }); return; }
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) { ack({ ok: false, reason: "not_joined" }); return; }
       await withRoomLock(roomCode, async () => {
+        const rpsRaw = await redis.get(rpsGameKey(roomCode));
+        if (rpsRaw) {
+          const rpsGame = JSON.parse(rpsRaw);
+          if (rpsGame.players?.[0] && userId !== rpsGame.players[0]) {
+            ack({ ok: false, reason: 'not_host' });
+            return;
+          }
+        }
         await redis.del(rpsGameKey(roomCode));
         io.to(roomCode).emit("game:rps:reset_done");
         ack({ ok: true });
@@ -1286,6 +1294,10 @@ export const registerSocketHandlers = (io) => {
 
       await withRoomLock(roomCode, async () => {
         const { choice, options } = parsed.data;
+        if (!options.includes(choice)) {
+          ack({ ok: false, reason: 'invalid_choice' });
+          return;
+        }
         const sessionKey = `telepathy:${roomCode}:session`;
         const existing = await redis.get(sessionKey);
         const session = existing ? JSON.parse(existing) : { choices: {}, options, revealed: false };
@@ -1451,6 +1463,12 @@ export const registerSocketHandlers = (io) => {
         return;
       }
       await withRoomLock(roomCode, async () => {
+        const pirateText = await redis.get(pirateKey(roomCode));
+        const gameState = pirateText ? JSON.parse(pirateText) : null;
+        if (gameState && gameState.players?.[0] && userId !== gameState.players[0]) {
+          ack({ ok: false, reason: 'not_host' });
+          return;
+        }
         await redis.del(pirateKey(roomCode));
         io.to(roomCode).emit("game:pirate:reset_done", { by: userId, at: Date.now() });
         ack({ ok: true });
@@ -1668,6 +1686,7 @@ export const registerSocketHandlers = (io) => {
 
       if (isNak && gameState.pendingMoves.length === 0) {
         gameState.hasBonusThrow = false;
+        gameState.caughtOpponentThisTurn = false;
         gameState.currentTurn = getNextYutPlayer(gameState, userId);
         gameState.phase = "throwing";
         resetYutTurnThrows(gameState);
@@ -2573,7 +2592,14 @@ export const registerSocketHandlers = (io) => {
       }
 
       await redis.set(`game:${roomCode}:penalty`, JSON.stringify(nextGameState), "EX", 3600);
-      io.to(roomCode).emit("game:penalty:updated", nextGameState);
+      const allSubmitted = Object.keys(nextGameState.submissions).length >= 2;
+      const emitState = allSubmitted ? nextGameState : {
+        ...nextGameState,
+        submissions: Object.fromEntries(
+          Object.entries(nextGameState.submissions).map(([uid, _]) => [uid, true])
+        )
+      };
+      io.to(roomCode).emit("game:penalty:updated", emitState);
       if (nextGameState.status === 'finished' && nextGameState.result?.winner && nextGameState.result.winner !== 'draw') {
         const loser = Object.keys(nextGameState.scores).find(p => p !== nextGameState.result.winner);
         await saveGameResult(roomCode, nextGameState.result.winner, loser, 'penalty', 0).catch(() => {});
@@ -2756,6 +2782,13 @@ export const registerSocketHandlers = (io) => {
       }
 
       const card = hand[cardIndex];
+
+      // Wild and Wild Draw4 require a declared color
+      if ((card.value === 'wild' || card.value === 'wild_draw4') && !declaredColor) {
+        ack({ ok: false, reason: 'must_declare_color' });
+        return;
+      }
+
       const topCard = gameState.discardPile[gameState.discardPile.length - 1];
 
       // Draw stack restriction: when stack is pending, only matching defense cards allowed
@@ -3148,12 +3181,14 @@ export const registerSocketHandlers = (io) => {
 
       const drawnCard = drawnCards[drawnCards.length - 1] ?? null;
       const topCard = gameState.discardPile[gameState.discardPile.length - 1];
+      // Check playability with drawStack cleared — the penalty draw has been served,
+      // so the drawn card only needs to be playable as a normal card.
       const drawnCardIsPlayable = drawnCard != null && canPlayCard(
         drawnCard,
         topCard,
         gameState.declaredColor,
-        gameState.drawStack || 0,
-        gameState.drawStackType,
+        0,    // drawStack cleared after penalty draw
+        null, // drawStackType cleared
         { mode: gameState.mode },
       );
 
@@ -3294,7 +3329,7 @@ export const registerSocketHandlers = (io) => {
 
       io.to(roomCode).emit("game:bomb:started", {
         currentPlayer: gameState.currentPlayer,
-        duration: gameState.duration,
+        duration: Math.round(gameState.duration / 1000),
         startTime: gameState.startTime,
         quiz: {
           category: gameState.currentQuiz.category,
@@ -3344,6 +3379,7 @@ export const registerSocketHandlers = (io) => {
         });
         if (bombWinner) {
           await saveGameResult(roomCode, bombWinner, userId, 'bomb', 0).catch(() => {});
+          grantGameXpAndMissions(bombWinner, userId, 'bomb').catch(() => {});
         }
         ack({ ok: false, reason: "time_up", loser: userId });
         return;
@@ -3480,7 +3516,7 @@ export const registerSocketHandlers = (io) => {
         await redis.set(bombGameKey(roomCode), JSON.stringify(gameState), "EX", 300);
         io.to(roomCode).emit("game:bomb:started", {
           currentPlayer: gameState.currentPlayer,
-          duration: gameState.duration,
+          duration: Math.round(gameState.duration / 1000),
           startTime: gameState.startTime,
           quiz: { category: gameState.currentQuiz.category, question: gameState.currentQuiz.question },
         });
@@ -3564,16 +3600,24 @@ export const registerSocketHandlers = (io) => {
     });
 
     // draw relay — no ack for performance
-    socket.on("game:catch:draw", (payload) => {
-      const { roomCode } = socket.data;
+    socket.on("game:catch:draw", async (payload) => {
+      const { roomCode, userId } = socket.data;
       if (!roomCode) return;
+      const catchDrawRaw = await redis.get(`game:${roomCode}:catch`);
+      if (!catchDrawRaw) return;
+      const catchDrawState = JSON.parse(catchDrawRaw);
+      if (catchDrawState.drawer !== userId) return;
       socket.to(roomCode).emit("game:catch:draw", payload);
     });
 
     // clear relay
-    socket.on("game:catch:clear", () => {
-      const { roomCode } = socket.data;
+    socket.on("game:catch:clear", async () => {
+      const { roomCode, userId } = socket.data;
       if (!roomCode) return;
+      const catchClearRaw = await redis.get(`game:${roomCode}:catch`);
+      if (!catchClearRaw) return;
+      const catchClearState = JSON.parse(catchClearRaw);
+      if (catchClearState.drawer !== userId) return;
       socket.to(roomCode).emit("game:catch:clear");
     });
 
@@ -3667,6 +3711,9 @@ export const registerSocketHandlers = (io) => {
         if (!raw) return ack({ ok: false });
         const state = JSON.parse(raw);
 
+        const catchHost = Object.keys(state.scores)[0];
+        if (catchHost && userId !== catchHost) return ack({ ok: false, reason: 'not_host' });
+
         if (state.phase !== "drawing") return ack({ ok: false });
         state.phase = "timeout";
         await redis.set(`game:${roomCode}:catch`, JSON.stringify(state), "EX", 86400);
@@ -3691,6 +3738,10 @@ export const registerSocketHandlers = (io) => {
         const raw = await redis.get(`game:${roomCode}:catch`);
         if (!raw) return ack({ ok: false });
         const state = JSON.parse(raw);
+
+        const catchNextHost = Object.keys(state.scores)[0];
+        if (catchNextHost && userId !== catchNextHost) return ack({ ok: false, reason: 'not_host' });
+
         if (state.phase !== "guessed" && state.phase !== "timeout") {
           return ack({ ok: false, reason: "round_not_finished" });
         }
@@ -3712,6 +3763,7 @@ export const registerSocketHandlers = (io) => {
             const catchLoser = Object.keys(state.scores).find(p => p !== winner);
             if (catchLoser) {
               await saveGameResult(roomCode, winner, catchLoser, 'catch', 0).catch(() => {});
+              grantGameXpAndMissions(winner, catchLoser, 'catch').catch(() => {});
             }
           }
           return ack({ ok: true });
@@ -3767,6 +3819,14 @@ export const registerSocketHandlers = (io) => {
         if (!roomCode) return ack({ ok: false });
 
         await withRoomLock(roomCode, async () => {
+        const catchResetRaw = await redis.get(`game:${roomCode}:catch`);
+        if (catchResetRaw) {
+          const catchResetState = JSON.parse(catchResetRaw);
+          const catchResetHost = Object.keys(catchResetState.scores)[0];
+          if (catchResetHost && userId !== catchResetHost) {
+            return ack({ ok: false, reason: 'not_host' });
+          }
+        }
         await redis.del(`game:${roomCode}:catch`);
         io.to(roomCode).emit("game:catch:reset_done");
         ack({ ok: true });
