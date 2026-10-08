@@ -2222,9 +2222,15 @@ class SocketService extends ChangeNotifier {
   }
 
   Future<void> _loadProfileEmoji() async {
-    final prefs = await SharedPreferences.getInstance();
-    profileEmoji = prefs.getString(_profileEmojiKey) ?? defaultProfileEmoji;
-    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      profileEmoji = prefs.getString(_profileEmojiKey) ?? defaultProfileEmoji;
+      notifyListeners();
+    } catch (error, stack) {
+      // Widget tests and early platform startup may not have a preferences
+      // channel yet; the in-memory default is still a valid profile state.
+      _log('프로필 이모지 저장소를 불러오지 못함: $error\n$stack');
+    }
   }
 
   void _applyYutState(Map<String, dynamic> map) {

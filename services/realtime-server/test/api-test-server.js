@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
+import Redis from 'ioredis';
 import { createIntegrationEnvironment } from '../src/integration-environment.js';
 
 export async function createApiTestServer({ adminUrl, redisUrl }) {
@@ -24,14 +25,24 @@ export async function createApiTestServer({ adminUrl, redisUrl }) {
   }
 
   Object.assign(process.env, runtime);
-  const [{ default: routes }, database, { createApp }, { config }, { redis }] = await Promise.all([
+  const [{ default: routes }, database, { createApp }, { config }] = await Promise.all([
     import('../src/routes.js'),
     import('../src/db.js'),
     import('../src/app/create-app.js'),
     import('../src/config.js'),
-    import('../src/redis.js'),
   ]);
-  const app = createApp({ config, redis, routes });
+  Object.assign(config, {
+    DATABASE_URL: environment.databaseUrl,
+    REDIS_URL: redisUrl,
+    REDIS_KEY_PREFIX: environment.redisNamespace,
+    UPLOADS_ROOT: environment.uploadsRoot,
+  });
+  const appRedis = new Redis(redisUrl, {
+    maxRetriesPerRequest: 3,
+    enableReadyCheck: true,
+    keyPrefix: environment.redisNamespace,
+  });
+  const app = createApp({ config, redis: appRedis, routes });
   app.locals.io = {
     to: () => ({ emit: () => {} }),
     in: () => ({ disconnectSockets: () => {} }),
@@ -44,7 +55,7 @@ export async function createApiTestServer({ adminUrl, redisUrl }) {
     environment,
     async request(path, { token, method = 'GET', body } = {}) {
       const isFormData = body instanceof FormData;
-      return fetch(`${baseUrl}/api${path}`, {
+      const response = await fetch(`${baseUrl}/api${path}`, {
         method,
         headers: {
           ...(token ? { authorization: `Bearer ${token}` } : {}),
@@ -52,10 +63,29 @@ export async function createApiTestServer({ adminUrl, redisUrl }) {
         },
         ...(body ? { body: isFormData ? body : JSON.stringify(body) } : {}),
       });
+      const responseBody = await response.arrayBuffer();
+      const responseText = new TextDecoder().decode(responseBody);
+      return {
+        ok: response.ok,
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+        url: response.url,
+        async text() {
+          return responseText;
+        },
+        async json() {
+          return JSON.parse(responseText);
+        },
+        async arrayBuffer() {
+          return responseBody.slice(0);
+        },
+      };
     },
     async close() {
       await new Promise((resolve) => server.close(resolve));
       await database.close();
+      await appRedis.quit().catch(() => appRedis.disconnect());
       await environment.cleanup();
     },
   };

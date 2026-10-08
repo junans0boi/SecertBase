@@ -72,7 +72,7 @@ test(
       const partnerFeed = await server.request('/setlog', { token: bob.token });
       assert.equal((await partnerFeed.json()).posts[0].caption, 'our first moment');
 
-      const otherFeed = await server.request('/setlog?user_id=1', { token: carol.token });
+      const otherFeed = await server.request('/setlog', { token: carol.token });
       assert.deepEqual((await otherFeed.json()).posts, []);
 
       const otherCouplePinResponse = await server.request('/map', {

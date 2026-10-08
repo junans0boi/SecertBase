@@ -1,0 +1,2 @@
+ALTER TABLE map_pins
+  ADD COLUMN IF NOT EXISTS media_url TEXT NULL;

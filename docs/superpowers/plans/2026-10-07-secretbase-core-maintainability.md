@@ -138,3 +138,10 @@ Modify: `home_screen.dart`, `home_shell.dart`, `moment_loop_screen.dart`, `auth_
 - [ ] On failure, inspect trace/logs with secrets and personal payloads removed, fix the smallest failing test, then rerun the full gate.
 - [ ] Run `git diff --check` and `git status --short --branch`; verify no secrets/E2E artifacts are tracked and no deployment occurred.
 - [ ] Commit `refactor: stabilize SecretBase core feature boundaries` only after every checklist item is green or an explicitly documented external blocker remains.
+
+## Completion record — 2026-10-08
+
+- [x] Core maintainability refactor completed without changing game engines or game behavior.
+- [x] Backend 284/284, Flutter 187/187, Flutter analyze, release web build, and Playwright headless/headed verification passed.
+- [x] Operational DB/Redis used only through the local Tailscale/SSH path; no production migration, fixture, pairing, upload, or deployment was performed.
+- [ ] Before production deployment: apply migrations 0040–0042 through the normal backed-up deployment migration procedure; current operational ledger is still at 0039.

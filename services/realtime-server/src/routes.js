@@ -21,7 +21,6 @@ import {
   classifyPinsForDeletion,
   collectMediaPaths,
 } from './account-deletion.js';
-import { normalizeMomentClip } from './moment-clip.js';
 import { businessDate } from './business-date.js';
 import { createExplanationProvider } from './relationship-explanation-provider.js';
 import { createExplanationAttempt } from './relationship-explanation-service.js';
@@ -61,218 +60,26 @@ import {
   buildSharedCounselingContext,
 } from './relationship-context-builder.js';
 import {
-  canReplaceTodayMoment,
-  canViewTodayMoment,
-  maskLockedTodayMoment,
-  todayMomentStatus,
-} from './today-moment-policy.js';
-import {
   disabledFeature,
   mvpRestFeatureGate,
   requireAuth,
 } from './backend-access.js';
+import { MomentLoopService } from './modules/moment-loop/application.js';
+import {
+  createMomentLoopRouter,
+  createMomentUploadStore,
+} from './modules/moment-loop/http-router.js';
+import { createMomentLoopRepository } from './modules/moment-loop/repository.js';
+import { momentLoopPolicy } from './modules/moment-loop/domain.js';
 import path from 'path';
 import fs from 'fs';
 
 const router = express.Router();
 const googleClient = new OAuth2Client();
 
-let setlogReadyPromise;
-const ensureSetlogTable = () => {
-  setlogReadyPromise ??= (async () => {
-    await query(`
-    CREATE TABLE IF NOT EXISTS setlog_posts (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      couple_id INT NULL,
-      user_id INT NOT NULL,
-      map_pin_id INT NULL,
-      user_code VARCHAR(32) NULL,
-      media_type ENUM('text', 'image', 'video') NOT NULL DEFAULT 'text',
-      media_url TEXT NULL,
-      caption TEXT NULL,
-      tags JSON NULL,
-      taken_at DATE NOT NULL,
-      captured_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      INDEX idx_setlog_couple_taken (couple_id, taken_at),
-      INDEX idx_setlog_user_taken (user_id, taken_at),
-      INDEX idx_setlog_map_pin (map_pin_id)
-    )
-  `);
-    await query(`ALTER TABLE setlog_posts ADD COLUMN IF NOT EXISTS map_pin_id INT NULL`);
-    await query(`ALTER TABLE setlog_posts ADD INDEX IF NOT EXISTS idx_setlog_map_pin (map_pin_id)`);
-    await query(`ALTER TABLE setlog_posts ADD COLUMN IF NOT EXISTS session_id VARCHAR(64) NULL`);
-    await query(`ALTER TABLE setlog_posts ADD INDEX IF NOT EXISTS idx_setlog_session (session_id)`);
-    await query(`
-      CREATE TABLE IF NOT EXISTS setlog_reactions (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        couple_id INT NOT NULL,
-        session_id VARCHAR(64) NOT NULL,
-        user_id INT NOT NULL,
-        emoji VARCHAR(8) NOT NULL,
-        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE KEY uniq_reaction (couple_id, session_id, user_id),
-        INDEX idx_reaction_session (couple_id, session_id)
-      )
-    `);
-  })();
-
-  return setlogReadyPromise;
-};
-
-// 누락된 테이블 자동 생성
-let _tablesReady = false;
-const ensureTables = async () => {
-  if (_tablesReady) return;
-  await ensureUserColumns();
-  await query(`CREATE TABLE IF NOT EXISTS map_pins (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    place_name VARCHAR(200) NOT NULL,
-    latitude DECIMAL(10,8) NOT NULL DEFAULT 0,
-    longitude DECIMAL(11,8) NOT NULL DEFAULT 0,
-    category VARCHAR(50) NULL,
-    rating SMALLINT NULL,
-    visit_date DATE NULL,
-    memo TEXT NULL,
-    created_by VARCHAR(50) NOT NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-  )`);
-  await query(`CREATE TABLE IF NOT EXISTS daily_questions (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    question TEXT NOT NULL,
-    scheduled_date DATE NOT NULL UNIQUE,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-  )`);
-  await query(`CREATE TABLE IF NOT EXISTS question_answers (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    question_id INT NOT NULL,
-    user_id INT NOT NULL,
-    answer TEXT NOT NULL,
-    UserName VARCHAR(100) NULL,
-    answered_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_qa_question (question_id)
-  )`);
-  await query(`CREATE TABLE IF NOT EXISTS challenges (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    title VARCHAR(200) NOT NULL,
-    description TEXT NULL,
-    target_value DECIMAL(10,2) NOT NULL DEFAULT 1,
-    current_value DECIMAL(10,2) NOT NULL DEFAULT 0,
-    unit VARCHAR(20) NULL,
-    owner_id INT NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'active',
-    start_date DATE NOT NULL,
-    target_date DATE NULL,
-    completed_at DATETIME NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-  )`);
-  await query(`CREATE TABLE IF NOT EXISTS challenge_logs (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    challenge_id INT NOT NULL,
-    value DECIMAL(10,2) NOT NULL,
-    note TEXT NULL,
-    logged_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_cl_challenge (challenge_id)
-  )`);
-  await query(`CREATE TABLE IF NOT EXISTS jukebox_tracks (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    title VARCHAR(200) NOT NULL,
-    artist VARCHAR(200) NULL,
-    file_url TEXT NOT NULL,
-    duration_sec INT NULL,
-    uploaded_by VARCHAR(50) NOT NULL,
-    uploaded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-  )`);
-  await query(`CREATE TABLE IF NOT EXISTS time_capsules (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    title VARCHAR(200) NOT NULL,
-    message TEXT NULL,
-    media_url VARCHAR(500) NULL,
-    created_by VARCHAR(100) NOT NULL,
-    open_date DATE NOT NULL,
-    is_opened TINYINT(1) NOT NULL DEFAULT 0,
-    opened_at DATETIME NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-  )`);
-  await query(`CREATE TABLE IF NOT EXISTS album_folders (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    couple_id INT NULL,
-    title VARCHAR(200) NOT NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-  )`);
-  await query(`CREATE TABLE IF NOT EXISTS album_photos (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    folder_id INT NOT NULL,
-    user_id INT NOT NULL,
-    user_code VARCHAR(32) NOT NULL,
-    photo_url TEXT NOT NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_album_photos_folder (folder_id)
-  )`);
-  await query(`CREATE TABLE IF NOT EXISTS private_reflections (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    content TEXT NOT NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_reflections_user (user_id)
-  )`);
-  await query(`CREATE TABLE IF NOT EXISTS premium_subscriptions (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    plan VARCHAR(20) NOT NULL DEFAULT 'monthly',
-    status VARCHAR(20) NOT NULL DEFAULT 'active',
-    amount_krw INT NULL,
-    started_at DATETIME NULL,
-    expires_at DATETIME NULL,
-    payment_key VARCHAR(200) NULL,
-    payment_method VARCHAR(50) NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_premium_sub_user (user_id)
-  )`);
-
-  // album_folders 누락 컬럼 추가 (기존 테이블 대응)
-  await query(`ALTER TABLE album_folders ADD COLUMN IF NOT EXISTS description TEXT NULL`);
-  await query(`ALTER TABLE album_folders ADD COLUMN IF NOT EXISTS cover_url TEXT NULL`);
-  await query(`ALTER TABLE album_folders ADD COLUMN IF NOT EXISTS sort_order INT NOT NULL DEFAULT 0`);
-
-  // album_photos 누락 컬럼 추가
-  await query(`ALTER TABLE album_photos ADD COLUMN IF NOT EXISTS caption TEXT NULL`);
-  await query(`ALTER TABLE album_photos ADD COLUMN IF NOT EXISTS is_premium_quality TINYINT(1) NOT NULL DEFAULT 0`);
-  await query(`ALTER TABLE album_photos ADD COLUMN IF NOT EXISTS file_size_kb INT NULL`);
-
-  // private_reflections 누락 컬럼 추가
-  await query(`ALTER TABLE private_reflections ADD COLUMN IF NOT EXISTS mood_tag VARCHAR(50) NULL`);
-  await query(`ALTER TABLE private_reflections ADD COLUMN IF NOT EXISTS category VARCHAR(50) NOT NULL DEFAULT 'general'`);
-
-  // map_pins couple/user 스코핑 컬럼 추가
-  await query(`ALTER TABLE map_pins ADD COLUMN IF NOT EXISTS couple_id INT NULL`);
-  await query(`ALTER TABLE map_pins ADD COLUMN IF NOT EXISTS user_id INT NULL`);
-  await query(`ALTER TABLE map_pins ADD COLUMN IF NOT EXISTS status VARCHAR(20) NULL`);
-  await query(`ALTER TABLE map_pins ADD COLUMN IF NOT EXISTS emotion_tags JSON NULL`);
-  await query(`ALTER TABLE map_pins ADD COLUMN IF NOT EXISTS media_url TEXT NULL`);
-
-  // 비밀장소 리뷰 테이블 (0013)
-  await query(`CREATE TABLE IF NOT EXISTS map_pin_reviews (
-    id         INT AUTO_INCREMENT PRIMARY KEY,
-    map_pin_id INT         NOT NULL,
-    user_id    INT         NOT NULL,
-    couple_id  INT         NOT NULL,
-    user_code  VARCHAR(50) NULL,
-    content    TEXT        NULL,
-    media_url  TEXT        NULL,
-    created_at DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_reviews_pin    (map_pin_id),
-    INDEX idx_reviews_couple (couple_id)
-  )`);
-
-  _tablesReady = true;
+const mediaFilePath = (mediaUrl) => {
+  const filename = path.basename(String(mediaUrl || ''));
+  return filename ? path.join(config.UPLOADS_ROOT, filename) : null;
 };
 
 const parseJsonArray = (value) => {
@@ -290,223 +97,6 @@ const parseJsonArray = (value) => {
       .filter(Boolean);
   }
 };
-
-let retentionTablesReadyPromise;
-const ensureRetentionTables = async () => {
-  if (retentionTablesReadyPromise) return retentionTablesReadyPromise;
-
-  retentionTablesReadyPromise = (async () => {
-    await query(`CREATE TABLE IF NOT EXISTS daily_engagement_days (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      couple_id INT NOT NULL,
-      date DATE NOT NULL,
-      question_id INT NULL,
-      mission_id INT NULL,
-      streak_count_after INT NOT NULL DEFAULT 0,
-      completed_at DATETIME NULL,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      UNIQUE KEY uniq_daily_engagement_day (couple_id, date)
-    )`);
-
-    await query(`CREATE TABLE IF NOT EXISTS daily_engagement_actions (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      couple_id INT NULL,
-      user_id INT NOT NULL,
-      date DATE NOT NULL,
-      action_type VARCHAR(50) NOT NULL,
-      target_id INT NULL,
-      payload_json JSON NULL,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      INDEX idx_daily_actions_couple_date (couple_id, date),
-      INDEX idx_daily_actions_user_date (user_id, date)
-    )`);
-
-    await query(`CREATE TABLE IF NOT EXISTS daily_missions (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      title VARCHAR(200) NOT NULL,
-      description TEXT NULL,
-      mission_type VARCHAR(50) NOT NULL DEFAULT 'confirm',
-      requirement_type VARCHAR(50) NOT NULL DEFAULT 'both_confirm',
-      active TINYINT(1) NOT NULL DEFAULT 1,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE KEY uniq_daily_mission_title (title)
-    )`);
-
-    await query(`CREATE TABLE IF NOT EXISTS couple_mission_instances (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      couple_id INT NOT NULL,
-      mission_id INT NOT NULL,
-      date DATE NOT NULL,
-      status VARCHAR(20) NOT NULL DEFAULT 'active',
-      completed_by_user1 TINYINT(1) NOT NULL DEFAULT 0,
-      completed_by_user2 TINYINT(1) NOT NULL DEFAULT 0,
-      completed_at DATETIME NULL,
-      payload_json JSON NULL,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      UNIQUE KEY uniq_couple_mission_date (couple_id, date)
-    )`);
-
-    await query(`CREATE TABLE IF NOT EXISTS couple_streaks (
-      couple_id INT PRIMARY KEY,
-      current_count INT NOT NULL DEFAULT 0,
-      longest_count INT NOT NULL DEFAULT 0,
-      last_completed_date DATE NULL,
-      last_grace_used_date DATE NULL,
-      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-    )`);
-
-    await query(`CREATE TABLE IF NOT EXISTS couple_timeline_events (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      couple_id INT NOT NULL,
-      event_type VARCHAR(50) NOT NULL,
-      actor_user_id INT NULL,
-      target_user_id INT NULL,
-      title VARCHAR(200) NOT NULL,
-      body TEXT NULL,
-      payload_json JSON NULL,
-      event_date DATE NOT NULL,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      INDEX idx_timeline_couple_date (couple_id, event_date, id)
-    )`);
-
-    await query(`CREATE TABLE IF NOT EXISTS notification_tokens (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      user_id INT NOT NULL,
-      platform VARCHAR(32) NOT NULL,
-      token TEXT NOT NULL,
-      token_hash VARCHAR(128) NOT NULL,
-      device_label VARCHAR(100) NULL,
-      enabled TINYINT(1) NOT NULL DEFAULT 1,
-      last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      UNIQUE KEY uniq_notification_token_hash (token_hash),
-      INDEX idx_notification_user (user_id)
-    )`);
-
-    await query(`CREATE TABLE IF NOT EXISTS notification_events (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      user_id INT NOT NULL,
-      couple_id INT NULL,
-      event_type VARCHAR(50) NOT NULL,
-      title VARCHAR(200) NOT NULL,
-      body TEXT NULL,
-      payload_json JSON NULL,
-      status VARCHAR(20) NOT NULL DEFAULT 'queued',
-      sent_at DATETIME NULL,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      INDEX idx_notification_events_user (user_id, created_at)
-    )`);
-
-    await query(`CREATE TABLE IF NOT EXISTS wish_tickets (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      couple_id INT NOT NULL,
-      owner_user_id INT NOT NULL,
-      issuer_user_id INT NULL,
-      source_type VARCHAR(50) NULL,
-      source_id INT NULL,
-      title VARCHAR(200) NOT NULL,
-      description TEXT NULL,
-      status VARCHAR(20) NOT NULL DEFAULT 'available',
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      used_at DATETIME NULL,
-      expires_at DATETIME NULL,
-      INDEX idx_wish_tickets_couple_status (couple_id, status),
-      INDEX idx_wish_tickets_owner (owner_user_id, status)
-    )`);
-
-    await query(`CREATE TABLE IF NOT EXISTS balance_questions (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      option_a VARCHAR(120) NOT NULL,
-      option_b VARCHAR(120) NOT NULL,
-      active TINYINT(1) NOT NULL DEFAULT 1,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE KEY uniq_balance_options (option_a, option_b)
-    )`);
-
-    await query(`CREATE TABLE IF NOT EXISTS couple_balance_answers (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      couple_id INT NOT NULL,
-      user_id INT NOT NULL,
-      question_id INT NOT NULL,
-      date DATE NOT NULL,
-      choice CHAR(1) NOT NULL,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      UNIQUE KEY uniq_balance_answer (couple_id, user_id, date)
-    )`);
-  })();
-
-  return retentionTablesReadyPromise;
-};
-
-let userColumnsReadyPromise;
-const ensureUserColumns = async () => {
-  if (userColumnsReadyPromise) return userColumnsReadyPromise;
-
-  userColumnsReadyPromise = (async () => {
-    const result = await query(
-      `SELECT COLUMN_NAME, IS_NULLABLE
-       FROM INFORMATION_SCHEMA.COLUMNS
-       WHERE TABLE_SCHEMA = DATABASE()
-         AND TABLE_NAME = 'Users'
-         AND COLUMN_NAME IN (
-           'AuthProvider', 'GoogleSubject', 'GooglePictureUrl',
-           'FullName', 'Nickname', 'BirthDate',
-           'PasswordHash', 'PasswordSalt'
-         )`
-    );
-    const existing = new Set(result.rows.map((row) => row.COLUMN_NAME));
-    const nullableByColumn = new Map(result.rows.map((row) => [row.COLUMN_NAME, row.IS_NULLABLE]));
-
-    if (!existing.has('AuthProvider')) {
-      await query("ALTER TABLE Users ADD COLUMN AuthProvider VARCHAR(32) NULL DEFAULT 'password'");
-    }
-    if (!existing.has('GoogleSubject')) {
-      await query('ALTER TABLE Users ADD COLUMN GoogleSubject VARCHAR(255) NULL');
-      await query('CREATE UNIQUE INDEX idx_users_google_subject ON Users (GoogleSubject)');
-    }
-    if (!existing.has('GooglePictureUrl')) {
-      await query('ALTER TABLE Users ADD COLUMN GooglePictureUrl TEXT NULL');
-    }
-    if (!existing.has('FullName')) {
-      await query('ALTER TABLE Users ADD COLUMN FullName VARCHAR(100) NULL');
-      await query("UPDATE Users SET FullName = COALESCE(NULLIF(TRIM(UserName), ''), SUBSTRING_INDEX(Email, '@', 1), '사용자') WHERE FullName IS NULL OR TRIM(FullName) = ''");
-      await query("ALTER TABLE Users MODIFY COLUMN FullName VARCHAR(100) NOT NULL");
-    }
-    if (!existing.has('Nickname')) {
-      await query('ALTER TABLE Users ADD COLUMN Nickname VARCHAR(50) NULL');
-      await query("UPDATE Users SET Nickname = COALESCE(NULLIF(TRIM(UserName), ''), NULLIF(TRIM(FullName), ''), SUBSTRING_INDEX(Email, '@', 1), '사용자') WHERE Nickname IS NULL OR TRIM(Nickname) = ''");
-      await query("ALTER TABLE Users MODIFY COLUMN Nickname VARCHAR(50) NOT NULL");
-    }
-    if (!existing.has('BirthDate')) {
-      await query('ALTER TABLE Users ADD COLUMN BirthDate DATE NULL');
-      await query("UPDATE Users SET BirthDate = '2000-01-01' WHERE BirthDate IS NULL");
-      await query("ALTER TABLE Users MODIFY COLUMN BirthDate DATE NOT NULL");
-    }
-    if (existing.has('PasswordHash') && nullableByColumn.get('PasswordHash') === 'NO') {
-      await query('ALTER TABLE Users MODIFY COLUMN PasswordHash VARCHAR(255) NULL');
-    }
-    if (existing.has('PasswordSalt') && nullableByColumn.get('PasswordSalt') === 'NO') {
-      await query('ALTER TABLE Users MODIFY COLUMN PasswordSalt VARCHAR(255) NULL');
-    }
-
-    // 프리미엄 컬럼
-    await query(`ALTER TABLE Users ADD COLUMN IF NOT EXISTS is_premium TINYINT(1) NOT NULL DEFAULT 0`);
-    await query(`ALTER TABLE Users ADD COLUMN IF NOT EXISTS premium_since DATETIME NULL`);
-    await query(`ALTER TABLE Users ADD COLUMN IF NOT EXISTS premium_expires_at DATETIME NULL`);
-
-    // 탈퇴 tombstone 컬럼
-    await query(`ALTER TABLE Users ADD COLUMN IF NOT EXISTS IsDeleted TINYINT(1) NOT NULL DEFAULT 0`);
-    await query(`ALTER TABLE Users ADD COLUMN IF NOT EXISTS DeletedAt DATETIME NULL`);
-  })();
-
-  return userColumnsReadyPromise;
-};
-
-const ensureGoogleAuthColumns = ensureUserColumns;
 
 const createJwtForUser = (user) =>
   jwt.sign(
@@ -600,7 +190,6 @@ const normalizeAuthUser = (user) => ({
 });
 
 const getProfileRowByUserId = async (userId) => {
-  await ensureUserColumns();
   const result = await query(
     `SELECT u.UserId, u.Email, u.UserName, u.FullName, u.Nickname, u.BirthDate, u.UserCode,
             u.AuthProvider, u.GoogleSubject, u.GooglePictureUrl,
@@ -638,20 +227,6 @@ const shiftDate = (date, days) => {
   return value.toISOString().slice(0, 10);
 };
 
-class TodayMomentRequestError extends Error {
-  constructor(status, reason) {
-    super(reason);
-    this.status = status;
-    this.reason = reason;
-  }
-}
-
-const sendTodayMomentError = (res, error) => {
-  if (!(error instanceof TodayMomentRequestError)) return false;
-  res.status(error.status).json({ ok: false, reason: error.reason });
-  return true;
-};
-
 class AfterglowRequestError extends Error {
   constructor(status, reason) {
     super(reason);
@@ -664,77 +239,6 @@ const sendAfterglowError = (res, error) => {
   if (!(error instanceof AfterglowRequestError)) return false;
   res.status(error.status).json({ ok: false, reason: error.reason });
   return true;
-};
-
-const selectTodayMoment = async (connection, { coupleId, userId, postId, date }) => {
-  await connection.execute(
-    'SELECT CoupleId FROM Couples WHERE CoupleId = ? AND Status = \'active\' FOR UPDATE',
-    [coupleId],
-  );
-  const [posts] = await connection.execute(
-    `SELECT id FROM setlog_posts
-     WHERE id = ? AND couple_id = ? AND user_id = ? AND taken_at = ?
-     LIMIT 1`,
-    [postId, coupleId, userId, date],
-  );
-  if (!posts[0]) throw new TodayMomentRequestError(404, 'today_moment_not_found');
-
-  const [current] = await connection.execute(
-    `SELECT revealed_at FROM today_moments
-     WHERE couple_id = ? AND user_id = ? AND business_date = ?
-     LIMIT 1 FOR UPDATE`,
-    [coupleId, userId, date],
-  );
-  if (current[0] && !canReplaceTodayMoment(current[0].revealed_at)) {
-    throw new TodayMomentRequestError(409, 'today_loop_locked');
-  }
-
-  await connection.execute(
-    `INSERT INTO today_moments
-       (couple_id, user_id, business_date, setlog_post_id, selected_at, revealed_at, deleted_at)
-     VALUES (?, ?, ?, ?, NOW(), NULL, NULL)
-     ON DUPLICATE KEY UPDATE
-       setlog_post_id = VALUES(setlog_post_id), selected_at = NOW(), deleted_at = NULL`,
-    [coupleId, userId, date, postId],
-  );
-
-  const [participants] = await connection.execute(
-    `SELECT COUNT(*) AS count FROM today_moments
-     WHERE couple_id = ? AND business_date = ? AND setlog_post_id IS NOT NULL`,
-    [coupleId, date],
-  );
-  if (Number(participants[0]?.count) >= 2) {
-    await connection.execute(
-      `UPDATE today_moments SET revealed_at = COALESCE(revealed_at, NOW())
-       WHERE couple_id = ? AND business_date = ?`,
-      [coupleId, date],
-    );
-  }
-};
-
-const serializeTodayMomentRow = (row) => {
-  if (!row) return null;
-  if (row.deleted_at || !row.id) {
-    return {
-      user_id: row.user_id,
-      UserName: row.UserName,
-      deleted: true,
-    };
-  }
-  return {
-    id: row.id,
-    user_id: row.user_id,
-    UserName: row.UserName,
-    media_type: row.media_type,
-    media_url: row.media_url,
-    caption: row.caption,
-    tags: parseJsonArray(row.tags),
-    taken_at: dateOnly(row.taken_at),
-    captured_at: row.captured_at,
-    map_pin_id: row.map_pin_id,
-    linked_place_name: row.linked_place_name,
-    deleted: false,
-  };
 };
 
 // ============================================
@@ -756,7 +260,6 @@ router.post('/auth/register', async (req, res) => {
       return res.status(400).json({ ok: false, reason: 'invalid_birth_date' });
     }
 
-    await ensureUserColumns();
 
     // 중복 확인
     const existing = await query('SELECT UserId FROM Users WHERE Email = ?', [email]);
@@ -847,7 +350,6 @@ router.post(
       return res.status(404).json({ ok: false, reason: 'not_found' });
     }
 
-    await ensureUserColumns();
 
     const result = await query('SELECT * FROM Users WHERE Email = ?', [
       config.KAKAO_REVIEW_EMAIL,
@@ -884,7 +386,6 @@ router.post(
       return res.status(503).json({ ok: false, reason: 'google_login_not_configured' });
     }
 
-    await ensureUserColumns();
 
     const ticket = await googleClient.verifyIdToken({
       idToken,
@@ -966,6 +467,21 @@ router.post(
 
 router.use(requireAuth(config.JWT_SECRET));
 router.use(mvpRestFeatureGate(config.PUBLIC_FEATURE_SET));
+
+const momentUploadStore = createMomentUploadStore({ config });
+const momentRepository = createMomentLoopRepository({
+  queryFn: query,
+  transactionFn: transaction,
+});
+const momentService = MomentLoopService({
+  repository: momentRepository,
+  policy: momentLoopPolicy,
+  media: momentUploadStore,
+});
+router.use(createMomentLoopRouter({
+  service: momentService,
+  uploadStore: momentUploadStore,
+}));
 
 router.get('/relationship/birth-profile', async (req, res) => {
   try {
@@ -1115,22 +631,25 @@ router.get('/relationship/assessments', async (req, res) => {
     ]);
 
     const statusByCode = new Map(
-      statusResult.rows.map((row) => [row.code, row.completion_status]),
+      statusResult.rows.map((row) => [row.code, row]),
     );
-    const assessments = catalogResult.rows.map((row) => ({
-      code: row.code,
-      audience: row.audience,
-      title: row.title,
-      description: row.description,
-      version: row.version_label,
-      candidateQuestionCount: Number(row.candidate_question_count),
-      activeQuestionCount: Number(row.active_question_count),
-      completionStatus: statusByCode.get(row.code) ?? 'not_started',
-      hasResultHistory:
-        row.has_result_history === true || Number(row.has_result_history) === 1,
-      dimensions: [],
-      questions: [],
-    }));
+    const assessments = catalogResult.rows.map((row) => {
+      const status = statusByCode.get(row.code);
+      return {
+        code: row.code,
+        audience: row.audience,
+        title: row.title,
+        description: row.description,
+        version: row.version_label,
+        candidateQuestionCount: Number(row.candidate_question_count),
+        activeQuestionCount: Number(row.active_question_count),
+        completionStatus: status?.completion_status ?? 'not_started',
+        hasResultHistory:
+          status?.has_result_history === true || Number(status?.has_result_history) === 1,
+        dimensions: [],
+        questions: [],
+      };
+    });
     const byCode = new Map(assessments.map((assessment) => [assessment.code, assessment]));
 
     for (const row of dimensionResult.rows) {
@@ -3405,7 +2924,6 @@ router.post('/pairing/requests/:id/accept', async (req, res) => {
 
 router.patch('/user/profile/:userId', async (req, res) => {
   try {
-    await ensureUserColumns();
 
     const userId = req.auth.userId;
     const fullName = String(req.body.fullName || req.body.FullName || '').trim();
@@ -3549,7 +3067,6 @@ router.post(
 // 애인 연결 해제
 router.delete('/user/partner', async (req, res) => {
   try {
-    await ensureUserColumns();
     const userId = getAuthenticatedUserId(req);
     if (!userId) {
       return res.status(401).json({ ok: false, reason: 'unauthorized' });
@@ -3603,7 +3120,6 @@ router.delete('/user/partner', async (req, res) => {
 //   5. Users 행 → tombstone (이메일/이름/자격증명 제거, IsDeleted=1)
 router.delete('/user', async (req, res) => {
   try {
-    await ensureUserColumns();
     const userId = getAuthenticatedUserId(req);
     if (!userId) {
       return res.status(401).json({ ok: false, reason: 'unauthorized' });
@@ -3806,604 +3322,11 @@ const upload = multer({
 });
 
 // ============================================
-// 1. Setlog API (OOTD & 데이트 사진)
-// ============================================
-
-// 셋로그 목록 조회 (달력 뷰용)
-router.get('/setlog', async (req, res) => {
-  try {
-    await ensureUserColumns();
-    await ensureSetlogTable();
-
-    const { month } = req.query; // YYYY-MM 형식
-    const coupleId = await getCoupleIdForUser(req.auth.userId);
-    if (!coupleId) {
-      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
-    }
-    let sql = `SELECT p.*, u.Nickname, COALESCE(u.Nickname, u.UserName) AS UserName,
-                      mp.place_name AS linked_place_name, mp.category AS linked_place_category,
-                      mp.archived_at AS linked_place_archived_at,
-                      tm.business_date AS today_business_date,
-                      tm.revealed_at AS today_revealed_at,
-                      viewer_tm.id AS viewer_today_moment_id,
-                      (SELECT JSON_ARRAYAGG(JSON_OBJECT('user_id', r.user_id, 'emoji', r.emoji))
-                       FROM setlog_reactions r
-                       WHERE p.session_id IS NOT NULL AND r.session_id = p.session_id AND r.couple_id = p.couple_id
-                      ) AS session_reactions
-               FROM setlog_posts p
-               LEFT JOIN Users u ON p.user_id = u.UserId
-               LEFT JOIN map_pins mp ON mp.id = p.map_pin_id
-               LEFT JOIN today_moments tm ON tm.setlog_post_id = p.id
-               LEFT JOIN today_moments viewer_tm
-                 ON viewer_tm.couple_id = tm.couple_id
-                AND viewer_tm.business_date = tm.business_date
-                AND viewer_tm.user_id = ?
-               WHERE p.couple_id = ?`;
-    const params = [req.auth.userId, coupleId];
-
-    if (month) {
-      sql += ` AND DATE_FORMAT(p.taken_at, '%Y-%m') = ?`;
-      params.push(month);
-    }
-
-    sql += ` ORDER BY p.captured_at DESC, p.id DESC`;
-
-    const result = await query(sql, params);
-    res.json({
-      ok: true,
-      posts: result.rows.map((post) => maskLockedTodayMoment({
-        post,
-        viewerUserId: req.auth.userId,
-      })),
-    });
-  } catch (err) {
-    console.error('[API] /setlog GET error:', err);
-    res.status(500).json({ ok: false, reason: 'internal_error' });
-  }
-});
-
-const uploadedFilePath = (file) => file?.path || (file?.filename
-  ? path.join(config.UPLOADS_ROOT, file.filename)
-  : null);
-
-const removeUploadedFile = async (file) => {
-  const filePath = uploadedFilePath(file);
-  if (!filePath) return;
-  await fs.promises.rm(filePath, { force: true });
-};
-
-const mediaFilePath = (mediaUrl) => {
-  const filename = path.basename(String(mediaUrl || ''));
-  return filename ? path.join(config.UPLOADS_ROOT, filename) : null;
-};
-
-const resolveSetlogMapPinId = async (mapPinId, userId, coupleId) => {
-  if (!mapPinId) return null;
-
-  const pinId = Number(mapPinId);
-  if (!Number.isInteger(pinId) || pinId <= 0) {
-    return { error: 'invalid_map_pin' };
-  }
-
-  const result = await query(
-    'SELECT id, user_id, couple_id FROM map_pins WHERE id = ? LIMIT 1',
-    [pinId]
-  );
-  const pin = result.rows[0];
-  if (!pin) return { error: 'map_pin_not_found' };
-
-  const sameCouple = coupleId && Number(pin.couple_id) === Number(coupleId);
-  if (!sameCouple) return { error: 'map_pin_forbidden' };
-
-  return { id: pinId };
-};
-
-// 셋로그 생성
-router.post('/setlog', upload.single('media'), async (req, res) => {
-  let keepUpload = false;
-  try {
-    await ensureUserColumns();
-    await ensureSetlogTable();
-
-    const {
-      caption,
-      tags,
-      taken_at,
-      captured_at,
-      media_type,
-      map_pin_id,
-      session_id,
-      today_moment,
-    } = req.body;
-    let mediaUrl = req.file ? `/uploads/${req.file.filename}` : null;
-    const uploadedMediaType = req.file?.mimetype.startsWith('video/') ? 'video' : 'image';
-    const normalizedMediaType = mediaUrl ? uploadedMediaType : (media_type || 'text');
-    const reject = async (status, reason) => {
-      await removeUploadedFile(req.file);
-      return res.status(status).json({ ok: false, reason });
-    };
-    const allowedMomentMimes = new Set([
-      'image/jpeg',
-      'image/png',
-      'image/webp',
-      'video/mp4',
-      'video/quicktime',
-      'video/webm',
-    ]);
-
-    if (req.file && !allowedMomentMimes.has(req.file.mimetype)) {
-      return reject(415, 'unsupported_media_type');
-    }
-
-    if (!taken_at) {
-      return reject(400, 'missing_fields');
-    }
-
-    if (!['text', 'image', 'video'].includes(normalizedMediaType)) {
-      return reject(400, 'invalid_media_type');
-    }
-
-    if (normalizedMediaType === 'text' && !caption?.trim()) {
-      return reject(400, 'caption_required');
-    }
-
-    const userId = req.auth.userId;
-    const coupleId = await getCoupleIdForUser(userId);
-    if (!coupleId) {
-      return reject(409, 'active_couple_required');
-    }
-    const resolvedMapPin = await resolveSetlogMapPinId(map_pin_id, userId, coupleId);
-    if (resolvedMapPin?.error) {
-      return reject(400, resolvedMapPin.error);
-    }
-    if (req.file?.mimetype.startsWith('video/')) {
-      try {
-        const normalizedPath = await normalizeMomentClip(uploadedFilePath(req.file));
-        req.file.path = normalizedPath;
-        req.file.filename = path.basename(normalizedPath);
-        req.file.mimetype = 'video/mp4';
-        mediaUrl = `/uploads/${req.file.filename}`;
-      } catch (error) {
-        return reject(422, error.message);
-      }
-    }
-    const tagsArray = parseJsonArray(tags);
-    const user = await query('SELECT UserCode FROM Users WHERE UserId = ? LIMIT 1', [userId]);
-    const designateAsToday = today_moment === true || today_moment === 'true';
-    const today = businessDate();
-    if (designateAsToday && taken_at !== today) {
-      return reject(400, 'today_moment_date_required');
-    }
-
-    const createdPost = await transaction(async (connection) => {
-      const [result] = await connection.execute(
-        `INSERT INTO setlog_posts
-         (couple_id, user_id, map_pin_id, user_code, media_type, media_url, caption, tags, taken_at, captured_at, session_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, NOW()), ?)`,
-        [
-          coupleId,
-          userId,
-          resolvedMapPin?.id ?? null,
-          user.rows[0]?.UserCode || null,
-          normalizedMediaType,
-          mediaUrl,
-          caption || null,
-          JSON.stringify(tagsArray),
-          taken_at,
-          captured_at || null,
-          session_id || null,
-        ],
-      );
-      if (designateAsToday) {
-        await selectTodayMoment(connection, {
-          coupleId,
-          userId,
-          postId: result.insertId,
-          date: today,
-        });
-      }
-      const [created] = await connection.execute(
-        `SELECT p.*, u.Nickname, COALESCE(u.Nickname, u.UserName) AS UserName,
-                mp.place_name AS linked_place_name, mp.category AS linked_place_category,
-                mp.archived_at AS linked_place_archived_at
-         FROM setlog_posts p
-         LEFT JOIN Users u ON p.user_id = u.UserId
-         LEFT JOIN map_pins mp ON mp.id = p.map_pin_id
-         WHERE p.id = ?`,
-        [result.insertId],
-      );
-      return created[0];
-    });
-    keepUpload = true;
-
-    res.status(201).json({ ok: true, post: createdPost });
-  } catch (err) {
-    console.error('[API] /setlog POST error:', err);
-    await removeUploadedFile(req.file).catch(() => {});
-    if (sendTodayMomentError(res, err)) return;
-    res.status(500).json({ ok: false, reason: 'internal_error' });
-  } finally {
-    if (req.file && !keepUpload) {
-      await removeUploadedFile(req.file).catch((error) => {
-        console.error('[API] failed to clean rejected MomentLoop upload:', error);
-      });
-    }
-  }
-});
-
-// 셋로그 이모지 반응 토글
-router.post('/setlog/reaction', async (req, res) => {
-  try {
-    await ensureSetlogTable();
-    const { session_id, emoji } = req.body;
-    if (!session_id || !emoji) {
-      return res.status(400).json({ ok: false, reason: 'missing_fields' });
-    }
-    const userId = req.auth.userId;
-    const coupleId = await getCoupleIdForUser(userId);
-    if (!coupleId) {
-      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
-    }
-
-    const existing = await query(
-      'SELECT emoji FROM setlog_reactions WHERE couple_id = ? AND session_id = ? AND user_id = ? LIMIT 1',
-      [coupleId, session_id, userId]
-    );
-
-    if (existing.rows[0]?.emoji === emoji) {
-      await query(
-        'DELETE FROM setlog_reactions WHERE couple_id = ? AND session_id = ? AND user_id = ?',
-        [coupleId, session_id, userId]
-      );
-    } else {
-      await query(
-        `INSERT INTO setlog_reactions (couple_id, session_id, user_id, emoji)
-         VALUES (?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE emoji = VALUES(emoji), created_at = NOW()`,
-        [coupleId, session_id, userId, emoji]
-      );
-    }
-
-    const reactions = await query(
-      'SELECT user_id, emoji FROM setlog_reactions WHERE couple_id = ? AND session_id = ?',
-      [coupleId, session_id]
-    );
-    res.json({ ok: true, reactions: reactions.rows });
-  } catch (err) {
-    console.error('[API] /setlog/reaction POST error:', err);
-    res.status(500).json({ ok: false, reason: 'internal_error' });
-  }
-});
-
-router.patch('/setlog/:id', async (req, res) => {
-  try {
-    await ensureSetlogTable();
-    const postId = Number(req.params.id);
-    const existing = await query(
-      'SELECT id, user_id, couple_id FROM setlog_posts WHERE id = ? LIMIT 1',
-      [postId],
-    );
-    const post = existing.rows[0];
-    if (!post) return res.status(404).json({ ok: false, reason: 'moment_not_found' });
-    if (Number(post.user_id) !== req.auth.userId) {
-      return res.status(403).json({ ok: false, reason: 'moment_author_required' });
-    }
-    const coupleId = await getCoupleIdForUser(req.auth.userId);
-    if (!coupleId || Number(post.couple_id) !== Number(coupleId)) {
-      return res.status(403).json({ ok: false, reason: 'active_couple_required' });
-    }
-
-    const caption = typeof req.body.caption === 'string' ? req.body.caption.trim() : null;
-    const takenAt = typeof req.body.taken_at === 'string' ? req.body.taken_at : null;
-    const tags = req.body.tags === undefined ? null : JSON.stringify(parseJsonArray(req.body.tags));
-    const hasMapPinId = Object.prototype.hasOwnProperty.call(req.body, 'map_pin_id');
-    let mapPinId = hasMapPinId ? (req.body.map_pin_id ? Number(req.body.map_pin_id) : null) : null;
-    if (hasMapPinId && mapPinId !== null) {
-      const resolvedMapPin = await resolveSetlogMapPinId(mapPinId, req.auth.userId, coupleId);
-      if (resolvedMapPin?.error) {
-        return res.status(400).json({ ok: false, reason: resolvedMapPin.error });
-      }
-      mapPinId = resolvedMapPin.id;
-    }
-    if (caption === null && takenAt === null && tags === null && !hasMapPinId) {
-      return res.status(400).json({ ok: false, reason: 'no_changes' });
-    }
-    const updates = [];
-    const params = [];
-    if (caption !== null) { updates.push('caption = ?'); params.push(caption); }
-    if (takenAt !== null) { updates.push('taken_at = ?'); params.push(takenAt); }
-    if (tags !== null) { updates.push('tags = ?'); params.push(tags); }
-    if (hasMapPinId) { updates.push('map_pin_id = ?'); params.push(mapPinId); }
-
-    await query(
-      `UPDATE setlog_posts SET ${updates.join(', ')} WHERE id = ?`,
-      [...params, postId],
-    );
-    const updated = await query(
-      `SELECT p.*, u.Nickname, COALESCE(u.Nickname, u.UserName) AS UserName
-       FROM setlog_posts p LEFT JOIN Users u ON p.user_id = u.UserId WHERE p.id = ?`,
-      [postId],
-    );
-    res.json({ ok: true, post: updated.rows[0] });
-  } catch (err) {
-    console.error('[API] /setlog PATCH error:', err);
-    res.status(500).json({ ok: false, reason: 'internal_error' });
-  }
-});
-
-// 셋로그 삭제
-router.delete('/setlog/:id', async (req, res) => {
-  try {
-    await ensureSetlogTable();
-
-    const id = Number(req.params.id);
-    const existing = await query(
-      'SELECT id, user_id, couple_id, media_url FROM setlog_posts WHERE id = ? LIMIT 1',
-      [id],
-    );
-    const post = existing.rows[0];
-    if (!post) return res.status(404).json({ ok: false, reason: 'moment_not_found' });
-    if (Number(post.user_id) !== req.auth.userId) {
-      return res.status(403).json({ ok: false, reason: 'moment_author_required' });
-    }
-    const coupleId = await getCoupleIdForUser(req.auth.userId);
-    if (!coupleId || Number(post.couple_id) !== Number(coupleId)) {
-      return res.status(403).json({ ok: false, reason: 'active_couple_required' });
-    }
-    await transaction(async (connection) => {
-      const [lockedPosts] = await connection.execute(
-        'SELECT id FROM setlog_posts WHERE id = ? LIMIT 1 FOR UPDATE',
-        [id],
-      );
-      if (!lockedPosts[0]) return;
-      const [todayRows] = await connection.execute(
-        `SELECT id, revealed_at FROM today_moments
-         WHERE setlog_post_id = ? LIMIT 1 FOR UPDATE`,
-        [id],
-      );
-      const todayMoment = todayRows[0];
-      if (todayMoment?.revealed_at) {
-        await connection.execute(
-          `UPDATE today_moments
-           SET setlog_post_id = NULL, deleted_at = NOW()
-           WHERE id = ?`,
-          [todayMoment.id],
-        );
-      } else if (todayMoment) {
-        await connection.execute('DELETE FROM today_moments WHERE id = ?', [todayMoment.id]);
-      }
-      await connection.execute(
-        `UPDATE afterglow_contributions
-         SET setlog_post_id = NULL, deleted_at = NOW()
-         WHERE setlog_post_id = ?`,
-        [id],
-      );
-      await connection.execute('DELETE FROM setlog_posts WHERE id = ?', [id]);
-    });
-    const filePath = mediaFilePath(post.media_url);
-    if (filePath) await fs.promises.rm(filePath, { force: true });
-    res.json({ ok: true });
-  } catch (err) {
-    console.error('[API] /setlog DELETE error:', err);
-    res.status(500).json({ ok: false, reason: 'internal_error' });
-  }
-});
-
-// ============================================
-// 1.1 Today Moment / Today Loop
-// ============================================
-
-router.get('/retention/today', async (req, res) => {
-  try {
-    const userId = req.auth.userId;
-    const coupleId = await getCoupleIdForUser(userId);
-    if (!coupleId) {
-      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
-    }
-    const date = businessDate();
-    const result = await query(
-      `SELECT tm.user_id, tm.revealed_at, tm.deleted_at,
-              p.id, p.media_type, p.media_url, p.caption, p.tags, p.taken_at, p.captured_at,
-              p.map_pin_id, mp.place_name AS linked_place_name,
-              COALESCE(u.Nickname, u.UserName) AS UserName
-       FROM today_moments tm
-       LEFT JOIN setlog_posts p ON p.id = tm.setlog_post_id
-       LEFT JOIN map_pins mp ON mp.id = p.map_pin_id
-       LEFT JOIN Users u ON u.UserId = tm.user_id
-       WHERE tm.couple_id = ? AND tm.business_date = ?`,
-      [coupleId, date],
-    );
-    const mine = result.rows.find((row) => Number(row.user_id) === userId) ?? null;
-    const partner = result.rows.find((row) => Number(row.user_id) !== userId) ?? null;
-    const hasMine = Boolean(mine);
-    const hasPartner = Boolean(partner);
-    const revealedAt = mine?.revealed_at ?? partner?.revealed_at ?? null;
-    const viewResult = await query(
-      `SELECT viewed_at FROM today_loop_views
-       WHERE couple_id = ? AND user_id = ? AND business_date = ? LIMIT 1`,
-      [coupleId, userId, date],
-    );
-    const viewedAt = viewResult.rows[0]?.viewed_at ?? null;
-    const canViewPartner = hasPartner && canViewTodayMoment({
-      isAuthor: false,
-      revealed: Boolean(revealedAt),
-      viewerHasMoment: hasMine,
-    });
-    res.json({
-      ok: true,
-      date,
-      status: todayMomentStatus({ hasMine, hasPartner, viewed: Boolean(viewedAt) }),
-      hasPartnerMoment: hasPartner,
-      revealedAt: revealedAt,
-      viewedAt,
-      myMoment: serializeTodayMomentRow(mine),
-      partnerMoment: canViewPartner ? serializeTodayMomentRow(partner) : null,
-    });
-  } catch (err) {
-    console.error('[API] /retention/today GET error:', err);
-    res.status(500).json({ ok: false, reason: 'internal_error' });
-  }
-});
-
-router.post('/retention/today/view', async (req, res) => {
-  try {
-    const userId = req.auth.userId;
-    const coupleId = await getCoupleIdForUser(userId);
-    if (!coupleId) {
-      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
-    }
-    const date = businessDate();
-    const result = await transaction(async (connection) => {
-      const [moments] = await connection.execute(
-        `SELECT COUNT(*) AS count, MIN(revealed_at) AS revealed_at
-         FROM today_moments
-         WHERE couple_id = ? AND business_date = ? AND revealed_at IS NOT NULL`,
-        [coupleId, date],
-      );
-      if (Number(moments[0]?.count) < 2 || !moments[0]?.revealed_at) {
-        throw new TodayMomentRequestError(409, 'today_loop_not_revealed');
-      }
-      await connection.execute(
-        `INSERT INTO today_loop_views (couple_id, user_id, business_date, viewed_at)
-         VALUES (?, ?, ?, NOW())
-         ON DUPLICATE KEY UPDATE viewed_at = LEAST(viewed_at, VALUES(viewed_at))`,
-        [coupleId, userId, date],
-      );
-      const [views] = await connection.execute(
-        `SELECT viewed_at FROM today_loop_views
-         WHERE couple_id = ? AND user_id = ? AND business_date = ? LIMIT 1`,
-        [coupleId, userId, date],
-      );
-      return views[0]?.viewed_at;
-    });
-    res.json({ ok: true, date, viewedAt: result });
-  } catch (err) {
-    if (sendTodayMomentError(res, err)) return;
-    console.error('[API] /retention/today/view POST error:', err);
-    res.status(500).json({ ok: false, reason: 'internal_error' });
-  }
-});
-
-router.get('/retention/beta/summary', async (req, res) => {
-  try {
-    const userId = req.auth.userId;
-    const coupleId = await getCoupleIdForUser(userId);
-    if (!coupleId) {
-      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
-    }
-    const requestedDays = Number(req.query.days ?? 7);
-    const days = Number.isFinite(requestedDays)
-      ? Math.min(Math.max(Math.trunc(requestedDays), 1), 30)
-      : 7;
-    const endDate = businessDate();
-    const startDate = shiftDate(endDate, -(days - 1));
-    const result = await query(
-      `SELECT
-         COUNT(DISTINCT CASE WHEN daily.contribution_count >= 2 THEN daily.business_date END) AS loop_days,
-         COUNT(tm.id) AS moments_total,
-         COALESCE(SUM(CASE
-           WHEN v.viewed_at >= tm.selected_at
-             AND v.viewed_at <= DATE_ADD(tm.selected_at, INTERVAL 24 HOUR)
-           THEN 1 ELSE 0 END), 0) AS viewed_within_24_hours
-       FROM today_moments tm
-       JOIN Couples c ON c.CoupleId = tm.couple_id AND c.Status = 'active'
-       JOIN (
-         SELECT couple_id, business_date, COUNT(*) AS contribution_count
-         FROM today_moments
-         WHERE revealed_at IS NOT NULL
-         GROUP BY couple_id, business_date
-       ) daily ON daily.couple_id = tm.couple_id AND daily.business_date = tm.business_date
-       LEFT JOIN today_loop_views v
-         ON v.couple_id = tm.couple_id
-        AND v.business_date = tm.business_date
-        AND v.user_id = CASE WHEN tm.user_id = c.User1Id THEN c.User2Id ELSE c.User1Id END
-       WHERE tm.couple_id = ? AND tm.business_date BETWEEN ? AND ?`,
-      [coupleId, startDate, endDate],
-    );
-    const row = result.rows[0] ?? {};
-    const momentsTotal = Number(row.moments_total ?? 0);
-    const momentsViewedWithin24Hours = Number(row.viewed_within_24_hours ?? 0);
-    res.json({
-      ok: true,
-      days,
-      startDate,
-      endDate,
-      loopDays: Number(row.loop_days ?? 0),
-      momentsTotal,
-      momentsViewedWithin24Hours,
-      viewRateWithin24Hours: momentsTotal === 0
-        ? 0
-        : momentsViewedWithin24Hours / momentsTotal,
-    });
-  } catch (err) {
-    console.error('[API] /retention/beta/summary GET error:', err);
-    res.status(500).json({ ok: false, reason: 'internal_error' });
-  }
-});
-
-router.put('/retention/today/moment', async (req, res) => {
-  try {
-    const postId = Number(req.body.post_id);
-    if (!Number.isInteger(postId) || postId <= 0) {
-      return res.status(400).json({ ok: false, reason: 'invalid_post_id' });
-    }
-    const userId = req.auth.userId;
-    const coupleId = await getCoupleIdForUser(userId);
-    if (!coupleId) {
-      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
-    }
-    const date = businessDate();
-    await transaction((connection) => selectTodayMoment(connection, {
-      coupleId,
-      userId,
-      postId,
-      date,
-    }));
-    res.json({ ok: true, date, postId });
-  } catch (err) {
-    if (sendTodayMomentError(res, err)) return;
-    console.error('[API] /retention/today/moment PUT error:', err);
-    res.status(500).json({ ok: false, reason: 'internal_error' });
-  }
-});
-
-router.delete('/retention/today/moment', async (req, res) => {
-  try {
-    const userId = req.auth.userId;
-    const coupleId = await getCoupleIdForUser(userId);
-    if (!coupleId) {
-      return res.status(409).json({ ok: false, reason: 'active_couple_required' });
-    }
-    const date = businessDate();
-    const removed = await transaction(async (connection) => {
-      const [rows] = await connection.execute(
-        `SELECT id, revealed_at FROM today_moments
-         WHERE couple_id = ? AND user_id = ? AND business_date = ?
-         LIMIT 1 FOR UPDATE`,
-        [coupleId, userId, date],
-      );
-      if (!rows[0]) return false;
-      if (!canReplaceTodayMoment(rows[0].revealed_at)) {
-        throw new TodayMomentRequestError(409, 'today_loop_locked');
-      }
-      await connection.execute('DELETE FROM today_moments WHERE id = ?', [rows[0].id]);
-      return true;
-    });
-    res.json({ ok: true, removed });
-  } catch (err) {
-    if (sendTodayMomentError(res, err)) return;
-    console.error('[API] /retention/today/moment DELETE error:', err);
-    res.status(500).json({ ok: false, reason: 'internal_error' });
-  }
-});
-
-// ============================================
 // 2. Map API (데이트 장소 핀)
 // ============================================
 
 router.post('/retention/afterglow/:pinId/visit', async (req, res) => {
   try {
-    await ensureTables();
     const pinId = Number(req.params.pinId);
     if (!Number.isInteger(pinId) || pinId <= 0) {
       return res.status(404).json({ ok: false, reason: 'afterglow_pin_not_found' });
@@ -5079,7 +4002,6 @@ router.get('/places/search', async (req, res) => {
 // 지도 핀 목록 조회 (couple_id 스코핑)
 router.get('/map', async (req, res) => {
   try {
-    await ensureTables();
     const coupleId = await getCoupleIdForUser(req.auth.userId);
     if (!coupleId) {
       return res.status(409).json({ ok: false, reason: 'active_couple_required' });
@@ -5104,7 +4026,6 @@ router.get('/map', async (req, res) => {
 // 지도 핀 생성 (lat/lng 선택사항, couple_id 자동 설정)
 router.post('/map', upload.single('media'), async (req, res) => {
   try {
-    await ensureTables();
     const { place_name, latitude, longitude, category, rating, visit_date, memo, status, emotion_tags } = req.body;
 
     if (!place_name) {
@@ -5176,7 +4097,6 @@ const parseMapEmotionTags = (value) => {
 // 지도 핀 업데이트 (활성 커플 공동 편집)
 router.patch('/map/:id', upload.single('media'), async (req, res) => {
   try {
-    await ensureTables();
     const { id } = req.params;
     const editorUserId = getAuthenticatedUserId(req);
     if (!editorUserId) {
@@ -5267,7 +4187,6 @@ router.patch('/map/:id', upload.single('media'), async (req, res) => {
 // 지도 핀 삭제 (작성자만 가능)
 router.delete('/map/:id', async (req, res) => {
   try {
-    await ensureTables();
     const { id } = req.params;
     const editorUserId = getAuthenticatedUserId(req);
     if (!editorUserId) {
@@ -5323,7 +4242,6 @@ router.delete('/map/:id', async (req, res) => {
 
 router.get('/map/:id/reviews', async (req, res) => {
   try {
-    await ensureTables();
     const pinId = Number(req.params.id);
     const coupleId = await getCoupleIdForUser(req.auth.userId);
     if (!coupleId) return res.status(409).json({ ok: false, reason: 'active_couple_required' });
@@ -5350,7 +4268,6 @@ router.get('/map/:id/reviews', async (req, res) => {
 
 router.post('/map/:id/reviews', upload.single('media'), async (req, res) => {
   try {
-    await ensureTables();
     const pinId = Number(req.params.id);
     const uid = req.auth.userId;
     const coupleId = await getCoupleIdForUser(uid);
@@ -5385,7 +4302,6 @@ router.post('/map/:id/reviews', upload.single('media'), async (req, res) => {
 
 router.delete('/map/:id/reviews/:reviewId', async (req, res) => {
   try {
-    await ensureTables();
     const pinId = Number(req.params.id);
     const reviewId = Number(req.params.reviewId);
     const uid = req.auth.userId;
@@ -5835,8 +4751,6 @@ const updateStreakForDate = async (couple, date) => {
 
 router.get('/today', async (req, res) => {
   try {
-    await ensureTables();
-    await ensureRetentionTables();
 
     const userId = Number(req.query.user_id);
     if (!userId) {
@@ -5960,7 +4874,6 @@ router.get('/today', async (req, res) => {
 
 router.post('/missions/:instanceId/complete', async (req, res) => {
   try {
-    await ensureRetentionTables();
     const instanceId = Number(req.params.instanceId);
     const userId = Number(req.body.user_id);
     if (!instanceId || !userId) {
@@ -6040,7 +4953,6 @@ router.post('/missions/:instanceId/complete', async (req, res) => {
 // 오늘의 질문 조회 (질문 없으면 자동 생성)
 router.get('/qa/today', async (req, res) => {
   try {
-    await ensureTables();
     const question = await getOrCreateTodayQuestion();
 
     if (!question) return res.json({ ok: true, question: null, answers: [] });
@@ -6090,7 +5002,6 @@ router.get('/qa/today', async (req, res) => {
 // 답변 제출
 router.post('/qa/answer', async (req, res) => {
   try {
-    await ensureRetentionTables();
     const { question_id, user_id, answer } = req.body;
 
     if (!question_id || !user_id || !answer) {
@@ -6156,8 +5067,6 @@ router.post('/qa/answer', async (req, res) => {
 
 router.get('/timeline', async (req, res) => {
   try {
-    await ensureUserColumns();
-    await ensureRetentionTables();
     const userId = Number(req.query.user_id);
     const limit = Math.min(Number(req.query.limit) || 30, 100);
     if (!userId) {
@@ -6188,7 +5097,6 @@ router.get('/timeline', async (req, res) => {
 
 router.post('/push/token', async (req, res) => {
   try {
-    await ensureRetentionTables();
     const { user_id, platform, token, device_label } = req.body;
     if (!user_id || !platform || !token) {
       return res.status(400).json({ ok: false, reason: 'missing_fields' });
@@ -6218,7 +5126,6 @@ router.post('/push/token', async (req, res) => {
 
 router.delete('/push/token', async (req, res) => {
   try {
-    await ensureRetentionTables();
     const { user_id, token } = req.body;
     if (!user_id || !token) {
       return res.status(400).json({ ok: false, reason: 'missing_fields' });
@@ -6239,8 +5146,6 @@ router.delete('/push/token', async (req, res) => {
 
 router.get('/wish-tickets', async (req, res) => {
   try {
-    await ensureUserColumns();
-    await ensureRetentionTables();
     const userId = Number(req.query.user_id);
     if (!userId) {
       return res.status(400).json({ ok: false, reason: 'missing_user_id' });
@@ -6267,7 +5172,6 @@ router.get('/wish-tickets', async (req, res) => {
 
 router.post('/wish-tickets', async (req, res) => {
   try {
-    await ensureRetentionTables();
     const { issuer_user_id, owner_user_id, owner_user_code, title, description, source_type, source_id } = req.body;
     if (!issuer_user_id || (!owner_user_id && !owner_user_code) || !title) {
       return res.status(400).json({ ok: false, reason: 'missing_fields' });
@@ -6332,7 +5236,6 @@ router.post('/wish-tickets', async (req, res) => {
 
 router.patch('/wish-tickets/:id/use', async (req, res) => {
   try {
-    await ensureRetentionTables();
     const id = Number(req.params.id);
     const userId = Number(req.body.user_id);
     if (!id || !userId) {
@@ -6368,7 +5271,6 @@ router.patch('/wish-tickets/:id/use', async (req, res) => {
 
 router.patch('/wish-tickets/:id/cancel', async (req, res) => {
   try {
-    await ensureRetentionTables();
     const id = Number(req.params.id);
     const userId = Number(req.body.user_id);
     if (!id || !userId) {
@@ -6395,7 +5297,6 @@ router.patch('/wish-tickets/:id/cancel', async (req, res) => {
 
 router.get('/reports/monthly', async (req, res) => {
   try {
-    await ensureRetentionTables();
     const userId = Number(req.query.user_id);
     const month = String(req.query.month || businessDate().slice(0, 7));
     if (!userId || !/^\d{4}-\d{2}$/.test(month)) {
@@ -6446,7 +5347,6 @@ router.get('/reports/monthly', async (req, res) => {
 
 router.get('/balance/today', async (req, res) => {
   try {
-    await ensureRetentionTables();
     const userId = Number(req.query.user_id);
     if (!userId) {
       return res.status(400).json({ ok: false, reason: 'missing_user_id' });
@@ -6499,7 +5399,6 @@ router.get('/balance/today', async (req, res) => {
 
 router.post('/balance/answer', async (req, res) => {
   try {
-    await ensureRetentionTables();
     const userId = Number(req.body.user_id);
     const questionId = Number(req.body.question_id);
     const choice = String(req.body.choice || '').toUpperCase();
@@ -6548,7 +5447,6 @@ router.post('/balance/answer', async (req, res) => {
 // 활성 챌린지 목록
 router.get('/challenges', async (req, res) => {
   try {
-    await ensureTables();
     const result = await query("SELECT * FROM challenges WHERE status = 'active' ORDER BY created_at DESC");
     res.json({ ok: true, challenges: result.rows });
   } catch (err) {
@@ -6560,7 +5458,6 @@ router.get('/challenges', async (req, res) => {
 // 챌린지 생성
 router.post('/challenges', async (req, res) => {
   try {
-    await ensureTables();
     const { title, description, target_value, unit, owner_id, start_date, target_date } = req.body;
 
     if (!title || !target_value || !owner_id || !start_date) {
@@ -6632,7 +5529,6 @@ router.post('/challenges/:id/log', async (req, res) => {
 // 트랙 목록 조회
 router.get('/jukebox', async (req, res) => {
   try {
-    await ensureTables();
     const result = await query('SELECT * FROM jukebox_tracks ORDER BY uploaded_at DESC');
     res.json({ ok: true, tracks: result.rows });
   } catch (err) {
@@ -6644,7 +5540,6 @@ router.get('/jukebox', async (req, res) => {
 // 트랙 업로드
 router.post('/jukebox', upload.single('audio'), async (req, res) => {
   try {
-    await ensureTables();
     const { title, artist, duration_sec, uploaded_by } = req.body;
     const file_url = req.file ? `/uploads/${req.file.filename}` : null;
 
@@ -6668,19 +5563,8 @@ router.post('/jukebox', upload.single('audio'), async (req, res) => {
 // 6. Couple Info API (D-Day / 기념일)
 // ============================================
 
-let _couplesColumnReady = false;
-const ensureCouplesStartDate = async () => {
-  if (_couplesColumnReady) return;
-  try {
-    await query('ALTER TABLE Couples ADD COLUMN IF NOT EXISTS StartDate DATE NULL');
-  } catch {}
-  _couplesColumnReady = true;
-};
-
 router.get('/couple/info', async (req, res) => {
   try {
-    await ensureUserColumns();
-    await ensureCouplesStartDate();
     const uid = req.auth.userId;
     const result = await query(
       `SELECT c.CoupleId, c.StartDate,
@@ -6721,7 +5605,6 @@ router.get('/couple/info', async (req, res) => {
 
 router.patch('/couple/info', async (req, res) => {
   try {
-    await ensureCouplesStartDate();
     const { start_date } = req.body;
     const userId = req.auth.userId;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(start_date ?? ''))) {
@@ -6761,7 +5644,6 @@ router.patch('/couple/info', async (req, res) => {
 
 router.get('/capsules', async (req, res) => {
   try {
-    await ensureTables();
     const today = new Date().toISOString().split('T')[0];
     const result = await query(
       `SELECT *, (open_date <= ?) AS is_openable FROM time_capsules ORDER BY open_date ASC`,
@@ -6776,7 +5658,6 @@ router.get('/capsules', async (req, res) => {
 
 router.post('/capsules', async (req, res) => {
   try {
-    await ensureTables();
     const { title, message, created_by, open_date } = req.body;
     if (!title || !created_by || !open_date) {
       return res.status(400).json({ ok: false, reason: 'missing_fields' });
@@ -6798,7 +5679,6 @@ router.post('/capsules', async (req, res) => {
 
 router.patch('/capsules/:id/open', async (req, res) => {
   try {
-    await ensureTables();
     const { id } = req.params;
     const today = new Date().toISOString().split('T')[0];
     const check = await query(
@@ -6856,7 +5736,6 @@ const getUserPremium = async (userId) => {
 // 폴더 목록 조회
 router.get('/album/folders', async (req, res) => {
   try {
-    await ensureTables();
     const { user_id } = req.query;
     if (!user_id) return res.status(400).json({ ok: false, reason: 'missing_fields' });
 
@@ -6886,7 +5765,6 @@ router.get('/album/folders', async (req, res) => {
 // 폴더 생성
 router.post('/album/folders', async (req, res) => {
   try {
-    await ensureTables();
     const { user_id, title, description } = req.body;
     if (!user_id || !title) return res.status(400).json({ ok: false, reason: 'missing_fields' });
 
@@ -6959,7 +5837,6 @@ router.patch('/album/folders/:id/set-cover', async (req, res) => {
 // 폴더 삭제
 router.delete('/album/folders/:id', async (req, res) => {
   try {
-    await ensureTables();
     const { id } = req.params;
     await query('DELETE FROM album_photos WHERE folder_id = ?', [Number(id)]);
     await query('DELETE FROM album_folders WHERE id = ?', [Number(id)]);
@@ -6973,7 +5850,6 @@ router.delete('/album/folders/:id', async (req, res) => {
 // 폴더 전체 사진 일괄 다운로드 (ZIP)
 router.get('/album/folders/:id/download-all', async (req, res) => {
   try {
-    await ensureTables();
     const { id } = req.params;
     
     // 폴더 이름 확인
@@ -7019,7 +5895,6 @@ router.get('/album/folders/:id/download-all', async (req, res) => {
 // 폴더별 사진 조회
 router.get('/album/photos', async (req, res) => {
   try {
-    await ensureTables();
     const { folder_id } = req.query;
     if (!folder_id) return res.status(400).json({ ok: false, reason: 'missing_fields' });
 
@@ -7037,7 +5912,6 @@ router.get('/album/photos', async (req, res) => {
 // 폴더별 사진 등록
 router.post('/album/photos', upload.single('media'), async (req, res) => {
   try {
-    await ensureTables();
     const { folder_id, user_id, user_code, caption } = req.body;
     const mediaUrl = req.file ? `/uploads/${req.file.filename}` : null;
 
@@ -7085,7 +5959,6 @@ router.post('/album/photos', upload.single('media'), async (req, res) => {
 // 사진 삭제
 router.delete('/album/photos/:id', async (req, res) => {
   try {
-    await ensureTables();
     const { id } = req.params;
     await query('DELETE FROM album_photos WHERE id = ?', [Number(id)]);
     res.json({ ok: true });
@@ -7102,7 +5975,6 @@ router.delete('/album/photos/:id', async (req, res) => {
 // 대피소 고민 목록 조회
 router.get('/reflections', async (req, res) => {
   try {
-    await ensureTables();
     const { user_id, category } = req.query;
     if (!user_id) return res.status(400).json({ ok: false, reason: 'missing_fields' });
 
@@ -7125,7 +5997,6 @@ router.get('/reflections', async (req, res) => {
 // 고민 등록
 router.post('/reflections', async (req, res) => {
   try {
-    await ensureTables();
     const { user_id, content, mood_tag, category } = req.body;
     if (!user_id || !content) return res.status(400).json({ ok: false, reason: 'missing_fields' });
 
@@ -7143,7 +6014,6 @@ router.post('/reflections', async (req, res) => {
 // 고민 수정
 router.patch('/reflections/:id', async (req, res) => {
   try {
-    await ensureTables();
     const { id } = req.params;
     const { content, mood_tag, category } = req.body;
     if (!content) return res.status(400).json({ ok: false, reason: 'missing_fields' });
@@ -7162,7 +6032,6 @@ router.patch('/reflections/:id', async (req, res) => {
 // 고민 삭제
 router.delete('/reflections/:id', async (req, res) => {
   try {
-    await ensureTables();
     const { id } = req.params;
     await query('DELETE FROM private_reflections WHERE id = ?', [Number(id)]);
     res.json({ ok: true });

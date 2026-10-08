@@ -1,11 +1,24 @@
 import mysql from 'mysql2/promise';
 import { config } from './config.js';
 
-// MariaDB 연결 풀
-const pool = mysql.createPool(config.DATABASE_URL);
+// MariaDB 연결 풀. 테스트 하네스는 같은 프로세스에서 disposable DB를
+// 순차적으로 교체하므로, 닫힌 풀도 현재 설정으로 다시 만들 수 있어야 한다.
+let pool = mysql.createPool(config.DATABASE_URL);
+let poolUrl = config.DATABASE_URL;
+
+const getPool = () => {
+  const nextUrl = config.DATABASE_URL;
+  if (pool && poolUrl === nextUrl) return pool;
+
+  const previousPool = pool;
+  pool = mysql.createPool(nextUrl);
+  poolUrl = nextUrl;
+  if (previousPool) void previousPool.end().catch(() => {});
+  return pool;
+};
 
 // 연결 테스트
-pool.getConnection()
+getPool().getConnection()
   .then(conn => {
     console.log('[DB] MariaDB connected');
     conn.release();
@@ -24,7 +37,7 @@ export async function query(text, params = []) {
   try {
     // MariaDB/MySQL은 $1 대신 ?를 사용하므로 호환성을 위해 변환하거나 직접 ? 사용 권장
     // 여기서는 신규 코드이므로 ?를 사용하도록 안내하고 래퍼 제공
-    const [rows] = await pool.execute(text, params);
+    const [rows] = await getPool().execute(text, params);
     const duration = Date.now() - start;
     console.log('[DB] Query executed', { text: text.substring(0, 50), duration, rowCount: rows.length });
     return { rows };
@@ -39,7 +52,7 @@ export async function query(text, params = []) {
  * @param {Function} callback - 트랜잭션 콜백 (connection) => Promise
  */
 export async function transaction(callback) {
-  const connection = await pool.getConnection();
+  const connection = await getPool().getConnection();
   try {
     await connection.beginTransaction();
     const result = await callback(connection);
@@ -57,7 +70,9 @@ export async function transaction(callback) {
  * 연결 종료
  */
 export async function close() {
-  await pool.end();
+  const activePool = pool;
+  pool = null;
+  if (activePool) await activePool.end();
   console.log('[DB] MariaDB connection closed');
 }
 

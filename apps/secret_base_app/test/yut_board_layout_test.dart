@@ -42,6 +42,15 @@ Future<void> _pumpBoard(WidgetTester tester, Size size) async {
       ),
     ),
   );
+  final boardArt = tester.widget<Image>(
+    find.byKey(const ValueKey('yut_board_art')),
+  );
+  await tester.runAsync(
+    () => precacheImage(
+      boardArt.image,
+      tester.element(find.byKey(const ValueKey('yut_board_art'))),
+    ),
+  );
   await tester.pumpAndSettle();
 }
 

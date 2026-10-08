@@ -45,7 +45,7 @@ test('Secret Map is Couple-scoped, jointly editable, and creator-deletable', { s
       method: 'POST',
       body: {
         place_name: 'Our place', latitude: 37.5, longitude: 127,
-        created_by: carol.userCode, user_id: 999, status: 'wishlist',
+        created_by: carol.userCode, status: 'wishlist',
       },
     });
     const created = await createdResponse.json();
@@ -57,7 +57,7 @@ test('Secret Map is Couple-scoped, jointly editable, and creator-deletable', { s
     });
     assert.equal(partnerEdit.status, 200);
 
-    const otherFeed = await server.request('/map?user_id=1', { token: carol.token });
+    const otherFeed = await server.request('/map', { token: carol.token });
     assert.deepEqual((await otherFeed.json()).pins, []);
     const otherEdit = await server.request(`/map/${created.id}`, {
       token: carol.token, method: 'PATCH', body: { memo: 'tampered' },

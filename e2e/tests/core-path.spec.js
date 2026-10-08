@@ -26,13 +26,18 @@ test('test account can read the home and MomentLoop core paths', async ({ page }
   await expect(passwordInput).toHaveValue(password);
   await page.getByRole('button', { name: '로그인', exact: true }).first().click();
 
-  await expect(page.getByRole('tab', { name: '홈', exact: true })).toBeVisible({ timeout: 30_000 });
+  // The first request can include a cold MariaDB connection over the local
+  // Tailscale/SSH tunnel. Keep this explicit readiness wait separate from the
+  // shorter interaction waits so a slow cold start is not mistaken for an
+  // account-state failure.
+  const shellReadyTimeout = 60_000;
+  await expect(page.getByRole('tab', { name: '홈', exact: true })).toBeVisible({ timeout: shellReadyTimeout });
   await expect(page.getByRole('tab', { name: 'MomentLoop', exact: true })).toBeVisible();
 
   await page.getByRole('tab', { name: 'MomentLoop', exact: true }).click();
   await expect(page.getByRole('tab', { name: 'MomentLoop', exact: true })).toHaveAttribute('aria-selected', 'true', { timeout: 15_000 });
 
   await page.reload();
-  await expect(page.getByRole('tab', { name: '홈', exact: true })).toHaveAttribute('aria-selected', 'true', { timeout: 30_000 });
+  await expect(page.getByRole('tab', { name: '홈', exact: true })).toHaveAttribute('aria-selected', 'true', { timeout: shellReadyTimeout });
   await expect(page.getByRole('tab', { name: 'MomentLoop', exact: true })).toBeVisible();
 });
