@@ -1,15 +1,17 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../core/auth_service.dart';
+import '../../core/http/api_client.dart';
 import '../../core/main_design.dart';
-import '../../core/today_api.dart';
+import '../../features/moment_loop/application/moment_loop_controller.dart';
+import '../../features/moment_loop/data/moment_loop_repository.dart';
+import '../../features/moment_loop/domain/moment.dart';
+import '../../features/moment_loop/presentation/moment_loop_state_view.dart';
 import 'map_screen.dart';
 
 // ── Screen ────────────────────────────────────────────────────────────────────
@@ -18,8 +20,15 @@ class MomentLoopScreen extends StatefulWidget {
   final http.Client? client;
   final String? baseUrl;
   final int? userId;
+  final MomentLoopController? controller;
 
-  const MomentLoopScreen({super.key, this.client, this.baseUrl, this.userId});
+  const MomentLoopScreen({
+    super.key,
+    this.client,
+    this.baseUrl,
+    this.userId,
+    this.controller,
+  });
 
   @override
   State<MomentLoopScreen> createState() => _MomentLoopScreenState();
@@ -27,13 +36,26 @@ class MomentLoopScreen extends StatefulWidget {
 
 class _MomentLoopScreenState extends State<MomentLoopScreen> {
   final _auth = AuthService();
-  late final http.Client _client;
-  late final bool _ownsClient;
-  List<Map<String, dynamic>> _posts = [];
-  bool _loading = true;
-  String? _error;
+  late final ApiClient _apiClient;
+  late final MomentLoopController _controller;
+  late final bool _ownsController;
   late DateTime _weekStart;
   final Set<String> _seenSessionIds = {};
+
+  List<Map<String, dynamic>> get _posts => _controller.state.moments
+      .map((moment) => moment.toLegacyMap())
+      .toList(growable: false);
+
+  String? get _error {
+    final error = _controller.state.error;
+    if (error == null) return null;
+    final code = error is MomentLoopException ? error.code : '$error';
+    return switch (code) {
+      'active_couple_required' => '커플 연결 후 MomentLoop를 사용할 수 있어요',
+      'unauthorized' => '로그인 정보가 없어요',
+      _ => '기록을 불러오지 못했어요',
+    };
+  }
 
   int? get _userId {
     if (widget.userId != null) return widget.userId;
@@ -45,17 +67,39 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
   @override
   void initState() {
     super.initState();
-    _ownsClient = widget.client == null;
-    _client = widget.client ?? http.Client();
     final now = DateTime.now();
     _weekStart = _mondayOf(now);
+    if (widget.controller != null) {
+      _controller = widget.controller!;
+      _ownsController = false;
+    } else {
+      _apiClient = ApiClient(
+        baseUrl: widget.baseUrl ?? _auth.baseUrl,
+        tokenProvider: () => _auth.token,
+        client: widget.client,
+      );
+      _controller = MomentLoopController(
+        repository: HttpMomentLoopRepository(apiClient: _apiClient),
+        currentUserId: () => _userId,
+      );
+      _ownsController = true;
+    }
+    _controller.addListener(_onControllerChanged);
     _loadPosts(initial: true);
   }
 
   @override
   void dispose() {
-    if (_ownsClient) _client.close();
+    _controller.removeListener(_onControllerChanged);
+    if (_ownsController) {
+      _controller.dispose();
+      _apiClient.close();
+    }
     super.dispose();
+  }
+
+  void _onControllerChanged() {
+    if (mounted) setState(() {});
   }
 
   static DateTime _mondayOf(DateTime d) {
@@ -110,68 +154,18 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     return map;
   }
 
-  Future<void> _loadPosts({bool initial = false}) async {
-    final userId = _userId;
-    if (userId == null) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _error = '로그인 정보가 없어요';
-        });
-      }
-      return;
-    }
-    if (mounted) {
-      setState(() {
-        if (initial) _loading = true;
-        _error = null;
-      });
-    }
-
-    try {
-      final uri = Uri.parse(
-        '${widget.baseUrl ?? _auth.baseUrl}/api/setlog',
-      ).replace(queryParameters: {'user_id': '$userId'});
-      final response = await _client.get(
-        uri,
-        headers: {'Authorization': 'Bearer ${_auth.token}'},
-      );
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode == 200 && data['ok'] == true) {
-        final posts = data['posts'];
-        if (!mounted) return;
-        setState(() {
-          _posts = posts is List
-              ? posts
-                    .map((item) => Map<String, dynamic>.from(item as Map))
-                    .toList()
-              : [];
-          _posts.sort((a, b) {
-            final da =
-                DateTime.tryParse('${a['captured_at'] ?? ''}') ?? DateTime(0);
-            final db =
-                DateTime.tryParse('${b['captured_at'] ?? ''}') ?? DateTime(0);
-            return db.compareTo(da);
-          });
-        });
-      } else {
-        if (mounted) setState(() => _error = '기록을 불러오지 못했어요');
-      }
-    } catch (_) {
-      if (mounted) setState(() => _error = '네트워크 연결을 확인해주세요');
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
+  Future<void> _loadPosts({bool initial = false}) =>
+      _controller.loadWeek(_weekStart);
 
   Future<void> _startCreatePostFlow() async {
     final created = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) => _CreateMomentPage(auth: _auth, initialMedia: const []),
+        builder: (_) =>
+            _CreateMomentPage(controller: _controller, initialMedia: const []),
       ),
     );
-    if (created == true) _loadPosts();
+    if (created == true) await _loadPosts();
   }
 
   Future<void> _editPost(Map<String, dynamic> post) async {
@@ -201,15 +195,15 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     );
     controller.dispose();
     if (caption == null || caption.isEmpty) return;
-    final response = await _client.patch(
-      Uri.parse('${_auth.baseUrl}/api/setlog/${post['id']}'),
-      headers: {
-        'Authorization': 'Bearer ${_auth.token}',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({'caption': caption}),
-    );
-    if (response.statusCode == 200) await _loadPosts();
+    try {
+      await _controller.updateCaption(int.parse('${post['id']}'), caption);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('순간을 수정하지 못했어요')));
+      }
+    }
   }
 
   Future<void> _deletePost(Map<String, dynamic> post) async {
@@ -231,11 +225,15 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
       ),
     );
     if (confirmed != true) return;
-    final response = await _client.delete(
-      Uri.parse('${_auth.baseUrl}/api/setlog/${post['id']}'),
-      headers: {'Authorization': 'Bearer ${_auth.token}'},
-    );
-    if (response.statusCode == 200) await _loadPosts();
+    try {
+      await _controller.deleteMoment(int.parse('${post['id']}'));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('순간을 삭제하지 못했어요')));
+      }
+    }
   }
 
   String _myNickname() {
@@ -388,17 +386,21 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
 
             // ── Day list ─────────────────────────────────────────────────────
             Expanded(
-              child: _loading
-                  ? const Center(
-                      child: CircularProgressIndicator(color: kMainRose),
-                    )
-                  : _error != null
-                  ? _ErrorState(message: _error!, onRetry: _loadPosts)
-                  : RefreshIndicator(
-                      color: kMainRose,
-                      onRefresh: _loadPosts,
-                      child: _buildWeekContent(),
-                    ),
+              child: MomentLoopStateView(
+                state: _controller.state,
+                loading: () => const Center(
+                  child: CircularProgressIndicator(color: kMainRose),
+                ),
+                failure: (_) => _ErrorState(
+                  message: _error ?? '기록을 불러오지 못했어요',
+                  onRetry: _loadPosts,
+                ),
+                child: RefreshIndicator(
+                  color: kMainRose,
+                  onRefresh: _loadPosts,
+                  child: _buildWeekContent(),
+                ),
+              ),
             ),
           ],
         ),
@@ -440,16 +442,11 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
                   myUserId: _userId,
                   onEdit: _editPost,
                   onDelete: _deletePost,
-                  onReactionUpdate: (sessionId, reactions) {
-                    if (!mounted) return;
-                    setState(() {
-                      for (final post in _posts) {
-                        if ('${post['session_id']}' == sessionId) {
-                          post['session_reactions'] = reactions;
-                        }
-                      }
-                    });
-                  },
+                  onReactionToggle: (sessionId, emoji) => _controller
+                      .toggleReaction(sessionId: sessionId, emoji: emoji),
+                  onDesignateToday: (postId) =>
+                      _controller.designateToday(postId),
+                  onRemoveTodayDesignation: _controller.removeTodayDesignation,
                 ),
               ),
             );
@@ -1394,8 +1391,10 @@ class _PostDetailPage extends StatefulWidget {
   final int? myUserId;
   final Future<void> Function(Map<String, dynamic>) onEdit;
   final Future<void> Function(Map<String, dynamic>) onDelete;
-  final void Function(String sessionId, List<Map<String, dynamic>> reactions)
-  onReactionUpdate;
+  final Future<List<MomentReaction>> Function(String sessionId, String emoji)
+  onReactionToggle;
+  final Future<void> Function(int postId) onDesignateToday;
+  final Future<void> Function() onRemoveTodayDesignation;
 
   const _PostDetailPage({
     required this.group,
@@ -1403,7 +1402,9 @@ class _PostDetailPage extends StatefulWidget {
     required this.myUserId,
     required this.onEdit,
     required this.onDelete,
-    required this.onReactionUpdate,
+    required this.onReactionToggle,
+    required this.onDesignateToday,
+    required this.onRemoveTodayDesignation,
   });
 
   @override
@@ -1459,25 +1460,15 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     if (_sessionId.isEmpty || _reacting) return;
     setState(() => _reacting = true);
     try {
-      final response = await http.post(
-        Uri.parse('${widget.auth.baseUrl}/api/setlog/reaction'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ${widget.auth.token}',
-        },
-        body: jsonEncode({'session_id': _sessionId, 'emoji': emoji}),
-      );
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode == 200 && data['ok'] == true) {
-        final updated = (data['reactions'] as List)
-            .map((r) => Map<String, dynamic>.from(r as Map))
-            .toList();
-        if (!mounted) return;
-        setState(() => _reactions = updated);
-        widget.onReactionUpdate(_sessionId, updated);
-      }
+      final updated = await widget.onReactionToggle(_sessionId, emoji);
+      if (!mounted) return;
+      setState(() => _reactions = updated.map((r) => r.toJson()).toList());
     } catch (_) {
-      // silent fail
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('반응을 저장하지 못했어요')));
+      }
     } finally {
       if (mounted) setState(() => _reacting = false);
     }
@@ -1488,20 +1479,18 @@ class _PostDetailPageState extends State<_PostDetailPage> {
 
   Future<void> _designateTodayMoment(Map<String, dynamic> post) async {
     final postId = int.tryParse('${post['id']}');
-    final token = widget.auth.token;
-    if (postId == null || token == null || _designatingToday) return;
+    if (postId == null || _designatingToday) return;
 
     setState(() => _designatingToday = true);
-    final api = TodayApi(baseUrl: widget.auth.baseUrl, token: token);
     try {
-      await api.designateMoment(TodayMomentSelection(postId: postId));
+      await widget.onDesignateToday(postId);
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('오늘의 순간으로 선택했어요')));
-    } on TodayApiException catch (error) {
+    } on MomentLoopException catch (error) {
       if (!mounted) return;
-      final message = switch (error.reason) {
+      final message = switch (error.code) {
         'today_loop_locked' => '오늘의 루프가 열린 뒤에는 바꿀 수 없어요',
         'today_moment_not_found' => '오늘 작성한 내 순간만 선택할 수 있어요',
         _ => '오늘의 순간으로 선택하지 못했어요',
@@ -1515,27 +1504,22 @@ class _PostDetailPageState extends State<_PostDetailPage> {
         context,
       ).showSnackBar(const SnackBar(content: Text('네트워크 연결을 확인해주세요')));
     } finally {
-      api.close();
       if (mounted) setState(() => _designatingToday = false);
     }
   }
 
   Future<void> _removeTodayDesignation() async {
-    final token = widget.auth.token;
-    if (token == null || _designatingToday) return;
+    if (_designatingToday) return;
     setState(() => _designatingToday = true);
     try {
-      await TodayApi(
-        baseUrl: widget.auth.baseUrl,
-        token: token,
-      ).removeDesignation();
+      await widget.onRemoveTodayDesignation();
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('오늘의 순간 선택을 해제했어요')));
-    } on TodayApiException catch (error) {
+    } on MomentLoopException catch (error) {
       if (!mounted) return;
-      final message = error.reason == 'today_loop_locked'
+      final message = error.code == 'today_loop_locked'
           ? '오늘의 루프가 열린 뒤에는 해제할 수 없어요'
           : '오늘의 순간 선택을 해제하지 못했어요';
       ScaffoldMessenger.of(
@@ -1947,9 +1931,12 @@ class _MapLocationPickerResult {
 }
 
 class _CreateMomentPage extends StatefulWidget {
-  final AuthService auth;
+  final MomentLoopController controller;
   final List<_PickedMomentMedia> initialMedia;
-  const _CreateMomentPage({required this.auth, required this.initialMedia});
+  const _CreateMomentPage({
+    required this.controller,
+    required this.initialMedia,
+  });
 
   @override
   State<_CreateMomentPage> createState() => _CreateMomentPageState();
@@ -1967,12 +1954,6 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
   bool _useTodayPrompt = false;
 
   static const _maxMedia = 10;
-
-  int? get _userId {
-    final value = widget.auth.user?['UserId'] ?? widget.auth.user?['id'];
-    if (value is int) return value;
-    return int.tryParse('$value');
-  }
 
   @override
   void initState() {
@@ -2027,29 +2008,22 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
   }
 
   Future<void> _loadMapPins() async {
-    final userId = _userId;
-    if (userId == null || _loadingLocations) return;
+    if (_loadingLocations) return;
     setState(() => _loadingLocations = true);
     try {
-      final uri = Uri.parse(
-        '${widget.auth.baseUrl}/api/map',
-      ).replace(queryParameters: {'user_id': '$userId'});
-      final response = await http.get(
-        uri,
-        headers: {'Authorization': 'Bearer ${widget.auth.token}'},
-      );
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode == 200 && data['ok'] == true) {
-        final pins = data['pins'];
-        if (!mounted) return;
-        setState(() {
-          _mapPins = pins is List
-              ? pins
-                    .map((pin) => Map<String, dynamic>.from(pin as Map))
-                    .toList()
-              : [];
-        });
-      }
+      final pins = await widget.controller.loadMapPins();
+      if (!mounted) return;
+      setState(() {
+        _mapPins = pins
+            .map(
+              (pin) => {
+                'id': pin.id,
+                'place_name': pin.name,
+                'category': pin.category,
+              },
+            )
+            .toList();
+      });
     } catch (_) {
       _toast('비밀지도 위치를 불러오지 못했어요');
     } finally {
@@ -2094,39 +2068,18 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
     required DateTime now,
   }) async {
     if (!location.isNew) return location.id;
-    final userId = _userId;
-    final userCode =
-        widget.auth.user?['UserCode'] ?? widget.auth.user?['userCode'];
-    if (userId == null || userCode == null) return null;
-    final response = await http.post(
-      Uri.parse('${widget.auth.baseUrl}/api/map'),
-      headers: {
-        'Content-Type': 'application/json',
-        if (widget.auth.token != null)
-          'Authorization': 'Bearer ${widget.auth.token}',
-      },
-      body: jsonEncode({
-        'place_name': location.name,
-        'category': location.category ?? 'MomentLoop',
-        'rating': null,
-        'visit_date': _dateOnly(now),
-        'memo': caption,
-        'created_by': userCode,
-        'user_id': userId,
-        'latitude': 0,
-        'longitude': 0,
-        'status': 'visited',
-        'emotion_tags': <String>[],
-      }),
+    return widget.controller.createMapPin(
+      MomentMapPinDraft(
+        name: location.name,
+        category: location.category,
+        visitDate: now,
+        memo: caption,
+      ),
     );
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    if (response.statusCode != 200 || data['ok'] != true) return null;
-    return int.tryParse('${data['id']}');
   }
 
   Future<void> _saveMoment() async {
-    final userId = _userId;
-    if (_saving || userId == null) return;
+    if (_saving) return;
     final caption = _captionCtrl.text.trim();
     if (caption.isEmpty) {
       _toast('오늘 남기고 싶은 장면을 적어주세요');
@@ -2151,43 +2104,25 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
         return;
       }
 
-      final mediaItems = _pickedMedia.isEmpty
-          ? <_PickedMomentMedia?>[null]
-          : _pickedMedia.map<_PickedMomentMedia?>((m) => m).toList();
-
-      for (var index = 0; index < mediaItems.length; index++) {
-        final media = mediaItems[index];
-        final request = http.MultipartRequest(
-          'POST',
-          Uri.parse('${widget.auth.baseUrl}/api/setlog'),
-        );
-        request.headers['Authorization'] = 'Bearer ${widget.auth.token}';
-        request.fields.addAll({
-          'caption': caption,
-          'tags': jsonEncode(['#momentloop']),
-          'taken_at': _dateOnly(now),
-          'captured_at': _mysqlDateTime(now),
-          'session_id': sessionId,
-          if (_todayMoment && index == 0) 'today_moment': 'true',
-          if (mapPinId != null) 'map_pin_id': '$mapPinId',
-        });
-        if (media != null) {
-          request.files.add(
-            http.MultipartFile.fromBytes(
-              'media',
-              media.bytes,
-              filename: media.name,
-              contentType: MediaType.parse(_mimeFor(media.name, media.isVideo)),
-            ),
-          );
-        }
-        final response = await http.Response.fromStream(await request.send());
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        if (response.statusCode != 201 || data['ok'] != true) {
-          _toast('저장하지 못했어요');
-          return;
-        }
-      }
+      await widget.controller.createMoment(
+        MomentDraft(
+          caption: caption,
+          takenAt: now,
+          capturedAt: now,
+          sessionId: sessionId,
+          todayMoment: _todayMoment,
+          mapPinId: mapPinId,
+          media: _pickedMedia
+              .map(
+                (media) => MomentMedia(
+                  name: media.name,
+                  bytes: media.bytes,
+                  isVideo: media.isVideo,
+                ),
+              )
+              .toList(),
+        ),
+      );
       if (mounted) Navigator.pop(context, true);
     } catch (_) {
       _toast('네트워크 연결을 확인해주세요');
@@ -2790,12 +2725,6 @@ String _mediaUrl(String baseUrl, String mediaUrl) {
   return '$baseUrl$mediaUrl';
 }
 
-String _dateOnly(DateTime value) =>
-    '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
-
-String _mysqlDateTime(DateTime value) =>
-    '${_dateOnly(value)} ${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}:${value.second.toString().padLeft(2, '0')}';
-
 String _timeAgo(dynamic value) {
   final date = DateTime.tryParse('${value ?? ''}')?.toLocal();
   if (date == null) return '';
@@ -2805,19 +2734,4 @@ String _timeAgo(dynamic value) {
   if (diff.inHours < 24) return '${diff.inHours}시간 전';
   if (diff.inDays < 7) return '${diff.inDays}일 전';
   return '${date.month}월 ${date.day}일';
-}
-
-String _mimeFor(String name, bool isVideo) {
-  final ext = name.split('.').last.toLowerCase();
-  const map = {
-    'jpg': 'image/jpeg',
-    'jpeg': 'image/jpeg',
-    'png': 'image/png',
-    'gif': 'image/gif',
-    'webp': 'image/webp',
-    'mp4': 'video/mp4',
-    'mov': 'video/quicktime',
-    'm4v': 'video/mp4',
-  };
-  return map[ext] ?? (isVideo ? 'video/mp4' : 'image/jpeg');
 }
