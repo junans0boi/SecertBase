@@ -151,7 +151,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: kMainSky,
+                  gradient: kRoseGrad,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
@@ -251,6 +251,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     final losses = r?['losses'] ?? 0;
     final total = r?['total'] ?? 0;
     return MainCard(
+      radius: 26,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -658,6 +659,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
   Widget _buildWalletCard() {
     final balance = _balance;
     return MainCard(
+      radius: 26,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -707,7 +709,10 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('둘이서 놀기', style: mainTitle(size: 30)),
+                    Text(
+                      '둘이서 놀기',
+                      style: mainTitle(size: 32, color: kMainRose),
+                    ),
                     const SizedBox(height: 4),
                     Text(
                       connected ? '오늘은 어떤 게임으로 놀아볼까요?' : '상대방 연결을 확인하고 있어요',
@@ -720,10 +725,14 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                  color: kMainPaper,
-                  borderRadius: BorderRadius.circular(15),
+                  color: kMainRoseSoft,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: kMainLine),
                 ),
-                child: const Icon(Icons.sports_esports_outlined),
+                child: const Icon(
+                  Icons.sports_esports_rounded,
+                  color: kMainRose,
+                ),
               ),
             ],
           ),
@@ -731,7 +740,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
           _buildWalletBar(),
           Row(
             children: [
-              Expanded(child: Text('게임 고르기', style: mainTitle(size: 20))),
+              Expanded(child: Text('게임 고르기', style: mainTitle(size: 24))),
               Text(
                 '${_games.length}가지',
                 style: mainBody(size: 12, color: kMainMuted),
@@ -752,6 +761,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
           const SizedBox(height: 20),
           if (selected == null)
             MainCard(
+              radius: 26,
               padding: const EdgeInsets.symmetric(vertical: 38),
               child: _buildEmptyState(),
             )

@@ -2370,11 +2370,29 @@ class _MapScreenState extends State<MapScreen> {
                       children: [
                         const BrandLogo(size: 34),
                         const SizedBox(width: 9),
-                        Text('우리 지도', style: mainTitle(size: 25)),
-                        const Spacer(),
                         Text(
-                          '${_pins.length}곳',
-                          style: mainBody(size: 12, color: kMainSub),
+                          '우리 지도',
+                          style: mainTitle(size: 28, color: kMainRose),
+                        ),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 11,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: kMainRoseSoft,
+                            borderRadius: BorderRadius.circular(99),
+                            border: Border.all(color: kMainLine),
+                          ),
+                          child: Text(
+                            '${_pins.length}곳',
+                            style: mainBody(
+                              size: 12,
+                              color: kMainRose,
+                              weight: FontWeight.w800,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -2394,8 +2412,8 @@ class _MapScreenState extends State<MapScreen> {
                           height: 48,
                           decoration: BoxDecoration(
                             color: kMainPaper.withAlpha(245),
-                            borderRadius: BorderRadius.circular(24),
-                            border: Border.all(color: kMainLine.withAlpha(180)),
+                            borderRadius: BorderRadius.circular(26),
+                            border: Border.all(color: kMainLine),
                             boxShadow: [
                               BoxShadow(
                                 color: kMainRose.withAlpha(16),
@@ -2655,11 +2673,15 @@ class _MapScreenState extends State<MapScreen> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 18),
                     child: MainCard(
+                      radius: 26,
                       color: kMainPaper.withAlpha(248),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text('아직 우리 지도가 비어 있어요', style: mainTitle(size: 20)),
+                          Text(
+                            '아직 우리 지도가 비어 있어요',
+                            style: mainTitle(size: 22, color: kMainRose),
+                          ),
                           const SizedBox(height: 5),
                           Text(
                             '검색하거나 지도 위를 눌러 첫 장소를 남겨봐요',
@@ -2735,8 +2757,10 @@ class _MapScreenState extends State<MapScreen> {
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withAlpha(8),
-                blurRadius: 8,
+                color: (isActive ? kMainPeach : kMainRose).withAlpha(
+                  isActive ? 40 : 14,
+                ),
+                blurRadius: 10,
                 offset: const Offset(0, 3),
               ),
             ],
@@ -2766,6 +2790,7 @@ class _MapScreenState extends State<MapScreen> {
 
     return MainCard(
       padding: const EdgeInsets.all(14),
+      radius: 26,
       color: kMainPaper.withAlpha(248),
       borderColor: isVisited
           ? kMainRose.withAlpha(70)
@@ -2959,7 +2984,8 @@ class _RoundIconButton extends StatelessWidget {
     return Material(
       color: kMainPaper.withAlpha(245),
       shape: const CircleBorder(),
-      elevation: 0,
+      elevation: 3,
+      shadowColor: kMainRose.withAlpha(60),
       child: InkWell(
         customBorder: const CircleBorder(),
         onTap: onTap,
@@ -2970,7 +2996,7 @@ class _RoundIconButton extends StatelessWidget {
             shape: BoxShape.circle,
             border: Border.all(color: kMainLine.withAlpha(180)),
           ),
-          child: Icon(icon, size: 18, color: kMainInk),
+          child: Icon(icon, size: 19, color: kMainRose),
         ),
       ),
     );

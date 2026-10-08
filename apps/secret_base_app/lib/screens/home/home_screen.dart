@@ -162,7 +162,7 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('우리의 하루', style: mainTitle(size: 25)),
+              Text('우리의 하루', style: mainTitle(size: 30, color: kMainRose)),
               Text('$name님, 오늘도 함께 기록해요', style: mainBody(size: 12)),
             ],
           ),
@@ -177,18 +177,13 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         Row(
           children: [
-            Expanded(
-              child: Text(
-                '함께 해볼까요?',
-                style: mainBody(size: 15, weight: FontWeight.w900),
-              ),
-            ),
+            Expanded(child: Text('함께 해볼까요?', style: mainTitle(size: 22))),
             Text('좌우로 밀어 더 보기', style: mainBody(size: 11, color: kMainMuted)),
           ],
         ),
         const SizedBox(height: 10),
         SizedBox(
-          height: 112,
+          height: 118,
           child: ListView(
             scrollDirection: Axis.horizontal,
             clipBehavior: Clip.none,
@@ -296,7 +291,50 @@ class _HomeScreenState extends State<HomeScreen> {
     final startDate = _couple?.startDate;
     return MainCard(
       gradient: kRoseGrad,
-      padding: const EdgeInsets.all(20),
+      radius: 30,
+      padding: const EdgeInsets.all(22),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            right: -30,
+            top: -34,
+            child: IgnorePointer(
+              child: Container(
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                  color: Colors.white.withAlpha(30),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            right: 20,
+            bottom: -2,
+            child: IgnorePointer(
+              child: Icon(
+                Icons.favorite_rounded,
+                size: 44,
+                color: Colors.white.withAlpha(70),
+              ),
+            ),
+          ),
+          _coupleCardBody(myName, partnerName, dDay, startDate),
+        ],
+      ),
+    );
+  }
+
+  Widget _coupleCardBody(
+    Object myName,
+    String partnerName,
+    int? dDay,
+    String? startDate,
+  ) {
+    return SizedBox(
+      width: double.infinity,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -529,23 +567,25 @@ class _QuickAction extends StatelessWidget {
             width: 124,
             child: Material(
               color: kMainPaper,
-              borderRadius: BorderRadius.circular(20),
+              elevation: 3,
+              shadowColor: color.withAlpha(60),
+              borderRadius: BorderRadius.circular(24),
               child: InkWell(
                 onTap: onTap,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(24),
                 child: Padding(
                   padding: const EdgeInsets.all(14),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Container(
-                        width: 36,
-                        height: 36,
+                        width: 40,
+                        height: 40,
                         decoration: BoxDecoration(
                           color: background,
-                          borderRadius: BorderRadius.circular(12),
+                          shape: BoxShape.circle,
                         ),
-                        child: Icon(icon, color: color, size: 20),
+                        child: Icon(icon, color: color, size: 21),
                       ),
                       const Spacer(),
                       Text(

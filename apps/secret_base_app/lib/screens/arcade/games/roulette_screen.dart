@@ -55,9 +55,11 @@ class _RouletteScreenState extends State<RouletteScreen>
     if (!mounted) return;
     final opts = _socket.lastRouletteOptions;
     if (opts != null && opts.isNotEmpty) {
-      setState(() => _options
-        ..clear()
-        ..addAll(opts));
+      setState(
+        () => _options
+          ..clear()
+          ..addAll(opts),
+      );
     } else {
       setState(() {});
     }

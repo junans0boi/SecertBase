@@ -297,9 +297,9 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
         tooltip: '순간 남기기',
         backgroundColor: kMainRose,
         foregroundColor: Colors.white,
-        elevation: 4,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        child: const Icon(Icons.add_rounded, size: 28),
+        elevation: 6,
+        shape: const CircleBorder(),
+        child: const Icon(Icons.add_rounded, size: 30),
       ),
       body: SafeArea(
         child: Column(
@@ -307,7 +307,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
           children: [
             // ── Header ──────────────────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
+              padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
               child: Row(
                 children: [
                   GestureDetector(
@@ -315,10 +315,19 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
                     child: Semantics(
                       button: true,
                       label: '뒤로가기',
-                      child: const Icon(
-                        Icons.arrow_back_ios_new_rounded,
-                        size: 20,
-                        color: kMainSub,
+                      child: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: kMainPaper,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: kMainLine),
+                        ),
+                        child: const Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          size: 16,
+                          color: kMainSub,
+                        ),
                       ),
                     ),
                   ),
@@ -327,7 +336,10 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('MomentLoop', style: mainTitle(size: 24)),
+                        Text(
+                          'MomentLoop',
+                          style: mainTitle(size: 28, color: kMainRose),
+                        ),
                         Text(
                           '우리 둘의 날짜별 기록',
                           style: mainBody(size: 12, color: kMainMuted),
@@ -339,7 +351,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
               ),
             ),
 
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
 
             // ── Story highlights ─────────────────────────────────────────────
             if (_posts.isNotEmpty)
@@ -371,14 +383,10 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
             ),
 
             Padding(
-              padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
               child: Text(
                 _isCurrentWeek ? '이번 주의 순간' : '선택한 주의 순간',
-                style: mainBody(
-                  size: 13,
-                  color: kMainSub,
-                  weight: FontWeight.w800,
-                ),
+                style: mainTitle(size: 20, color: kMainInk),
               ),
             ),
 
@@ -479,7 +487,7 @@ class _HighlightStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 90,
+      height: 98,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 18),
@@ -513,20 +521,24 @@ class _HighlightStrip extends StatelessWidget {
                     clipBehavior: Clip.none,
                     children: [
                       Container(
-                        width: 62,
-                        height: 62,
+                        width: 70,
+                        height: 70,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           gradient: seen
                               ? null
-                              : LinearGradient(
-                                  colors: isMine
-                                      ? [kMainRose, const Color(0xFFFF9F6A)]
-                                      : [kMainSky, const Color(0xFF7EC8E3)],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                          color: seen ? Colors.grey.shade300 : null,
+                              : (isMine ? kRoseGrad : kSkyGrad),
+                          color: seen ? kMainLine : null,
+                          boxShadow: seen
+                              ? null
+                              : [
+                                  BoxShadow(
+                                    color: (isMine ? kMainRose : kMainSky)
+                                        .withAlpha(60),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
                         ),
                         padding: const EdgeInsets.all(2.5),
                         child: Container(
@@ -982,15 +994,16 @@ class _WeekEmptyState extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 72,
-                height: 72,
+                width: 88,
+                height: 88,
                 decoration: BoxDecoration(
                   color: kMainRoseSoft,
-                  borderRadius: BorderRadius.circular(20),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: kMainLine, width: 2),
                 ),
                 child: const Icon(
-                  Icons.photo_album_outlined,
-                  size: 34,
+                  Icons.favorite_rounded,
+                  size: 38,
                   color: kMainRose,
                 ),
               ),
@@ -1018,6 +1031,15 @@ class _WeekEmptyState extends StatelessWidget {
                 onPressed: onCreate,
                 icon: const Icon(Icons.add_photo_alternate_outlined),
                 label: const Text('순간 남기기'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: kMainRose,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 14,
+                  ),
+                  shape: const StadiumBorder(),
+                ),
               ),
               const SizedBox(height: 8),
               TextButton(onPressed: onRefresh, child: const Text('새로고침')),
@@ -1060,11 +1082,18 @@ class _WeekNavigator extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 18),
         child: Container(
-          height: 48,
+          height: 52,
           decoration: BoxDecoration(
             color: kMainPaper,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(99),
             border: Border.all(color: kMainLine),
+            boxShadow: [
+              BoxShadow(
+                color: kMainRose.withAlpha(18),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
           child: Row(
             children: [
@@ -1136,9 +1165,9 @@ class _NavBtn extends StatelessWidget {
     return GestureDetector(
       onTap: disabled ? null : onTap,
       child: SizedBox(
-        width: 44,
-        height: 48,
-        child: Icon(icon, size: 22, color: disabled ? kMainLine : kMainSub),
+        width: 48,
+        height: 52,
+        child: Icon(icon, size: 24, color: disabled ? kMainLine : kMainRose),
       ),
     );
   }
@@ -1184,10 +1213,9 @@ class _DaySection extends StatelessWidget {
               children: [
                 Text(
                   '$dayName  ${day.day}',
-                  style: mainBody(
-                    size: 15,
+                  style: mainTitle(
+                    size: 22,
                     color: isToday ? kMainRose : kMainInk,
-                    weight: FontWeight.w900,
                   ),
                 ),
                 if (isToday) ...[
@@ -1221,7 +1249,7 @@ class _DaySection extends StatelessWidget {
           ),
           // ── Horizontal scroll of group cards ──────────────────────────
           SizedBox(
-            height: 160,
+            height: 196,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 18),
@@ -1246,11 +1274,18 @@ class _DaySection extends StatelessWidget {
                 return GestureDetector(
                   onTap: () => onTap(group),
                   child: Container(
-                    width: 140,
-                    margin: const EdgeInsets.only(right: 8),
+                    width: 152,
+                    margin: const EdgeInsets.only(right: 10, bottom: 8),
                     decoration: BoxDecoration(
                       color: kMainPaperSoft,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: kMainRose.withAlpha(30),
+                          blurRadius: 14,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
                     ),
                     clipBehavior: Clip.antiAlias,
                     child: Stack(
@@ -2157,7 +2192,7 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
           color: kMainInk,
         ),
         centerTitle: true,
-        title: Text('새 순간', style: mainBody(size: 17, weight: FontWeight.w900)),
+        title: Text('새 순간', style: mainTitle(size: 24)),
         actions: [
           TextButton(
             onPressed: _saving ? null : _saveMoment,
@@ -2191,22 +2226,26 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
                       child: Container(
                         width: double.infinity,
                         decoration: BoxDecoration(
-                          color: kMainPaperSoft,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: kMainLine),
+                          color: kMainRoseSoft,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: kMainLine, width: 1.5),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             const Icon(
                               Icons.add_photo_alternate_outlined,
-                              size: 20,
-                              color: kMainSub,
+                              size: 22,
+                              color: kMainRose,
                             ),
                             const SizedBox(width: 8),
                             Text(
                               '사진·영상 추가 (최대 10개)',
-                              style: mainBody(color: kMainSub, size: 13),
+                              style: mainBody(
+                                color: kMainRose,
+                                size: 13,
+                                weight: FontWeight.w700,
+                              ),
                             ),
                           ],
                         ),
@@ -2356,10 +2395,14 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
                 filled: true,
                 fillColor: kMainPaperSoft,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(18),
                   borderSide: BorderSide.none,
                 ),
-                contentPadding: const EdgeInsets.all(16),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  borderSide: const BorderSide(color: kMainRose, width: 1.5),
+                ),
+                contentPadding: const EdgeInsets.all(18),
               ),
             ),
 
@@ -2401,17 +2444,17 @@ class _LocationAddButton extends StatelessWidget {
     final selected = location;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(18),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: kMainPaperSoft,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: kMainLine),
+          color: selected == null ? kMainPaperSoft : kMainRoseSoft,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: selected == null ? kMainLine : kMainRose),
         ),
         child: Row(
           children: [
-            const Icon(Icons.location_on_outlined, color: kMainInk, size: 20),
+            const Icon(Icons.location_on_rounded, color: kMainRose, size: 22),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -2508,7 +2551,7 @@ class _MapLocationPickerSheetState extends State<_MapLocationPickerSheet> {
       ),
       decoration: const BoxDecoration(
         color: kMainPaper,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       padding: EdgeInsets.fromLTRB(18, 12, 18, bottom + 18),
       child: Column(
@@ -2572,7 +2615,7 @@ class _MapLocationPickerSheetState extends State<_MapLocationPickerSheet> {
                 icon: const Icon(Icons.add_location_alt_outlined),
                 tooltip: '비밀지도에서 추가',
                 style: IconButton.styleFrom(
-                  backgroundColor: kMainInk,
+                  backgroundColor: kMainRose,
                   foregroundColor: Colors.white,
                   fixedSize: const Size(48, 48),
                   shape: RoundedRectangleBorder(

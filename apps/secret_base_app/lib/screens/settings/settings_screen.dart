@@ -59,7 +59,10 @@ class _MoreOverview extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('전체', style: mainTitle(size: 32)),
+                        Text(
+                          '전체',
+                          style: mainTitle(size: 32, color: kMainRose),
+                        ),
                         const SizedBox(height: 4),
                         Text(
                           '우리의 공간과 기능을 한 곳에서 관리해요',
@@ -75,7 +78,7 @@ class _MoreOverview extends StatelessWidget {
                     ),
                     icon: const Icon(
                       Icons.headset_mic_outlined,
-                      color: kMainSky,
+                      color: kMainRose,
                     ),
                   ),
                 ],
@@ -1702,21 +1705,22 @@ class _MoreProfileEntry extends StatelessWidget {
       onTap: onTap,
       child: ExcludeSemantics(
         child: MainCard(
+          radius: 26,
           padding: EdgeInsets.zero,
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(26),
             child: Padding(
               padding: const EdgeInsets.all(18),
               child: Row(
                 children: [
                   DoodleBadge(
-                    color: kMainLilac,
-                    backgroundColor: kMainLilacSoft,
+                    color: kMainRose,
+                    backgroundColor: kMainRoseSoft,
                     size: 54,
                     child: const Icon(
                       Icons.person_outline_rounded,
-                      color: kMainLilac,
+                      color: kMainRose,
                       size: 27,
                     ),
                   ),
@@ -1759,12 +1763,10 @@ class _MoreSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          title,
-          style: mainBody(size: 14, color: kMainSub, weight: FontWeight.w800),
-        ),
+        Text(title, style: mainTitle(size: 22)),
         const SizedBox(height: 9),
         MainCard(
+          radius: 26,
           padding: EdgeInsets.zero,
           child: Column(children: children),
         ),

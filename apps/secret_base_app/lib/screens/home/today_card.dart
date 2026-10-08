@@ -66,6 +66,7 @@ class TodayCard extends StatelessWidget {
 
     return MainCard(
       gradient: kSkyGrad,
+      radius: 28,
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

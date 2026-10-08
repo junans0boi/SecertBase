@@ -43,39 +43,70 @@ class _HomeShellState extends State<HomeShell> {
     return Scaffold(
       backgroundColor: kMainBg,
       body: SafeArea(bottom: false, child: _pages[_index]),
-      bottomNavigationBar: NavigationBar(
-        height: 72,
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        selectedIndex: _index,
-        onDestinationSelected: (index) => setState(() => _index = index),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
-            label: '홈',
+      bottomNavigationBar: NavigationBarTheme(
+        data: NavigationBarThemeData(
+          backgroundColor: kMainPaper,
+          surfaceTintColor: Colors.transparent,
+          elevation: 8,
+          shadowColor: kMainRose.withAlpha(60),
+          indicatorColor: kMainRoseSoft,
+          iconTheme: WidgetStateProperty.resolveWith(
+            (states) => IconThemeData(
+              color: states.contains(WidgetState.selected)
+                  ? kMainRose
+                  : kMainMuted,
+            ),
           ),
-          NavigationDestination(
-            icon: Icon(Icons.auto_stories_outlined),
-            selectedIcon: Icon(Icons.auto_stories_rounded),
-            label: 'MomentLoop',
+          labelTextStyle: WidgetStateProperty.resolveWith(
+            (states) => mainBody(
+              size: 11,
+              color: states.contains(WidgetState.selected)
+                  ? kMainRose
+                  : kMainMuted,
+              weight: states.contains(WidgetState.selected)
+                  ? FontWeight.w800
+                  : FontWeight.w600,
+            ),
           ),
-          NavigationDestination(
-            icon: Icon(Icons.map_outlined),
-            selectedIcon: Icon(Icons.map_rounded),
-            label: '지도',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.sports_esports_outlined),
-            selectedIcon: Icon(Icons.sports_esports_rounded),
-            label: '놀이',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings_rounded),
-            label: '더보기',
-          ),
-        ],
+        ),
+        child: _navigationBar(),
       ),
+    );
+  }
+
+  NavigationBar _navigationBar() {
+    return NavigationBar(
+      height: 72,
+      labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+      selectedIndex: _index,
+      onDestinationSelected: (index) => setState(() => _index = index),
+      destinations: const [
+        NavigationDestination(
+          icon: Icon(Icons.home_outlined),
+          selectedIcon: Icon(Icons.home_rounded),
+          label: '홈',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.auto_stories_outlined),
+          selectedIcon: Icon(Icons.auto_stories_rounded),
+          label: 'MomentLoop',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.map_outlined),
+          selectedIcon: Icon(Icons.map_rounded),
+          label: '지도',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.sports_esports_outlined),
+          selectedIcon: Icon(Icons.sports_esports_rounded),
+          label: '놀이',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.settings_outlined),
+          selectedIcon: Icon(Icons.settings_rounded),
+          label: '더보기',
+        ),
+      ],
     );
   }
 }
