@@ -1,11 +1,11 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 
 import '../../core/auth_service.dart';
 import '../../core/main_design.dart';
 import '../../core/today_api.dart';
+import '../../features/home/application/home_controller.dart';
+import '../../features/home/data/home_overview_repository.dart';
+import '../../features/home/domain/home_overview.dart';
 import 'today_card.dart';
 import 'today_loop_viewer.dart';
 import 'memory_list_screen.dart';
@@ -21,12 +21,14 @@ class HomeScreen extends StatefulWidget {
   final ValueChanged<int> onNavigate;
   final RelationshipAssessmentStatus? relationshipStatus;
   final Future<TodayState> Function()? todayStateLoader;
+  final HomeController? controller;
 
   const HomeScreen({
     super.key,
     required this.onNavigate,
     this.relationshipStatus,
     this.todayStateLoader,
+    this.controller,
   });
 
   @override
@@ -35,13 +37,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _auth = AuthService();
-  Map<String, dynamic>? _coupleInfo;
-  Map<String, dynamic>? _memoryCard;
-  int _memoryCardTotal = 0;
-  RelationshipAssessmentStatus? _loadedRelationshipStatus;
-  TodayState? _todayState;
-  bool _todayLoading = true;
-  bool _todayLoadFailed = false;
+  late HomeController _controller;
+  var _ownsController = false;
 
   Map<String, String> get _authHeaders => {
     if (_auth.token != null) 'Authorization': 'Bearer ${_auth.token}',
@@ -50,95 +47,82 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    _attachController(widget.controller ?? _createController());
+    _controller.load();
   }
 
-  Future<void> _load() async {
-    if (mounted) {
-      setState(() {
-        _todayLoading = true;
-        _todayLoadFailed = false;
-      });
-    }
-    final today = _loadTodayState().then<({TodayState? state, bool failed})>(
-      (state) => (state: state, failed: false),
-      onError: (Object error, StackTrace stackTrace) =>
-          (state: null, failed: true),
+  HomeController _createController() {
+    return HomeController(
+      HomeOverviewRepository.forAuth(
+        _auth,
+        todayStateLoader: widget.todayStateLoader,
+      ),
     );
-    try {
-      final responses = await Future.wait([
-        http.get(
-          Uri.parse('${_auth.baseUrl}/api/couple/info'),
-          headers: _authHeaders,
-        ),
-        http.get(
-          Uri.parse('${_auth.baseUrl}/api/retention/memory-card'),
-          headers: _authHeaders,
-        ),
-        http.get(
-          Uri.parse('${_auth.baseUrl}/api/relationship/assessments'),
-          headers: _authHeaders,
-        ),
-      ]);
-      if (!mounted) return;
-      final couple = jsonDecode(responses[0].body) as Map<String, dynamic>;
-
-      setState(() {
-        if (responses[0].statusCode == 200 && couple['ok'] == true) {
-          _coupleInfo = couple;
-        }
-        if (responses[1].statusCode == 200) {
-          final mc = jsonDecode(responses[1].body) as Map<String, dynamic>;
-          if (mc['ok'] == true && mc['card'] != null) {
-            _memoryCard = mc['card'] as Map<String, dynamic>;
-            _memoryCardTotal = mc['total_count'] as int? ?? 0;
-          } else {
-            _memoryCard = null;
-            _memoryCardTotal = 0;
-          }
-        }
-        if (responses[2].statusCode == 200) {
-          final catalog = jsonDecode(responses[2].body) as Map<String, dynamic>;
-          final assessments = catalog['assessments'];
-          if (catalog['ok'] == true && assessments is List) {
-            _loadedRelationshipStatus = _relationshipStatusFromCatalog(
-              assessments,
-            );
-          }
-        }
-      });
-    } catch (_) {
-      // Home remains resilient
-    }
-    final loadedToday = await today;
-    if (!mounted) return;
-    setState(() {
-      _todayState = loadedToday.state;
-      _todayLoading = false;
-      _todayLoadFailed = loadedToday.failed;
-    });
   }
 
-  Future<TodayState> _loadTodayState() async {
-    final loader = widget.todayStateLoader;
-    if (loader != null) return loader();
-    final token = _auth.token;
-    if (token == null || token.isEmpty) {
-      throw StateError('Today entry requires an authenticated user');
-    }
-    final api = TodayApi(baseUrl: _auth.baseUrl, token: token);
-    try {
-      return await api.fetchState();
-    } finally {
-      api.close();
-    }
+  void _attachController(HomeController controller) {
+    _controller = controller;
+    _ownsController = widget.controller == null;
+    _controller.addListener(_onControllerChanged);
   }
+
+  void _onControllerChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void didUpdateWidget(covariant HomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller == widget.controller) return;
+
+    _controller.removeListener(_onControllerChanged);
+    if (_ownsController) _controller.dispose();
+    _attachController(widget.controller ?? _createController());
+    _controller.load();
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_onControllerChanged);
+    if (_ownsController) _controller.dispose();
+    super.dispose();
+  }
+
+  HomeOverview? get _overview => _controller.state.data;
+
+  Future<void> _refresh() => _controller.refresh();
+
+  RelationshipAssessmentStatus? get _loadedRelationshipStatus {
+    return switch (_overview?.assessmentStatus) {
+      HomeAssessmentStatus.inProgress =>
+        RelationshipAssessmentStatus.inProgress,
+      HomeAssessmentStatus.resultReady =>
+        RelationshipAssessmentStatus.resultReady,
+      HomeAssessmentStatus.notStarted =>
+        RelationshipAssessmentStatus.notStarted,
+      null => null,
+    };
+  }
+
+  HomeCoupleInfo? get _couple => _overview?.couple;
+
+  bool get _homeLoading =>
+      _controller.state.status == HomeStatus.loading && _overview == null;
+
+  bool get _homeFailed => _controller.state.status == HomeStatus.failure;
+
+  bool get _todayLoadFailed =>
+      _homeFailed || _overview == null || _overview!.todayLoadFailed;
+
+  TodayState? get _todayState => _overview?.todayState;
+
+  bool get _todayLoading => _homeLoading;
 
   @override
   Widget build(BuildContext context) {
     return CozyPage(
       child: RefreshIndicator(
-        onRefresh: _load,
+        onRefresh: _refresh,
         color: kMainRose,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -153,11 +137,11 @@ class _HomeScreenState extends State<HomeScreen> {
             _quickActions(),
             const SizedBox(height: 18),
             _relationshipCard(),
-            if (_memoryCard != null) ...[
+            if (_overview?.memoryCard != null) ...[
               const SizedBox(height: 18),
               _MemoryCardWidget(
-                card: _memoryCard!,
-                totalCount: _memoryCardTotal,
+                card: _overview!.memoryCard!,
+                totalCount: _overview!.memoryCardTotal,
                 baseUrl: _auth.baseUrl,
                 authHeaders: _authHeaders,
               ),
@@ -290,8 +274,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _todayEntry() {
     if (_todayLoading) return const _TodayLoadingCard();
-    if (_todayLoadFailed) return _TodayFailureCard(onRetry: _load);
-    final state = _todayState!;
+    final state = _todayState;
+    if (_todayLoadFailed || state == null) {
+      return _TodayFailureCard(onRetry: _refresh);
+    }
     return TodayCard(
       state: state,
       onCreateMoment: () => widget.onNavigate(1),
@@ -305,9 +291,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _coupleCard() {
     final myName = _auth.user?['Nickname'] ?? _auth.user?['UserName'] ?? '나';
-    final partnerName = _coupleInfo?['partnerName'] ?? '상대방';
-    final dDay = _coupleInfo?['dDay'];
-    final startDate = _coupleInfo?['startDate'];
+    final partnerName = _couple?.partnerName ?? '상대방';
+    final dDay = _couple?.dDay;
+    final startDate = _couple?.startDate;
     return MainCard(
       gradient: kRoseGrad,
       padding: const EdgeInsets.all(20),
@@ -356,7 +342,7 @@ class _HomeScreenState extends State<HomeScreen> {
         MaterialPageRoute(
           builder: (_) => RelationshipUnderstandingScreen(
             assessmentStatus: status,
-            hasActiveCouple: _coupleInfo != null,
+            hasActiveCouple: _couple != null,
           ),
         ),
       ),
@@ -370,27 +356,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     return _loadedRelationshipStatus ?? RelationshipAssessmentStatus.notStarted;
   }
-
-  RelationshipAssessmentStatus _relationshipStatusFromCatalog(List raw) {
-    final personalAssessments = raw.whereType<Map>().where(
-      (assessment) => assessment['audience'] == 'individual',
-    );
-    if (personalAssessments.any(
-      (assessment) => assessment['completionStatus'] == 'in_progress',
-    )) {
-      return RelationshipAssessmentStatus.inProgress;
-    }
-    if (personalAssessments.any(
-      (assessment) => assessment['completionStatus'] == 'completed',
-    )) {
-      return RelationshipAssessmentStatus.resultReady;
-    }
-    return RelationshipAssessmentStatus.notStarted;
-  }
 }
 
 class _MemoryCardWidget extends StatelessWidget {
-  final Map<String, dynamic> card;
+  final HomeMemoryCard card;
   final int totalCount;
   final String baseUrl;
   final Map<String, String> authHeaders;
@@ -404,10 +373,10 @@ class _MemoryCardWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final yearsAgo = card['years_ago'] as int? ?? 0;
-    final placeName = card['place_name'] as String?;
-    final caption = card['caption'] as String?;
-    final mediaUrl = card['media_url'] as String?;
+    final yearsAgo = card.yearsAgo;
+    final placeName = card.placeName;
+    final caption = card.caption;
+    final mediaUrl = card.mediaUrl;
     final fullMediaUrl = mediaUrl != null ? '$baseUrl$mediaUrl' : null;
 
     return MainCard(
