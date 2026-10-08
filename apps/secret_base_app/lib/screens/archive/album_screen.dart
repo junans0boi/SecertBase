@@ -189,9 +189,7 @@ class _AlbumScreenState extends State<AlbumScreen> {
             },
             style: FilledButton.styleFrom(
               backgroundColor: kMainRose,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
+              shape: const StadiumBorder(),
             ),
             child: Text(
               '만들기',
@@ -213,7 +211,7 @@ class _AlbumScreenState extends State<AlbumScreen> {
           children: [
             const Text('👑', style: TextStyle(fontSize: 24)),
             const SizedBox(width: 8),
-            Text('비밀기지 Premium', style: mainTitle(size: 18, color: kMainInk)),
+            Text('비밀기지 Premium', style: mainTitle(size: 20)),
           ],
         ),
         content: Column(
@@ -311,9 +309,7 @@ class _AlbumScreenState extends State<AlbumScreen> {
             },
             style: FilledButton.styleFrom(
               backgroundColor: kMainRose,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
+              shape: const StadiumBorder(),
             ),
             child: Text(
               '구독하기 👑',
@@ -332,7 +328,7 @@ class _AlbumScreenState extends State<AlbumScreen> {
       appBar: AppBar(
         backgroundColor: kMainPaper,
         elevation: 0,
-        title: Text('우리 앨범 📸', style: mainTitle(size: 22)),
+        title: Text('우리 앨범 📸', style: mainTitle(size: 24, color: kMainRose)),
         actions: [
           if (_isPremium)
             Container(
@@ -431,7 +427,7 @@ class _AlbumScreenState extends State<AlbumScreen> {
                                 const SizedBox(height: 16),
                                 Text(
                                   '아직 추억 폴더가 없어요',
-                                  style: mainTitle(size: 18, color: kMainInk),
+                                  style: mainTitle(size: 20),
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
@@ -555,14 +551,14 @@ class _FolderCard extends StatelessWidget {
       onLongPress: onDelete,
       child: MainCard(
         padding: EdgeInsets.zero,
-        radius: 20,
+        radius: 26,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
               child: ClipRRect(
                 borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(20),
+                  top: Radius.circular(28),
                 ),
                 child: coverUrl != null
                     ? Image.network(
@@ -760,9 +756,7 @@ class _AlbumFolderDetailScreenState extends State<AlbumFolderDetailScreen> {
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(
               backgroundColor: kMainRose,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
+              shape: const StadiumBorder(),
             ),
             child: Text(
               '사진 고르기',
@@ -896,7 +890,7 @@ class _AlbumFolderDetailScreenState extends State<AlbumFolderDetailScreen> {
           children: [
             const Text('👑', style: TextStyle(fontSize: 24)),
             const SizedBox(width: 8),
-            Text('비밀기지 Premium', style: mainTitle(size: 18, color: kMainInk)),
+            Text('비밀기지 Premium', style: mainTitle(size: 20)),
           ],
         ),
         content: Column(
@@ -962,9 +956,7 @@ class _AlbumFolderDetailScreenState extends State<AlbumFolderDetailScreen> {
             },
             style: FilledButton.styleFrom(
               backgroundColor: kMainRose,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
+              shape: const StadiumBorder(),
             ),
             child: Text(
               '구독하기 👑',
@@ -1193,7 +1185,7 @@ class _PolaroidCard extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         decoration: const BoxDecoration(
           color: kMainPaper,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,

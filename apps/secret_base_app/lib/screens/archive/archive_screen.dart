@@ -86,7 +86,7 @@ class ArchiveScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('우리의 기록', style: mainTitle(size: 34)),
+              Text('우리의 기록', style: mainTitle(size: 34, color: kMainRose)),
               const SizedBox(height: 2),
               Text(
                 '쌓아두는 곳보다 꺼내보기 쉬운 곳으로',
@@ -155,6 +155,7 @@ class _FeaturedMemoryCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: MainCard(
+        radius: 26,
         padding: EdgeInsets.zero,
         gradient: kRoseGrad,
         child: Stack(

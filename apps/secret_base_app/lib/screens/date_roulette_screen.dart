@@ -175,7 +175,7 @@ class _DateRouletteScreenState extends State<DateRouletteScreen>
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: isSelected ? kMainSky : kMainPaperSoft,
+                      color: isSelected ? kMainRose : kMainPaperSoft,
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
@@ -223,11 +223,9 @@ class _DateRouletteScreenState extends State<DateRouletteScreen>
           ),
         ),
         style: FilledButton.styleFrom(
-          backgroundColor: kMainSky,
+          backgroundColor: kMainRose,
           disabledBackgroundColor: kMainLine,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
+          shape: const StadiumBorder(),
           padding: const EdgeInsets.symmetric(vertical: 16),
         ),
       ),

@@ -84,10 +84,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
       appBar: AppBar(
         backgroundColor: kMainBg,
         foregroundColor: kMainInk,
-        title: Text(
-          '커플 밸런스',
-          style: mainBody(size: 17, color: kMainInk, weight: FontWeight.w800),
-        ),
+        title: Text('커플 밸런스', style: mainTitle(size: 26, color: kMainRose)),
       ),
       body: CozyPage(
         child: _loading
@@ -98,6 +95,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
                   padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
                   children: [
                     MainCard(
+                      radius: 26,
                       gradient: kSkyGrad,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -138,6 +136,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
                     const SizedBox(height: 14),
                     if (_status?['myAnswered'] == true && !reveal)
                       MainCard(
+                        radius: 26,
                         child: Text(
                           '상대가 고르면 결과가 열려요',
                           style: mainBody(size: 14, color: kMainSub),
@@ -145,6 +144,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
                       ),
                     if (reveal)
                       MainCard(
+                        radius: 26,
                         color: matched ? kMainSageSoft : kMainRoseSoft,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -193,6 +193,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
     return GestureDetector(
       onTap: _submitting ? null : () => _answer(choice),
       child: MainCard(
+        radius: 26,
         color: selected ? kMainSkySoft : kMainPaper,
         borderColor: selected ? kMainSky : kMainLine,
         child: SizedBox(

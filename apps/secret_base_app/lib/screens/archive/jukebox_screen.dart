@@ -146,9 +146,7 @@ class _JukeboxScreenState extends State<JukeboxScreen> {
                 backgroundColor: kMainPeach,
                 foregroundColor: Colors.white,
                 disabledBackgroundColor: kMainLine,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                shape: const StadiumBorder(),
               ),
               child: Text(
                 '업로드',
@@ -176,6 +174,10 @@ class _JukeboxScreenState extends State<JukeboxScreen> {
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: kMainRose, width: 1.5),
         ),
         labelStyle: mainBody(size: 12, color: kMainMuted),
         hintStyle: mainBody(size: 13, color: kMainMuted),
@@ -228,10 +230,7 @@ class _JukeboxScreenState extends State<JukeboxScreen> {
           icon: const Icon(Icons.arrow_back_ios_new, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text(
-          '🎵 주크박스',
-          style: mainBody(size: 17, color: kMainInk, weight: FontWeight.w700),
-        ),
+        title: Text('🎵 주크박스', style: mainTitle(size: 26, color: kMainRose)),
         elevation: 0,
       ),
       floatingActionButton: FloatingActionButton(
@@ -293,6 +292,7 @@ class _JukeboxScreenState extends State<JukeboxScreen> {
         : null;
 
     return MainCard(
+      radius: 26,
       child: Row(
         children: [
           DoodleBadge(

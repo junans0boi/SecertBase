@@ -114,7 +114,7 @@ class _CompatibilityDashboardScreenState
           : ListView(
               padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
               children: [
-                Text('검사별 관계 카드', style: mainTitle(size: 25)),
+                Text('검사별 관계 카드', style: mainTitle(size: 28, color: kMainRose)),
                 const SizedBox(height: 6),
                 Text(
                   '각 분석은 필요한 검사만 준비되면 독립적으로 열려요.',
@@ -408,7 +408,7 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
       children: [
-        Text('우리의 관계 패턴', style: mainTitle(size: 25)),
+        Text('우리의 관계 패턴', style: mainTitle(size: 28, color: kMainRose)),
         const SizedBox(height: 8),
         Text(
           result.complementaryPattern,
@@ -436,7 +436,7 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
         const SizedBox(height: 4),
         if (result.conflictTrigger != null ||
             result.repairApproach != null) ...[
-          Text('갈등을 이해하는 단서', style: mainTitle(size: 19)),
+          Text('갈등을 이해하는 단서', style: mainTitle(size: 21)),
           const SizedBox(height: 8),
           if (result.conflictTrigger != null)
             MainCard(
@@ -461,7 +461,7 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
         ],
         if (result.conversationStarters.isNotEmpty) ...[
           const SizedBox(height: 4),
-          Text('대화 시작점', style: mainTitle(size: 19)),
+          Text('대화 시작점', style: mainTitle(size: 21)),
           const SizedBox(height: 8),
           ...result.conversationStarters.map(
             (item) => Padding(
@@ -473,7 +473,7 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
             ),
           ),
         ],
-        Text('주의해서 살펴볼 상호작용', style: mainTitle(size: 19)),
+        Text('주의해서 살펴볼 상호작용', style: mainTitle(size: 21)),
         const SizedBox(height: 8),
         ...result.cautionInteractions.map(
           (item) => Padding(
@@ -485,7 +485,7 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
           ),
         ),
         const SizedBox(height: 4),
-        Text('대화 질문', style: mainTitle(size: 19)),
+        Text('대화 질문', style: mainTitle(size: 21)),
         const SizedBox(height: 8),
         ...result.conversationPrompts.map(
           (item) => Padding(

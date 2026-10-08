@@ -188,7 +188,7 @@ class _PartnerScreenState extends State<PartnerScreen> {
                     const SizedBox(height: 20),
                     Text(
                       isPaired ? '연결된 우리 공간' : '연결 대기 공간',
-                      style: mainTitle(size: 30),
+                      style: mainTitle(size: 30, color: kMainRose),
                     ),
                     const SizedBox(height: 12),
                     Text(
@@ -340,10 +340,8 @@ class _PartnerScreenState extends State<PartnerScreen> {
             child: FilledButton(
               onPressed: _loading ? null : _linkPartner,
               style: FilledButton.styleFrom(
-                backgroundColor: kMainInk,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
+                backgroundColor: kMainRose,
+                shape: const StadiumBorder(),
               ),
               child: _loading
                   ? const SizedBox(

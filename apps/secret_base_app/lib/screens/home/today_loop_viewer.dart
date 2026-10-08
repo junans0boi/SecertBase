@@ -21,7 +21,7 @@ class TodayLoopViewer extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: kMainBg,
         surfaceTintColor: Colors.transparent,
-        title: Text('오늘의 루프', style: mainTitle(size: 23)),
+        title: Text('오늘의 루프', style: mainTitle(size: 26, color: kMainRose)),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(18, 10, 18, 32),
@@ -95,7 +95,7 @@ class _TodayMomentPanel extends StatelessWidget {
                     ? Icons.person_outline_rounded
                     : Icons.favorite_border_rounded,
                 size: 18,
-                color: kMainSky,
+                color: kMainRose,
               ),
               const SizedBox(width: 6),
               Text(

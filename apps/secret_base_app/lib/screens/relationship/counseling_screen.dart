@@ -177,8 +177,8 @@ class _RelationshipCounselingScreenState
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: mine ? kMainLilacSoft : Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          color: mine ? kMainRoseSoft : Colors.white,
+          borderRadius: BorderRadius.circular(22),
         ),
         child: Text(message.content, style: mainBody(size: 13, height: 1.5)),
       ),
@@ -194,7 +194,7 @@ class _RelationshipCounselingScreenState
         backgroundColor: kMainBg,
         title: Text(
           widget.shared ? '커플 상담' : '프라이빗 상담',
-          style: mainTitle(size: 22),
+          style: mainTitle(size: 24, color: kMainRose),
         ),
       ),
       body: _loading

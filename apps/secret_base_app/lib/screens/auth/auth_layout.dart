@@ -8,8 +8,8 @@ const authSecondary = Color(0xFF6C7784);
 const authMuted = Color(0xFFAAB3BD);
 const authLine = Color(0xFFE3E8ED);
 const authSurface = Color(0xFFF6F8FA);
-const authPrimary = Color(0xFF29445C);
-const authPrimarySoft = Color(0xFFEAF1F6);
+const authPrimary = kMainRose;
+const authPrimarySoft = kMainRoseSoft;
 const authError = Color(0xFFC43D4D);
 
 TextStyle authText({
@@ -57,7 +57,7 @@ class AuthTheme extends StatelessWidget {
   );
 
   static OutlineInputBorder _border(Color color) => OutlineInputBorder(
-    borderRadius: BorderRadius.circular(16),
+    borderRadius: BorderRadius.circular(18),
     borderSide: BorderSide(color: color),
   );
 }
@@ -167,9 +167,7 @@ class AuthButton extends StatelessWidget {
           foregroundColor: Colors.white,
           disabledBackgroundColor: authLine,
           disabledForegroundColor: authSecondary,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(17),
-          ),
+          shape: const StadiumBorder(),
         ),
         child: loading
             ? const SizedBox.square(

@@ -51,10 +51,7 @@ class _TimelineScreenState extends State<TimelineScreen> {
       appBar: AppBar(
         backgroundColor: kMainBg,
         foregroundColor: kMainInk,
-        title: Text(
-          '우리 타임라인',
-          style: mainBody(size: 17, color: kMainInk, weight: FontWeight.w800),
-        ),
+        title: Text('우리 타임라인', style: mainTitle(size: 26, color: kMainRose)),
         elevation: 0,
       ),
       body: CozyPage(
@@ -67,6 +64,7 @@ class _TimelineScreenState extends State<TimelineScreen> {
                         padding: const EdgeInsets.all(18),
                         children: [
                           MainCard(
+                            radius: 26,
                             child: Text(
                               '아직 기록된 이벤트가 없어요',
                               style: mainBody(size: 14, color: kMainSub),
@@ -91,6 +89,7 @@ class _TimelineScreenState extends State<TimelineScreen> {
       'T',
     )[0];
     return MainCard(
+      radius: 26,
       padding: const EdgeInsets.all(16),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,

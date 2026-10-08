@@ -134,7 +134,7 @@ class _TarotScreenState extends State<TarotScreen> {
                     couple: widget.relationshipFirst,
                   ),
                   const SizedBox(height: 5),
-                  Text('오늘의 한 장', style: mainTitle(size: 30)),
+                  Text('오늘의 한 장', style: mainTitle(size: 32, color: kMainRose)),
                   const SizedBox(height: 5),
                   Text(
                     '카드가 답을 정해주기보다, 지금의 마음을 바라볼 질문을 건네요.',

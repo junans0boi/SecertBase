@@ -230,10 +230,7 @@ class _SecretBaseScreenState extends State<SecretBaseScreen> {
         backgroundColor: kMainPaper,
         elevation: 0,
         scrolledUnderElevation: 0,
-        title: Text(
-          '우리의 비밀기지',
-          style: mainBody(size: 17, weight: FontWeight.w900),
-        ),
+        title: Text('우리의 비밀기지', style: mainTitle(size: 26, color: kMainRose)),
         leading: const BackButton(color: kMainInk),
         actions: [
           if (claimable > 0)
@@ -293,7 +290,7 @@ class _SecretBaseScreenState extends State<SecretBaseScreen> {
                   else ...[
                     _headerCard(achieved, total),
                     const SizedBox(height: 24),
-                    Text('함께 쌓은 기록', style: mainTitle(size: 20)),
+                    Text('함께 쌓은 기록', style: mainTitle(size: 22)),
                     const SizedBox(height: 4),
                     Text(
                       '달성한 기록은 보상으로 바꿀 수 있어요.',

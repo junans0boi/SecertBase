@@ -21,7 +21,7 @@ class AfterglowSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('우리의 여운', style: mainTitle(size: 18)),
+        Text('우리의 여운', style: mainTitle(size: 22)),
         const SizedBox(height: 4),
         Text(
           '${state.visit?.visitDate ?? ''} · 같은 데이트, 서로 다른 장면',
@@ -30,6 +30,7 @@ class AfterglowSection extends StatelessWidget {
         const SizedBox(height: 10),
         if (state.contributions.isEmpty)
           MainCard(
+            radius: 26,
             color: kMainRoseSoft,
             padding: const EdgeInsets.all(16),
             child: Row(

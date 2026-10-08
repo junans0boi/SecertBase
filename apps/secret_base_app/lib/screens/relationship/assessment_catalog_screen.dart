@@ -91,7 +91,7 @@ class _AssessmentCatalogScreenState extends State<AssessmentCatalogScreen> {
                   widget.audienceFilter == AssessmentAudience.couple
                       ? '우리의 관계를 이해하는 검사'
                       : '나를 이해하는 검사',
-                  style: mainTitle(size: 24),
+                  style: mainTitle(size: 28, color: kMainRose),
                 ),
                 const SizedBox(height: 6),
                 Text(

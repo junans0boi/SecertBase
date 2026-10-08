@@ -133,10 +133,7 @@ class _BasePostcardScreenState extends State<BasePostcardScreen> {
         backgroundColor: kMainPaper,
         elevation: 0,
         scrolledUnderElevation: 0,
-        title: Text(
-          '우리의 기지 엽서',
-          style: mainBody(size: 17, weight: FontWeight.w900),
-        ),
+        title: Text('우리의 기지 엽서', style: mainTitle(size: 26, color: kMainRose)),
         leading: const BackButton(color: kMainInk),
       ),
       body: Column(
@@ -361,7 +358,7 @@ class _BasePostcardScreenState extends State<BasePostcardScreen> {
         ),
         if (fullHighlightUrl != null || highlight != null) ...[
           const SizedBox(height: 18),
-          Text('이달의 하이라이트', style: mainTitle(size: 18)),
+          Text('이달의 하이라이트', style: mainTitle(size: 22)),
           const SizedBox(height: 8),
           MainCard(
             padding: const EdgeInsets.all(14),
@@ -411,7 +408,7 @@ class _BasePostcardScreenState extends State<BasePostcardScreen> {
         ],
         if (visitedPlaces.isNotEmpty) ...[
           const SizedBox(height: 18),
-          Text('방문한 장소', style: mainTitle(size: 18)),
+          Text('방문한 장소', style: mainTitle(size: 22)),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,

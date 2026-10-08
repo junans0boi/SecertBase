@@ -203,8 +203,8 @@ class _MindcareScreenState extends State<MindcareScreen> {
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(13),
         decoration: BoxDecoration(
-          color: mine ? kMainLilacSoft : Colors.white,
-          borderRadius: BorderRadius.circular(17),
+          color: mine ? kMainRoseSoft : Colors.white,
+          borderRadius: BorderRadius.circular(22),
         ),
         child: Text(message.content, style: mainBody(size: 13, height: 1.5)),
       ),
@@ -322,7 +322,7 @@ class _MindcareScreenState extends State<MindcareScreen> {
       backgroundColor: kMainBg,
       appBar: AppBar(
         backgroundColor: kMainBg,
-        title: Text('마음관리', style: mainTitle(size: 22)),
+        title: Text('마음관리', style: mainTitle(size: 24, color: kMainRose)),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: kMainRose))

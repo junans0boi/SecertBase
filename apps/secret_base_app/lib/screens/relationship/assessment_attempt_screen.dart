@@ -333,7 +333,7 @@ class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
       children: [
-        Text('검사 결과', style: mainTitle(size: 25)),
+        Text('검사 결과', style: mainTitle(size: 28, color: kMainRose)),
         const SizedBox(height: 6),
         Text(
           '지금의 응답을 바탕으로 정리한 자기이해용 결과예요.',
@@ -456,7 +456,7 @@ class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
       children: [
-        Text('두 사람의 관계 결과', style: mainTitle(size: 25)),
+        Text('두 사람의 관계 결과', style: mainTitle(size: 28, color: kMainRose)),
         const SizedBox(height: 6),
         Text(
           '개인별 답변은 공개하지 않고, 두 사람의 조합만 정리했어요.',
@@ -508,7 +508,7 @@ class _AssessmentAttemptScreenState extends State<AssessmentAttemptScreen> {
         ),
         if (result.conversationPrompts.isNotEmpty) ...[
           const SizedBox(height: 4),
-          Text('대화 질문', style: mainTitle(size: 19)),
+          Text('대화 질문', style: mainTitle(size: 21)),
           const SizedBox(height: 8),
           ...result.conversationPrompts.map(
             (prompt) => Padding(

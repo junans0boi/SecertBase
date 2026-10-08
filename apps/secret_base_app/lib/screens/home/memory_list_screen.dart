@@ -72,7 +72,7 @@ class _MemoryListScreenState extends State<MemoryListScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('추억 되짚기', style: mainBody(size: 16, weight: FontWeight.w900)),
+            Text('추억 되짚기', style: mainTitle(size: 26, color: kMainRose)),
             Text(dateLabel, style: mainBody(size: 11, color: kMainMuted)),
           ],
         ),

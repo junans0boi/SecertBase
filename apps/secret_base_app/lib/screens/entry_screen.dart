@@ -104,7 +104,7 @@ class _EntryScreenState extends State<EntryScreen>
           style: mainTitle(size: 20, color: kMainSub, weight: FontWeight.w600),
         ),
         const SizedBox(height: 6),
-        Text('두 분만의 비밀기지', style: mainTitle(size: 34)),
+        Text('두 분만의 비밀기지', style: mainTitle(size: 34, color: kMainRose)),
         const SizedBox(height: 28),
         const BrandLogo(size: 100),
         const SizedBox(height: 20),
@@ -346,12 +346,10 @@ class _EntryScreenState extends State<EntryScreen>
       child: FilledButton(
         onPressed: _connecting ? null : _connect,
         style: FilledButton.styleFrom(
-          backgroundColor: kMainInk,
+          backgroundColor: kMainRose,
           disabledBackgroundColor: kMainLine,
           foregroundColor: kMainPaper,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
+          shape: const StadiumBorder(),
           elevation: 0,
         ),
         child: _connecting

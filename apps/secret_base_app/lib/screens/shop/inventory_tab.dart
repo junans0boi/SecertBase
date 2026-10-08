@@ -289,7 +289,7 @@ class _InventoryTabState extends State<InventoryTab> {
         builder: (_, ctrl) => Container(
           decoration: const BoxDecoration(
             color: kSurface,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
           ),
           child: ListView(
             controller: ctrl,
@@ -380,7 +380,8 @@ class _InventoryTabState extends State<InventoryTab> {
                             }
                           : null,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: usable ? kMainHoney : kMainMuted,
+                        backgroundColor: usable ? kMainRose : kMainMuted,
+                        shape: const StadiumBorder(),
                         padding: const EdgeInsets.symmetric(
                           horizontal: 14,
                           vertical: 8,
@@ -716,9 +717,9 @@ class _InventoryTabState extends State<InventoryTab> {
                       onSelected: (_) => setState(() {
                         _filterGame = game;
                       }),
-                      selectedColor: kMainHoney.withValues(alpha: 0.2),
+                      selectedColor: kMainRose.withValues(alpha: 0.16),
                       labelStyle: TextStyle(
-                        color: _filterGame == game ? kMainHoney : kMainMuted,
+                        color: _filterGame == game ? kMainRose : kMainMuted,
                         fontWeight: FontWeight.w600,
                         fontSize: 13,
                       ),
@@ -736,7 +737,7 @@ class _InventoryTabState extends State<InventoryTab> {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: kSurface,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(26),
                 border: Border.all(color: kMainLine),
               ),
               child: Column(
@@ -952,11 +953,9 @@ class _InventoryItemCard extends StatelessWidget {
                 child: ElevatedButton(
                   onPressed: onEquip,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: kMainHoney,
+                    backgroundColor: kMainRose,
                     padding: EdgeInsets.zero,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                    shape: const StadiumBorder(),
                   ),
                   child: const Text(
                     '장착',
@@ -1008,7 +1007,7 @@ class _CompendiumSheetState extends State<_CompendiumSheet> {
       builder: (_, ctrl) => Container(
         decoration: const BoxDecoration(
           color: kSurface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
         child: Column(
           children: [
@@ -1028,7 +1027,7 @@ class _CompendiumSheetState extends State<_CompendiumSheet> {
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      Text('도감', style: mainTitle(size: 18)),
+                      Text('도감', style: mainTitle(size: 24, color: kMainRose)),
                       const SizedBox(width: 8),
                       Text(
                         '$owned / $total 수집',
@@ -1072,9 +1071,11 @@ class _CompendiumSheetState extends State<_CompendiumSheet> {
                               selected: _filterGame == g,
                               onSelected: (_) =>
                                   setState(() => _filterGame = g),
-                              selectedColor: kMainSky.withValues(alpha: 0.2),
+                              selectedColor: kMainRose.withValues(alpha: 0.16),
                               labelStyle: TextStyle(
-                                color: _filterGame == g ? kMainSky : kMainMuted,
+                                color: _filterGame == g
+                                    ? kMainRose
+                                    : kMainMuted,
                               ),
                             ),
                           ),
@@ -1297,7 +1298,7 @@ class _CompendiumCard extends StatelessWidget {
       builder: (ctx) => Container(
         decoration: const BoxDecoration(
           color: kSurface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
         padding: const EdgeInsets.all(24),
         child: Column(

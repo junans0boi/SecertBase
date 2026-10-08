@@ -115,10 +115,7 @@ class _QaScreenState extends State<QaScreen> {
           icon: const Icon(Icons.arrow_back_ios_new, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text(
-          '❓ 오늘의 질문',
-          style: mainBody(size: 17, color: kMainInk, weight: FontWeight.w700),
-        ),
+        title: Text('❓ 오늘의 질문', style: mainTitle(size: 26, color: kMainRose)),
         elevation: 0,
       ),
       body: CozyPage(
@@ -166,6 +163,7 @@ class _QaScreenState extends State<QaScreen> {
   Widget _questionCard() {
     if (_question == null) {
       return MainCard(
+        radius: 26,
         color: kMainHoneySoft,
         borderColor: kMainHoney.withAlpha(100),
         child: Center(
@@ -180,6 +178,7 @@ class _QaScreenState extends State<QaScreen> {
       );
     }
     return MainCard(
+      radius: 26,
       color: kMainHoneySoft,
       borderColor: kMainHoney.withAlpha(120),
       child: Column(
@@ -205,6 +204,7 @@ class _QaScreenState extends State<QaScreen> {
 
   Widget _answerInput() {
     return MainCard(
+      radius: 26,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -225,6 +225,10 @@ class _QaScreenState extends State<QaScreen> {
                 borderRadius: BorderRadius.circular(14),
                 borderSide: BorderSide.none,
               ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: kMainRose, width: 1.5),
+              ),
               contentPadding: const EdgeInsets.all(14),
             ),
             style: mainBody(size: 14, color: kMainInk),
@@ -238,9 +242,7 @@ class _QaScreenState extends State<QaScreen> {
               style: FilledButton.styleFrom(
                 backgroundColor: kMainHoney,
                 foregroundColor: kMainInk,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
+                shape: const StadiumBorder(),
               ),
               child: _submitting
                   ? const SizedBox(
@@ -265,6 +267,7 @@ class _QaScreenState extends State<QaScreen> {
 
   Widget _waitingRevealCard() {
     return MainCard(
+      radius: 26,
       color: kMainSkySoft,
       borderColor: kMainSky.withAlpha(100),
       child: Row(
@@ -295,6 +298,7 @@ class _QaScreenState extends State<QaScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: MainCard(
+        radius: 26,
         color: isMe ? kMainSageSoft : kMainSkySoft,
         borderColor: (isMe ? kMainSage : kMainSky).withAlpha(100),
         child: Column(

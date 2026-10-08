@@ -86,7 +86,7 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text('검사 기록', style: mainTitle(size: 24)),
+                    Text('검사 기록', style: mainTitle(size: 28, color: kMainRose)),
                     const SizedBox(width: 8),
                     Text(
                       '${_history!.length}회',
@@ -201,7 +201,7 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
         color: Colors.transparent,
         child: InkWell(
           key: Key('assessment_history_open_${item.id}'),
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(26),
           onTap: () => _openDetail(index, item),
           child: MainCard(
             key: index == 0
@@ -326,7 +326,7 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
   Widget _emptyState() => ListView(
     padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
     children: [
-      Text('검사 기록', style: mainTitle(size: 24)),
+      Text('검사 기록', style: mainTitle(size: 28, color: kMainRose)),
       const SizedBox(height: 6),
       Text(
         '완료한 검사는 결과가 자동으로 보관돼요. 다시 검사해도 이전 기록은 사라지지 않아요.',
@@ -401,7 +401,7 @@ class AssessmentHistoryDetailScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
         children: [
-          Text(title, style: mainTitle(size: 24)),
+          Text(title, style: mainTitle(size: 28, color: kMainRose)),
           const SizedBox(height: 6),
           Text(
             '이 기록은 읽기 전용이에요. 당시 선택한 답변은 변경할 수 없습니다.',

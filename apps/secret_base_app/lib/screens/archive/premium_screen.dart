@@ -137,9 +137,7 @@ class _PremiumScreenState extends State<PremiumScreen>
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(
               backgroundColor: kMainRose,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
+              shape: const StadiumBorder(),
             ),
             child: Text(
               '구독 시작 👑',
@@ -244,7 +242,10 @@ class _PremiumScreenState extends State<PremiumScreen>
       appBar: AppBar(
         backgroundColor: kMainPaper,
         elevation: 0,
-        title: Text('비밀기지 Premium', style: mainTitle(size: 20)),
+        title: Text(
+          '비밀기지 Premium',
+          style: mainTitle(size: 24, color: kMainRose),
+        ),
         iconTheme: IconThemeData(color: kMainInk),
       ),
       body: _loading
@@ -323,10 +324,7 @@ class _PremiumScreenState extends State<PremiumScreen>
                   const SizedBox(height: 28),
 
                   // ── 혜택 비교표
-                  Text(
-                    '무료 vs Premium 혜택 비교',
-                    style: mainTitle(size: 17, color: kMainInk),
-                  ),
+                  Text('무료 vs Premium 혜택 비교', style: mainTitle(size: 20)),
                   const SizedBox(height: 12),
                   _BenefitTable(limits: _limits),
 
@@ -334,7 +332,7 @@ class _PremiumScreenState extends State<PremiumScreen>
 
                   if (!_isPremium) ...[
                     // ── 플랜 선택
-                    Text('플랜 선택', style: mainTitle(size: 17, color: kMainInk)),
+                    Text('플랜 선택', style: mainTitle(size: 20)),
                     const SizedBox(height: 12),
                     _PlanCard(
                       title: '월간 플랜',
@@ -378,9 +376,7 @@ class _PremiumScreenState extends State<PremiumScreen>
                         style: FilledButton.styleFrom(
                           backgroundColor: kMainRose,
                           padding: const EdgeInsets.symmetric(vertical: 18),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
+                          shape: const StadiumBorder(),
                         ),
                         child: _activating
                             ? const SizedBox(
@@ -514,7 +510,7 @@ class _BenefitTable extends StatelessWidget {
             decoration: BoxDecoration(
               color: kMainRoseSoft,
               borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(16),
+                top: Radius.circular(28),
               ),
             ),
             child: Row(

@@ -148,9 +148,10 @@ class RelationshipEntryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MainCard(
+      radius: 26,
       padding: EdgeInsets.zero,
       child: InkWell(
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(26),
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(18),
@@ -426,7 +427,7 @@ class _RelationshipUnderstandingScreenState
             padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
             decoration: const BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -521,7 +522,7 @@ class _RelationshipUnderstandingScreenState
         padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
         decoration: const BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1283,11 +1284,11 @@ class _RelationshipUnderstandingScreenState
                   tabAlignment: TabAlignment.center,
                   indicatorSize: TabBarIndicatorSize.label,
                   indicator: const UnderlineTabIndicator(
-                    borderSide: BorderSide(color: kMainInk, width: 3),
+                    borderSide: BorderSide(color: kMainRose, width: 3),
                     insets: EdgeInsets.symmetric(horizontal: 10),
                   ),
                   dividerColor: Colors.transparent,
-                  labelColor: kMainInk,
+                  labelColor: kMainRose,
                   unselectedLabelColor: kMainMuted,
                   labelStyle: mainBody(size: 18, weight: FontWeight.w800),
                   unselectedLabelStyle: mainBody(
@@ -1332,7 +1333,10 @@ class _RelationshipUnderstandingScreenState
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     if (!widget.editBirthProfileOnly) ...[
-                      Text('관계 이해 허브', style: mainTitle(size: 26)),
+                      Text(
+                        '관계 이해 허브',
+                        style: mainTitle(size: 26, color: kMainRose),
+                      ),
                       const SizedBox(height: 8),
                       Text(
                         _selectedArea == _RelationshipArea.personal
@@ -1348,7 +1352,10 @@ class _RelationshipUnderstandingScreenState
                     if (showBirthProfile &&
                         _selectedArea == _RelationshipArea.personal) ...[
                       const SizedBox(height: 24),
-                      Text('출생 프로필', style: mainTitle(size: 26)),
+                      Text(
+                        '출생 프로필',
+                        style: mainTitle(size: 26, color: kMainRose),
+                      ),
                       const SizedBox(height: 8),
                       Text(
                         '나중에 관계 이해 콘텐츠를 맞춤화할 때 사용할 정보예요. '
@@ -1457,6 +1464,7 @@ class _RelationshipUnderstandingScreenState
                                 style: FilledButton.styleFrom(
                                   backgroundColor: kMainRose,
                                   foregroundColor: Colors.white,
+                                  shape: const StadiumBorder(),
                                   padding: const EdgeInsets.symmetric(
                                     vertical: 14,
                                   ),

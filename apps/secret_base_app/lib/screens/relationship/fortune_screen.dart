@@ -166,7 +166,7 @@ class _RelationshipFortuneScreenState extends State<RelationshipFortuneScreen> {
         const SizedBox(height: 5),
         Text(
           isCouple ? '오늘 우리 사이에 필요한 건' : '오늘 나에게 필요한 건',
-          style: mainTitle(size: 30),
+          style: mainTitle(size: 32, color: kMainRose),
         ),
         const SizedBox(height: 5),
         Text(

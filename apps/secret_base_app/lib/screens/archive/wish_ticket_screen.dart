@@ -93,7 +93,7 @@ class _WishTicketScreenState extends State<WishTicketScreen> {
       isScrollControlled: true,
       backgroundColor: kMainPaper,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (_) => SafeArea(
         child: Padding(
@@ -138,6 +138,10 @@ class _WishTicketScreenState extends State<WishTicketScreen> {
         borderRadius: BorderRadius.circular(14),
         borderSide: BorderSide.none,
       ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: kMainRose, width: 1.5),
+      ),
     ),
   );
 
@@ -149,10 +153,7 @@ class _WishTicketScreenState extends State<WishTicketScreen> {
       appBar: AppBar(
         backgroundColor: kMainBg,
         foregroundColor: kMainInk,
-        title: Text(
-          '소원권',
-          style: mainBody(size: 17, color: kMainInk, weight: FontWeight.w800),
-        ),
+        title: Text('소원권', style: mainTitle(size: 26, color: kMainRose)),
         actions: [
           IconButton(onPressed: _openCreateSheet, icon: const Icon(Icons.add)),
         ],
@@ -169,6 +170,7 @@ class _WishTicketScreenState extends State<WishTicketScreen> {
                   itemBuilder: (_, i) {
                     if (_tickets.isEmpty) {
                       return MainCard(
+                        radius: 26,
                         child: Text(
                           '아직 소원권이 없어요',
                           style: mainBody(size: 14, color: kMainSub),
@@ -179,6 +181,7 @@ class _WishTicketScreenState extends State<WishTicketScreen> {
                     final mine = '${ticket['owner_user_id']}' == myId;
                     final available = ticket['status'] == 'available';
                     return MainCard(
+                      radius: 26,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [

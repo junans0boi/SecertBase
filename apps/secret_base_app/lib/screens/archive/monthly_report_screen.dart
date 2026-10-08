@@ -51,10 +51,7 @@ class _MonthlyReportScreenState extends State<MonthlyReportScreen> {
       appBar: AppBar(
         backgroundColor: kMainBg,
         foregroundColor: kMainInk,
-        title: Text(
-          '월간 리포트',
-          style: mainBody(size: 17, color: kMainInk, weight: FontWeight.w800),
-        ),
+        title: Text('월간 리포트', style: mainTitle(size: 26, color: kMainRose)),
       ),
       body: CozyPage(
         child: _loading
@@ -63,6 +60,7 @@ class _MonthlyReportScreenState extends State<MonthlyReportScreen> {
                 padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
                 children: [
                   MainCard(
+                    radius: 26,
                     gradient: kRoseGrad,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -113,6 +111,7 @@ class _MonthlyReportScreenState extends State<MonthlyReportScreen> {
   }
 
   Widget _metric(String label, String value, Color color) => MainCard(
+    radius: 26,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -124,6 +123,7 @@ class _MonthlyReportScreenState extends State<MonthlyReportScreen> {
   );
 
   Widget _listMetric(String title, List? rows) => MainCard(
+    radius: 26,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

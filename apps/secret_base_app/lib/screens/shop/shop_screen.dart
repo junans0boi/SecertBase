@@ -492,10 +492,7 @@ class _ShopScreenState extends State<ShopScreen>
         elevation: 0,
         shadowColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
-        title: const Text(
-          '상점',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
-        ),
+        title: Text('상점', style: mainTitle(size: 28, color: kMainRose)),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 14),
@@ -543,15 +540,15 @@ class _ShopScreenState extends State<ShopScreen>
                         vertical: 3,
                       ),
                       decoration: BoxDecoration(
-                        color: kMainSky.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(8),
+                        color: kMainRose.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(99),
                       ),
                       child: Text(
                         'Lv.$_userLevel',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w800,
-                          color: kMainSky,
+                          color: kMainRose,
                         ),
                       ),
                     ),
@@ -563,7 +560,7 @@ class _ShopScreenState extends State<ShopScreen>
                           value: _xpNeeded > 0 ? _userXp / _xpNeeded : 0,
                           minHeight: 6,
                           backgroundColor: kMainMuted.withValues(alpha: 0.2),
-                          valueColor: AlwaysStoppedAnimation<Color>(kMainSky),
+                          valueColor: AlwaysStoppedAnimation<Color>(kMainRose),
                         ),
                       ),
                     ),
@@ -595,9 +592,9 @@ class _ShopScreenState extends State<ShopScreen>
                       ),
                     )
                     .toList(),
-                labelColor: kMainHoney,
+                labelColor: kMainRose,
                 unselectedLabelColor: kMainMuted,
-                indicatorColor: kMainHoney,
+                indicatorColor: kMainRose,
                 indicatorWeight: 3,
               ),
             ],
@@ -641,8 +638,15 @@ class _ShopScreenState extends State<ShopScreen>
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: kSurface,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: kMainHoney.withValues(alpha: 0.22)),
+              borderRadius: BorderRadius.circular(26),
+              border: Border.all(color: kMainLine),
+              boxShadow: [
+                BoxShadow(
+                  color: kMainRose.withAlpha(24),
+                  blurRadius: 18,
+                  offset: const Offset(0, 6),
+                ),
+              ],
             ),
             child: Row(
               children: [
@@ -716,12 +720,9 @@ class _ShopScreenState extends State<ShopScreen>
                 ],
               ),
             ),
-          const Padding(
+          Padding(
             padding: EdgeInsets.fromLTRB(16, 0, 16, 10),
-            child: Text(
-              '구매 가능한 아이템',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-            ),
+            child: Text('구매 가능한 아이템', style: mainTitle(size: 22)),
           ),
           _GameSection(
             title: '윷놀이',
@@ -1145,7 +1146,7 @@ class _ItemPreviewSheet extends StatelessWidget {
     return Container(
       decoration: const BoxDecoration(
         color: Color(0xFFFFFBFD),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
       child: Column(
@@ -1266,6 +1267,7 @@ class _ItemPreviewSheet extends StatelessWidget {
       return ElevatedButton(
         onPressed: null,
         style: ElevatedButton.styleFrom(
+          shape: const StadiumBorder(),
           padding: const EdgeInsets.symmetric(vertical: 14),
         ),
         child: const Text(
@@ -1277,6 +1279,7 @@ class _ItemPreviewSheet extends StatelessWidget {
     if (equipped) {
       return OutlinedButton(
         style: OutlinedButton.styleFrom(
+          shape: const StadiumBorder(),
           side: BorderSide(color: gradeColor),
           padding: const EdgeInsets.symmetric(vertical: 14),
         ),
@@ -1294,8 +1297,9 @@ class _ItemPreviewSheet extends StatelessWidget {
     if (owned) {
       return ElevatedButton(
         style: ElevatedButton.styleFrom(
-          backgroundColor: kMainSage,
+          backgroundColor: kMainRose,
           foregroundColor: Colors.white,
+          shape: const StadiumBorder(),
           padding: const EdgeInsets.symmetric(vertical: 14),
         ),
         onPressed: onEquip,
@@ -1310,6 +1314,7 @@ class _ItemPreviewSheet extends StatelessWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor: gradeColor,
           foregroundColor: Colors.white,
+          shape: const StadiumBorder(),
           padding: const EdgeInsets.symmetric(vertical: 14),
         ),
         onPressed: onGacha,
@@ -1323,6 +1328,7 @@ class _ItemPreviewSheet extends StatelessWidget {
       style: ElevatedButton.styleFrom(
         backgroundColor: canAfford ? gradeColor : kMainMuted,
         foregroundColor: Colors.white,
+        shape: const StadiumBorder(),
         padding: const EdgeInsets.symmetric(vertical: 14),
       ),
       onPressed: canAfford ? onBuy : null,

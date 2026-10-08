@@ -157,7 +157,10 @@ class _SajuScreenState extends State<SajuScreen> {
                   FilledButton(
                     key: const Key('saju_limited_confirm'),
                     onPressed: _confirmLimited,
-                    style: FilledButton.styleFrom(backgroundColor: kMainRose),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: kMainRose,
+                      shape: const StadiumBorder(),
+                    ),
                     child: const Text('네'),
                   ),
                 ],
@@ -194,7 +197,7 @@ class _SajuScreenState extends State<SajuScreen> {
       children: [
         Text(
           isLimited ? '기본 명식으로 살펴봐요' : '오늘의 나를 천천히 살펴봐요',
-          style: mainTitle(size: 27),
+          style: mainTitle(size: 28, color: kMainRose),
         ),
         const SizedBox(height: 6),
         Text(

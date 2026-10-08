@@ -102,11 +102,9 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
               );
             },
             style: FilledButton.styleFrom(
-              backgroundColor: kMainSky,
+              backgroundColor: kMainRose,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+              shape: const StadiumBorder(),
             ),
             child: Text(
               '만들기',
@@ -139,6 +137,10 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: kMainRose, width: 1.5),
         ),
         labelStyle: mainBody(size: 12, color: kMainMuted),
         hintStyle: mainBody(size: 13, color: kMainMuted),
@@ -221,9 +223,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
             style: FilledButton.styleFrom(
               backgroundColor: kMainSage,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+              shape: const StadiumBorder(),
             ),
             child: Text(
               '기록',
@@ -264,10 +264,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
           icon: const Icon(Icons.arrow_back_ios_new, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text(
-          '🏆 목표 챌린지',
-          style: mainBody(size: 17, color: kMainInk, weight: FontWeight.w700),
-        ),
+        title: Text('🏆 목표 챌린지', style: mainTitle(size: 26, color: kMainRose)),
         elevation: 0,
       ),
       floatingActionButton: FloatingActionButton(
@@ -320,6 +317,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
     return GestureDetector(
       onTap: isCompleted ? null : () => _showLogDialog(c),
       child: MainCard(
+        radius: 26,
         color: isCompleted ? kMainSageSoft : kMainPaper,
         borderColor: isCompleted ? kMainSage.withAlpha(100) : kMainLine,
         child: Column(

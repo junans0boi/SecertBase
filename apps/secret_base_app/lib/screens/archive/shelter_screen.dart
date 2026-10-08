@@ -219,9 +219,7 @@ class _ShelterScreenState extends State<ShelterScreen>
               onPressed: () => Navigator.pop(ctx, true),
               style: FilledButton.styleFrom(
                 backgroundColor: kMainRose,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
+                shape: const StadiumBorder(),
               ),
               child: Text(
                 '저장',
@@ -265,7 +263,7 @@ class _ShelterScreenState extends State<ShelterScreen>
       appBar: AppBar(
         backgroundColor: kMainPaper,
         elevation: 0,
-        title: Text('마음 대피소 🍃', style: mainTitle(size: 22)),
+        title: Text('마음 대피소 🍃', style: mainTitle(size: 24, color: kMainRose)),
         bottom: TabBar(
           controller: _tabController,
           labelStyle: mainBody(size: 14, weight: FontWeight.bold),
@@ -442,9 +440,7 @@ class _ShelterScreenState extends State<ShelterScreen>
                   ),
                   style: FilledButton.styleFrom(
                     backgroundColor: kMainRose,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                    shape: const StadiumBorder(),
                   ),
                 ),
               ),

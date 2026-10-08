@@ -237,7 +237,7 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: kMainPaper,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
         title: Text('로그아웃', style: mainTitle(size: 24)),
         content: Text('비밀기지에서 로그아웃할까요?', style: mainBody(size: 14)),
         actions: [
@@ -266,7 +266,7 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: kMainPaper,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
         title: Text('애인 연결 해제', style: mainTitle(size: 24)),
         content: Text(
           '연결을 해제하면 함께 쓰던 공간이 닫히고 상대방의 기록을 볼 수 없어요. '
@@ -294,7 +294,7 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: kMainPaper,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
         title: Text('정말 연결을 해제할까요?', style: mainTitle(size: 24)),
         content: Text(
           '상대방의 동의 없이 바로 연결이 해제됩니다.',
@@ -324,7 +324,7 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: kMainPaper,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
         title: Text('회원 탈퇴', style: mainTitle(size: 24)),
         content: Text(
           '탈퇴하면 내가 작성한 MomentLoop와 미디어가 영구 삭제되고, '
@@ -358,7 +358,7 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: kMainPaper,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
         title: Text('정말 탈퇴할까요?', style: mainTitle(size: 22)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -747,7 +747,7 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('내 공간', style: mainTitle(size: 30)),
+              Text('내 공간', style: mainTitle(size: 32, color: kMainRose)),
               Text('우리의 계정과 연결을 관리해요', style: mainBody(size: 13)),
             ],
           ),
@@ -1383,7 +1383,7 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
       context: context,
       backgroundColor: kMainPaper,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (context) => StatefulBuilder(
         builder: (context, setPickerState) {

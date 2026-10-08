@@ -27,7 +27,7 @@ class VaultScreen extends StatelessWidget {
           icon: const Icon(Icons.arrow_back_ios_new, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('추억 저장고', style: mainTitle(size: 24)),
+        title: Text('추억 저장고', style: mainTitle(size: 24, color: kMainRose)),
       ),
       body: CozyPage(
         child: Column(
@@ -95,7 +95,7 @@ class _VaultCard extends StatelessWidget {
       onTap: onTap,
       child: MainCard(
         padding: const EdgeInsets.all(15),
-        radius: 18,
+        radius: 26,
         borderColor: item.color.withAlpha(90),
         child: Row(
           children: [

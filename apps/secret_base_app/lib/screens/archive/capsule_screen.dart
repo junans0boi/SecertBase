@@ -99,9 +99,7 @@ class _CapsuleScreenState extends State<CapsuleScreen> {
               onPressed: () => Navigator.pop(ctx),
               style: FilledButton.styleFrom(
                 backgroundColor: kMainHoney,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                shape: const StadiumBorder(),
               ),
               child: Text(
                 '닫기',
@@ -148,6 +146,13 @@ class _CapsuleScreenState extends State<CapsuleScreen> {
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
                       borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(
+                        color: kMainRose,
+                        width: 1.5,
+                      ),
                     ),
                     hintStyle: mainBody(size: 13, color: kMainMuted),
                     contentPadding: const EdgeInsets.all(14),
@@ -239,9 +244,7 @@ class _CapsuleScreenState extends State<CapsuleScreen> {
               style: FilledButton.styleFrom(
                 backgroundColor: kMainHoney,
                 disabledBackgroundColor: kMainLine,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                shape: const StadiumBorder(),
               ),
               child: Text(
                 '봉인하기',
@@ -294,6 +297,10 @@ class _CapsuleScreenState extends State<CapsuleScreen> {
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
         ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: kMainRose, width: 1.5),
+        ),
         labelStyle: mainBody(size: 12, color: kMainMuted),
         hintStyle: mainBody(size: 13, color: kMainMuted),
         contentPadding: const EdgeInsets.symmetric(
@@ -317,10 +324,7 @@ class _CapsuleScreenState extends State<CapsuleScreen> {
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text(
-          '🕯️ 타임캡슐',
-          style: mainBody(size: 17, color: kMainInk, weight: FontWeight.w700),
-        ),
+        title: Text('🕯️ 타임캡슐', style: mainTitle(size: 26, color: kMainRose)),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showCreateDialog,
@@ -390,6 +394,7 @@ class _CapsuleScreenState extends State<CapsuleScreen> {
     }
 
     return MainCard(
+      radius: 26,
       padding: const EdgeInsets.all(18),
       color: isOpened
           ? kMainSageSoft
@@ -508,9 +513,7 @@ class _CapsuleScreenState extends State<CapsuleScreen> {
                 onPressed: () => _openCapsule(c),
                 style: FilledButton.styleFrom(
                   backgroundColor: kMainHoney,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  shape: const StadiumBorder(),
                   padding: const EdgeInsets.symmetric(vertical: 11),
                 ),
                 child: Text(

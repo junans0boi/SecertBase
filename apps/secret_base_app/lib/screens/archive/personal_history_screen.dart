@@ -103,7 +103,7 @@ class _PersonalHistoryScreenState extends State<PersonalHistoryScreen> {
     return Scaffold(
       backgroundColor: kMainBg,
       appBar: AppBar(
-        title: const Text('개인 보관함'),
+        title: Text('개인 보관함', style: mainTitle(size: 24, color: kMainRose)),
         actions: [
           IconButton(
             tooltip: 'ZIP 내보내기',
@@ -120,6 +120,7 @@ class _PersonalHistoryScreenState extends State<PersonalHistoryScreen> {
               padding: const EdgeInsets.all(18),
               children: [
                 MainCard(
+                  radius: 26,
                   color: kMainSageSoft,
                   padding: const EdgeInsets.all(16),
                   child: Row(
@@ -186,6 +187,7 @@ class _PersonalHistoryScreenState extends State<PersonalHistoryScreen> {
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: MainCard(
+          radius: 26,
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
