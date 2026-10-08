@@ -1,6 +1,5 @@
 import { spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import express from 'express';
 import { createIntegrationEnvironment } from '../src/integration-environment.js';
 
 export async function createApiTestServer({ adminUrl, redisUrl }) {
@@ -25,17 +24,18 @@ export async function createApiTestServer({ adminUrl, redisUrl }) {
   }
 
   Object.assign(process.env, runtime);
-  const [{ default: routes }, database] = await Promise.all([
+  const [{ default: routes }, database, { createApp }, { config }, { redis }] = await Promise.all([
     import('../src/routes.js'),
     import('../src/db.js'),
+    import('../src/app/create-app.js'),
+    import('../src/config.js'),
+    import('../src/redis.js'),
   ]);
-  const app = express();
+  const app = createApp({ config, redis, routes });
   app.locals.io = {
     to: () => ({ emit: () => {} }),
     in: () => ({ disconnectSockets: () => {} }),
   };
-  app.use(express.json());
-  app.use('/api', routes);
   const server = createServer(app);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const baseUrl = `http://127.0.0.1:${server.address().port}`;

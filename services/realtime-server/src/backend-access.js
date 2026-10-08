@@ -1,77 +1,16 @@
 import jwt from 'jsonwebtoken';
+import {
+  disabledResponse,
+  featureForRestPath,
+  featureForSocketPacket,
+  isRestEnabled,
+} from './shared/feature-registry.js';
+import {
+  AccessContextError,
+  getAuthenticatedActor,
+} from './shared/access-context.js';
 
-const disabledRestPrefixes = new Map([
-  ['/today', 'engagement'],
-  ['/missions', 'missions'],
-  ['/qa', 'qa'],
-  ['/timeline', 'timeline'],
-  ['/push', 'push'],
-  ['/wish-tickets', 'wish_tickets'],
-  ['/reports', 'reports'],
-  ['/balance', 'balance'],
-  ['/challenges', 'challenges'],
-  ['/jukebox', 'jukebox'],
-  ['/capsules', 'capsules'],
-  ['/album', 'album'],
-  ['/reflections', 'reflections'],
-  ['/premium', 'premium'],
-]);
-
-// 공개된 게임 타입. 게임을 복구할 때는 여기에 추가하고
-// disabledSocketPrefixes에서 해당 prefix를 제거한다 (epic #20).
-export const PUBLIC_GAME_TYPES = [
-  'yut',
-  'marble',
-  'rps',
-  'zero',
-  'uno',
-  'dice',
-  'telepathy',
-  'pirate',
-  'catch',
-  'blackjack',
-  'oldmaid',
-  'penalty',
-  'bowling',
-  'tank',
-  'gostop',
-];
-
-const disabledSocketPrefixes = new Map([
-  ['heart:', 'heart'],
-]);
-
-const disabledResponse = (feature) => ({
-  ok: false,
-  error: { code: 'FEATURE_DISABLED', feature },
-});
-
-const featureForRestPath = (requestPath) => {
-  for (const [prefix, feature] of disabledRestPrefixes) {
-    if (requestPath === prefix || requestPath.startsWith(`${prefix}/`)) return feature;
-  }
-  return null;
-};
-
-const featureForSocketPacket = ([event, payload]) => {
-  for (const [prefix, feature] of disabledSocketPrefixes) {
-    if (event.startsWith(prefix)) return feature;
-  }
-
-  if (event.startsWith('game:lobby:')) {
-    const gameType = String(payload?.gameType ?? payload?.type ?? '');
-    if (gameType && !PUBLIC_GAME_TYPES.includes(gameType)) return gameType;
-  }
-  if (event.startsWith('game:session:')) {
-    const gameType = String(payload?.gameType ?? '');
-    if (gameType && !PUBLIC_GAME_TYPES.includes(gameType)) return gameType;
-  }
-  if (event === 'game:restart:respond') {
-    const gameType = String(payload?.gameType ?? '');
-    if (gameType && !PUBLIC_GAME_TYPES.includes(gameType)) return gameType;
-  }
-  return null;
-};
+export { PUBLIC_GAME_TYPES } from './shared/feature-registry.js';
 
 export const requireAuth = (secret) => (req, res, next) => {
   const match = (req.get('authorization') || '').match(/^Bearer\s+(.+)$/i);
@@ -90,6 +29,17 @@ export const requireAuth = (secret) => (req, res, next) => {
       userId,
       userCode: typeof payload.userCode === 'string' ? payload.userCode : null,
     };
+    try {
+      getAuthenticatedActor(req);
+    } catch (error) {
+      if (error instanceof AccessContextError) {
+        return res.status(403).json({
+          ok: false,
+          error: { code: error.code },
+        });
+      }
+      throw error;
+    }
     next();
   } catch {
     return res.status(401).json({
@@ -100,9 +50,8 @@ export const requireAuth = (secret) => (req, res, next) => {
 };
 
 export const mvpRestFeatureGate = (featureSet) => (req, res, next) => {
-  if (featureSet !== 'mvp') return next();
   const feature = featureForRestPath(req.path);
-  if (!feature) return next();
+  if (isRestEnabled(req.path, featureSet) || !feature) return next();
   return res.status(403).json(disabledResponse(feature));
 };
 

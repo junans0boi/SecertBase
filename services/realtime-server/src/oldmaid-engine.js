@@ -136,7 +136,7 @@ export function drawCard(game, playerId, targetCardId) {
 
   const { updatedHand: pairedHand, removedCount } = removePairs(myHand);
   // removePairs 후에도 조커가 배열 뒤쪽에 몰리는 패턴이 생기므로 재셔플.
-  const newMyHand = shuffle(pairedHand);
+  const newMyHand = removedCount > 0 ? shuffle(pairedHand) : pairedHand;
 
   const updatedGame = {
     ...game,

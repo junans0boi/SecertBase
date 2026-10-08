@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
-    "check": "node --check src/index.js",
+    "check": "node --check src/index.js && node --check src/app/create-app.js && node --check src/app/create-realtime-server.js && node --check src/shared/access-context.js && node --check src/shared/feature-registry.js",
     "test": "node --test",
     "test:integration": "node scripts/run-integration-tests.js",
     "migrate": "node scripts/migrate.js"

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { MARBLE_CHARACTER_IDS } from "./marble-characters.js";
 import { config } from "./config.js";
 import { installSocketAuthentication, installSocketFeatureGate } from "./backend-access.js";
+import { resolveActiveCouple } from "./shared/access-context.js";
 import {
   registerGameSessionHandlers,
   resolveLobbyJoinForResume,
@@ -543,17 +544,14 @@ const cleanupLobbyForUser = async (io, roomCode, gameType, userId) => {
 };
 
 const resolveSocketSession = async (userId) => {
-  const result = await query(
-    `SELECT c.RoomCode, u.UserCode,
-            COALESCE(u.Nickname, u.UserName, u.UserCode) AS Nickname
-     FROM Couples c
-     JOIN Users u ON u.UserId = ?
-     WHERE c.Status = 'active' AND (c.User1Id = ? OR c.User2Id = ?)
-     LIMIT 1`,
-    [userId, userId, userId],
-  );
-  const row = result.rows[0];
-  return row ? { userId: row.UserCode, roomCode: row.RoomCode, nickname: row.Nickname } : null;
+  const couple = await resolveActiveCouple(userId, query);
+  return couple
+    ? {
+        userId: couple.UserCode,
+        roomCode: couple.RoomCode,
+        nickname: couple.Nickname,
+      }
+    : null;
 };
 
 const getOrderedPlayers = async (roomCode, presence) => {
