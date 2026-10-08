@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../../core/auth_service.dart';
 import '../../core/main_design.dart';
+import '../../core/main_hero.dart';
 import '../../core/socket_service.dart';
 import 'game_lobby_screen.dart';
 import 'games/blackjack_screen.dart';
@@ -511,44 +512,48 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       child: GestureDetector(
         key: ValueKey('arcade_game_${game.type}'),
         onTap: () => setState(() => _selectedIdx = isSelected ? null : idx),
-        child: SizedBox(
-          width: 66,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          decoration: BoxDecoration(
+            color: isSelected ? kMainRoseSoft : kMainPaper,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: isSelected ? kMainRose : Colors.transparent,
+              width: 2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: kMainRose.withAlpha(isSelected ? 50 : 22),
+                blurRadius: 14,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                width: 54,
-                height: 54,
+              Container(
+                width: 46,
+                height: 46,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: game.background,
-                  border: Border.all(
-                    color: isSelected ? game.color : Colors.transparent,
-                    width: 2.5,
-                  ),
-                  boxShadow: isSelected
-                      ? [
-                          BoxShadow(
-                            color: game.color.withValues(alpha: 0.35),
-                            blurRadius: 10,
-                            spreadRadius: 1,
-                          ),
-                        ]
-                      : null,
                 ),
-                child: Icon(game.icon, color: game.color, size: 26),
+                child: Icon(game.icon, color: game.color, size: 24),
               ),
-              const SizedBox(height: 5),
-              Text(
-                game.title,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
-                  color: isSelected ? game.color : kMainSub,
+              const SizedBox(height: 7),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  game.title,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: mainBody(
+                    size: 12,
+                    color: isSelected ? kMainRose : kMainInk,
+                    weight: FontWeight.w800,
+                  ),
                 ),
               ),
             ],
@@ -698,75 +703,63 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     final connected = SocketService().isConnected;
     final selected = _selectedIdx != null ? _games[_selectedIdx!] : null;
 
-    return CozyPage(
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(18, 16, 18, 32),
+    return ColoredBox(
+      color: kMainCream,
+      child: Column(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          MainTabHeader(
+            safeTop: true,
+            title: '둘이서 놀기',
+            subtitle: connected ? '오늘은 어떤 게임으로 놀아볼까요?' : '상대방 연결을 확인하고 있어요',
+            trailing: Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: kMainRoseSoft,
+                shape: BoxShape.circle,
+                border: Border.all(color: kMainLine),
+              ),
+              child: const Icon(Icons.sports_esports_rounded, color: kMainRose),
+            ),
+          ),
+          Expanded(
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 32),
+              children: [
+                _buildWalletBar(),
+                Row(
                   children: [
+                    Expanded(child: Text('게임 고르기', style: mainTitle(size: 24))),
                     Text(
-                      '둘이서 놀기',
-                      style: mainTitle(size: 32, color: kMainRose),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      connected ? '오늘은 어떤 게임으로 놀아볼까요?' : '상대방 연결을 확인하고 있어요',
-                      style: mainBody(size: 13, color: kMainSub),
+                      '${_games.length}가지',
+                      style: mainBody(size: 12, color: kMainMuted),
                     ),
                   ],
                 ),
-              ),
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: kMainRoseSoft,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: kMainLine),
+                const SizedBox(height: 12),
+                GridView.count(
+                  crossAxisCount: 3,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 10,
+                  children: [
+                    for (var i = 0; i < _games.length; i++) _buildStoryIcon(i),
+                  ],
                 ),
-                child: const Icon(
-                  Icons.sports_esports_rounded,
-                  color: kMainRose,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          _buildWalletBar(),
-          Row(
-            children: [
-              Expanded(child: Text('게임 고르기', style: mainTitle(size: 24))),
-              Text(
-                '${_games.length}가지',
-                style: mainBody(size: 12, color: kMainMuted),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 88,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              clipBehavior: Clip.none,
-              itemCount: _games.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 8),
-              itemBuilder: (context, i) => _buildStoryIcon(i),
+                const SizedBox(height: 20),
+                if (selected == null)
+                  MainCard(
+                    radius: 26,
+                    padding: const EdgeInsets.symmetric(vertical: 38),
+                    child: _buildEmptyState(),
+                  )
+                else
+                  _buildDetailCard(context, selected, connected),
+              ],
             ),
           ),
-          const SizedBox(height: 20),
-          if (selected == null)
-            MainCard(
-              radius: 26,
-              padding: const EdgeInsets.symmetric(vertical: 38),
-              child: _buildEmptyState(),
-            )
-          else
-            _buildDetailCard(context, selected, connected),
         ],
       ),
     );

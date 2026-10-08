@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/auth_service.dart';
 import '../../core/main_design.dart';
+import '../../core/main_hero.dart';
 import '../../core/today_api.dart';
 import '../../features/home/application/home_controller.dart';
 import '../../features/home/data/home_overview_repository.dart';
@@ -120,54 +122,239 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return CozyPage(
-      child: RefreshIndicator(
-        onRefresh: _refresh,
-        color: kMainRose,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(18, 16, 18, 32),
-          children: [
-            _homeHeader(),
-            const SizedBox(height: 16),
-            _coupleCard(),
-            const SizedBox(height: 14),
-            _todayEntry(),
-            const SizedBox(height: 22),
-            _quickActions(),
-            const SizedBox(height: 18),
-            _relationshipCard(),
-            if (_overview?.memoryCard != null) ...[
-              const SizedBox(height: 18),
-              _MemoryCardWidget(
-                card: _overview!.memoryCard!,
-                totalCount: _overview!.memoryCardTotal,
-                baseUrl: _auth.baseUrl,
-                authHeaders: _authHeaders,
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: ColoredBox(
+        color: kMainCream,
+        child: RefreshIndicator(
+          onRefresh: _refresh,
+          color: kMainRose,
+          edgeOffset: MediaQuery.paddingOf(context).top + 40,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.only(bottom: 32),
+            children: [
+              _homeHero(),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _featureCard(),
+                    const SizedBox(height: 12),
+                    _todayEntry(),
+                    const SizedBox(height: 12),
+                    _primaryActions(),
+                    const SizedBox(height: 24),
+                    _quickActions(),
+                    const SizedBox(height: 18),
+                    _relationshipCard(),
+                    if (_overview?.memoryCard != null) ...[
+                      const SizedBox(height: 18),
+                      _MemoryCardWidget(
+                        card: _overview!.memoryCard!,
+                        totalCount: _overview!.memoryCardTotal,
+                        baseUrl: _auth.baseUrl,
+                        authHeaders: _authHeaders,
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ],
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _homeHeader() {
+  Widget _homeHero() {
     final name = _auth.user?['Nickname'] ?? _auth.user?['UserName'] ?? '우리';
-    return Row(
+    final partnerName = _couple?.partnerName ?? '상대방';
+    final dDay = _couple?.dDay;
+    return MainHero(
+      trailing: const HeroMascot(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(72),
+              borderRadius: BorderRadius.circular(99),
+            ),
+            child: Text(
+              dDay == null ? '우리의 하루' : 'D + $dDay',
+              style: mainBody(
+                size: 12,
+                color: Colors.white,
+                weight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text('오늘도\n함께해요', style: mainTitle(size: 38, color: Colors.white)),
+          const SizedBox(height: 8),
+          Text(
+            '$name님 & $partnerName님, 오늘도 함께 기록해요',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: mainBody(size: 12, color: Colors.white.withAlpha(215)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _featureCard() {
+    final dDay = _couple?.dDay;
+    final startDate = _couple?.startDate;
+    final partnerName = _couple?.partnerName ?? '상대방';
+    Widget mini(String value, String label) => Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        const BrandLogo(size: 38),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        Text(value, style: mainTitle(size: 22), maxLines: 1),
+        Text(label, style: mainBody(size: 11, color: kMainMuted)),
+      ],
+    );
+    return MainCard(
+      radius: 26,
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
+      child: Row(
+        children: [
+          Expanded(
+            child: dDay == null
+                ? Text(
+                    '우리의 첫날을 등록해보세요',
+                    style: mainTitle(size: 26, color: kMainRose),
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '$dDay',
+                        style: mainTitle(size: 60, color: kMainRose),
+                      ),
+                      Text(
+                        '함께한 날',
+                        style: mainBody(size: 12, color: kMainMuted),
+                      ),
+                    ],
+                  ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text('우리의 하루', style: mainTitle(size: 30, color: kMainRose)),
-              Text('$name님, 오늘도 함께 기록해요', style: mainBody(size: 12)),
+              mini(partnerName, '함께하는 사람'),
+              if (startDate != null) ...[
+                const SizedBox(height: 10),
+                mini(startDate, '시작일'),
+              ],
             ],
           ),
-        ),
-      ],
+        ],
+      ),
+    );
+  }
+
+  Widget _primaryActions() {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            flex: 2,
+            child: Semantics(
+              button: true,
+              label: '순간 남기기',
+              child: GestureDetector(
+                onTap: () => widget.onNavigate(1),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: kRoseGrad,
+                    borderRadius: BorderRadius.circular(22),
+                    boxShadow: [
+                      BoxShadow(
+                        color: kMainRose.withAlpha(70),
+                        blurRadius: 18,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.auto_stories_rounded,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              '순간 남기기',
+                              style: mainBody(
+                                size: 14,
+                                color: Colors.white,
+                                weight: FontWeight.w900,
+                              ),
+                            ),
+                            Text(
+                              '오늘의 기록 쓰기',
+                              style: mainBody(
+                                size: 11,
+                                color: Colors.white.withAlpha(200),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Semantics(
+              button: true,
+              label: '놀이 시작',
+              child: GestureDetector(
+                onTap: () => widget.onNavigate(3),
+                child: MainCard(
+                  radius: 22,
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.sports_esports_rounded,
+                        color: kMainLilac,
+                        size: 24,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '놀이',
+                        style: mainBody(
+                          size: 12,
+                          color: kMainSub,
+                          weight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -280,94 +467,6 @@ class _HomeScreenState extends State<HomeScreen> {
         MaterialPageRoute(
           builder: (_) => TodayLoopViewer(state: state, baseUrl: _auth.baseUrl),
         ),
-      ),
-    );
-  }
-
-  Widget _coupleCard() {
-    final myName = _auth.user?['Nickname'] ?? _auth.user?['UserName'] ?? '나';
-    final partnerName = _couple?.partnerName ?? '상대방';
-    final dDay = _couple?.dDay;
-    final startDate = _couple?.startDate;
-    return MainCard(
-      gradient: kRoseGrad,
-      radius: 30,
-      padding: const EdgeInsets.all(22),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Positioned(
-            right: -30,
-            top: -34,
-            child: IgnorePointer(
-              child: Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(30),
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            right: 20,
-            bottom: -2,
-            child: IgnorePointer(
-              child: Icon(
-                Icons.favorite_rounded,
-                size: 44,
-                color: Colors.white.withAlpha(70),
-              ),
-            ),
-          ),
-          _coupleCardBody(myName, partnerName, dDay, startDate),
-        ],
-      ),
-    );
-  }
-
-  Widget _coupleCardBody(
-    Object myName,
-    String partnerName,
-    int? dDay,
-    String? startDate,
-  ) {
-    return SizedBox(
-      width: double.infinity,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '우리의 오늘',
-            style: mainBody(
-              size: 12,
-              color: Colors.white.withAlpha(220),
-              weight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            '$myName & $partnerName',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: mainBody(
-              size: 14,
-              color: Colors.white,
-              weight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            dDay == null ? '우리의 첫날을 등록해보세요' : 'D+$dDay',
-            style: mainTitle(size: dDay == null ? 28 : 48, color: Colors.white),
-          ),
-          if (startDate != null)
-            Text(
-              '$startDate 부터 함께',
-              style: mainBody(size: 13, color: Colors.white),
-            ),
-        ],
       ),
     );
   }

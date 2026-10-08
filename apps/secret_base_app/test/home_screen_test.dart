@@ -150,13 +150,22 @@ void main() {
       ),
     );
 
+    await tester.ensureVisible(find.text('비밀 지도'));
+    await tester.pump();
+
     await tester.tap(find.text('비밀 지도'));
     expect(navigationTarget, 2);
+
+    await tester.ensureVisible(find.text('비밀기지'));
+    await tester.pump();
 
     await tester.tap(find.text('비밀기지'));
     await tester.pumpAndSettle();
     expect(find.byType(SecretBaseScreen), findsOneWidget);
     await tester.pageBack();
+    await tester.pump();
+
+    await tester.ensureVisible(find.text('운세'));
     await tester.pump();
 
     await tester.tap(find.text('운세'));
@@ -165,10 +174,16 @@ void main() {
     await tester.pageBack();
     await tester.pump();
 
+    await tester.ensureVisible(find.text('타로'));
+    await tester.pump();
+
     await tester.tap(find.text('타로'));
     await tester.pumpAndSettle();
     expect(find.byType(TarotScreen), findsOneWidget);
     await tester.pageBack();
+    await tester.pump();
+
+    await tester.ensureVisible(find.text('사주'));
     await tester.pump();
 
     await tester.tap(find.text('사주'));

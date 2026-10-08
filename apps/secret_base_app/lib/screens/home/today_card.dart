@@ -65,52 +65,87 @@ class TodayCard extends StatelessWidget {
         : null;
 
     return MainCard(
-      gradient: kSkyGrad,
-      radius: 28,
-      padding: const EdgeInsets.all(20),
+      radius: 26,
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, color: Colors.white, size: 22),
-              const SizedBox(width: 8),
+              Container(
+                width: 76,
+                height: 76,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFFD0E8), Color(0xFFFFA8C8)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Icon(icon, color: Colors.white, size: 32),
+              ),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 9,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: kMainRoseSoft,
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                          child: Text(
+                            '오늘의 루프',
+                            style: mainBody(
+                              size: 10,
+                              color: kMainRose,
+                              weight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _shortDate(state.date),
+                          style: mainBody(size: 11, color: kMainMuted),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 7),
                     Text(
-                      '오늘의 루프',
+                      title,
                       style: mainBody(
-                        size: 13,
-                        color: Colors.white,
+                        size: 14,
+                        color: kMainInk,
                         weight: FontWeight.w900,
+                        height: 1.3,
                       ),
                     ),
+                    const SizedBox(height: 3),
                     Text(
-                      _shortDate(state.date),
-                      style: mainBody(
-                        size: 11,
-                        color: Colors.white.withAlpha(210),
-                      ),
+                      subtitle,
+                      style: mainBody(size: 12, color: kMainSub, height: 1.35),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          Text(title, style: mainTitle(size: 24, color: Colors.white)),
-          const SizedBox(height: 5),
-          Text(subtitle, style: mainBody(size: 13, color: Colors.white)),
           if (ownCaption != null && ownCaption.isNotEmpty) ...[
             const SizedBox(height: 12),
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: Colors.white.withAlpha(45),
-                borderRadius: BorderRadius.circular(14),
+                color: kMainPaperSoft,
+                borderRadius: BorderRadius.circular(16),
               ),
               child: Text(
                 ownCaption,
@@ -118,25 +153,26 @@ class TodayCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: mainBody(
                   size: 13,
-                  color: Colors.white,
+                  color: kMainInk,
                   weight: FontWeight.w700,
                 ),
               ),
             ),
           ],
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           SizedBox(
             width: double.infinity,
             child: FilledButton(
               onPressed: onPressed,
               style: FilledButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: kMainSky,
+                backgroundColor: kMainRose,
+                foregroundColor: Colors.white,
+                shape: const StadiumBorder(),
                 padding: const EdgeInsets.symmetric(vertical: 13),
               ),
               child: Text(
                 actionLabel,
-                style: mainBody(color: kMainSky, weight: FontWeight.w900),
+                style: mainBody(color: Colors.white, weight: FontWeight.w900),
               ),
             ),
           ),

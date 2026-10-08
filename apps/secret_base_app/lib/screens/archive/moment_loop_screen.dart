@@ -8,6 +8,7 @@ import 'package:video_player/video_player.dart';
 import '../../core/auth_service.dart';
 import '../../core/http/api_client.dart';
 import '../../core/main_design.dart';
+import '../../core/main_hero.dart';
 import '../../features/moment_loop/application/moment_loop_controller.dart';
 import '../../features/moment_loop/data/moment_loop_repository.dart';
 import '../../features/moment_loop/domain/moment.dart';
@@ -291,67 +292,83 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: kMainBg,
-      floatingActionButton: FloatingActionButton(
-        onPressed: _startCreatePostFlow,
-        tooltip: '순간 남기기',
-        backgroundColor: kMainRose,
-        foregroundColor: Colors.white,
-        elevation: 6,
-        shape: const CircleBorder(),
-        child: const Icon(Icons.add_rounded, size: 30),
+      backgroundColor: kMainCream,
+      floatingActionButton: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: kRoseGrad,
+          borderRadius: BorderRadius.circular(99),
+          boxShadow: [
+            BoxShadow(
+              color: kMainRose.withAlpha(90),
+              blurRadius: 18,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: FloatingActionButton.extended(
+          onPressed: _startCreatePostFlow,
+          tooltip: '순간 남기기',
+          backgroundColor: Colors.transparent,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          focusElevation: 0,
+          hoverElevation: 0,
+          highlightElevation: 0,
+          shape: const StadiumBorder(),
+          icon: const Icon(Icons.add_rounded, size: 22),
+          label: Text(
+            '순간 남기기',
+            style: mainBody(
+              size: 13,
+              color: Colors.white,
+              weight: FontWeight.w800,
+            ),
+          ),
+        ),
       ),
       body: SafeArea(
+        top: false,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ── Header ──────────────────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: () => Navigator.maybePop(context),
-                    child: Semantics(
-                      button: true,
-                      label: '뒤로가기',
-                      child: Container(
-                        width: 38,
-                        height: 38,
-                        decoration: BoxDecoration(
-                          color: kMainPaper,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: kMainLine),
-                        ),
-                        child: const Icon(
-                          Icons.arrow_back_ios_new_rounded,
-                          size: 16,
-                          color: kMainSub,
+            Stack(
+              children: [
+                const MainTabHeader(
+                  title: 'MomentLoop',
+                  subtitle: '우리 둘의 날짜별 기록',
+                  safeTop: true,
+                ),
+                if (Navigator.of(context).canPop())
+                  Positioned(
+                    right: 16,
+                    bottom: 12,
+                    child: GestureDetector(
+                      onTap: () => Navigator.maybePop(context),
+                      child: Semantics(
+                        button: true,
+                        label: '뒤로가기',
+                        child: Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: kMainPaper,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: kMainLine),
+                          ),
+                          child: const Icon(
+                            Icons.close_rounded,
+                            size: 18,
+                            color: kMainSub,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'MomentLoop',
-                          style: mainTitle(size: 28, color: kMainRose),
-                        ),
-                        Text(
-                          '우리 둘의 날짜별 기록',
-                          style: mainBody(size: 12, color: kMainMuted),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+              ],
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
 
             // ── Story highlights ─────────────────────────────────────────────
             if (_posts.isNotEmpty)
@@ -1247,172 +1264,304 @@ class _DaySection extends StatelessWidget {
               ],
             ),
           ),
-          // ── Horizontal scroll of group cards ──────────────────────────
-          SizedBox(
-            height: 196,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-              itemCount: groups.length,
-              itemBuilder: (context, i) {
-                final group = groups[i];
-                // Representative thumbnail: first media item
-                final thumbPost = group.firstWhere(
-                  (p) =>
-                      '${p['media_url'] ?? ''}'.trim().isNotEmpty &&
-                      p['media_type'] != 'text',
-                  orElse: () => group.first,
-                );
-                final mediaUrl = '${thumbPost['media_url'] ?? ''}'.trim();
-                final isVideo = thumbPost['media_type'] == 'video';
-                final hasMedia =
-                    mediaUrl.isNotEmpty && thumbPost['media_type'] != 'text';
-                final caption = '${group.first['caption'] ?? ''}'.trim();
-                final count = group.length;
-                final isMine = '${group.first['user_id']}' == '$myUserId';
-
-                return GestureDetector(
-                  onTap: () => onTap(group),
-                  child: Container(
-                    width: 152,
-                    margin: const EdgeInsets.only(right: 10, bottom: 8),
-                    decoration: BoxDecoration(
-                      color: kMainPaperSoft,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: kMainRose.withAlpha(30),
-                          blurRadius: 14,
-                          offset: const Offset(0, 5),
-                        ),
-                      ],
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        if (hasMedia && !isVideo)
-                          Image.network(
-                            _mediaUrl(auth.baseUrl, mediaUrl),
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => const Icon(
-                              Icons.broken_image_outlined,
-                              color: kMainMuted,
-                            ),
-                          )
-                        else if (hasMedia && isVideo) ...[
-                          Container(color: const Color(0xFF1A1A2E)),
-                          const Center(
-                            child: Icon(
-                              Icons.play_circle_rounded,
-                              color: Colors.white54,
-                              size: 36,
-                            ),
-                          ),
-                        ] else
-                          Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Text(
-                              caption.isEmpty ? '순간' : caption,
-                              style: mainBody(
-                                size: 13,
-                                color: kMainSub,
-                                height: 1.5,
-                              ),
-                              maxLines: 5,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        if (caption.isNotEmpty && hasMedia)
-                          Positioned(
-                            bottom: 0,
-                            left: 0,
-                            right: 0,
-                            child: Container(
-                              padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.bottomCenter,
-                                  end: Alignment.topCenter,
-                                  colors: const [
-                                    Color(0x99000000),
-                                    Colors.transparent,
-                                  ],
-                                ),
-                              ),
-                              child: Text(
-                                caption,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 11,
-                                  height: 1.4,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ),
-                        // Media count badge
-                        if (count > 1)
-                          Positioned(
-                            top: 8,
-                            right: 8,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 7,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.black54,
-                                borderRadius: BorderRadius.circular(99),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.collections_rounded,
-                                    color: Colors.white,
-                                    size: 11,
-                                  ),
-                                  const SizedBox(width: 3),
-                                  Text(
-                                    '$count',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        // Mine indicator dot
-                        Positioned(
-                          bottom: 8,
-                          left: 8,
-                          child: Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: isMine ? kMainRose : kMainSky,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 10),
+          // ── Vertical feed ─────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 18),
-            child: Divider(color: kMainLine.withAlpha(80), height: 1),
+            child: Column(
+              children: [
+                for (var i = 0; i < groups.length; i++)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: i == 0
+                        ? _FeaturedMomentCard(
+                            group: groups[i],
+                            auth: auth,
+                            myUserId: myUserId,
+                            onTap: () => onTap(groups[i]),
+                          )
+                        : _CompactMomentCard(
+                            group: groups[i],
+                            auth: auth,
+                            myUserId: myUserId,
+                            onTap: () => onTap(groups[i]),
+                          ),
+                  ),
+              ],
+            ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+const _momentCardShadow = [
+  BoxShadow(color: Color(0x14B43250), blurRadius: 16, offset: Offset(0, 5)),
+];
+
+class _MomentThumb extends StatelessWidget {
+  final List<Map<String, dynamic>> group;
+  final AuthService auth;
+  final double iconSize;
+
+  const _MomentThumb({
+    required this.group,
+    required this.auth,
+    required this.iconSize,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final thumbPost = group.firstWhere(
+      (p) =>
+          '${p['media_url'] ?? ''}'.trim().isNotEmpty &&
+          p['media_type'] != 'text',
+      orElse: () => group.first,
+    );
+    final mediaUrl = '${thumbPost['media_url'] ?? ''}'.trim();
+    final isVideo = thumbPost['media_type'] == 'video';
+    final hasMedia = mediaUrl.isNotEmpty && thumbPost['media_type'] != 'text';
+    final fallback = Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFFFFD0E8), Color(0xFFFFA8C8), Color(0xFFFF9670)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.photo_outlined,
+          size: iconSize,
+          color: Colors.white.withAlpha(190),
+        ),
+      ),
+    );
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (hasMedia && !isVideo)
+          Image.network(
+            _mediaUrl(auth.baseUrl, mediaUrl),
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => fallback,
+          )
+        else if (hasMedia && isVideo) ...[
+          Container(color: const Color(0xFF1A1A2E)),
+          Center(
+            child: Icon(
+              Icons.play_circle_rounded,
+              color: Colors.white54,
+              size: iconSize + 6,
+            ),
+          ),
+        ] else
+          fallback,
+        if (group.length > 1)
+          Positioned(
+            top: 8,
+            right: 8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(99),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.collections_rounded,
+                    color: Colors.white,
+                    size: 11,
+                  ),
+                  const SizedBox(width: 3),
+                  Text(
+                    '${group.length}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _FeaturedMomentCard extends StatelessWidget {
+  final List<Map<String, dynamic>> group;
+  final AuthService auth;
+  final int? myUserId;
+  final VoidCallback onTap;
+
+  const _FeaturedMomentCard({
+    required this.group,
+    required this.auth,
+    required this.myUserId,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final first = group.first;
+    final caption = '${first['caption'] ?? ''}'.trim();
+    final isMine = '${first['user_id']}' == '$myUserId';
+    final color = isMine ? kMainRose : kMainSky;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: kMainPaper,
+          borderRadius: BorderRadius.circular(26),
+          boxShadow: _momentCardShadow,
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              height: 150,
+              width: double.infinity,
+              child: _MomentThumb(group: group, auth: auth, iconSize: 34),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    caption.isEmpty ? '말없이 남긴 순간' : caption,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: mainBody(
+                      size: 14,
+                      color: kMainInk,
+                      weight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isMine ? kMainRoseSoft : kMainSkySoft,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                        child: Text(
+                          isMine ? 'MY' : '상대',
+                          style: mainBody(
+                            size: 10,
+                            color: color,
+                            weight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _timeLabel(first['captured_at']),
+                        style: mainBody(size: 11, color: kMainMuted),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CompactMomentCard extends StatelessWidget {
+  final List<Map<String, dynamic>> group;
+  final AuthService auth;
+  final int? myUserId;
+  final VoidCallback onTap;
+
+  const _CompactMomentCard({
+    required this.group,
+    required this.auth,
+    required this.myUserId,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final first = group.first;
+    final caption = '${first['caption'] ?? ''}'.trim();
+    final isMine = '${first['user_id']}' == '$myUserId';
+    final author = _authorName(first, isMine);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: kMainPaper,
+          borderRadius: BorderRadius.circular(22),
+          boxShadow: _momentCardShadow,
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Row(
+          children: [
+            SizedBox(
+              width: 70,
+              height: 70,
+              child: _MomentThumb(group: group, auth: auth, iconSize: 22),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      caption.isEmpty ? '말없이 남긴 순간' : caption,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: mainBody(
+                        size: 13,
+                        color: kMainInk,
+                        weight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: isMine ? kMainRose : kMainSky,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            '$author · ${_timeLabel(first['captured_at'])} · ${group.length}장',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: mainBody(size: 11, color: kMainMuted),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

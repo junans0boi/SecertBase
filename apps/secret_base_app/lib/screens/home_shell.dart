@@ -42,7 +42,7 @@ class _HomeShellState extends State<HomeShell> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: kMainBg,
-      body: SafeArea(bottom: false, child: _pages[_index]),
+      body: SafeArea(top: false, bottom: false, child: _pages[_index]),
       bottomNavigationBar: NavigationBarTheme(
         data: NavigationBarThemeData(
           backgroundColor: kMainPaper,
