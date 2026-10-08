@@ -3,8 +3,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'http/api_client.dart';
+import 'http/api_exception.dart';
 import 'server_config.dart';
 
 const googleClientId = String.fromEnvironment(
@@ -16,6 +17,11 @@ const kakaoReviewAutoLogin = bool.fromEnvironment(
   defaultValue: false,
 );
 const _kakaoReviewHosts = {'secretbase.cloud', 'secertbase.kro.kr'};
+
+Map<String, dynamic> _jsonObject(dynamic value) {
+  if (value is Map) return Map<String, dynamic>.from(value);
+  throw const FormatException('Expected a JSON object');
+}
 
 bool get isKakaoReviewHost {
   if (!kIsWeb) return false;
@@ -38,8 +44,13 @@ class AuthService extends ChangeNotifier {
   String? _googleError;
   bool _reviewAutoLoginLoading = false;
   String? _reviewAutoLoginError;
+  late final ApiClient _apiClient = ApiClient(
+    baseUrl: baseUrl,
+    tokenProvider: () => _token,
+  );
 
   String get baseUrl => serverBaseUrl;
+  ApiClient get apiClient => _apiClient;
 
   String? get token => _token;
   Map<String, dynamic>? get user => _user;
@@ -102,20 +113,19 @@ class AuthService extends ChangeNotifier {
     String birthDate,
   ) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/auth/register'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
+      await _apiClient.postJson(
+        '/api/auth/register',
+        body: {
           'email': email,
           'password': password,
           'user_name': nickname,
           'full_name': fullName,
           'nickname': nickname,
           'birth_date': birthDate,
-        }),
+        },
       );
 
-      return response.statusCode == 200;
+      return true;
     } catch (e) {
       debugPrint('[Auth] Register error: $e');
       return false;
@@ -124,18 +134,14 @@ class AuthService extends ChangeNotifier {
 
   Future<bool> login(String email, String password) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/auth/login'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'email': email, 'password': password}),
+      final data = _jsonObject(
+        await _apiClient.postJson(
+          '/api/auth/login',
+          body: {'email': email, 'password': password},
+        ),
       );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        await _storeAuthData(data);
-        return true;
-      }
-      return false;
+      await _storeAuthData(data);
+      return true;
     } catch (e) {
       debugPrint('[Auth] Login error: $e');
       return false;
@@ -152,19 +158,11 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/auth/review-login'),
-        headers: {'Content-Type': 'application/json'},
+      final data = _jsonObject(
+        await _apiClient.postJson('/api/auth/review-login'),
       );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        await _storeAuthData(data);
-        return true;
-      }
-
-      _reviewAutoLoginError = '심사용 자동 입장 준비가 필요합니다.';
-      return false;
+      await _storeAuthData(data);
+      return true;
     } catch (e) {
       debugPrint('[Auth] Review login error: $e');
       _reviewAutoLoginError = '심사용 자동 입장 중 오류가 발생했습니다.';
@@ -222,24 +220,16 @@ class AuthService extends ChangeNotifier {
         return false;
       }
 
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/auth/google'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'idToken': idToken}),
+      final data = _jsonObject(
+        await _apiClient.postJson(
+          '/api/auth/google',
+          body: {'idToken': idToken},
+        ),
       );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        await _storeAuthData(data);
-        _googleLoading = false;
-        _googleError = null;
-        return true;
-      }
-
+      await _storeAuthData(data);
       _googleLoading = false;
-      _googleError = 'Google 로그인에 실패했습니다.';
-      notifyListeners();
-      return false;
+      _googleError = null;
+      return true;
     } catch (e) {
       _googleLoading = false;
       _googleError = 'Google 로그인 중 오류가 발생했습니다.';
@@ -283,23 +273,16 @@ class AuthService extends ChangeNotifier {
   Future<bool> setPartner(String partnerCode) async {
     if (_token == null || _user == null) return false;
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/user/partner'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $_token',
-        },
-        body: jsonEncode({
+      await _apiClient.postJson(
+        '/api/user/partner',
+        body: {
           'userId': _user!['UserId'] ?? _user!['id'],
           'partnerCode': partnerCode,
-        }),
+        },
       );
 
-      if (response.statusCode == 200) {
-        await getProfile();
-        return true;
-      }
-      return false;
+      await getProfile();
+      return true;
     } catch (e) {
       debugPrint('[Auth] Set partner error: $e');
       return false;
@@ -309,12 +292,7 @@ class AuthService extends ChangeNotifier {
   Future<Map<String, dynamic>?> getPairingRequests() async {
     if (_token == null) return null;
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/pairing/requests'),
-        headers: {'Authorization': 'Bearer $_token'},
-      );
-      if (response.statusCode != 200) return null;
-      return jsonDecode(response.body) as Map<String, dynamic>;
+      return _jsonObject(await _apiClient.getJson('/api/pairing/requests'));
     } catch (e) {
       debugPrint('[Auth] Pairing requests error: $e');
       return null;
@@ -324,17 +302,13 @@ class AuthService extends ChangeNotifier {
   Future<String?> sendPairingRequest(String recipientCode) async {
     if (_token == null) return '로그인이 필요합니다.';
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/pairing/requests'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $_token',
-        },
-        body: jsonEncode({'recipientCode': recipientCode}),
+      await _apiClient.postJson(
+        '/api/pairing/requests',
+        body: {'recipientCode': recipientCode},
       );
-      if (response.statusCode == 201) return null;
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      return switch (data['reason']) {
+      return null;
+    } on ApiException catch (error) {
+      return switch (error.code) {
         'recipient_not_found' => '상대방 코드를 찾지 못했어요.',
         'request_already_pending' => '이미 두 분 사이에 대기 중인 요청이 있어요.',
         'active_couple_exists' => '이미 연결된 사용자는 새 요청을 받을 수 없어요.',
@@ -352,11 +326,7 @@ class AuthService extends ChangeNotifier {
       return false;
     }
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/pairing/requests/$requestId/$action'),
-        headers: {'Authorization': 'Bearer $_token'},
-      );
-      if (response.statusCode != 200) return false;
+      await _apiClient.postJson('/api/pairing/requests/$requestId/$action');
       if (action == 'accept') await getProfile();
       return true;
     } catch (e) {
@@ -368,16 +338,9 @@ class AuthService extends ChangeNotifier {
   Future<bool> disconnectPartner() async {
     if (_token == null || _user == null) return false;
     try {
-      final response = await http.delete(
-        Uri.parse('$baseUrl/api/user/partner'),
-        headers: {'Authorization': 'Bearer $_token'},
-      );
-
-      if (response.statusCode == 200) {
-        await getProfile();
-        return true;
-      }
-      return false;
+      await _apiClient.deleteJson('/api/user/partner');
+      await getProfile();
+      return true;
     } catch (e) {
       debugPrint('[Auth] Disconnect partner error: $e');
       return false;
@@ -393,24 +356,11 @@ class AuthService extends ChangeNotifier {
       if (password != null && password.isNotEmpty) {
         body['password'] = password;
       }
-      final response = await http.delete(
-        Uri.parse('$baseUrl/api/user'),
-        headers: {
-          'Authorization': 'Bearer $_token',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(body),
-      );
-      if (response.statusCode == 200) {
-        await logout();
-        return null;
-      }
-      try {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        return data['reason'] as String? ?? 'unknown_error';
-      } catch (_) {
-        return 'unknown_error';
-      }
+      await _apiClient.deleteJson('/api/user', body: body);
+      await logout();
+      return null;
+    } on ApiException catch (error) {
+      return error.code;
     } catch (e) {
       debugPrint('[Auth] Delete account error: $e');
       return 'network_error';
@@ -420,11 +370,7 @@ class AuthService extends ChangeNotifier {
   Future<bool> markReunionNoticeSeen() async {
     if (_token == null) return false;
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/couple/reunion-notice/seen'),
-        headers: {'Authorization': 'Bearer $_token'},
-      );
-      if (response.statusCode != 200) return false;
+      await _apiClient.postJson('/api/couple/reunion-notice/seen');
       await getProfile();
       return true;
     } catch (e) {
@@ -437,22 +383,16 @@ class AuthService extends ChangeNotifier {
     if (_token == null || _user == null) return null;
     final uid = _user!['UserId'] ?? _user!['id'];
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/user/profile/$uid'),
-        headers: {'Authorization': 'Bearer $_token'},
+      final data = _jsonObject(
+        await _apiClient.getJson('/api/user/profile/$uid'),
       );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        _user = data['user'];
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('user_data', jsonEncode(_user));
-        notifyListeners();
-        return _user;
-      }
-      if (response.statusCode == 401) {
-        await logout();
-      }
+      _user = data['user'];
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_data', jsonEncode(_user));
+      notifyListeners();
+      return _user;
+    } on ApiException catch (error) {
+      if (error.statusCode == 401) await logout();
       return null;
     } catch (e) {
       debugPrint('[Auth] Get profile error: $e');
@@ -468,28 +408,21 @@ class AuthService extends ChangeNotifier {
     if (_token == null || _user == null) return false;
     final uid = _user!['UserId'] ?? _user!['id'];
     try {
-      final response = await http.patch(
-        Uri.parse('$baseUrl/api/user/profile/$uid'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $_token',
-        },
-        body: jsonEncode({
-          'fullName': fullName,
-          'nickname': nickname,
-          'birthDate': birthDate,
-        }),
+      final data = _jsonObject(
+        await _apiClient.patchJson(
+          '/api/user/profile/$uid',
+          body: {
+            'fullName': fullName,
+            'nickname': nickname,
+            'birthDate': birthDate,
+          },
+        ),
       );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        _user = data['user'];
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('user_data', jsonEncode(_user));
-        notifyListeners();
-        return true;
-      }
-      return false;
+      _user = data['user'];
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_data', jsonEncode(_user));
+      notifyListeners();
+      return true;
     } catch (e) {
       debugPrint('[Auth] Update profile error: $e');
       return false;
@@ -503,21 +436,13 @@ class AuthService extends ChangeNotifier {
     if (_token == null || _user == null) return '로그인이 필요합니다.';
     final uid = _user!['UserId'] ?? _user!['id'];
     try {
-      final response = await http.patch(
-        Uri.parse('$baseUrl/api/user/password/$uid'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $_token',
-        },
-        body: jsonEncode({
-          'currentPassword': currentPassword,
-          'newPassword': newPassword,
-        }),
+      await _apiClient.patchJson(
+        '/api/user/password/$uid',
+        body: {'currentPassword': currentPassword, 'newPassword': newPassword},
       );
-
-      if (response.statusCode == 200) return null;
-      final data = jsonDecode(response.body);
-      return switch (data['reason']) {
+      return null;
+    } on ApiException catch (error) {
+      return switch (error.code) {
         'invalid_current_password' => '현재 비밀번호가 맞지 않습니다.',
         'weak_password' => '새 비밀번호는 6자 이상이어야 합니다.',
         'password_login_not_enabled' => '소셜 로그인 계정에는 아직 비밀번호가 없습니다.',

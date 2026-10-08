@@ -1,6 +1,7 @@
-import 'dart:convert';
-
 import 'package:http/http.dart' as http;
+
+import 'http/api_client.dart';
+import 'http/api_exception.dart';
 
 enum TodayStatus { empty, partnerWaiting, selfWaiting, complete, viewed }
 
@@ -131,69 +132,79 @@ class TodayApiException implements Exception {
 class TodayApi {
   final String baseUrl;
   final String token;
-  final http.Client _client;
+  final ApiClient _apiClient;
 
-  TodayApi({required this.baseUrl, required this.token, http.Client? client})
-    : _client = client ?? http.Client();
+  TodayApi({
+    required this.baseUrl,
+    required this.token,
+    http.Client? client,
+    ApiClient? apiClient,
+  }) : _apiClient =
+           apiClient ??
+           ApiClient(
+             baseUrl: baseUrl,
+             tokenProvider: () => token,
+             client: client,
+           );
 
-  void close() => _client.close();
+  void close() => _apiClient.close();
 
   Future<TodayState> fetchState() async {
-    final response = await _client.get(
-      Uri.parse('$baseUrl/api/retention/today'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
-    final body = _successfulBody(response);
     try {
+      final body = _successfulBody(
+        await _apiClient.getJson('/api/retention/today'),
+      );
       return TodayState.fromJson(body);
     } on FormatException {
       throw const TodayApiException('invalid_response');
+    } on ApiException catch (error) {
+      throw TodayApiException(error.code);
     }
   }
 
   Future<void> designateMoment(TodayMomentSelection selection) async {
-    final response = await _client.put(
-      Uri.parse('$baseUrl/api/retention/today/moment'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode(selection.toJson()),
-    );
-
-    _successfulBody(response);
+    try {
+      _successfulBody(
+        await _apiClient.putJson(
+          '/api/retention/today/moment',
+          body: selection.toJson(),
+        ),
+      );
+    } on ApiException catch (error) {
+      throw TodayApiException(error.code);
+    }
   }
 
   Future<void> removeDesignation() async {
-    final response = await _client.delete(
-      Uri.parse('$baseUrl/api/retention/today/moment'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
-
-    _successfulBody(response);
+    try {
+      _successfulBody(
+        await _apiClient.deleteJson('/api/retention/today/moment'),
+      );
+    } on ApiException catch (error) {
+      throw TodayApiException(error.code);
+    }
   }
 
   Future<String?> markViewed() async {
-    final response = await _client.post(
-      Uri.parse('$baseUrl/api/retention/today/view'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
-    return _optionalString(_successfulBody(response)['viewedAt']);
+    try {
+      return _optionalString(
+        _successfulBody(
+          await _apiClient.postJson('/api/retention/today/view'),
+        )['viewedAt'],
+      );
+    } on ApiException catch (error) {
+      throw TodayApiException(error.code);
+    }
   }
 
-  Map<String, dynamic> _successfulBody(http.Response response) {
-    Map<String, dynamic>? body;
-    try {
-      final decoded = jsonDecode(response.body);
-      if (decoded is Map<String, dynamic>) body = decoded;
-    } on FormatException {
-      body = null;
+  Map<String, dynamic> _successfulBody(dynamic value) {
+    if (value is! Map) {
+      throw const TodayApiException('invalid_response');
     }
-    if (response.statusCode < 200 ||
-        response.statusCode >= 300 ||
-        body?['ok'] != true) {
-      throw TodayApiException('${body?['reason'] ?? 'request_failed'}');
+    final body = Map<String, dynamic>.from(value);
+    if (body['ok'] != true) {
+      throw TodayApiException('${body['reason'] ?? 'request_failed'}');
     }
-    return body!;
+    return body;
   }
 }
