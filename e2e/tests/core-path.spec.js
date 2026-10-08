@@ -11,7 +11,9 @@ test('test account can read the home and MomentLoop core paths', async ({ page }
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: '이메일로 로그인' }).first().click();
   await page.getByRole('textbox', { name: '이메일' }).fill(email);
-  await page.getByRole('textbox', { name: '비밀번호' }).fill(password);
+  const passwordInput = page.locator('input[type="password"]').first();
+  await passwordInput.fill(password);
+  await expect(passwordInput).toHaveValue(password);
   await page.getByRole('button', { name: '로그인', exact: true }).first().click();
 
   await expect(page.getByRole('tab', { name: '홈', exact: true })).toBeVisible({ timeout: 30_000 });
