@@ -20,19 +20,13 @@ String fmm(int n) {
   return '$sign$man만$rem원'; // 예: 3000020 → '300만20원'
 }
 
-int _landValueOf(String userId, Map<String, dynamic> landData) {
-  int total = 0;
-  for (final entry in landData.entries) {
-    final data = entry.value;
-    if (data is Map && data['owner'] == userId) {
-      final pos = int.tryParse(entry.key) ?? 0;
-      final level = (data['level'] as int? ?? 1);
-      final tile = kTileByPos[pos];
-      if (tile != null && tile.price > 0) total += tile.price * level;
-    }
-  }
-  return total;
-}
+/// Server winReason values that trigger the monopoly flash (see marble-engine.js).
+const marbleMonopolyReasons = [
+  'bankrupt',
+  'tourist_monopoly',
+  'double_monopoly',
+  'line_monopoly',
+];
 
 class MarbleScreen extends StatefulWidget {
   const MarbleScreen({super.key});
@@ -314,7 +308,8 @@ class _MarbleScreenState extends State<MarbleScreen> {
                 round: sock.marbleRound,
                 currentTurn: sock.marbleCurrentTurn,
                 displayName: sock.nameOf,
-                landData: sock.marbleLands,
+                myAssets: sock.marbleAssets[currentUser] ?? myCoins,
+                opAssets: sock.marbleAssets[opponentId] ?? opCoins,
                 characters: sock.marbleCharacters,
               ),
             ),
@@ -384,7 +379,8 @@ class _MarbleHud extends StatelessWidget {
   final int round;
   final String? currentTurn;
   final String Function(String) displayName;
-  final Map<String, dynamic> landData;
+  final int myAssets;
+  final int opAssets;
   final Map<String, String> characters;
 
   const _MarbleHud({
@@ -396,7 +392,8 @@ class _MarbleHud extends StatelessWidget {
     required this.round,
     this.currentTurn,
     required this.displayName,
-    required this.landData,
+    required this.myAssets,
+    required this.opAssets,
     required this.characters,
   });
 
@@ -405,10 +402,8 @@ class _MarbleHud extends StatelessWidget {
     final opponentId = (currentUser == p1) ? p2 : p1;
     final isMyTurn = currentTurn == currentUser;
 
-    final myLandVal = _landValueOf(currentUser, landData);
-    final opLandVal = _landValueOf(opponentId, landData);
-    final myTotal = myCoins + myLandVal;
-    final opTotal = opCoins + opLandVal;
+    final myTotal = myAssets;
+    final opTotal = opAssets;
     final myRank = myTotal >= opTotal ? 1 : 2;
     final opRank = 3 - myRank;
 
@@ -1158,7 +1153,7 @@ class _MarbleResultDialogState extends State<_MarbleResultDialog>
     );
     final isWin = isMe && !isDraw;
     final isMonopoly =
-        isWin && ['bankrupt', 'shrine', 'line'].contains(widget.winReason);
+        isWin && marbleMonopolyReasons.contains(widget.winReason);
 
     return AnimatedBuilder(
       animation: _ctrl,
@@ -1395,8 +1390,8 @@ class _MarbleResultDialogState extends State<_MarbleResultDialog>
     if (!isMe) return ('패배', Colors.white38, '😢');
     return switch (reason) {
       'bankrupt' => ('파산 승리!', const Color(0xFFFB923C), '💀'),
-      'shrine' => ('독점 승리!', const Color(0xFFFFD700), '🏆'),
-      'line' => ('라인 독점 승리!', const Color(0xFFFFD700), '🏆'),
+      'tourist_monopoly' || 'double_monopoly' => ('독점 승리!', const Color(0xFFFFD700), '🏆'),
+      'line_monopoly' => ('라인 독점 승리!', const Color(0xFFFFD700), '🏆'),
       'timeout' => ('자산 승리!', Colors.white, '⏱️'),
       _ => ('승리!', const Color(0xFFFFD700), '🏆'),
     };
@@ -1405,8 +1400,8 @@ class _MarbleResultDialogState extends State<_MarbleResultDialog>
   static String _reasonLabel(String? reason, bool isMe) {
     return switch (reason) {
       'bankrupt' => isMe ? '상대방이 파산했습니다' : '파산했습니다',
-      'shrine' => '독점을 달성했습니다',
-      'line' => '한 라인을 완전히 점령했습니다',
+      'tourist_monopoly' || 'double_monopoly' => '독점을 달성했습니다',
+      'line_monopoly' => '한 라인을 완전히 점령했습니다',
       'timeout' => '20라운드 후 자산으로 결정됐습니다',
       'timeout_draw' => '20라운드 후 동점으로 무승부',
       _ => '게임이 종료됐습니다',

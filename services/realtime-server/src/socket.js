@@ -79,6 +79,7 @@ import {
   startGame as startOldMaidGame,
   drawCard as drawOldMaidCard,
 } from "./oldmaid-engine.js";
+import { TELEPATHY_SESSION_TTL_SEC } from "./telepathy-engine.js";
 import { resolveHanabagiRound } from "./rps-engine.js";
 
 import {
@@ -1039,7 +1040,7 @@ export const registerSocketHandlers = (io) => {
           io.to(roomCode).emit("game:rps:result", event);
           ack({ ok: true, result: event });
         } else {
-          await redis.set(sessionKey, JSON.stringify(session), "EX", 60);
+          await redis.set(sessionKey, JSON.stringify(session), "EX", TELEPATHY_SESSION_TTL_SEC);
           ack({ ok: true, waiting: true });
         }
       });
@@ -2601,6 +2602,7 @@ export const registerSocketHandlers = (io) => {
       if (nextGameState.status === 'finished' && nextGameState.result?.winner && nextGameState.result.winner !== 'draw') {
         const loser = Object.keys(nextGameState.scores).find(p => p !== nextGameState.result.winner);
         await saveGameResult(roomCode, nextGameState.result.winner, loser, 'penalty', 0).catch(() => {});
+        grantGameXpAndMissions(nextGameState.result.winner, loser, 'penalty').catch(() => {});
       }
       ack({ ok: true });
       });
@@ -2655,6 +2657,7 @@ export const registerSocketHandlers = (io) => {
       if (gameState.status === 'finished' && gameState.result?.winner && gameState.result.winner !== 'draw') {
         const loser = Object.keys(gameState.scores).find(p => p !== gameState.result.winner);
         await saveGameResult(roomCode, gameState.result.winner, loser, 'bowling', 0).catch(() => {});
+        grantGameXpAndMissions(gameState.result.winner, loser, 'bowling').catch(() => {});
       }
       ack({ ok: true });
       });
