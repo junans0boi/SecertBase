@@ -1,14 +1,38 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 import '../core/main_design.dart';
+import '../core/server_config.dart';
 import 'arcade/arcade_screen.dart';
 import 'archive/map_screen.dart';
 import 'archive/moment_loop_screen.dart';
 import 'home/home_screen.dart';
 import 'settings/settings_screen.dart';
 
+// 새 네이티브 의존성 없이 서버에 가벼운 요청을 보내 연결 여부를 판단한다.
+// ponytail: 서버 도달성 기준(인터넷은 되나 서버만 죽어도 오프라인으로 표시). 필요 시 connectivity_plus로 교체.
+Future<bool> _probeServer() async {
+  try {
+    await http
+        .head(Uri.parse(serverBaseUrl))
+        .timeout(const Duration(seconds: 4));
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 class HomeShell extends StatefulWidget {
-  const HomeShell({super.key});
+  final Future<bool> Function() connectivityProbe;
+  final Duration probeInterval;
+
+  const HomeShell({
+    super.key,
+    this.connectivityProbe = _probeServer,
+    this.probeInterval = const Duration(seconds: 15),
+  });
 
   @override
   State<HomeShell> createState() => _HomeShellState();
@@ -16,6 +40,26 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
+  bool _offline = false;
+  Timer? _probeTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _probe();
+    _probeTimer = Timer.periodic(widget.probeInterval, (_) => _probe());
+  }
+
+  @override
+  void dispose() {
+    _probeTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _probe() async {
+    final online = await widget.connectivityProbe();
+    if (mounted && _offline == online) setState(() => _offline = !online);
+  }
 
   late final List<Widget> _pages = [
     HomeScreen(onNavigate: _handleHomeNavigation),
@@ -42,7 +86,33 @@ class _HomeShellState extends State<HomeShell> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: kMainBg,
-      body: SafeArea(top: false, bottom: false, child: _pages[_index]),
+      body: Column(
+        children: [
+          if (_offline)
+            Material(
+              color: kMainRose,
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Center(
+                    child: Text(
+                      '인터넷 연결이 끊겼어요',
+                      style: mainBody(
+                        size: 12,
+                        color: Colors.white,
+                        weight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          Expanded(
+            child: SafeArea(top: false, bottom: false, child: _pages[_index]),
+          ),
+        ],
+      ),
       bottomNavigationBar: NavigationBarTheme(
         data: NavigationBarThemeData(
           backgroundColor: kMainPaper,
