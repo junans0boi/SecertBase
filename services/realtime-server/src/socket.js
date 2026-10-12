@@ -2602,6 +2602,7 @@ export const registerSocketHandlers = (io) => {
       if (nextGameState.status === 'finished' && nextGameState.result?.winner && nextGameState.result.winner !== 'draw') {
         const loser = Object.keys(nextGameState.scores).find(p => p !== nextGameState.result.winner);
         await saveGameResult(roomCode, nextGameState.result.winner, loser, 'penalty', 0).catch(() => {});
+        grantGameXpAndMissions(nextGameState.result.winner, loser, 'penalty').catch(() => {});
       }
       ack({ ok: true });
       });
@@ -2656,6 +2657,7 @@ export const registerSocketHandlers = (io) => {
       if (gameState.status === 'finished' && gameState.result?.winner && gameState.result.winner !== 'draw') {
         const loser = Object.keys(gameState.scores).find(p => p !== gameState.result.winner);
         await saveGameResult(roomCode, gameState.result.winner, loser, 'bowling', 0).catch(() => {});
+        grantGameXpAndMissions(gameState.result.winner, loser, 'bowling').catch(() => {});
       }
       ack({ ok: true });
       });
