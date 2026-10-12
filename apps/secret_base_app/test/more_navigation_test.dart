@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:secret_base_app/core/support_contact.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secret_base_app/screens/home_shell.dart';
 import 'package:secret_base_app/screens/relationship/relationship_understanding_screen.dart';
@@ -102,4 +104,36 @@ void main() {
       expect(find.text('프로필 이모지'), findsOneWidget);
     },
   );
+
+  testWidgets('support entry shows email and copies it', (tester) async {
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String?;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await tester.pumpWidget(
+      const MaterialApp(home: Scaffold(body: SettingsScreen())),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byTooltip('고객센터'));
+    await tester.pumpAndSettle();
+    expect(find.text(kSupportEmail), findsOneWidget);
+
+    await tester.tap(find.text('복사'));
+    await tester.pump();
+    expect(copied, kSupportEmail);
+    expect(find.text('이메일 주소를 복사했어요.'), findsOneWidget);
+  });
 }

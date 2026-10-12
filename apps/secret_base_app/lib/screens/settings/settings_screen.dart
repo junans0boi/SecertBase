@@ -1,12 +1,14 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/app_theme.dart';
 import '../../core/main_design.dart';
 import '../../core/main_hero.dart';
 import '../../core/socket_service.dart';
+import '../../core/support_contact.dart';
 import '../../core/auth_service.dart';
 import '../auth/auth_layout.dart';
 import '../relationship/relationship_understanding_screen.dart';
@@ -44,6 +46,55 @@ class _MoreOverview extends StatelessWidget {
 
   void _goToTab(int index) => onNavigate?.call(index);
 
+  static void _showSupport(BuildContext context) {
+    final messenger = ScaffoldMessenger.of(context);
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheet) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('고객센터', style: mainBody(size: 18, weight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            Text('문의는 아래 이메일로 보내주세요.', style: mainBody(size: 13)),
+            const SizedBox(height: 12),
+            SelectableText(
+              kSupportEmail,
+              style: mainBody(size: 15, weight: FontWeight.w700),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.copy_rounded, size: 18),
+                  label: const Text('복사'),
+                  onPressed: () async {
+                    await Clipboard.setData(
+                      const ClipboardData(text: kSupportEmail),
+                    );
+                    if (sheet.mounted) Navigator.of(sheet).pop();
+                    messenger.showSnackBar(
+                      const SnackBar(content: Text('이메일 주소를 복사했어요.')),
+                    );
+                  },
+                ),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  icon: const Icon(Icons.mail_outline, size: 18),
+                  label: const Text('메일 앱 열기'),
+                  onPressed: () =>
+                      launchUrl(Uri(scheme: 'mailto', path: kSupportEmail)),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   static String? _initial(Object? name) {
     final text = '${name ?? ''}'.trim();
     return text.isEmpty ? null : text.characters.first;
@@ -61,9 +112,7 @@ class _MoreOverview extends StatelessWidget {
             subtitle: '우리의 공간과 기능을 한 곳에서 관리해요',
             trailing: IconButton(
               tooltip: '고객센터',
-              onPressed: () => ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('고객센터 준비 중이에요.'))),
+              onPressed: () => _showSupport(context),
               icon: const Icon(Icons.headset_mic_outlined, color: kMainRose),
             ),
           ),
@@ -537,10 +586,10 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
                   const SizedBox(height: 4),
                   GestureDetector(
                     onTap: () => launchUrl(
-                      Uri.parse('mailto:admin@steady2vivid.kro.kr'),
+                      Uri(scheme: 'mailto', path: kSupportEmail),
                     ),
                     child: Text(
-                      '고객센터: admin@steady2vivid.kro.kr',
+                      '고객센터: $kSupportEmail',
                       style: mainBody(
                         size: 11,
                         color: kMainMuted,
