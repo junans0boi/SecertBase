@@ -12,7 +12,20 @@
           "package_name": "com.secretbase.secret_base_app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "19945781974-6hrc45i8llfatf381rv7pv4ifn6a87ch.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.secretbase.secret_base_app",
+            "certificate_hash": "e351168cc4580b400e3bb6b0556136aba7c7a69d"
+          }
+        },
+        {
+          "client_id": "19945781974-c4hpcrejbrub3gosqcotejbh5rpoqvsg.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDQAR9M_PKgCLe0YyQ0tKbPUMXca_4Xd18"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "19945781974-c4hpcrejbrub3gosqcotejbh5rpoqvsg.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
