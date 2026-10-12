@@ -4,6 +4,31 @@ import 'package:secret_base_app/core/app_theme.dart';
 import 'package:secret_base_app/screens/home_shell.dart';
 
 void main() {
+  testWidgets(
+    'offline banner appears when probe fails and clears on recovery',
+    (tester) async {
+      var online = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HomeShell(
+            connectivityProbe: () async => online,
+            probeInterval: const Duration(seconds: 5),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('인터넷 연결이 끊겼어요'), findsOneWidget);
+      expect(find.byType(NavigationBar), findsOneWidget);
+
+      online = true;
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pump();
+      expect(find.text('인터넷 연결이 끊겼어요'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
   testWidgets('bottom navigation exposes five labelled destinations in order', (
     tester,
   ) async {

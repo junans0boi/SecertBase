@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secret_base_app/core/today_api.dart';
+import 'package:secret_base_app/features/home/application/home_controller.dart';
+import 'package:secret_base_app/features/home/data/home_overview_repository.dart';
+import 'package:secret_base_app/features/home/domain/home_overview.dart';
+import 'package:secret_base_app/screens/auth/partner_screen.dart';
 import 'package:secret_base_app/screens/relationship/fortune_screen.dart';
 import 'package:secret_base_app/screens/home/home_screen.dart';
 import 'package:secret_base_app/screens/relationship/relationship_understanding_screen.dart';
@@ -190,4 +194,47 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(SajuScreen), findsOneWidget);
   });
+
+  for (final connected in [false, true]) {
+    testWidgets(
+      'home ${connected ? 'hides' : 'shows'} the partner connection guide',
+      (tester) async {
+        final controller = HomeController(
+          _FakeRepo(
+            HomeOverview(
+              couple: connected ? const HomeCoupleInfo(partnerName: 'p') : null,
+            ),
+          ),
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: HomeScreen(onNavigate: (_) {}, controller: controller),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('아직 연결 전이에요', skipOffstage: false),
+          connected ? findsNothing : findsOneWidget,
+        );
+        if (!connected) {
+          await tester.tap(find.text('연결하러 가기'));
+          await tester.pump();
+          await tester.pump(const Duration(seconds: 1));
+          expect(find.byType(PartnerScreen), findsOneWidget);
+          await tester.pumpWidget(const SizedBox());
+        }
+      },
+    );
+  }
+}
+
+class _FakeRepo extends HomeOverviewRepository {
+  final HomeOverview overview;
+  _FakeRepo(this.overview) : super.fake();
+
+  @override
+  Future<HomeOverview> fetch() async => overview;
 }
