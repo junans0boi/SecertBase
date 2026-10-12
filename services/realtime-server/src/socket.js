@@ -88,6 +88,7 @@ import {
   initBowlingGame,
   rollFrame as rollBowlingFrame,
   buildFrameDisplayData,
+  nextRollContext,
 } from "./bowling-engine.js";
 import {
   initPenaltyGame,
@@ -261,7 +262,7 @@ const unoNewSchema = z
   .default({ mode: DEFAULT_UNO_MODE, stake: 0 });
 
 const rouletteSchema = z.object({
-  options: z.array(z.string().min(1)).min(2).max(12),
+  options: z.array(z.string().min(1).max(100)).min(2).max(12),
 });
 
 const rpsSchema = z.object({
@@ -279,8 +280,8 @@ const rpsPickSchema = z.object({
 });
 
 const telepathySchema = z.object({
-  choice: z.string().min(1),
-  options: z.array(z.string().min(1)).min(2).max(10),
+  choice: z.string().min(1).max(100),
+  options: z.array(z.string().min(1).max(100)).min(2).max(10),
   sessionId: z.string().min(1).max(100).optional(),
 });
 
@@ -684,6 +685,22 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         await redis.set(key, JSON.stringify(session), "EX", TELEPATHY_SESSION_TTL_SEC);
         scheduleTelepathyExpiry(roomCode, session);
       });
+      // Restore active pirate game state for reconnecting player.
+      const pirateReconnect = await redis.get(pirateKey(roomCode));
+      if (pirateReconnect) {
+        const pirateState = JSON.parse(pirateReconnect);
+        if (pirateState.players?.includes(userId)) {
+          socket.emit("game:pirate:started", {
+            slots: pirateState.slots,
+            players: pirateState.players,
+            currentTurn: pirateState.currentTurn,
+            pickedSlots: pirateState.pickedSlots,
+            at: Date.now(),
+            reconnect: true,
+          });
+        }
+      }
+
       ack({ ok: true, state, roomCode, userId });
     });
 
@@ -1059,6 +1076,25 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       });
     });
 
+    // Propose options — each player submits their list; spin merges both.
+    socket.on("game:roulette:propose", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+      const parsed = rouletteSchema.safeParse(payload);
+      if (!parsed.success) return ack({ ok: false, reason: "invalid_payload" });
+      await withRoomLock(roomCode, async () => {
+        const proposeKey = `roulette:${roomCode}:proposals`;
+        const raw = await redis.get(proposeKey);
+        const proposals = raw ? JSON.parse(raw) : {};
+        proposals[userId] = parsed.data.options;
+        await redis.set(proposeKey, JSON.stringify(proposals), "EX", 300);
+        io.to(roomCode).emit("game:roulette:proposed", { by: userId, count: parsed.data.options.length });
+        ack({ ok: true });
+      });
+    });
+
     socket.on("game:roulette:spin", async (payload, ackRaw) => {
       const ack = normalizeAck(ackRaw);
       const roomCode = socket.data.roomCode;
@@ -1075,7 +1111,15 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       }
 
       await withRoomLock(roomCode, async () => {
-        const { options } = parsed.data;
+        // Merge proposals from both players if available; else use initiator's options.
+        const proposeKey = `roulette:${roomCode}:proposals`;
+        const raw = await redis.get(proposeKey);
+        const proposals = raw ? JSON.parse(raw) : {};
+        proposals[userId] = parsed.data.options;
+        const allOptions = Object.values(proposals).flat();
+        const options = allOptions.length >= 2 ? allOptions : parsed.data.options;
+        await redis.del(proposeKey);
+
         const index = Math.floor(Math.random() * options.length);
         const event = {
           index,
@@ -1551,9 +1595,18 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       await withRoomLock(roomCode, async () => {
         const pirateText = await redis.get(pirateKey(roomCode));
         const gameState = pirateText ? JSON.parse(pirateText) : null;
-        if (gameState && gameState.players?.[0] && userId !== gameState.players[0]) {
-          ack({ ok: false, reason: 'not_host' });
-          return;
+        if (gameState) {
+          if (!gameState.players?.includes(userId)) {
+            ack({ ok: false, reason: 'not_a_player' });
+            return;
+          }
+        } else {
+          // No active game: only room participants may clear
+          const presence = getPresence(io, roomCode);
+          if (!presence.includes(userId)) {
+            ack({ ok: false, reason: 'not_in_room' });
+            return;
+          }
         }
         await redis.del(pirateKey(roomCode));
         io.to(roomCode).emit("game:pirate:reset_done", { by: userId, at: Date.now() });
@@ -2731,12 +2784,16 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       if (!Object.prototype.hasOwnProperty.call(previousState.scores ?? {}, String(userId))) {
         return ack({ ok: false, reason: "not_a_player" });
       }
-      const pins = Math.min(10, Math.max(0, Number(payload?.pins) || 0));
       const clampUnit = (v) => Math.min(1, Math.max(-1, Number(v) || 0));
-      const gameState = rollBowlingFrame(previousState, String(userId), pins, {
-        aim: clampUnit(payload?.aim),
-        curve: clampUnit(payload?.curve),
-      });
+      const aim = clampUnit(payload?.aim);
+      const curve = clampUnit(payload?.curve);
+      // Pins generated server-side; aim/curve bias the distribution.
+      const ctx = nextRollContext(previousState.rolls[String(userId)] || []);
+      const standing = ctx?.standing ?? 10;
+      const skillFactor = 1 - Math.abs(aim) * 0.4 - Math.abs(curve) * 0.2;
+      const maxExpected = Math.round(standing * Math.max(0.3, skillFactor));
+      const pins = Math.floor(Math.random() * (maxExpected + 1));
+      const gameState = rollBowlingFrame(previousState, String(userId), pins, { aim, curve });
       if (gameState === previousState) return ack({ ok: false, reason: "invalid_action" });
 
       await redis.set(`game:${roomCode}:bowling`, JSON.stringify(gameState), "EX", 3600);
@@ -2912,7 +2969,9 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       for (const playedCard of playedCards) {
         gameState.discardPile.push(playedCard);
       }
-      gameState.declaredColor = declaredColor || null;
+      // Only Wild cards may declare a color; normal cards must not override it.
+      const isWild = card.value === 'wild' || card.value === 'wild_draw4';
+      gameState.declaredColor = isWild ? (declaredColor || null) : null;
 
       // Apply card effects in the same order the cards reached the discard pile.
       // A +2 swept up by an All card is discarded, not played as an attack.
@@ -3415,7 +3474,7 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       const gameState = createBombGameState(orderedPlayers, parsed.data.duration);
       await redis.set(bombGameKey(roomCode), JSON.stringify(gameState), "EX", 300);
 
-      io.to(roomCode).emit("game:bomb:started", {
+      const bombStarted = {
         currentPlayer: gameState.currentPlayer,
         duration: Math.round(gameState.duration / 1000),
         startTime: gameState.startTime,
@@ -3423,8 +3482,9 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
           category: gameState.currentQuiz.category,
           question: gameState.currentQuiz.question,
         },
-      });
-      ack({ ok: true, gameState });
+      };
+      io.to(roomCode).emit("game:bomb:started", bombStarted);
+      ack({ ok: true, ...bombStarted });
       }); // withRoomLock
     });
 
@@ -3914,6 +3974,11 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
           if (catchResetHost && userId !== catchResetHost) {
             return ack({ ok: false, reason: 'not_host' });
           }
+        } else {
+          const presence = getPresence(io, roomCode);
+          if (!presence.includes(userId)) {
+            return ack({ ok: false, reason: 'not_in_room' });
+          }
         }
         await redis.del(`game:${roomCode}:catch`);
         io.to(roomCode).emit("game:catch:reset_done");
@@ -4026,7 +4091,19 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       if (!result.ok) return ack({ ok: false, reason: result.error });
 
       await redis.set(tankGameKey(roomCode), JSON.stringify(result.state), "EX", 7200);
-      io.to(roomCode).emit("game:tank:updated", result.state);
+      // Send each player a view that hides the opponent's aim (angle/power).
+      const sockets = await io.in(roomCode).fetchSockets();
+      for (const sock of sockets) {
+        const pid = sock.data.userId;
+        if (!pid) continue;
+        const view = {
+          ...result.state,
+          players: result.state.players.map(p =>
+            p.id === pid ? p : { ...p, angle: undefined, power: undefined }
+          ),
+        };
+        sock.emit("game:tank:updated", view);
+      }
       ack({ ok: true });
       });
     });
