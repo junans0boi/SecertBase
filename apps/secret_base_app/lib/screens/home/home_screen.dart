@@ -227,7 +227,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: dDay == null
                 ? Text(
                     '우리의 첫날을 등록해보세요',
-                    style: mainTitle(size: 26, color: kMainRose),
+                    style: mainTitle(size: 22, color: kMainRose),
                   )
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

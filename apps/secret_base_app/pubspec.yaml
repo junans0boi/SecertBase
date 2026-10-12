@@ -47,6 +47,7 @@ dependencies:
   latlong2: ^0.9.0
   geolocator: ^14.0.2
   geocoding: ^4.0.0
+  exif: ^3.3.0
 
 dev_dependencies:
   flutter_test:

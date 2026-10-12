@@ -12,6 +12,7 @@ import '../../core/main_hero.dart';
 import '../../features/moment_loop/application/moment_loop_controller.dart';
 import '../../features/moment_loop/data/moment_loop_repository.dart';
 import '../../features/moment_loop/domain/moment.dart';
+import '../../features/moment_loop/domain/photo_date.dart';
 import '../../features/moment_loop/presentation/moment_loop_state_view.dart';
 import 'map_screen.dart';
 
@@ -2163,12 +2164,8 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
       final files = await _imagePicker.pickMultipleMedia(limit: remaining);
       if (files.isEmpty) return;
       final media = <_PickedMomentMedia>[];
+      final wantsSuggestion = _pickedMedia.isEmpty && !_dateTouched;
       DateTime? suggested;
-      if (_pickedMedia.isEmpty && !_dateTouched) {
-        try {
-          suggested = _dateOnly(await files.first.lastModified());
-        } catch (_) {}
-      }
       for (final file in files) {
         final isVideo = _isVideoFile(file.name);
         if (isVideo) {
@@ -2181,14 +2178,19 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
             _PickedMomentMedia(name: file.name, bytes: bytes, isVideo: true),
           );
         } else {
+          final bytes = await file.readAsBytes();
+          if (wantsSuggestion && suggested == null && media.isEmpty) {
+            suggested = await exifCaptureDate(bytes);
+          }
           media.add(
-            _PickedMomentMedia(
-              name: file.name,
-              bytes: await file.readAsBytes(),
-              isVideo: false,
-            ),
+            _PickedMomentMedia(name: file.name, bytes: bytes, isVideo: false),
           );
         }
+      }
+      if (wantsSuggestion && suggested == null) {
+        try {
+          suggested = _dateOnly(await files.first.lastModified());
+        } catch (_) {}
       }
       if (!mounted) return;
       setState(() {
