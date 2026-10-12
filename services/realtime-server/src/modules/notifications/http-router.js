@@ -1,13 +1,20 @@
 import express from 'express';
-import { NOTIFICATION_TYPES } from './notifier.js';
+import { PREF_FIELDS, notificationPrefs, validPreferencePatch } from './preferences.js';
 
 const PLATFORMS = new Set(['android', 'ios', 'web']);
+const parseToken = (value) => typeof value === 'string' ? value.trim() : '';
 
-export function createNotificationRouter({ queryFn }) {
+export function createNotificationRouter({ queryFn, log = console }) {
   const router = express.Router();
+  router.use((req, res, next) => {
+    if (!Number.isSafeInteger(req.auth?.userId) || req.auth.userId <= 0) {
+      return res.status(401).json({ ok: false, reason: 'auth_required' });
+    }
+    next();
+  });
 
   router.post('/device-token', async (req, res) => {
-    const token = String(req.body?.token ?? '').trim();
+    const token = parseToken(req.body?.token);
     const platform = String(req.body?.platform ?? '').trim();
     if (!token || token.length > 512 || !PLATFORMS.has(platform)) {
       return res.status(400).json({ ok: false, reason: 'invalid_token' });
@@ -22,23 +29,23 @@ export function createNotificationRouter({ queryFn }) {
         [req.auth.userId, platform, token, req.body?.appVersion ? String(req.body.appVersion).slice(0, 32) : null],
       );
       return res.json({ ok: true });
-    } catch (error) {
-      console.error('[API] /device-token POST error:', error);
+    } catch {
+      log.error('[API] /device-token POST failed');
       return res.status(500).json({ ok: false, reason: 'internal_error' });
     }
   });
 
   router.delete('/device-token', async (req, res) => {
-    const token = String(req.body?.token ?? '').trim();
-    if (!token) return res.status(400).json({ ok: false, reason: 'invalid_token' });
+    const token = parseToken(req.body?.token);
+    if (!token || token.length > 512) return res.status(400).json({ ok: false, reason: 'invalid_token' });
     try {
       await queryFn(
         'UPDATE device_tokens SET revoked_at = NOW() WHERE token = ? AND user_id = ?',
         [token, req.auth.userId],
       );
       return res.json({ ok: true });
-    } catch (error) {
-      console.error('[API] /device-token DELETE error:', error);
+    } catch {
+      log.error('[API] /device-token DELETE failed');
       return res.status(500).json({ ok: false, reason: 'internal_error' });
     }
   });
@@ -46,39 +53,37 @@ export function createNotificationRouter({ queryFn }) {
   router.get('/notification-prefs', async (req, res) => {
     try {
       const { rows } = await queryFn(
-        'SELECT partner_moment, today_loop, game_invite FROM notification_prefs WHERE user_id = ?',
+        `SELECT ${PREF_FIELDS.join(', ')} FROM notification_prefs WHERE user_id = ?`,
         [req.auth.userId],
       );
       const row = rows[0] ?? {};
       return res.json({
         ok: true,
-        prefs: Object.fromEntries(
-          NOTIFICATION_TYPES.map((t) => [t, row[t] === undefined ? true : Boolean(Number(row[t]))]),
-        ),
+        prefs: notificationPrefs(row),
       });
-    } catch (error) {
-      console.error('[API] /notification-prefs GET error:', error);
+    } catch {
+      log.error('[API] /notification-prefs GET failed');
       return res.status(500).json({ ok: false, reason: 'internal_error' });
     }
   });
 
   router.put('/notification-prefs', async (req, res) => {
     const input = req.body ?? {};
-    const types = NOTIFICATION_TYPES.filter((t) => input[t] !== undefined);
-    if (!types.length || types.some((t) => typeof input[t] !== 'boolean')) {
+    if (!validPreferencePatch(input)) {
       return res.status(400).json({ ok: false, reason: 'invalid_prefs' });
     }
+    const fields = PREF_FIELDS.filter((field) => Object.hasOwn(input, field));
     try {
-      // Column names come from the NOTIFICATION_TYPES whitelist, never from input.
+      // Only whitelisted fields are updated; an omitted field keeps its value.
       await queryFn(
-        `INSERT INTO notification_prefs (user_id, ${types.join(', ')})
-         VALUES (?, ${types.map(() => '?').join(', ')})
-         ON DUPLICATE KEY UPDATE ${types.map((t) => `${t} = VALUES(${t})`).join(', ')}`,
-        [req.auth.userId, ...types.map((t) => (input[t] ? 1 : 0))],
+        `INSERT INTO notification_prefs (user_id, ${fields.join(', ')})
+         VALUES (?, ${fields.map(() => '?').join(', ')})
+         ON DUPLICATE KEY UPDATE ${fields.map((field) => `${field} = VALUES(${field})`).join(', ')}`,
+        [req.auth.userId, ...fields.map((field) => typeof input[field] === 'boolean' ? Number(input[field]) : input[field])],
       );
       return res.json({ ok: true });
-    } catch (error) {
-      console.error('[API] /notification-prefs PUT error:', error);
+    } catch {
+      log.error('[API] /notification-prefs PUT failed');
       return res.status(500).json({ ok: false, reason: 'internal_error' });
     }
   });

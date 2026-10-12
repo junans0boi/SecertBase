@@ -1,0 +1,6 @@
+-- Additive settings migration. 0043 remains immutable.
+ALTER TABLE notification_prefs
+  ADD COLUMN IF NOT EXISTS quiet_hours_enabled TINYINT(1) NOT NULL DEFAULT 1,
+  ADD COLUMN IF NOT EXISTS quiet_start CHAR(5) NOT NULL DEFAULT '22:00',
+  ADD COLUMN IF NOT EXISTS quiet_end CHAR(5) NOT NULL DEFAULT '08:00',
+  ADD COLUMN IF NOT EXISTS reveal_hour TINYINT UNSIGNED NOT NULL DEFAULT 21;
