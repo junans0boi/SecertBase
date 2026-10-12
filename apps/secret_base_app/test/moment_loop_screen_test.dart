@@ -39,6 +39,74 @@ void main() {
   });
 
   momentDateTests();
+  todayMomentFlagTests();
+}
+
+void todayMomentFlagTests() {
+  Future<List<Map<String, String>>> saveWith(
+    WidgetTester tester, {
+    required bool checkToday,
+  }) async {
+    final posted = <Map<String, String>>[];
+    final api = MockClient((request) async {
+      if (request.method == 'POST') {
+        final body = String.fromCharCodes(request.bodyBytes);
+        final fields = <String, String>{};
+        for (final key in ['taken_at', 'today_moment']) {
+          final m = RegExp('name="$key"\\r\\n\\r\\n([^\\r]*)').firstMatch(body);
+          if (m != null) fields[key] = m.group(1)!;
+        }
+        posted.add(fields);
+        return http.Response(
+          jsonEncode({
+            'ok': true,
+            'post': {'id': 1, 'user_id': 7, 'media_type': 'text'},
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      return http.Response(
+        jsonEncode({'ok': true, 'posts': [], 'pins': []}),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MomentLoopScreen(
+          client: api,
+          baseUrl: 'https://secretbase.example',
+          userId: 7,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('moment_empty_create')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'today');
+    if (checkToday) {
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(find.text('공유'));
+    await tester.pumpAndSettle();
+    return posted;
+  }
+
+  testWidgets('saving without the toggle does not send today_moment', (
+    tester,
+  ) async {
+    final posted = await saveWith(tester, checkToday: false);
+    expect(posted, hasLength(1));
+    expect(posted.single.containsKey('today_moment'), isFalse);
+  });
+
+  testWidgets('saving with the toggle sends today_moment=true', (tester) async {
+    final posted = await saveWith(tester, checkToday: true);
+    expect(posted, hasLength(1));
+    expect(posted.single['today_moment'], 'true');
+  });
 }
 
 void momentDateTests() {

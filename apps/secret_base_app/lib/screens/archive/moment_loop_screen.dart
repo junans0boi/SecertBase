@@ -2570,8 +2570,9 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
                       if (!value) _useTodayPrompt = false;
                     }),
               contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-              activeTrackColor: kMainRoseSoft,
-              activeThumbColor: kMainRose,
+              // ON must be unmistakable: a pale track was read as "off".
+              activeTrackColor: kMainRose,
+              activeThumbColor: Colors.white,
               title: Text(
                 '오늘의 순간으로 남기기',
                 style: mainBody(size: 15, weight: FontWeight.w900),
