@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "19945781974",
+    "project_id": "secretbase-289d0",
+    "storage_bucket": "secretbase-289d0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:19945781974:android:c4b538077ac5a53b6de777",
+        "android_client_info": {
+          "package_name": "com.secretbase.secret_base_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDQAR9M_PKgCLe0YyQ0tKbPUMXca_4Xd18"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
