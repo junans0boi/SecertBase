@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -108,8 +109,9 @@ void main() {
 
     Future<void> withMap(
       WidgetTester tester,
-      Future<void> Function() body,
-    ) async {
+      Future<void> Function() body, {
+      MockClientHandler? handleRequest,
+    }) async {
       await http.runWithClient(
         () async {
           await tester.pumpWidget(const MaterialApp(home: MapScreen()));
@@ -117,17 +119,56 @@ void main() {
           await body();
         },
         () => MockClient(
-          (_) async => http.Response.bytes(
-            utf8.encode(jsonEncode({'ok': true, 'pins': pins, 'reviews': []})),
-            200,
-            headers: {'content-type': 'application/json; charset=utf-8'},
-          ),
+          handleRequest ??
+              (_) async => http.Response.bytes(
+                utf8.encode(
+                  jsonEncode({'ok': true, 'pins': pins, 'reviews': []}),
+                ),
+                200,
+                headers: {'content-type': 'application/json; charset=utf-8'},
+              ),
         ),
       );
     }
 
     double sheetFraction(WidgetTester tester) =>
         tester.getSize(find.byKey(const Key('map-sheet'))).height / 600;
+
+    Future<void> enterWishlistPin(WidgetTester tester) async {
+      await tester.tap(find.byKey(const Key('map-add-fab')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const Key('map-sheet')),
+          matching: find.text('가고 싶은 곳'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final name = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.hintText == '장소 이름',
+      );
+      await tester.enterText(name, '새 카페');
+      await tester.ensureVisible(find.text('☕ 카페'));
+      await tester.tap(find.text('☕ 카페'));
+      final memo = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.hintText == '가보고 싶은 이유',
+      );
+      await tester.ensureVisible(memo);
+      await tester.enterText(memo, '함께 커피 마시기');
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.widgetWithText(FilledButton, '지도에 저장'));
+      await tester.pumpAndSettle();
+      expect(sheetFraction(tester), closeTo(0.45, 0.01));
+    }
+
+    http.Response jsonResponse(Map<String, dynamic> body, int status) =>
+        http.Response.bytes(
+          utf8.encode(jsonEncode(body)),
+          status,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
 
     testWidgets('starts collapsed and shows one filter row', (tester) async {
       await withMap(tester, () async {
@@ -190,5 +231,114 @@ void main() {
         expect(sheetFraction(tester), closeTo(0.45, 0.01));
       });
     });
+
+    testWidgets('successful save closes the add form and collapses the sheet', (
+      tester,
+    ) async {
+      final save = Completer<http.Response>();
+      var saved = false;
+      await withMap(
+        tester,
+        () async {
+          await enterWishlistPin(tester);
+          await tester.tap(find.text('지도에 저장'));
+          await tester.pump();
+          expect(find.text('비밀 장소 추가'), findsOneWidget);
+          expect(sheetFraction(tester), closeTo(0.45, 0.01));
+
+          save.complete(jsonResponse({'ok': true, 'id': 3}, 200));
+          await tester.pumpAndSettle();
+          expect(find.text('비밀 장소 추가'), findsNothing);
+          expect(sheetFraction(tester), closeTo(0.12, 0.01));
+          expect(find.byKey(const Key('map-pin-3')), findsOneWidget);
+          expect(find.byKey(const Key('map-filter-active')), findsOneWidget);
+          expect(tester.takeException(), isNull);
+        },
+        handleRequest: (request) async {
+          if (request.method == 'POST' && request.url.path == '/api/map') {
+            final response = await save.future;
+            saved = true;
+            return response;
+          }
+          if (request.method == 'GET' && request.url.path == '/api/map') {
+            return jsonResponse({
+              'ok': true,
+              'pins': [
+                ...pins,
+                if (saved)
+                  {
+                    'id': 3,
+                    'place_name': '새 카페',
+                    'category': '카페',
+                    'status': 'wishlist',
+                    'latitude': 37.54,
+                    'longitude': 127.05,
+                  },
+              ],
+            }, 200);
+          }
+          throw StateError('Unexpected fake API request');
+        },
+      );
+    });
+
+    testWidgets('completed save returns the sheet to collapsed', (
+      tester,
+    ) async {
+      await withMap(
+        tester,
+        () async {
+          await enterWishlistPin(tester);
+          await tester.tap(find.text('지도에 저장'));
+          await tester.pumpAndSettle();
+          expect(sheetFraction(tester), closeTo(0.12, 0.01));
+          expect(find.text('비밀 장소 추가'), findsNothing);
+        },
+        handleRequest: (request) async {
+          if (request.method == 'POST' && request.url.path == '/api/map') {
+            return jsonResponse({'ok': true, 'id': 3}, 200);
+          }
+          if (request.method == 'GET' && request.url.path == '/api/map') {
+            return jsonResponse({'ok': true, 'pins': pins}, 200);
+          }
+          throw StateError('Unexpected fake API request');
+        },
+      );
+    });
+
+    for (final status in [400, 500]) {
+      testWidgets('HTTP $status keeps the entered form and half sheet', (
+        tester,
+      ) async {
+        await withMap(
+          tester,
+          () async {
+            await enterWishlistPin(tester);
+            await tester.tap(find.text('지도에 저장'));
+            await tester.pumpAndSettle();
+            expect(find.text('비밀 장소 추가'), findsOneWidget);
+            expect(find.text('새 카페'), findsOneWidget);
+            expect(find.text('함께 커피 마시기'), findsOneWidget);
+            expect(find.text('방문 날짜'), findsNothing);
+            expect(sheetFraction(tester), closeTo(0.45, 0.01));
+            expect(find.text('장소를 저장하지 못했어요'), findsOneWidget);
+            expect(find.byKey(const Key('map-filter-active')), findsNothing);
+            expect(find.byKey(const Key('map-pin-1')), findsOneWidget);
+            expect(find.byKey(const Key('map-pin-2')), findsOneWidget);
+            expect(tester.takeException(), isNull);
+          },
+          handleRequest: (request) async {
+            if (request.method == 'POST' && request.url.path == '/api/map') {
+              // A success-shaped body must not override the HTTP failure.
+              return jsonResponse({'ok': true}, status);
+            }
+            if (request.method == 'GET' && request.url.path == '/api/map') {
+              return jsonResponse({'ok': true, 'pins': pins}, 200);
+            }
+            throw StateError('Unexpected fake API request');
+          },
+        );
+      });
+    }
   });
 }

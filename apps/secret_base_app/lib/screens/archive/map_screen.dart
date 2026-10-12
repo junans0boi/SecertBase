@@ -126,6 +126,7 @@ class _MapScreenState extends State<MapScreen> {
         Uri.parse(mapUrl),
         headers: _jsonHeaders(includeAuth: true),
       );
+      if (!mounted) return;
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       if (data['ok'] == true) {
         setState(() {
@@ -338,7 +339,7 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  Future<void> _addPin({
+  Future<bool> _addPin({
     required String name,
     required String status,
     required String category,
@@ -353,7 +354,7 @@ class _MapScreenState extends State<MapScreen> {
     final bodyMemo = _composeMemo(memo, emotionTags);
 
     try {
-      await http.post(
+      final response = await http.post(
         Uri.parse('${_auth.baseUrl}/api/map'),
         headers: _jsonHeaders(includeAuth: true),
         body: jsonEncode({
@@ -368,6 +369,10 @@ class _MapScreenState extends State<MapScreen> {
           'emotion_tags': emotionTags,
         }),
       );
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw const HttpException('Map pin save failed');
+      }
+      if (!mounted) return false;
       setState(() {
         _tempSelectedLatLng = null;
         _tempSelectedName = null;
@@ -376,14 +381,17 @@ class _MapScreenState extends State<MapScreen> {
         _activeCategory = category;
       });
       await _load();
+      if (!mounted) return false;
       _moveToFirstFiltered();
+      return true;
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('장소를 저장하지 못했어요', style: mainBody(color: Colors.white)),
         ),
       );
+      return false;
     }
   }
 
@@ -1120,8 +1128,7 @@ class _MapScreenState extends State<MapScreen> {
                   child: FilledButton(
                     onPressed: () async {
                       if (nameCtrl.text.trim().isEmpty) return;
-                      _closePanel();
-                      await _addPin(
+                      final saved = await _addPin(
                         name: nameCtrl.text.trim(),
                         status: selectedStatus,
                         category: selectedCategory,
@@ -1136,6 +1143,9 @@ class _MapScreenState extends State<MapScreen> {
                         lat: latLng.latitude,
                         lng: latLng.longitude,
                       );
+                      if (!saved || !ctx.mounted) return;
+                      _closePanel();
+                      _snapSheetAfterBuild(_sheetCollapsed);
                     },
                     style: FilledButton.styleFrom(
                       backgroundColor: kMainRose,
