@@ -38,6 +38,10 @@ const _emotionTags = [
 
 final _koreaCenter = LatLng(36.35, 127.85);
 
+const _sheetCollapsed = 0.12;
+const _sheetHalf = 0.45;
+const _sheetExpanded = 0.92;
+
 const mapTileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 const mapFallbackTileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
@@ -53,7 +57,8 @@ class MapScreen extends StatefulWidget {
 class _MapScreenState extends State<MapScreen> {
   final _auth = AuthService();
   final MapController _mapController = MapController();
-  final PageController _pageController = PageController(viewportFraction: 0.86);
+  final DraggableScrollableController _sheetCtrl =
+      DraggableScrollableController();
   final TextEditingController _searchCtrl = TextEditingController();
 
   List<Map<String, dynamic>> _pins = [];
@@ -73,7 +78,11 @@ class _MapScreenState extends State<MapScreen> {
   LatLng? _tempSelectedLatLng;
   String? _tempSelectedName;
   String? _tempSelectedCategory;
-  int _activeCardIndex = 0;
+  // Non-modal bottom sheet: null panel => place list, else detail/add form.
+  Widget Function(ScrollController)? _panel;
+  int _panelSeq = 0;
+  Map<String, dynamic>? _selectedPin;
+  double _sheetExtent = _sheetCollapsed;
   bool _afterglowStarting = false;
 
   @override
@@ -86,7 +95,7 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void dispose() {
     _searchCtrl.dispose();
-    _pageController.dispose();
+    _sheetCtrl.dispose();
     super.dispose();
   }
 
@@ -125,7 +134,6 @@ class _MapScreenState extends State<MapScreen> {
                   ?.map((e) => Map<String, dynamic>.from(e as Map))
                   .toList() ??
               [];
-          _activeCardIndex = 0;
         });
       }
 
@@ -368,9 +376,7 @@ class _MapScreenState extends State<MapScreen> {
         _activeCategory = category;
       });
       await _load();
-      if (_filteredPins.isNotEmpty) {
-        _onCardChanged(0);
-      }
+      _moveToFirstFiltered();
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1007,169 +1013,148 @@ class _MapScreenState extends State<MapScreen> {
     DateTime selectedDate = DateTime.now();
     final selectedTags = <String>{};
 
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheet) => DraggableScrollableSheet(
-          initialChildSize: 0.75,
-          minChildSize: 0.3,
-          maxChildSize: 0.95,
-          expand: false,
-          builder: (_, scrollController) => _SheetFrame(
-            child: SingleChildScrollView(
-              controller: scrollController,
-              padding: EdgeInsets.fromLTRB(
-                20,
-                16,
-                20,
-                MediaQuery.of(ctx).viewInsets.bottom + 20,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 42,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: kMainLine,
-                        borderRadius: BorderRadius.circular(99),
-                      ),
+    _openPanel(
+      (scrollController) => StatefulBuilder(
+        builder: (ctx, setSheet) => _SheetFrame(
+          child: SingleChildScrollView(
+            controller: scrollController,
+            padding: EdgeInsets.fromLTRB(
+              20,
+              16,
+              20,
+              MediaQuery.of(ctx).viewInsets.bottom + 20,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _sheetHandle(),
+                _panelCloseButton('닫기'),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.add_location_alt_rounded,
+                      color: kMainRose,
+                      size: 24,
                     ),
-                  ),
-                  const SizedBox(height: 18),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.add_location_alt_rounded,
-                        color: kMainRose,
-                        size: 24,
-                      ),
-                      const SizedBox(width: 8),
-                      Text('비밀 장소 추가', style: mainTitle(size: 24)),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${latLng.latitude.toStringAsFixed(5)}, ${latLng.longitude.toStringAsFixed(5)}',
-                    style: mainBody(size: 11, color: kMainMuted),
-                  ),
-                  const SizedBox(height: 18),
-                  _StatusSegment(
-                    value: selectedStatus,
-                    onChanged: (value) =>
-                        setSheet(() => selectedStatus = value),
-                  ),
-                  const SizedBox(height: 16),
-                  _SoftTextField(
-                    controller: nameCtrl,
-                    hintText: '장소 이름',
-                    prefixIcon: Icons.place_outlined,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    '카테고리',
-                    style: mainBody(
-                      size: 12,
-                      color: kMainMuted,
-                      weight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: _categories
-                        .map(
-                          (cat) => _ChoiceChip(
-                            label: '${_categoryEmojis[cat]} $cat',
-                            selected: selectedCategory == cat,
-                            onTap: () => setSheet(() => selectedCategory = cat),
-                          ),
-                        )
-                        .toList(),
-                  ),
-                  if (selectedStatus == 'visited') ...[
-                    const SizedBox(height: 16),
-                    _DatePickerTile(
-                      date: selectedDate,
-                      label: '방문 날짜',
-                      onPick: () async {
-                        final picked = await _pickDate(ctx, selectedDate);
-                        if (picked != null) {
-                          setSheet(() => selectedDate = picked);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    _RatingPicker(
-                      rating: selectedRating,
-                      onChanged: (value) =>
-                          setSheet(() => selectedRating = value),
-                    ),
-                    const SizedBox(height: 16),
-                    _EmotionPicker(
-                      selectedTags: selectedTags,
-                      onToggle: (tag) => setSheet(() {
-                        selectedTags.contains(tag)
-                            ? selectedTags.remove(tag)
-                            : selectedTags.add(tag);
-                      }),
-                    ),
+                    const SizedBox(width: 8),
+                    Text('비밀 장소 추가', style: mainTitle(size: 24)),
                   ],
-                  const SizedBox(height: 16),
-                  _SoftTextField(
-                    controller: memoCtrl,
-                    hintText: selectedStatus == 'visited'
-                        ? '우리 메모'
-                        : '가보고 싶은 이유',
-                    maxLines: 3,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${latLng.latitude.toStringAsFixed(5)}, ${latLng.longitude.toStringAsFixed(5)}',
+                  style: mainBody(size: 11, color: kMainMuted),
+                ),
+                const SizedBox(height: 18),
+                _StatusSegment(
+                  value: selectedStatus,
+                  onChanged: (value) => setSheet(() => selectedStatus = value),
+                ),
+                const SizedBox(height: 16),
+                _SoftTextField(
+                  controller: nameCtrl,
+                  hintText: '장소 이름',
+                  prefixIcon: Icons.place_outlined,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  '카테고리',
+                  style: mainBody(
+                    size: 12,
+                    color: kMainMuted,
+                    weight: FontWeight.w800,
                   ),
-                  const SizedBox(height: 18),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: () async {
-                        if (nameCtrl.text.trim().isEmpty) return;
-                        Navigator.pop(ctx);
-                        await _addPin(
-                          name: nameCtrl.text.trim(),
-                          status: selectedStatus,
-                          category: selectedCategory,
-                          rating: selectedRating,
-                          visitDate: selectedStatus == 'visited'
-                              ? selectedDate
-                              : null,
-                          emotionTags: selectedStatus == 'visited'
-                              ? selectedTags.toList()
-                              : const [],
-                          memo: memoCtrl.text.trim(),
-                          lat: latLng.latitude,
-                          lng: latLng.longitude,
-                        );
-                      },
-                      style: FilledButton.styleFrom(
-                        backgroundColor: kMainRose,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _categories
+                      .map(
+                        (cat) => _ChoiceChip(
+                          label: '${_categoryEmojis[cat]} $cat',
+                          selected: selectedCategory == cat,
+                          onTap: () => setSheet(() => selectedCategory = cat),
                         ),
-                      ),
-                      child: Text(
-                        '지도에 저장',
-                        style: mainBody(
-                          color: Colors.white,
-                          weight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
+                      )
+                      .toList(),
+                ),
+                if (selectedStatus == 'visited') ...[
+                  const SizedBox(height: 16),
+                  _DatePickerTile(
+                    date: selectedDate,
+                    label: '방문 날짜',
+                    onPick: () async {
+                      final picked = await _pickDate(ctx, selectedDate);
+                      if (picked != null) {
+                        setSheet(() => selectedDate = picked);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  _RatingPicker(
+                    rating: selectedRating,
+                    onChanged: (value) =>
+                        setSheet(() => selectedRating = value),
+                  ),
+                  const SizedBox(height: 16),
+                  _EmotionPicker(
+                    selectedTags: selectedTags,
+                    onToggle: (tag) => setSheet(() {
+                      selectedTags.contains(tag)
+                          ? selectedTags.remove(tag)
+                          : selectedTags.add(tag);
+                    }),
                   ),
                 ],
-              ),
+                const SizedBox(height: 16),
+                _SoftTextField(
+                  controller: memoCtrl,
+                  hintText: selectedStatus == 'visited' ? '우리 메모' : '가보고 싶은 이유',
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () async {
+                      if (nameCtrl.text.trim().isEmpty) return;
+                      _closePanel();
+                      await _addPin(
+                        name: nameCtrl.text.trim(),
+                        status: selectedStatus,
+                        category: selectedCategory,
+                        rating: selectedRating,
+                        visitDate: selectedStatus == 'visited'
+                            ? selectedDate
+                            : null,
+                        emotionTags: selectedStatus == 'visited'
+                            ? selectedTags.toList()
+                            : const [],
+                        memo: memoCtrl.text.trim(),
+                        lat: latLng.latitude,
+                        lng: latLng.longitude,
+                      );
+                    },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: kMainRose,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                    ),
+                    child: Text(
+                      '지도에 저장',
+                      style: mainBody(
+                        color: Colors.white,
+                        weight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -1197,36 +1182,72 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  void _onCardChanged(int index) {
+  void _moveToFirstFiltered() {
     final pins = _filteredPins;
-    if (index < 0 || index >= pins.length) return;
-    setState(() => _activeCardIndex = index);
-    final pin = pins[index];
+    if (pins.isNotEmpty) _moveToPin(pins.first);
+  }
+
+  void _snapSheet(double size) {
+    if (_sheetCtrl.isAttached) {
+      _sheetCtrl.animateTo(
+        size,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  void _snapSheetAfterBuild(double size) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _snapSheet(size);
+    });
+  }
+
+  void _openPanel(Widget Function(ScrollController) builder) {
+    setState(() {
+      _panel = builder;
+      _panelSeq++;
+    });
+    _snapSheetAfterBuild(_sheetHalf);
+  }
+
+  void _closePanel() {
+    setState(() {
+      _panel = null;
+      _selectedPin = null;
+    });
+  }
+
+  void _showListSheet() {
+    _closePanel();
+    _snapSheetAfterBuild(_sheetExpanded);
+  }
+
+  /// Marker / list tap: select the pin and show its detail inline at half.
+  void _selectPin(Map<String, dynamic> pin) {
+    setState(() {
+      _tempSelectedLatLng = null;
+      _tempSelectedName = null;
+      _showSearchResults = false;
+    });
     _moveToPin(pin);
+    _showPinDetail(pin);
+  }
+
+  void _reshowPin(Map<String, dynamic> pin) {
+    if (!mounted) return;
+    final updated = _pins.where((p) => p['id'] == pin['id']);
+    if (updated.isEmpty) {
+      _closePanel();
+    } else {
+      _showPinDetail(updated.first);
+    }
   }
 
   void _moveToPin(Map<String, dynamic> pin, {double zoom = 15.0}) {
     final lat = placeDoubleForMap(pin['latitude']) ?? 37.5665;
     final lng = placeDoubleForMap(pin['longitude']) ?? 126.9780;
     _mapController.move(LatLng(lat, lng), zoom);
-  }
-
-  void _focusPin(int index, {bool openDetail = false}) {
-    final pins = _filteredPins;
-    if (index < 0 || index >= pins.length) return;
-    setState(() {
-      _tempSelectedLatLng = null;
-      _tempSelectedName = null;
-      _showSearchResults = false;
-      _activeCardIndex = index;
-    });
-    _pageController.animateToPage(
-      index,
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOut,
-    );
-    _moveToPin(pins[index]);
-    if (openDetail) _showPinDetail(pins[index]);
   }
 
   void _showPinDetail(Map<String, dynamic> pin) {
@@ -1259,11 +1280,9 @@ class _MapScreenState extends State<MapScreen> {
       if (mounted) setSheet(() {});
     }
 
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
+    _selectedPin = pin;
+    _openPanel(
+      (sheetScroll) => StatefulBuilder(
         builder: (ctx, setSheet) {
           if (!reviewsLoaded && !reviewsLoading) loadReviews(setSheet);
           final category = pin['category'] ?? '기타';
@@ -1295,21 +1314,13 @@ class _MapScreenState extends State<MapScreen> {
                 MediaQuery.of(ctx).viewInsets.bottom + 22,
               ),
               child: SingleChildScrollView(
+                controller: sheetScroll,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Center(
-                      child: Container(
-                        width: 42,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: kMainLine,
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
+                    _sheetHandle(),
+                    _panelCloseButton('목록으로'),
                     if (pinMediaUrl.isNotEmpty) ...[
                       ClipRRect(
                         borderRadius: BorderRadius.circular(16),
@@ -1453,7 +1464,6 @@ class _MapScreenState extends State<MapScreen> {
                               state: state!,
                               baseUrl: _auth.baseUrl,
                               onContribute: () {
-                                Navigator.pop(ctx);
                                 _showAfterglowContributionSheet(
                                   pin,
                                   state.visit!,
@@ -1620,7 +1630,6 @@ class _MapScreenState extends State<MapScreen> {
                           const SizedBox(height: 6),
                           GestureDetector(
                             onTap: () async {
-                              Navigator.pop(ctx);
                               await _showWriteReviewSheet(pin, () {
                                 // Reopen detail to see updated reviews
                                 _showPinDetail(pin);
@@ -1742,9 +1751,9 @@ class _MapScreenState extends State<MapScreen> {
                     ],
                     const SizedBox(height: 8),
                     TextButton.icon(
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        _editPin(pin);
+                      onPressed: () async {
+                        await _editPin(pin);
+                        _reshowPin(pin);
                       },
                       icon: const Icon(Icons.edit_outlined),
                       label: const Text('장소 수정'),
@@ -1752,9 +1761,8 @@ class _MapScreenState extends State<MapScreen> {
                     ),
                     if (isCreator) ...[
                       TextButton.icon(
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          _deletePin(pin);
+                        onPressed: () async {
+                          if (await _deletePin(pin)) _closePanel();
                         },
                         icon: const Icon(Icons.delete_outline),
                         label: const Text('장소 삭제'),
@@ -1978,7 +1986,7 @@ class _MapScreenState extends State<MapScreen> {
     contentCtrl.dispose();
   }
 
-  Future<void> _deletePin(Map<String, dynamic> pin) async {
+  Future<bool> _deletePin(Map<String, dynamic> pin) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -1996,89 +2004,14 @@ class _MapScreenState extends State<MapScreen> {
         ],
       ),
     );
-    if (confirmed != true) return;
+    if (confirmed != true) return false;
     final response = await http.delete(
       Uri.parse('${_auth.baseUrl}/api/map/${pin['id']}'),
       headers: _jsonHeaders(includeAuth: true),
     );
-    if (response.statusCode == 200) await _load();
-  }
-
-  void _showListSheet() {
-    final pins = _filteredPins;
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => _SheetFrame(
-        child: DraggableScrollableSheet(
-          initialChildSize: 0.66,
-          minChildSize: 0.38,
-          maxChildSize: 0.9,
-          expand: false,
-          builder: (ctx, scrollController) => Padding(
-            padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 42,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: kMainLine,
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 18),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text('장소 모아보기', style: mainTitle(size: 24)),
-                    ),
-                    Text(
-                      '${pins.length}곳',
-                      style: mainBody(
-                        size: 13,
-                        color: kMainMuted,
-                        weight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: pins.isEmpty
-                      ? Center(
-                          child: Text(
-                            '조건에 맞는 장소가 없어요',
-                            style: mainBody(size: 13, color: kMainMuted),
-                          ),
-                        )
-                      : ListView.separated(
-                          controller: scrollController,
-                          itemCount: pins.length,
-                          separatorBuilder: (_, index) =>
-                              const SizedBox(height: 10),
-                          itemBuilder: (ctx, i) {
-                            final pin = pins[i];
-                            return GestureDetector(
-                              onTap: () {
-                                Navigator.pop(ctx);
-                                _focusPin(i, openDetail: true);
-                              },
-                              child: _ListTilePin(pin: pin),
-                            );
-                          },
-                        ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
+    if (response.statusCode != 200) return false;
+    await _load();
+    return true;
   }
 
   Future<void> _sharePin(Map<String, dynamic> pin) async {
@@ -2247,649 +2180,650 @@ class _MapScreenState extends State<MapScreen> {
     return Scaffold(
       backgroundColor: kMainBg,
       resizeToAvoidBottomInset: false,
-      body: Stack(
-        children: [
-          _loading
-              ? const Center(child: CircularProgressIndicator(color: kMainRose))
-              : FlutterMap(
-                  mapController: _mapController,
-                  options: MapOptions(
-                    initialCenter: centerLatLng,
-                    initialZoom: initialZoom,
-                    maxZoom: 18.0,
-                    minZoom: 3.0,
-                    onTap: (_, point) {
-                      setState(() {
-                        _tempSelectedLatLng = point;
-                        _tempSelectedName = null;
-                        _showSearchResults = false;
-                      });
-                      _mapController.move(point, _mapController.camera.zoom);
-                    },
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate: mapTileUrl,
-                      fallbackUrl: mapFallbackTileUrl,
-                      subdomains: const ['a', 'b', 'c'],
-                      userAgentPackageName: 'com.secretbase.app',
-                      errorTileCallback: (_, _, _) {
-                        if (mounted && !_mapTileError) {
-                          setState(() => _mapTileError = true);
-                        }
+      body: LayoutBuilder(
+        builder: (context, constraints) => Stack(
+          children: [
+            _loading
+                ? const Center(
+                    child: CircularProgressIndicator(color: kMainRose),
+                  )
+                : FlutterMap(
+                    mapController: _mapController,
+                    options: MapOptions(
+                      initialCenter: centerLatLng,
+                      initialZoom: initialZoom,
+                      maxZoom: 18.0,
+                      minZoom: 3.0,
+                      onTap: (_, point) {
+                        setState(() {
+                          _tempSelectedLatLng = point;
+                          _tempSelectedName = null;
+                          _showSearchResults = false;
+                        });
+                        _mapController.move(point, _mapController.camera.zoom);
                       },
                     ),
-                    MarkerLayer(
-                      markers: [
-                        if (_userLatLng != null)
-                          Marker(
-                            point: _userLatLng!,
-                            width: 42,
-                            height: 42,
-                            child: const _UserLocationMarker(),
-                          ),
-                        ...pins.asMap().entries.map((entry) {
-                          final i = entry.key;
-                          final pin = entry.value;
-                          final lat = placeDoubleForMap(pin['latitude']) ?? 0.0;
-                          final lng =
-                              placeDoubleForMap(pin['longitude']) ?? 0.0;
-                          final category = pin['category'] ?? '기타';
-                          final emoji = _categoryEmojis[category] ?? '📍';
-                          final status = _pinStatus(pin);
-                          final isActive = i == _activeCardIndex;
+                    children: [
+                      TileLayer(
+                        urlTemplate: mapTileUrl,
+                        fallbackUrl: mapFallbackTileUrl,
+                        subdomains: const ['a', 'b', 'c'],
+                        userAgentPackageName: 'com.secretbase.app',
+                        errorTileCallback: (_, _, _) {
+                          if (mounted && !_mapTileError) {
+                            setState(() => _mapTileError = true);
+                          }
+                        },
+                      ),
+                      MarkerLayer(
+                        markers: [
+                          if (_userLatLng != null)
+                            Marker(
+                              point: _userLatLng!,
+                              width: 42,
+                              height: 42,
+                              child: const _UserLocationMarker(),
+                            ),
+                          ...pins.map((pin) {
+                            final lat =
+                                placeDoubleForMap(pin['latitude']) ?? 0.0;
+                            final lng =
+                                placeDoubleForMap(pin['longitude']) ?? 0.0;
+                            final category = pin['category'] ?? '기타';
+                            final emoji = _categoryEmojis[category] ?? '📍';
+                            final status = _pinStatus(pin);
+                            final isActive =
+                                _selectedPin != null &&
+                                _selectedPin!['id'] == pin['id'];
 
-                          return Marker(
-                            point: LatLng(lat, lng),
-                            width: isActive ? 66 : 48,
-                            height: isActive ? 66 : 48,
-                            child: GestureDetector(
-                              onTap: () => _focusPin(i, openDetail: true),
-                              child: _PinBubble(
-                                emoji: emoji,
-                                status: status,
-                                active: isActive,
-                                size: isActive ? 58 : 44,
+                            return Marker(
+                              point: LatLng(lat, lng),
+                              width: isActive ? 66 : 48,
+                              height: isActive ? 66 : 48,
+                              child: GestureDetector(
+                                key: Key('map-pin-${pin['id']}'),
+                                onTap: () => _selectPin(pin),
+                                child: _PinBubble(
+                                  emoji: emoji,
+                                  status: status,
+                                  active: isActive,
+                                  size: isActive ? 58 : 44,
+                                ),
+                              ),
+                            );
+                          }),
+                          if (_tempSelectedLatLng != null)
+                            Marker(
+                              point: _tempSelectedLatLng!,
+                              width: 64,
+                              height: 64,
+                              child: const Icon(
+                                Icons.location_on_rounded,
+                                color: kMainRose,
+                                size: 52,
                               ),
                             ),
-                          );
-                        }),
-                        if (_tempSelectedLatLng != null)
-                          Marker(
-                            point: _tempSelectedLatLng!,
-                            width: 64,
-                            height: 64,
-                            child: const Icon(
-                              Icons.location_on_rounded,
-                              color: kMainRose,
-                              size: 52,
+                        ],
+                      ),
+                      RichAttributionWidget(
+                        attributions: [
+                          TextSourceAttribution(
+                            'OpenStreetMap contributors',
+                            onTap: () => launchUrl(
+                              Uri.parse(
+                                'https://www.openstreetmap.org/copyright',
+                              ),
                             ),
                           ),
-                      ],
-                    ),
-                    RichAttributionWidget(
-                      attributions: [
-                        TextSourceAttribution(
-                          'OpenStreetMap contributors',
-                          onTap: () => launchUrl(
-                            Uri.parse(
-                              'https://www.openstreetmap.org/copyright',
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-          Positioned.fill(
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.center,
-                    colors: [
-                      kMainBg.withAlpha(215),
-                      kMainBg.withAlpha(55),
-                      Colors.transparent,
+                        ],
+                      ),
                     ],
+                  ),
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.center,
+                      colors: [
+                        kMainBg.withAlpha(215),
+                        kMainBg.withAlpha(55),
+                        Colors.transparent,
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (!widget.closeAsModal) ...[
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (!widget.closeAsModal) ...[
+                      Row(
+                        children: [
+                          const BrandLogo(size: 34),
+                          const SizedBox(width: 9),
+                          Text(
+                            '우리 지도',
+                            style: mainTitle(size: 28, color: kMainRose),
+                          ),
+                          const Spacer(),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 11,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: kMainRoseSoft,
+                              borderRadius: BorderRadius.circular(99),
+                              border: Border.all(color: kMainLine),
+                            ),
+                            child: Text(
+                              '${_pins.length}곳',
+                              style: mainBody(
+                                size: 12,
+                                color: kMainRose,
+                                weight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     Row(
                       children: [
-                        const BrandLogo(size: 34),
-                        const SizedBox(width: 9),
-                        Text(
-                          '우리 지도',
-                          style: mainTitle(size: 28, color: kMainRose),
-                        ),
-                        const Spacer(),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 11,
-                            vertical: 5,
+                        if (widget.closeAsModal) ...[
+                          _RoundIconButton(
+                            icon: Icons.close_rounded,
+                            onTap: () => Navigator.pop(context),
                           ),
-                          decoration: BoxDecoration(
-                            color: kMainRoseSoft,
-                            borderRadius: BorderRadius.circular(99),
-                            border: Border.all(color: kMainLine),
-                          ),
-                          child: Text(
-                            '${_pins.length}곳',
-                            style: mainBody(
-                              size: 12,
-                              color: kMainRose,
-                              weight: FontWeight.w800,
+                          const SizedBox(width: 8),
+                        ],
+                        Expanded(
+                          child: Container(
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: kMainPaper.withAlpha(245),
+                              borderRadius: BorderRadius.circular(26),
+                              border: Border.all(color: kMainLine),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: kMainRose.withAlpha(16),
+                                  blurRadius: 18,
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
+                            ),
+                            child: TextField(
+                              controller: _searchCtrl,
+                              onSubmitted: _searchAddress,
+                              decoration: InputDecoration(
+                                hintText: '장소 검색',
+                                hintStyle: mainBody(
+                                  size: 13,
+                                  color: kMainMuted,
+                                ),
+                                prefixIcon: const Icon(
+                                  Icons.search_rounded,
+                                  color: kMainRose,
+                                ),
+                                suffixIcon: _searchCtrl.text.isNotEmpty
+                                    ? IconButton(
+                                        icon: const Icon(
+                                          Icons.close_rounded,
+                                          size: 17,
+                                          color: kMainMuted,
+                                        ),
+                                        onPressed: () {
+                                          _searchCtrl.clear();
+                                          setState(() {
+                                            _searchResults.clear();
+                                            _showSearchResults = false;
+                                          });
+                                        },
+                                      )
+                                    : null,
+                                border: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 13,
+                                ),
+                              ),
+                              style: mainBody(size: 14, color: kMainInk),
+                              onChanged: (val) {
+                                setState(() {});
+                                if (val.isEmpty) {
+                                  setState(() {
+                                    _searchResults.clear();
+                                    _showSearchResults = false;
+                                  });
+                                }
+                              },
                             ),
                           ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  Row(
-                    children: [
-                      if (widget.closeAsModal) ...[
+                        const SizedBox(width: 8),
                         _RoundIconButton(
-                          icon: Icons.close_rounded,
-                          onTap: () => Navigator.pop(context),
+                          icon: _locationDenied
+                              ? Icons.location_disabled_rounded
+                              : (_locatingUser
+                                    ? Icons.gps_fixed_rounded
+                                    : Icons.my_location_rounded),
+                          onTap: () => _requestUserLocation(moveMap: true),
                         ),
                         const SizedBox(width: 8),
+                        _RoundIconButton(
+                          icon: Icons.format_list_bulleted_rounded,
+                          onTap: _showListSheet,
+                        ),
                       ],
-                      Expanded(
-                        child: Container(
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: kMainPaper.withAlpha(245),
-                            borderRadius: BorderRadius.circular(26),
-                            border: Border.all(color: kMainLine),
-                            boxShadow: [
-                              BoxShadow(
-                                color: kMainRose.withAlpha(16),
-                                blurRadius: 18,
-                                offset: const Offset(0, 8),
+                    ),
+                    if (_showSearchResults) ...[
+                      const SizedBox(height: 8),
+                      _SearchResultPanel(
+                        isSearching: _isSearching,
+                        failed: _searchFailed,
+                        results: _searchResults,
+                        onTap: (item) {
+                          final pos = LatLng(item['lat'], item['lon']);
+                          setState(() {
+                            _tempSelectedLatLng = pos;
+                            _tempSelectedName =
+                                item['name'] as String? ??
+                                item['display_name'].toString().split(',')[0];
+                            _tempSelectedCategory = item['category'] as String?;
+                            _showSearchResults = false;
+                            _searchCtrl.text = _tempSelectedName ?? '';
+                          });
+                          _mapController.move(pos, 15.0);
+                        },
+                      ),
+                    ],
+                    if (_mapLoadError != null || _mapTileError) ...[
+                      const SizedBox(height: 8),
+                      _MapFallbackBanner(
+                        message: _mapTileError
+                            ? '지도를 불러올 수 없어요'
+                            : _mapLoadError!,
+                        detail: _mapTileError
+                            ? '장소 목록과 검색은 계속 사용할 수 있어요.'
+                            : '장소 검색이나 목록에서 다음 행동을 선택해보세요.',
+                        onRetry: _load,
+                      ),
+                    ],
+                    if (_locationDenied) ...[
+                      const SizedBox(height: 8),
+                      const _MapInfoBanner(
+                        icon: Icons.location_disabled_outlined,
+                        text: '위치 권한 없이도 장소 검색과 저장을 사용할 수 있어요.',
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: [
+                                _StatusChip(
+                                  label: '전체',
+                                  count: _pins.length,
+                                  selected: _activeStatus == 'all',
+                                  color: kMainInk,
+                                  onTap: () => _setStatus('all'),
+                                ),
+                                _StatusChip(
+                                  label: '다녀온 곳',
+                                  count: _visitedCount,
+                                  selected: _activeStatus == 'visited',
+                                  color: kMainRose,
+                                  onTap: () => _setStatus('visited'),
+                                ),
+                                _StatusChip(
+                                  label: '가고 싶은 곳',
+                                  count: _wishlistCount,
+                                  selected: _activeStatus == 'wishlist',
+                                  color: kMainLilac,
+                                  onTap: () => _setStatus('wishlist'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        _buildFilterButton(),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (_sheetExtent < 0.6)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: _sheetExtent * constraints.maxHeight + 12,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_tempSelectedLatLng != null)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: MainCard(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
+                          color: kMainPaper.withAlpha(246),
+                          borderColor: kMainRose.withAlpha(90),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.add_location_alt_rounded,
+                                color: kMainRose,
+                              ),
+                              const SizedBox(width: 9),
+                              Expanded(
+                                child: Text(
+                                  _tempSelectedName == null
+                                      ? '선택한 위치 저장하기'
+                                      : _tempSelectedName!,
+                                  style: mainBody(
+                                    size: 13,
+                                    color: kMainInk,
+                                    weight: FontWeight.w800,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () => setState(() {
+                                  _tempSelectedLatLng = null;
+                                  _tempSelectedName = null;
+                                  _tempSelectedCategory = null;
+                                }),
+                                child: Text(
+                                  '취소',
+                                  style: mainBody(size: 12, color: kMainMuted),
+                                ),
+                              ),
+                              FilledButton(
+                                onPressed: () => _showAddDialog(
+                                  _tempSelectedLatLng!,
+                                  initialName: _tempSelectedName,
+                                  initialCategory: _tempSelectedCategory,
+                                ),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: kMainRose,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                  ),
+                                ),
+                                child: Text(
+                                  '저장',
+                                  style: mainBody(
+                                    size: 12,
+                                    color: Colors.white,
+                                    weight: FontWeight.w800,
+                                  ),
+                                ),
                               ),
                             ],
                           ),
-                          child: TextField(
-                            controller: _searchCtrl,
-                            onSubmitted: _searchAddress,
-                            decoration: InputDecoration(
-                              hintText: '장소 검색',
-                              hintStyle: mainBody(size: 13, color: kMainMuted),
-                              prefixIcon: const Icon(
-                                Icons.search_rounded,
-                                color: kMainRose,
+                        ),
+                      )
+                    else if (pins.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 18),
+                        child: MainCard(
+                          radius: 26,
+                          color: kMainPaper.withAlpha(248),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '아직 우리 지도가 비어 있어요',
+                                style: mainTitle(size: 22, color: kMainRose),
                               ),
-                              suffixIcon: _searchCtrl.text.isNotEmpty
-                                  ? IconButton(
-                                      icon: const Icon(
-                                        Icons.close_rounded,
-                                        size: 17,
-                                        color: kMainMuted,
-                                      ),
-                                      onPressed: () {
-                                        _searchCtrl.clear();
-                                        setState(() {
-                                          _searchResults.clear();
-                                          _showSearchResults = false;
-                                        });
-                                      },
-                                    )
-                                  : null,
-                              border: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(
-                                vertical: 13,
+                              const SizedBox(height: 5),
+                              Text(
+                                '검색하거나 지도 위를 눌러 첫 장소를 남겨봐요',
+                                style: mainBody(size: 12, color: kMainMuted),
+                                textAlign: TextAlign.center,
                               ),
-                            ),
-                            style: mainBody(size: 14, color: kMainInk),
-                            onChanged: (val) {
-                              setState(() {});
-                              if (val.isEmpty) {
-                                setState(() {
-                                  _searchResults.clear();
-                                  _showSearchResults = false;
-                                });
-                              }
-                            },
+                              const SizedBox(height: 10),
+                              Text(
+                                '장소 검색 → 결과 선택 → 저장 순서로 기록할 수 있어요.',
+                                style: mainBody(size: 11, color: kMainMuted),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      _RoundIconButton(
-                        icon: _locationDenied
-                            ? Icons.location_disabled_rounded
-                            : (_locatingUser
-                                  ? Icons.gps_fixed_rounded
-                                  : Icons.my_location_rounded),
-                        onTap: () => _requestUserLocation(moveMap: true),
-                      ),
-                      const SizedBox(width: 8),
-                      _RoundIconButton(
-                        icon: Icons.format_list_bulleted_rounded,
-                        onTap: _showListSheet,
-                      ),
-                    ],
-                  ),
-                  if (_showSearchResults) ...[
-                    const SizedBox(height: 8),
-                    _SearchResultPanel(
-                      isSearching: _isSearching,
-                      failed: _searchFailed,
-                      results: _searchResults,
-                      onTap: (item) {
-                        final pos = LatLng(item['lat'], item['lon']);
-                        setState(() {
-                          _tempSelectedLatLng = pos;
-                          _tempSelectedName =
-                              item['name'] as String? ??
-                              item['display_name'].toString().split(',')[0];
-                          _tempSelectedCategory = item['category'] as String?;
-                          _showSearchResults = false;
-                          _searchCtrl.text = _tempSelectedName ?? '';
-                        });
-                        _mapController.move(pos, 15.0);
-                      },
-                    ),
                   ],
-                  if (_mapLoadError != null || _mapTileError) ...[
-                    const SizedBox(height: 8),
-                    _MapFallbackBanner(
-                      message: _mapTileError ? '지도를 불러올 수 없어요' : _mapLoadError!,
-                      detail: _mapTileError
-                          ? '장소 목록과 검색은 계속 사용할 수 있어요.'
-                          : '장소 검색이나 목록에서 다음 행동을 선택해보세요.',
-                      onRetry: _load,
-                    ),
-                  ],
-                  if (_locationDenied) ...[
-                    const SizedBox(height: 8),
-                    const _MapInfoBanner(
-                      icon: Icons.location_disabled_outlined,
-                      text: '위치 권한 없이도 장소 검색과 저장을 사용할 수 있어요.',
-                    ),
-                  ],
-                  const SizedBox(height: 10),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        _StatusChip(
-                          label: '전체',
-                          count: _pins.length,
-                          selected: _activeStatus == 'all',
-                          color: kMainInk,
-                          onTap: () => _setStatus('all'),
-                        ),
-                        _StatusChip(
-                          label: '다녀온 곳',
-                          count: _visitedCount,
-                          selected: _activeStatus == 'visited',
-                          color: kMainRose,
-                          onTap: () => _setStatus('visited'),
-                        ),
-                        _StatusChip(
-                          label: '가고 싶은 곳',
-                          count: _wishlistCount,
-                          selected: _activeStatus == 'wishlist',
-                          color: kMainLilac,
-                          onTap: () => _setStatus('wishlist'),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        _buildCategoryChip(null, '전체'),
-                        ..._categories.map(
-                          (cat) => _buildCategoryChip(
-                            cat,
-                            '${_categoryEmojis[cat]} $cat',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 22,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (_tempSelectedLatLng != null)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: MainCard(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 14,
-                      ),
-                      color: kMainPaper.withAlpha(246),
-                      borderColor: kMainRose.withAlpha(90),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.add_location_alt_rounded,
-                            color: kMainRose,
-                          ),
-                          const SizedBox(width: 9),
-                          Expanded(
-                            child: Text(
-                              _tempSelectedName == null
-                                  ? '선택한 위치 저장하기'
-                                  : _tempSelectedName!,
-                              style: mainBody(
-                                size: 13,
-                                color: kMainInk,
-                                weight: FontWeight.w800,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () => setState(() {
-                              _tempSelectedLatLng = null;
-                              _tempSelectedName = null;
-                              _tempSelectedCategory = null;
-                            }),
-                            child: Text(
-                              '취소',
-                              style: mainBody(size: 12, color: kMainMuted),
-                            ),
-                          ),
-                          FilledButton(
-                            onPressed: () => _showAddDialog(
-                              _tempSelectedLatLng!,
-                              initialName: _tempSelectedName,
-                              initialCategory: _tempSelectedCategory,
-                            ),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: kMainRose,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                              ),
-                            ),
-                            child: Text(
-                              '저장',
-                              style: mainBody(
-                                size: 12,
-                                color: Colors.white,
-                                weight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                else if (pins.isNotEmpty)
-                  SizedBox(
-                    height: 142,
-                    child: PageView.builder(
-                      controller: _pageController,
-                      itemCount: pins.length,
-                      onPageChanged: _onCardChanged,
-                      itemBuilder: (ctx, i) {
-                        final pin = pins[i];
-                        return AnimatedScale(
-                          scale: i == _activeCardIndex ? 1.0 : 0.95,
-                          duration: const Duration(milliseconds: 200),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            child: GestureDetector(
-                              onTap: () => _showPinDetail(pin),
-                              child: _pinCard(pin),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  )
-                else
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 18),
-                    child: MainCard(
-                      radius: 26,
-                      color: kMainPaper.withAlpha(248),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            '아직 우리 지도가 비어 있어요',
-                            style: mainTitle(size: 22, color: kMainRose),
-                          ),
-                          const SizedBox(height: 5),
-                          Text(
-                            '검색하거나 지도 위를 눌러 첫 장소를 남겨봐요',
-                            style: mainBody(size: 12, color: kMainMuted),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            '장소 검색 → 결과 선택 → 저장 순서로 기록할 수 있어요.',
-                            style: mainBody(size: 11, color: kMainMuted),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
+            if (_tempSelectedLatLng == null && _sheetExtent < 0.6)
+              Positioned(
+                right: 16,
+                bottom: _sheetExtent * constraints.maxHeight + 12,
+                child: FloatingActionButton(
+                  key: const Key('map-add-fab'),
+                  onPressed: () {
+                    final center = _mapController.camera.center;
+                    _showAddDialog(center);
+                  },
+                  backgroundColor: kMainRose,
+                  foregroundColor: Colors.white,
+                  elevation: 4,
+                  shape: const CircleBorder(),
+                  child: const Icon(Icons.add_location_alt_outlined),
+                ),
+              ),
+            _buildSheet(),
+          ],
+        ),
       ),
-      floatingActionButton: _tempSelectedLatLng != null
-          ? null
-          : Padding(
-              padding: const EdgeInsets.only(bottom: 148),
-              child: FloatingActionButton(
-                onPressed: () {
-                  final center = _mapController.camera.center;
-                  _showAddDialog(center);
-                },
-                backgroundColor: kMainRose,
-                foregroundColor: Colors.white,
-                elevation: 4,
-                shape: const CircleBorder(),
-                child: const Icon(Icons.add_location_alt_outlined),
-              ),
-            ),
     );
   }
 
-  void _setStatus(String status) {
-    setState(() {
-      _activeStatus = status;
-      _activeCardIndex = 0;
-      _tempSelectedLatLng = null;
-      _tempSelectedName = null;
-    });
-    if (_filteredPins.isNotEmpty) _onCardChanged(0);
-  }
+  Widget _sheetHandle() => Center(
+    key: const Key('map-sheet-handle'),
+    child: Container(
+      width: 42,
+      height: 4,
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: kMainLine,
+        borderRadius: BorderRadius.circular(99),
+      ),
+    ),
+  );
 
-  Widget _buildCategoryChip(String? category, String label) {
-    final isActive = _activeCategory == category;
-    return Padding(
-      padding: const EdgeInsets.only(right: 6),
-      child: GestureDetector(
-        onTap: () {
-          setState(() {
-            _activeCategory = category;
-            _activeCardIndex = 0;
-            _tempSelectedLatLng = null;
-            _tempSelectedName = null;
+  Widget _panelCloseButton(String label) => Align(
+    alignment: Alignment.centerRight,
+    child: TextButton.icon(
+      onPressed: _closePanel,
+      icon: const Icon(Icons.format_list_bulleted_rounded, size: 16),
+      label: Text(label),
+      style: TextButton.styleFrom(foregroundColor: kMainMuted),
+    ),
+  );
+
+  Widget _buildSheet() {
+    return NotificationListener<DraggableScrollableNotification>(
+      onNotification: (n) {
+        if ((n.extent - _sheetExtent).abs() > 0.005) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) setState(() => _sheetExtent = n.extent);
           });
-          if (_filteredPins.isNotEmpty) _onCardChanged(0);
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-          decoration: BoxDecoration(
-            color: isActive ? kMainPeach : kMainPaper.withAlpha(235),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isActive ? kMainPeach : kMainLine.withAlpha(180),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: (isActive ? kMainPeach : kMainRose).withAlpha(
-                  isActive ? 40 : 14,
-                ),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Text(
-            label,
-            style: mainBody(
-              size: 12,
-              color: isActive ? Colors.white : kMainInk,
-              weight: isActive ? FontWeight.w800 : FontWeight.w600,
-            ),
+        }
+        return false;
+      },
+      child: DraggableScrollableSheet(
+        controller: _sheetCtrl,
+        initialChildSize: _sheetCollapsed,
+        minChildSize: _sheetCollapsed,
+        maxChildSize: _sheetExpanded,
+        snap: true,
+        snapSizes: const [_sheetHalf],
+        builder: (context, scrollController) => SizedBox.expand(
+          key: const Key('map-sheet'),
+          child: KeyedSubtree(
+            key: ValueKey(_panelSeq),
+            child:
+                _panel?.call(scrollController) ??
+                _buildListPanel(scrollController),
           ),
         ),
       ),
     );
   }
 
-  Widget _pinCard(Map<String, dynamic> pin) {
-    final category = pin['category'] ?? '기타';
-    final emoji = _categoryEmojis[category] ?? '📍';
-    final rating = placeIntForMap(pin['rating']) ?? 0;
-    final status = _pinStatus(pin);
-    final isVisited = status == 'visited';
-    final tags = _extractTags(pin);
-    final memo = _cleanMemo(pin['memo']);
-    final visitDateStr = _formattedDate(pin['visit_date']);
-
-    return MainCard(
-      padding: const EdgeInsets.all(14),
-      radius: 26,
-      color: kMainPaper.withAlpha(248),
-      borderColor: isVisited
-          ? kMainRose.withAlpha(70)
-          : kMainLilac.withAlpha(70),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildListPanel(ScrollController controller) {
+    final pins = _filteredPins;
+    return _SheetFrame(
+      child: ListView(
+        controller: controller,
+        padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
         children: [
-          _PinBubble(emoji: emoji, status: status, active: true, size: 50),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        pin['place_name'] ?? '',
-                        style: mainBody(
-                          size: 14,
-                          color: kMainInk,
-                          weight: FontWeight.w900,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      size: 18,
-                      color: kMainMuted.withAlpha(180),
-                    ),
-                  ],
+          _sheetHandle(),
+          Row(
+            children: [
+              Expanded(child: Text('장소 모아보기', style: mainTitle(size: 24))),
+              Text(
+                '${pins.length}곳',
+                style: mainBody(
+                  size: 13,
+                  color: kMainMuted,
+                  weight: FontWeight.w800,
                 ),
-                const SizedBox(height: 5),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 5,
-                  children: [
-                    _MiniPill(
-                      label: isVisited ? '다녀온 곳' : '가고 싶은 곳',
-                      color: isVisited ? kMainRose : kMainLilac,
-                      backgroundColor: isVisited
-                          ? kMainRoseSoft
-                          : kMainLilacSoft,
-                    ),
-                    _MiniPill(
-                      label: category,
-                      color: kMainPeach,
-                      backgroundColor: kMainPeachSoft,
-                    ),
-                    if (visitDateStr != null)
-                      _MiniPill(
-                        label: visitDateStr,
-                        color: kMainSage,
-                        backgroundColor: kMainSageSoft,
-                      ),
-                  ],
-                ),
-                if (isVisited && rating > 0) ...[
-                  const SizedBox(height: 6),
-                  Row(
-                    children: List.generate(
-                      5,
-                      (i) => Icon(
-                        Icons.star_rounded,
-                        size: 14,
-                        color: i < rating ? kMainHoney : kMainLine,
-                      ),
-                    ),
-                  ),
-                ],
-                if (tags.isNotEmpty) ...[
-                  const SizedBox(height: 5),
-                  Text(
-                    tags.take(2).join(' · '),
-                    style: mainBody(
-                      size: 11,
-                      color: kMainRose,
-                      weight: FontWeight.w800,
-                    ),
-                  ),
-                ] else if (memo.isNotEmpty) ...[
-                  const SizedBox(height: 5),
-                  Text(
-                    memo,
-                    style: mainBody(size: 11, color: kMainSub, height: 1.25),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ],
-            ),
+              ),
+            ],
           ),
+          const SizedBox(height: 12),
+          if (pins.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: Text(
+                  '조건에 맞는 장소가 없어요',
+                  style: mainBody(size: 13, color: kMainMuted),
+                ),
+              ),
+            )
+          else
+            for (final pin in pins)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: GestureDetector(
+                  onTap: () => _selectPin(pin),
+                  child: _ListTilePin(pin: pin),
+                ),
+              ),
         ],
       ),
     );
+  }
+
+  Widget _buildFilterButton() {
+    final active = _activeCategory != null;
+    return GestureDetector(
+      key: const Key('map-filter-button'),
+      onTap: _showCategoryPicker,
+      child: AnimatedContainer(
+        key: active ? const Key('map-filter-active') : null,
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: active ? kMainPeach : kMainPaper.withAlpha(235),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: active ? kMainPeach : kMainLine.withAlpha(180),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              active ? '${_categoryEmojis[_activeCategory]} 필터' : '필터',
+              style: mainBody(
+                size: 12,
+                color: active ? Colors.white : kMainInk,
+                weight: active ? FontWeight.w800 : FontWeight.w600,
+              ),
+            ),
+            Icon(
+              Icons.arrow_drop_down_rounded,
+              size: 18,
+              color: active ? Colors.white : kMainInk,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showCategoryPicker() async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _SheetFrame(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('카테고리', style: mainTitle(size: 22)),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final cat in <String?>[null, ..._categories])
+                    _ChoiceChip(
+                      label: cat == null
+                          ? '전체'
+                          : '${_categoryEmojis[cat]} $cat',
+                      selected: _activeCategory == cat,
+                      onTap: () => Navigator.pop(ctx, cat ?? ''),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _activeCategory = picked.isEmpty ? null : picked;
+      _tempSelectedLatLng = null;
+      _tempSelectedName = null;
+    });
+    _moveToFirstFiltered();
+  }
+
+  void _setStatus(String status) {
+    setState(() {
+      _activeStatus = status;
+      _tempSelectedLatLng = null;
+      _tempSelectedName = null;
+    });
+    _moveToFirstFiltered();
   }
 }
 

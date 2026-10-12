@@ -1,4 +1,9 @@
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:secret_base_app/screens/archive/map_screen.dart';
 
 void main() {
@@ -77,5 +82,113 @@ void main() {
     );
 
     expect(linked.map((post) => post['id']), [1]);
+  });
+
+  group('MapScreen bottom sheet', () {
+    final pins = [
+      {
+        'id': 1,
+        'place_name': '성수 카페',
+        'category': '카페',
+        'status': 'visited',
+        'latitude': 37.54,
+        'longitude': 127.05,
+        'rating': 4,
+        'visit_date': '2026-07-14',
+      },
+      {
+        'id': 2,
+        'place_name': '한강 피크닉',
+        'category': '활동',
+        'status': 'wishlist',
+        'latitude': 37.541,
+        'longitude': 127.052,
+      },
+    ];
+
+    Future<void> withMap(
+      WidgetTester tester,
+      Future<void> Function() body,
+    ) async {
+      await http.runWithClient(
+        () async {
+          await tester.pumpWidget(const MaterialApp(home: MapScreen()));
+          await tester.pump(const Duration(milliseconds: 200));
+          await body();
+        },
+        () => MockClient(
+          (_) async => http.Response.bytes(
+            utf8.encode(jsonEncode({'ok': true, 'pins': pins, 'reviews': []})),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          ),
+        ),
+      );
+    }
+
+    double sheetFraction(WidgetTester tester) =>
+        tester.getSize(find.byKey(const Key('map-sheet'))).height / 600;
+
+    testWidgets('starts collapsed and shows one filter row', (tester) async {
+      await withMap(tester, () async {
+        expect(sheetFraction(tester), closeTo(0.12, 0.01));
+        expect(find.text('전체'), findsOneWidget);
+        expect(find.text('다녀온 곳'), findsOneWidget);
+        expect(find.text('가고 싶은 곳'), findsOneWidget);
+        expect(find.byKey(const Key('map-filter-button')), findsOneWidget);
+        expect(find.text('🍽️ 식당'), findsNothing);
+      });
+    });
+
+    testWidgets('marker tap moves sheet to half with inline detail', (
+      tester,
+    ) async {
+      await withMap(tester, () async {
+        await tester.tap(find.byKey(const Key('map-pin-1')));
+        await tester.pumpAndSettle();
+        expect(find.text('성수 카페'), findsWidgets);
+        expect(find.text('장소 수정'), findsOneWidget);
+        expect(sheetFraction(tester), closeTo(0.45, 0.01));
+      });
+    });
+
+    testWidgets('dragging up to expanded shows the place list', (tester) async {
+      await withMap(tester, () async {
+        await tester.drag(
+          find.descendant(
+            of: find.byKey(const Key('map-sheet')),
+            matching: find.byType(ListView),
+          ),
+          const Offset(0, -600),
+        );
+        await tester.pumpAndSettle();
+        expect(sheetFraction(tester), closeTo(0.92, 0.01));
+        expect(find.text('성수 카페'), findsOneWidget);
+        expect(find.text('한강 피크닉'), findsOneWidget);
+      });
+    });
+
+    testWidgets('filter button picks a category and highlights', (
+      tester,
+    ) async {
+      await withMap(tester, () async {
+        await tester.tap(find.byKey(const Key('map-filter-button')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('☕ 카페'));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('map-pin-1')), findsOneWidget);
+        expect(find.byKey(const Key('map-pin-2')), findsNothing);
+        expect(find.byKey(const Key('map-filter-active')), findsOneWidget);
+      });
+    });
+
+    testWidgets('add FAB opens the add form in the half sheet', (tester) async {
+      await withMap(tester, () async {
+        await tester.tap(find.byKey(const Key('map-add-fab')));
+        await tester.pumpAndSettle();
+        expect(find.text('비밀 장소 추가'), findsOneWidget);
+        expect(sheetFraction(tester), closeTo(0.45, 0.01));
+      });
+    });
   });
 }
