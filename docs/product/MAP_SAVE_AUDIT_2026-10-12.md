@@ -48,3 +48,26 @@ appeared during verification; neither caused a test failure.
 
 Only the map screen, map widget tests, and this map report are in the patch.
 No push, deployment, database operation, or issue write was performed.
+
+## Review follow-up: duplicate submission
+
+Starting commit: `ba2b2b6`. Scope remains the add-pin save flow.
+
+- Red: a delayed `MockClient` response exposed two POSTs from two taps before
+  the next rebuild. Pending-button assertions also failed for the delayed
+  HTTP 400 and 500 cases because the save button remained enabled.
+- The form now sets its pending flag synchronously before awaiting the save.
+  The callback guards against reentry even before rebuilding; the rebuilt
+  button is disabled until save completion.
+- A failed save resets pending state only while the form context is mounted.
+  Retry tests preserve the name, memo, status, category, filters, and 0.45
+  height, then verify the outgoing retry fields and successful 0.12 collapse.
+- Disposal tests complete delayed HTTP 200 and 500 requests after removing
+  the screen and verify no exceptions, error snackbars, or extra pin reloads.
+- Green: `flutter test --no-pub --reporter expanded test/map_screen_test.dart`
+  passed all 17 tests; same-frame double taps and taps on the disabled button
+  leave the POST count at one, including after successful completion.
+- `flutter analyze --no-pub lib/screens/archive/map_screen.dart test/map_screen_test.dart`:
+  no issues found.
+- `flutter test --no-pub --reporter expanded`: all 212 tests passed.
+- `git diff --check`: passed. All save regressions still use fake HTTP responses.

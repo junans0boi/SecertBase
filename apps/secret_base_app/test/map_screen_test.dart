@@ -232,22 +232,38 @@ void main() {
       });
     });
 
-    testWidgets('successful save closes the add form and collapses the sheet', (
+    testWidgets('double tap sends one POST until save completes', (
       tester,
     ) async {
       final save = Completer<http.Response>();
       var saved = false;
+      var postCount = 0;
       await withMap(
         tester,
         () async {
           await enterWishlistPin(tester);
           await tester.tap(find.text('지도에 저장'));
+          // Both taps occur before a rebuild, exercising the synchronous guard.
+          await tester.tap(find.text('지도에 저장'));
           await tester.pump();
+          expect(postCount, 1);
+          expect(
+            tester
+                .widget<FilledButton>(
+                  find.widgetWithText(FilledButton, '지도에 저장'),
+                )
+                .onPressed,
+            isNull,
+          );
           expect(find.text('비밀 장소 추가'), findsOneWidget);
           expect(sheetFraction(tester), closeTo(0.45, 0.01));
+          await tester.tap(find.text('지도에 저장'));
+          await tester.pump();
+          expect(postCount, 1);
 
           save.complete(jsonResponse({'ok': true, 'id': 3}, 200));
           await tester.pumpAndSettle();
+          expect(postCount, 1);
           expect(find.text('비밀 장소 추가'), findsNothing);
           expect(sheetFraction(tester), closeTo(0.12, 0.01));
           expect(find.byKey(const Key('map-pin-3')), findsOneWidget);
@@ -256,6 +272,7 @@ void main() {
         },
         handleRequest: (request) async {
           if (request.method == 'POST' && request.url.path == '/api/map') {
+            postCount++;
             final response = await save.future;
             saved = true;
             return response;
@@ -307,14 +324,28 @@ void main() {
     });
 
     for (final status in [400, 500]) {
-      testWidgets('HTTP $status keeps the entered form and half sheet', (
+      testWidgets('HTTP $status keeps the entered form and permits retry', (
         tester,
       ) async {
+        final save = Completer<http.Response>();
+        final requests = <Map<String, dynamic>>[];
         await withMap(
           tester,
           () async {
             await enterWishlistPin(tester);
             await tester.tap(find.text('지도에 저장'));
+            await tester.pump();
+            expect(requests, hasLength(1));
+            expect(
+              tester
+                  .widget<FilledButton>(
+                    find.widgetWithText(FilledButton, '지도에 저장'),
+                  )
+                  .onPressed,
+              isNull,
+            );
+            // A success-shaped body must not override the HTTP failure.
+            save.complete(jsonResponse({'ok': true}, status));
             await tester.pumpAndSettle();
             expect(find.text('비밀 장소 추가'), findsOneWidget);
             expect(find.text('새 카페'), findsOneWidget);
@@ -325,14 +356,72 @@ void main() {
             expect(find.byKey(const Key('map-filter-active')), findsNothing);
             expect(find.byKey(const Key('map-pin-1')), findsOneWidget);
             expect(find.byKey(const Key('map-pin-2')), findsOneWidget);
+            expect(
+              tester
+                  .widget<FilledButton>(
+                    find.widgetWithText(FilledButton, '지도에 저장'),
+                  )
+                  .onPressed,
+              isNotNull,
+            );
+            // Let the error snackbar leave the retry button's hit area.
+            await tester.pump(const Duration(seconds: 4));
+            await tester.pumpAndSettle();
+            await tester.tap(find.text('지도에 저장'));
+            await tester.pumpAndSettle();
+            expect(requests, hasLength(2));
+            expect(requests.last, containsPair('place_name', '새 카페'));
+            expect(requests.last, containsPair('memo', '함께 커피 마시기'));
+            expect(requests.last, containsPair('status', 'wishlist'));
+            expect(requests.last, containsPair('category', '카페'));
+            expect(sheetFraction(tester), closeTo(0.12, 0.01));
+            expect(find.text('비밀 장소 추가'), findsNothing);
             expect(tester.takeException(), isNull);
           },
           handleRequest: (request) async {
             if (request.method == 'POST' && request.url.path == '/api/map') {
-              // A success-shaped body must not override the HTTP failure.
-              return jsonResponse({'ok': true}, status);
+              requests.add(jsonDecode(request.body) as Map<String, dynamic>);
+              if (requests.length == 1) return save.future;
+              return jsonResponse({'ok': true, 'id': 3}, 200);
             }
             if (request.method == 'GET' && request.url.path == '/api/map') {
+              return jsonResponse({'ok': true, 'pins': pins}, 200);
+            }
+            throw StateError('Unexpected fake API request');
+          },
+        );
+      });
+    }
+
+    for (final status in [200, 500]) {
+      testWidgets('pending HTTP $status save is safe after screen disposal', (
+        tester,
+      ) async {
+        final save = Completer<http.Response>();
+        var postCount = 0;
+        var loadCount = 0;
+        await withMap(
+          tester,
+          () async {
+            await enterWishlistPin(tester);
+            await tester.tap(find.text('지도에 저장'));
+            await tester.pump();
+            expect(postCount, 1);
+            await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+            save.complete(jsonResponse({'ok': status == 200, 'id': 3}, status));
+            await tester.pumpAndSettle();
+            expect(loadCount, 1);
+            expect(find.byType(MapScreen), findsNothing);
+            expect(find.byType(SnackBar), findsNothing);
+            expect(tester.takeException(), isNull);
+          },
+          handleRequest: (request) async {
+            if (request.method == 'POST' && request.url.path == '/api/map') {
+              postCount++;
+              return save.future;
+            }
+            if (request.method == 'GET' && request.url.path == '/api/map') {
+              loadCount++;
               return jsonResponse({'ok': true, 'pins': pins}, 200);
             }
             throw StateError('Unexpected fake API request');

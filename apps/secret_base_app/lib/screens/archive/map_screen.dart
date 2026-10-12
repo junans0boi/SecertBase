@@ -1020,6 +1020,7 @@ class _MapScreenState extends State<MapScreen> {
     int selectedRating = 5;
     DateTime selectedDate = DateTime.now();
     final selectedTags = <String>{};
+    var submitting = false;
 
     _openPanel(
       (scrollController) => StatefulBuilder(
@@ -1126,27 +1127,36 @@ class _MapScreenState extends State<MapScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
-                    onPressed: () async {
-                      if (nameCtrl.text.trim().isEmpty) return;
-                      final saved = await _addPin(
-                        name: nameCtrl.text.trim(),
-                        status: selectedStatus,
-                        category: selectedCategory,
-                        rating: selectedRating,
-                        visitDate: selectedStatus == 'visited'
-                            ? selectedDate
-                            : null,
-                        emotionTags: selectedStatus == 'visited'
-                            ? selectedTags.toList()
-                            : const [],
-                        memo: memoCtrl.text.trim(),
-                        lat: latLng.latitude,
-                        lng: latLng.longitude,
-                      );
-                      if (!saved || !ctx.mounted) return;
-                      _closePanel();
-                      _snapSheetAfterBuild(_sheetCollapsed);
-                    },
+                    onPressed: submitting
+                        ? null
+                        : () async {
+                            if (submitting || nameCtrl.text.trim().isEmpty) {
+                              return;
+                            }
+                            setSheet(() => submitting = true);
+                            final saved = await _addPin(
+                              name: nameCtrl.text.trim(),
+                              status: selectedStatus,
+                              category: selectedCategory,
+                              rating: selectedRating,
+                              visitDate: selectedStatus == 'visited'
+                                  ? selectedDate
+                                  : null,
+                              emotionTags: selectedStatus == 'visited'
+                                  ? selectedTags.toList()
+                                  : const [],
+                              memo: memoCtrl.text.trim(),
+                              lat: latLng.latitude,
+                              lng: latLng.longitude,
+                            );
+                            if (!ctx.mounted) return;
+                            if (!saved) {
+                              setSheet(() => submitting = false);
+                              return;
+                            }
+                            _closePanel();
+                            _snapSheetAfterBuild(_sheetCollapsed);
+                          },
                     style: FilledButton.styleFrom(
                       backgroundColor: kMainRose,
                       foregroundColor: Colors.white,
