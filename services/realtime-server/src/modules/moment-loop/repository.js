@@ -511,5 +511,43 @@ export function createMomentLoopRepository({
         return true;
       });
     },
+
+    async listComments({ postId }) {
+      const result = await queryFn(
+        `SELECT c.id, c.user_id, c.body, c.created_at,
+                COALESCE(u.Nickname, u.UserName) AS author
+         FROM setlog_comments c
+         LEFT JOIN Users u ON u.UserId = c.user_id
+         WHERE c.post_id = ?
+         ORDER BY c.id ASC`,
+        [postId],
+      );
+      return result.rows;
+    },
+
+    async createComment({ postId, coupleId, userId, body }) {
+      const insert = await queryFn(
+        `INSERT INTO setlog_comments (post_id, couple_id, user_id, body)
+         VALUES (?, ?, ?, ?)`,
+        [postId, coupleId, userId, body],
+      );
+      const fetched = await queryFn(
+        `SELECT c.id, c.user_id, c.body, c.created_at,
+                COALESCE(u.Nickname, u.UserName) AS author
+         FROM setlog_comments c
+         LEFT JOIN Users u ON u.UserId = c.user_id
+         WHERE c.id = ? LIMIT 1`,
+        [insert.rows.insertId],
+      );
+      return fetched.rows[0];
+    },
+
+    async deleteComment({ commentId, coupleId, userId }) {
+      const result = await queryFn(
+        `DELETE FROM setlog_comments WHERE id = ? AND couple_id = ? AND user_id = ?`,
+        [commentId, coupleId, userId],
+      );
+      return result.rows.affectedRows > 0;
+    },
   };
 }

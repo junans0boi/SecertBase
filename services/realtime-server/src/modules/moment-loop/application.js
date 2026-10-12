@@ -379,6 +379,51 @@ export function MomentLoopService({
       });
       return { ok: true, removed };
     },
+
+    async listComments(actor, postId) {
+      const id = parseMomentId(postId, 'invalid_moment_id');
+      const scope = await scopeFor(actor);
+      const post = await repository.findMoment(id);
+      if (!post || Number(post.couple_id) !== scope.coupleId) {
+        throw new MomentLoopError(404, 'moment_not_found');
+      }
+      return repository.listComments({ postId: id });
+    },
+
+    async addComment(actor, postId, body) {
+      const id = parseMomentId(postId, 'invalid_moment_id');
+      const text = typeof body === 'string' ? body.trim() : '';
+      if (!text) throw new MomentLoopError(400, 'comment_body_required');
+      if (text.length > 500) throw new MomentLoopError(400, 'comment_too_long');
+      const scope = await scopeFor(actor);
+      const post = await repository.findMoment(id);
+      if (!post || Number(post.couple_id) !== scope.coupleId) {
+        throw new MomentLoopError(404, 'moment_not_found');
+      }
+      return repository.createComment({
+        postId: id,
+        coupleId: scope.coupleId,
+        userId: scope.userId,
+        body: text,
+      });
+    },
+
+    async deleteComment(actor, postId, commentId) {
+      const id = parseMomentId(postId, 'invalid_moment_id');
+      const cid = parseMomentId(commentId, 'invalid_comment_id');
+      const scope = await scopeFor(actor);
+      const post = await repository.findMoment(id);
+      if (!post || Number(post.couple_id) !== scope.coupleId) {
+        throw new MomentLoopError(404, 'moment_not_found');
+      }
+      const deleted = await repository.deleteComment({
+        commentId: cid,
+        coupleId: scope.coupleId,
+        userId: scope.userId,
+      });
+      if (!deleted) throw new MomentLoopError(404, 'comment_not_found');
+      return true;
+    },
   };
 }
 

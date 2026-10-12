@@ -166,5 +166,20 @@ export function createMomentLoopRouter({ service, uploadStore }) {
     return res.json(await service.removeToday(actor));
   }));
 
+  router.get('/setlog/:postId/comments', route('GET /setlog/:postId/comments', async (actor, req, res) => {
+    const comments = await service.listComments(actor, req.params.postId);
+    return res.json({ ok: true, comments });
+  }));
+
+  router.post('/setlog/:postId/comments', route('POST /setlog/:postId/comments', async (actor, req, res) => {
+    const comment = await service.addComment(actor, req.params.postId, req.body?.body);
+    return res.status(201).json({ ok: true, comment });
+  }));
+
+  router.delete('/setlog/:postId/comments/:commentId', route('DELETE /setlog/:postId/comments/:commentId', async (actor, req, res) => {
+    await service.deleteComment(actor, req.params.postId, req.params.commentId);
+    return res.json({ ok: true });
+  }));
+
   return router;
 }

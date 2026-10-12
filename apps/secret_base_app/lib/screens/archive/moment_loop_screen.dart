@@ -2454,10 +2454,279 @@ class _PostDetailPageState extends State<_PostDetailPage> {
                     );
                   }).toList(),
                 ),
+                const SizedBox(height: 12),
+                // ── Comment button ────────────────────────────────────────
+                GestureDetector(
+                  onTap: () => showModalBottomSheet<void>(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (_) => _CommentSheet(
+                      postId: int.parse('${post['id']}'),
+                      myUserId: widget.myUserId,
+                      auth: widget.auth,
+                    ),
+                  ),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white10,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.chat_bubble_outline_rounded,
+                            color: Colors.white54, size: 16),
+                        SizedBox(width: 6),
+                        Text(
+                          '댓글 보기',
+                          style: TextStyle(color: Colors.white54, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CommentSheet extends StatefulWidget {
+  final int postId;
+  final int? myUserId;
+  final AuthService auth;
+
+  const _CommentSheet({
+    required this.postId,
+    required this.myUserId,
+    required this.auth,
+  });
+
+  @override
+  State<_CommentSheet> createState() => _CommentSheetState();
+}
+
+class _CommentSheetState extends State<_CommentSheet> {
+  late final ApiClient _api;
+  final _ctrl = TextEditingController();
+  List<Map<String, dynamic>> _comments = [];
+  bool _loading = true;
+  bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _api = ApiClient(
+      baseUrl: widget.auth.baseUrl,
+      tokenProvider: () => widget.auth.token,
+    );
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _api.close();
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final body = await _api.getJson('/api/setlog/${widget.postId}/comments');
+      if (!mounted) return;
+      final list = body['comments'];
+      setState(() {
+        _comments = (list is List)
+            ? list.map((c) => Map<String, dynamic>.from(c as Map)).toList()
+            : [];
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _submit() async {
+    final text = _ctrl.text.trim();
+    if (text.isEmpty || _submitting) return;
+    setState(() => _submitting = true);
+    try {
+      final body = await _api.postJson(
+        '/api/setlog/${widget.postId}/comments',
+        body: {'body': text},
+      );
+      if (!mounted) return;
+      final comment = body['comment'];
+      if (comment != null) {
+        setState(() => _comments.add(Map<String, dynamic>.from(comment as Map)));
+      }
+      _ctrl.clear();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('댓글을 저장하지 못했어요')));
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _delete(Map<String, dynamic> comment) async {
+    final commentId = comment['id'];
+    try {
+      await _api.deleteJson('/api/setlog/${widget.postId}/comments/$commentId');
+      if (!mounted) return;
+      setState(() => _comments.removeWhere((c) => c['id'] == commentId));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('댓글을 삭제하지 못했어요')));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.only(bottom: bottom),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              '댓글',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.all(24),
+                child: CircularProgressIndicator(
+                  color: Colors.white38,
+                  strokeWidth: 2,
+                ),
+              )
+            else if (_comments.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Text(
+                  '아직 댓글이 없어요',
+                  style: TextStyle(color: Colors.white38, fontSize: 13),
+                ),
+              )
+            else
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.45,
+                ),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: _comments.length,
+                  itemBuilder: (_, i) {
+                    final c = _comments[i];
+                    final isMine =
+                        '${c['user_id']}' == '${widget.myUserId}';
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${c['author'] ?? '?'}',
+                                  style: TextStyle(
+                                    color: isMine ? kMainRose : kMainSky,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${c['body']}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (isMine)
+                            GestureDetector(
+                              onTap: () => _delete(c),
+                              child: const Padding(
+                                padding: EdgeInsets.only(left: 8, top: 2),
+                                child: Icon(Icons.close_rounded,
+                                    color: Colors.white38, size: 16),
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            const Divider(color: Colors.white12, height: 1),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _ctrl,
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                      decoration: const InputDecoration(
+                        hintText: '댓글 남기기…',
+                        hintStyle: TextStyle(color: Colors.white38),
+                        border: InputBorder.none,
+                      ),
+                      onSubmitted: (_) => _submit(),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _submitting ? null : _submit,
+                    icon: Icon(
+                      Icons.send_rounded,
+                      color: _submitting ? Colors.white24 : kMainRose,
+                      size: 20,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
