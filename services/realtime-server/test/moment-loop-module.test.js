@@ -137,6 +137,20 @@ test('MomentLoop rejects oversized and unsupported media before persistence', as
   assert.deepEqual(media.prepared, []);
 });
 
+test('MomentLoop only designates a Today Moment when today_moment is explicitly true', async () => {
+  const seen = [];
+  const repository = fakeRepository({
+    createMoment: async (args) => { seen.push(args.designateAsToday); return { id: 10 }; },
+  });
+  const service = MomentLoopService({ repository, media: fakeMedia(), now: () => '2026-10-12' });
+  const base = { caption: 'hi', media_type: 'text', taken_at: '2026-10-12' };
+  await service.createMoment(actor(), base);
+  await service.createMoment(actor(), { ...base, today_moment: 'false' });
+  await service.createMoment(actor(), { ...base, today_moment: '' });
+  await service.createMoment(actor(), { ...base, today_moment: 'true' });
+  assert.deepEqual(seen, [false, false, false, true]);
+});
+
 test('MomentLoop preserves clip normalization errors as 422 domain errors', async () => {
   const media = fakeMedia();
   media.prepare = async () => {
