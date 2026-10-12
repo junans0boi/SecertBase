@@ -121,6 +121,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
   String? _storageError;
   late DateTime _weekStart;
   final Set<String> _seenSessionIds = {};
+  String? _selectedTag;
 
   List<Map<String, dynamic>> get _posts => _controller.state.moments
       .map((moment) => moment.toLegacyMap())
@@ -309,6 +310,24 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
       map.putIfAbsent(key, () => []).add(group);
     }
     return map;
+  }
+
+  List<String> get _allTags {
+    final seen = <String>{};
+    for (final post in _posts) {
+      for (final t in _momentTags(post['tags'])) {
+        if (t != '#momentloop') seen.add(t);
+      }
+    }
+    final list = seen.toList()..sort();
+    return list;
+  }
+
+  List<List<Map<String, dynamic>>> get _filteredGroups {
+    if (_selectedTag == null) return _groups;
+    return _groups
+        .where((g) => g.any((p) => _momentTags(p['tags']).contains(_selectedTag)))
+        .toList();
   }
 
   Future<void> _loadPosts({bool initial = false}) async {
@@ -593,6 +612,27 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     }
   }
 
+  void _showCalendarSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) => _MonthCalendarSheet(
+        month: _weekStart,
+        postDateKeys: _groupsByDate.keys.toSet(),
+        onDayTap: (day) {
+          Navigator.pop(sheetCtx);
+          setState(() {
+            _weekStart = _mondayOf(day);
+          });
+          unawaited(_loadPosts());
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -727,6 +767,12 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
                     ),
                   ),
                   IconButton(
+                    key: const Key('moment_calendar_btn'),
+                    tooltip: '달력으로 날짜 선택',
+                    onPressed: _showCalendarSheet,
+                    icon: const Icon(Icons.calendar_month_rounded),
+                  ),
+                  IconButton(
                     key: const Key('moment_view_toggle'),
                     tooltip: _gridView ? '목록으로 보기' : '격자로 보기',
                     onPressed: _toggleViewMode,
@@ -739,6 +785,16 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
                 ],
               ),
             ),
+
+            // ── Tag filter ───────────────────────────────────────────────────
+            if (_allTags.isNotEmpty)
+              _TagFilterRow(
+                tags: _allTags,
+                selected: _selectedTag,
+                onChanged: (tag) => setState(
+                  () => _selectedTag = _selectedTag == tag ? null : tag,
+                ),
+              ),
 
             const SizedBox(height: 4),
 
@@ -767,17 +823,32 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
   }
 
   Widget _buildWeekContent() {
-    final byDate = _groupsByDate;
+    final filtered = _filteredGroups;
+
+    // Build byDate from filtered groups so the tag filter affects day sections
+    final byDate = <String, List<List<Map<String, dynamic>>>>{};
+    for (final group in filtered) {
+      final key = _dateKey(
+        group.first['taken_at'] ?? group.first['captured_at'],
+      );
+      byDate.putIfAbsent(key, () => []).add(group);
+    }
+
     final daysWithGroups = _weekDays
         .where((d) => (byDate[_dateKey(d.toIso8601String())] ?? []).isNotEmpty)
         .toList();
 
     if (daysWithGroups.isEmpty) {
-      return _WeekEmptyState(
-        isCurrentWeek: _isCurrentWeek,
-        onRefresh: _loadPosts,
-        onCreate: _startCreatePostFlow,
-      );
+      return _selectedTag != null
+          ? _TagEmptyState(
+              tag: _selectedTag!,
+              onClear: () => setState(() => _selectedTag = null),
+            )
+          : _WeekEmptyState(
+              isCurrentWeek: _isCurrentWeek,
+              onRefresh: _loadPosts,
+              onCreate: _startCreatePostFlow,
+            );
     }
 
     return ListView.builder(
@@ -802,6 +873,237 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
                 onTap: _openDetail,
               );
       },
+    );
+  }
+}
+
+// ── Tag Filter Row ────────────────────────────────────────────────────────────
+
+class _TagFilterRow extends StatelessWidget {
+  final List<String> tags;
+  final String? selected;
+  final ValueChanged<String> onChanged;
+
+  const _TagFilterRow({
+    required this.tags,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 42,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: tags.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (_, i) {
+          final tag = tags[i];
+          final active = tag == selected;
+          return FilterChip(
+            key: Key('tag_filter_$tag'),
+            label: Text(tag),
+            selected: active,
+            onSelected: (_) => onChanged(tag),
+            selectedColor: kMainRose.withAlpha(30),
+            checkmarkColor: kMainRose,
+            labelStyle: mainBody(
+              size: 12,
+              color: active ? kMainRose : kMainSub,
+              weight: active ? FontWeight.w700 : FontWeight.w400,
+            ),
+            side: BorderSide(color: active ? kMainRose : kMainLine),
+            backgroundColor: kMainPaper,
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ── Tag Empty State ───────────────────────────────────────────────────────────
+
+class _TagEmptyState extends StatelessWidget {
+  final String tag;
+  final VoidCallback onClear;
+
+  const _TagEmptyState({required this.tag, required this.onClear});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.label_off_outlined, size: 48, color: kMainLine),
+          const SizedBox(height: 12),
+          Text(
+            '"$tag" 태그가 붙은 순간이 없어요',
+            style: mainBody(size: 14, color: kMainSub),
+          ),
+          const SizedBox(height: 12),
+          TextButton(onPressed: onClear, child: const Text('필터 지우기')),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Month Calendar Sheet ──────────────────────────────────────────────────────
+
+class _MonthCalendarSheet extends StatefulWidget {
+  final DateTime month;
+  final Set<String> postDateKeys;
+  final ValueChanged<DateTime> onDayTap;
+
+  const _MonthCalendarSheet({
+    required this.month,
+    required this.postDateKeys,
+    required this.onDayTap,
+  });
+
+  @override
+  State<_MonthCalendarSheet> createState() => _MonthCalendarSheetState();
+}
+
+class _MonthCalendarSheetState extends State<_MonthCalendarSheet> {
+  late DateTime _month;
+
+  @override
+  void initState() {
+    super.initState();
+    _month = DateTime(widget.month.year, widget.month.month);
+  }
+
+  String _key(DateTime d) => d.toIso8601String().substring(0, 10);
+
+  @override
+  Widget build(BuildContext context) {
+    final first = DateTime(_month.year, _month.month, 1);
+    final lastDay = DateTime(_month.year, _month.month + 1, 0).day;
+    // Monday-first: 0=Mon … 6=Sun
+    final startOffset = (first.weekday - 1) % 7;
+    final totalCells = startOffset + lastDay;
+    final rows = (totalCells / 7).ceil();
+
+    const headers = ['월', '화', '수', '목', '금', '토', '일'];
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Month header
+            Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chevron_left_rounded),
+                  onPressed: () => setState(
+                    () => _month = DateTime(_month.year, _month.month - 1),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    '${_month.year}년 ${_month.month}월',
+                    textAlign: TextAlign.center,
+                    style: mainTitle(size: 16, color: kMainInk),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right_rounded),
+                  onPressed: DateTime(_month.year, _month.month + 1)
+                          .isAfter(DateTime.now())
+                      ? null
+                      : () => setState(
+                            () => _month =
+                                DateTime(_month.year, _month.month + 1),
+                          ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            // Day-of-week headers
+            Row(
+              children: headers
+                  .map(
+                    (h) => Expanded(
+                      child: Text(
+                        h,
+                        textAlign: TextAlign.center,
+                        style: mainBody(size: 12, color: kMainSub),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+            const SizedBox(height: 4),
+            // Calendar grid
+            for (int row = 0; row < rows; row++)
+              Row(
+                children: List.generate(7, (col) {
+                  final cellIndex = row * 7 + col;
+                  final day = cellIndex - startOffset + 1;
+                  if (day < 1 || day > lastDay) {
+                    return const Expanded(child: SizedBox(height: 44));
+                  }
+                  final date = DateTime(_month.year, _month.month, day);
+                  final hasPost = widget.postDateKeys.contains(_key(date));
+                  final isToday = _key(date) == _key(DateTime.now());
+                  return Expanded(
+                    child: GestureDetector(
+                      onTap: () => widget.onDayTap(date),
+                      child: SizedBox(
+                        height: 44,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 32,
+                              height: 32,
+                              decoration: isToday
+                                  ? BoxDecoration(
+                                      color: kMainRose.withAlpha(20),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: kMainRose),
+                                    )
+                                  : null,
+                              alignment: Alignment.center,
+                              child: Text(
+                                '$day',
+                                style: mainBody(
+                                  size: 13,
+                                  color: isToday ? kMainRose : kMainInk,
+                                  weight: isToday
+                                      ? FontWeight.w700
+                                      : FontWeight.w400,
+                                ),
+                              ),
+                            ),
+                            if (hasPost)
+                              Container(
+                                width: 5,
+                                height: 5,
+                                decoration: const BoxDecoration(
+                                  color: kMainRose,
+                                  shape: BoxShape.circle,
+                                ),
+                              )
+                            else
+                              const SizedBox(height: 5),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
