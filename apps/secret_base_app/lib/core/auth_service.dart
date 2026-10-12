@@ -239,7 +239,13 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  /// Runs before credentials are cleared (e.g. revoke the push token).
+  Future<void> Function()? beforeLogout;
+
   Future<void> logout() async {
+    try {
+      await beforeLogout?.call();
+    } catch (_) {}
     _token = null;
     _user = null;
     _googleError = null;

@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'core/push/push_service.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/semantics.dart';
 import 'core/app_theme.dart';
@@ -18,6 +21,9 @@ Future<void> main() async {
   final auth = AuthService();
   await auth.init();
   await YutAudio.instance.loadSettings();
+  // Guarded: without Firebase config push is silently disabled.
+  auth.beforeLogout = PushService.instance.revoke;
+  unawaited(PushService.instance.start());
 
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
@@ -78,6 +84,13 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
         _showReunionNotice();
       });
     }
+    unawaited(
+      PushService.instance.sync(
+        api: _auth.apiClient,
+        loggedIn: _auth.token != null,
+        paired: _auth.user?['PartnerCode'] != null,
+      ),
+    );
     // If logged in and paired, but not connected to socket, try auto-connect
     if (_auth.token != null &&
         _auth.user?['PartnerCode'] != null &&
