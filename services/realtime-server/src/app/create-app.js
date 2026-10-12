@@ -1,6 +1,9 @@
 import cors from 'cors';
 import express from 'express';
 import { mkdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+const legalWebRoot = fileURLToPath(new URL('../../../../apps/secret_base_app/web/', import.meta.url));
 
 export function createApp({
   config,
@@ -20,6 +23,17 @@ export function createApp({
 
   app.use(cors({ origin: config.CORS_ORIGIN, credentials: true }));
   app.use(express.json());
+
+  for (const [route, aliases] of [
+    ['privacy', ['privacy.html']],
+    ['terms', ['terms.html']],
+    ['delete-account', ['delete-account.html', 'account-deletion.html']],
+  ]) {
+    app.get([`/${route}`, ...aliases.map(alias => `/${alias}`)], (_, res) => {
+      res.sendFile(`${route}/index.html`, { root: legalWebRoot });
+    });
+  }
+  app.use('/legal', express.static(`${legalWebRoot}/legal`));
 
   if (config.UPLOADS_ROOT) {
     app.use('/uploads', express.static(config.UPLOADS_ROOT));

@@ -55,6 +55,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Future<void> _register() async {
     if (_loading) return;
+    if (!_agreed) {
+      setState(() => _error = '개인정보 처리방침과 이용약관에 동의해주세요.');
+      return;
+    }
     final emailError = validateAuthEmail(_emailCtrl.text);
     if (emailError != null) {
       setState(() => _error = emailError);

@@ -1,3 +1,5 @@
-// Static pages served from web/ (nginx try_files serves real files before SPA fallback).
-const kPrivacyUrl = 'https://secertbase.kro.kr/privacy.html';
-const kTermsUrl = 'https://secertbase.kro.kr/terms.html';
+// Canonical pages have web/<route>/index.html for Flutter Web/Caddy hosting.
+// Express serves the same documents; secertbase.kro.kr remains a host alias.
+const kPrivacyUrl = 'https://secretbase.cloud/privacy';
+const kTermsUrl = 'https://secretbase.cloud/terms';
+const kDeleteAccountUrl = 'https://secretbase.cloud/delete-account';

@@ -543,12 +543,13 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
             Center(
               child: Column(
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  Wrap(
+                    alignment: WrapAlignment.center,
                     children: [
                       for (final (label, url) in [
                         ('개인정보 처리방침', kPrivacyUrl),
                         ('이용약관', kTermsUrl),
+                        ('계정 삭제 안내', kDeleteAccountUrl),
                       ])
                         TextButton(
                           onPressed: () => launchUrl(

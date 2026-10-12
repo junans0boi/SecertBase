@@ -1,12 +1,42 @@
 <!doctype html>
-<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>계정 삭제 요청 - 시크릿 베이스</title>
-<style>body{font-family:-apple-system,"Noto Sans KR",sans-serif;max-width:720px;margin:0 auto;padding:24px 16px;line-height:1.7;color:#2b2b2b;background:#fffaf8}h1{color:#c2506b}h2{margin-top:2em;font-size:1.1em}footer{margin-top:3em;padding-top:1em;border-top:1px solid #ddd;font-size:.85em;color:#777}</style></head><body>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>계정 삭제 요청 - Secret Base (시크릿 베이스)</title>
+  <link rel="canonical" href="https://secretbase.cloud/delete-account">
+  <link rel="stylesheet" href="/legal/legal.css">
+</head>
+<body>
+<main>
 <h1>계정 삭제 요청</h1>
-<p>서비스: 시크릿 베이스 / 운영: 스테디투비비드(STEADY TO VIVID STUDIO)</p>
-<h2>앱에서 삭제</h2><p>시크릿 베이스 앱의 설정에서 <b>회원탈퇴</b>를 누르면 계정이 삭제됩니다.</p>
-<h2>이메일로 요청</h2>
-<p>앱을 사용할 수 없다면 <a href="mailto:admin@steady2vivid.kro.kr?subject=%EA%B3%84%EC%A0%95%20%EC%82%AD%EC%A0%9C%20%EC%9A%94%EC%B2%AD">admin@steady2vivid.kro.kr</a> 로 가입한 이메일 주소와 "계정 삭제 요청"이라는 제목으로 보내 주세요. 본인 확인 후 처리합니다.</p>
-<h2>삭제되는 정보</h2>
-<p>계정 정보(이메일, 이름, 닉네임, 생년월일), 업로드한 사진·메모, 지도 장소, 기기 푸시 토큰. 탈퇴일로부터 30일 이내에 파기하며, 법령상 보존 의무가 있는 정보는 해당 기간 보관 후 파기합니다.</p>
-<p>자세한 내용은 <a href="/privacy.html">개인정보 처리방침</a>을 확인해 주세요.</p>
-<footer>※ 이 문서는 초안이며 운영자 및 법률 전문가의 검토가 필요합니다 (owner/legal review pending).</footer></body></html>
+<p>Secret Base (시크릿 베이스) · 문서 초안 업데이트: 2026-10-12</p>
+<p class="notice"><strong>법률 검토 미완료.</strong> 이 문서는 현재 구현을 설명하는 초안입니다. 부모 이슈 #139에서 법률 검토는 범위 밖이며, 법률 검토 완료나 스토어 정책 충족을 의미하지 않습니다.</p>
+
+<h2>앱에서 삭제</h2>
+<p><strong>더보기 → 내 공간 → 회원 탈퇴</strong>에서 안내를 읽고 확인하세요. 이메일 가입자는 현재 비밀번호가 필요합니다. Google 가입자는 비밀번호를 입력하지 않습니다. 연결 해제는 계정 삭제와 다릅니다.</p>
+<h2>앱 없이 이메일로 요청</h2>
+<p>가입한 이메일 주소를 입력하면 담당자에게 보낼 삭제 요청 메일 초안을 엽니다. 메일 앱에서 내용을 확인하고 직접 전송해야 요청이 접수됩니다. 이 페이지는 이메일 주소를 서버에 전송하거나 저장하지 않으며, 비밀번호·인증 코드를 요구하지 않습니다. 담당자가 본인 확인 후 처리하는 흐름입니다.</p>
+<p class="notice">현재 검증된 운영자 및 삭제 요청 수신 이메일이 <strong>미확인</strong>이므로 이메일 요청 버튼을 사용할 수 없습니다. 담당자와 실제 수신 가능한 주소가 확인된 후 활성화해야 합니다. 그 전에는 앱의 회원 탈퇴를 이용해 주세요.</p>
+<form id="deletion-form">
+<label for="account-email">가입한 이메일 주소</label>
+<input id="account-email" name="email" type="email" autocomplete="email" required maxlength="254" placeholder="name@example.com">
+<button id="send-request" type="submit" disabled>삭제 요청 이메일 보내기</button>
+<p id="request-status" role="status" aria-live="polite">삭제 요청 수신 이메일 미확인 — 이메일 접수 준비 중입니다.</p>
+</form>
+<noscript><p>이메일 요청 기능에는 JavaScript와 메일 앱이 필요합니다. 앱의 회원 탈퇴 경로를 이용할 수 있습니다.</p></noscript>
+<h2>삭제 및 보관 범위</h2>
+<p>현재 앱 탈퇴는 로그인용 식별 정보를 대체하고 활성 커플을 비활성화하며, 본인이 작성한 MomentLoop 기록을 삭제하고 미디어 파일 삭제를 시도합니다. 본인의 장소 중 다른 기록이 참조하는 장소는 작성자 연결을 제거해 남기며 나머지는 삭제합니다. 파트너 작성 기록은 자동 삭제하지 않습니다.</p>
+<p>탈퇴 표식, 출생 정보, 심리검사·상담·알림 등 다른 기능의 잔여 데이터와 백업의 완전 파기 범위·기한은 아직 확정되지 않았습니다. 운영 문서는 백업 30세대 보관을 설명하지만 실제 실행 주기와 만료 여부는 미확인입니다. 모든 정보가 탈퇴 후 30일 이내 삭제된다고 보장하지 않습니다. <a href="https://secretbase.cloud/privacy">개인정보 처리방침 초안의 보관 및 파기 제한</a>을 확인하세요.</p>
+<script type="module" src="/legal/deletion-request.js"></script>
+<footer>
+<p>운영자 법적 명칭·개인정보 담당자·검증된 문의 및 삭제 요청 이메일: <strong>미확인</strong>. 기존 앱의 팀 소개와 고객센터 표기만으로 담당자와 메일 수신 가능 여부를 검증하지 않았습니다. 공개 확정 전에 오너 확인이 필요합니다.</p>
+<nav aria-label="법률 문서">
+<a href="https://secretbase.cloud/privacy">개인정보 처리방침</a>
+<a href="https://secretbase.cloud/terms">이용약관</a>
+<a href="https://secretbase.cloud/delete-account">계정 삭제 요청</a>
+</nav>
+</footer>
+</main>
+</body>
+</html>
