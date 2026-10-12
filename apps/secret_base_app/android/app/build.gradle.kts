@@ -1,4 +1,5 @@
 import java.util.Properties
+import java.io.File
 
 plugins {
     id("com.android.application")
@@ -7,10 +8,12 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-// android/key.properties (gitignored), ticket env vars, or legacy RELEASE_* env vars.
+// Keep existing signing material in place, including in another worktree.
+val externalKeyPropsPath = System.getenv("KEYSTORE_PROPERTIES_PATH")?.takeIf { it.isNotBlank() }
+val keyPropsFile = externalKeyPropsPath?.let { rootProject.file(it) }
+    ?: rootProject.file("key.properties")
 val keyProps = Properties().apply {
-    val f = rootProject.file("key.properties")
-    if (f.exists()) f.inputStream().use { load(it) }
+    if (keyPropsFile.isFile) keyPropsFile.inputStream().use { load(it) }
 }
 fun releaseProp(name: String): String? {
     keyProps.getProperty(name)?.takeIf { it.isNotBlank() }?.let { return it }
@@ -30,8 +33,33 @@ fun releaseProp(name: String): String? {
 
     return if (name == "storeFile") "keystore/release.jks" else null
 }
-val hasReleaseKey = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+// Relative storeFile paths belong to the properties file's directory, not app/.
+val releaseStoreFile = releaseProp("storeFile")?.let { storePath ->
+    val candidate = File(storePath)
+    if (candidate.isAbsolute) candidate else File(keyPropsFile.parentFile, storePath)
+}
+val hasReleaseKey = (externalKeyPropsPath == null || keyPropsFile.isFile) &&
+    releaseStoreFile?.isFile == true &&
+    listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
     .all { !releaseProp(it).isNullOrBlank() }
+val allowDebugReleaseSigning = System.getenv("ALLOW_DEBUG_RELEASE_SIGNING") == "true"
+
+// Configuration, signingReport and debug builds remain usable without secrets.
+// Any release packaging (APK, AAB, flavor or install) must have signing material.
+gradle.taskGraph.whenReady {
+    val packagesRelease = allTasks.any { task ->
+        task.project == project && task.name.contains("Release") &&
+            listOf("assemble", "bundle", "package", "install").any { task.name.startsWith(it) }
+    }
+    if (packagesRelease && !hasReleaseKey && !allowDebugReleaseSigning) {
+        throw GradleException(
+            "Release signing is missing or incomplete. Set KEYSTORE_PROPERTIES_PATH " +
+                "to the existing properties file, or provide KEYSTORE_PATH, " +
+                "KEYSTORE_PASSWORD, KEY_ALIAS and KEY_PASSWORD. " +
+                "ALLOW_DEBUG_RELEASE_SIGNING=true is for local testing only."
+        )
+    }
+}
 
 android {
     namespace = "com.secretbase.secret_base_app"
@@ -62,7 +90,7 @@ android {
     signingConfigs {
         if (hasReleaseKey) {
             create("release") {
-                storeFile = rootProject.file(releaseProp("storeFile")!!)
+                storeFile = releaseStoreFile
                 storePassword = releaseProp("storePassword")
                 keyAlias = releaseProp("keyAlias")
                 keyPassword = releaseProp("keyPassword")
@@ -72,12 +100,12 @@ android {
 
     buildTypes {
         release {
-            // Release keystore if configured; otherwise fall back to debug signing
-            // so `flutter run --release` and CI without secrets keep working.
             signingConfig = if (hasReleaseKey) {
                 signingConfigs.getByName("release")
-            } else {
+            } else if (allowDebugReleaseSigning) {
                 signingConfigs.getByName("debug")
+            } else {
+                null
             }
         }
     }
