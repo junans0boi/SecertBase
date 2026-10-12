@@ -280,9 +280,10 @@ export function settleTurnAfterMove(gameState, userId) {
     return;
   }
   if (gameState.hasBonusThrow) {
-    // Consume one bonus throw; caughtOpponentThisTurn is left intact so it
-    // grants another throw on the subsequent settleTurnAfterMove call.
+    // Consume one bonus throw; a capture on the same turn is covered by this
+    // extra throw, so clear it instead of granting a second one later.
     gameState.hasBonusThrow = false;
+    gameState.caughtOpponentThisTurn = false;
     gameState.currentTurn = userId;
     gameState.phase = "throwing";
     return;

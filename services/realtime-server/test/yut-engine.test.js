@@ -356,3 +356,22 @@ test('resolveYutMove applies carried movement and capture to the game state', ()
   assert.equal(gameState.pendingMoves.length, 0);
   assert.equal(gameState.caughtOpponentThisTurn, true);
 });
+
+test('catch plus bonus throw grants a single extra throw, not a second one', () => {
+  const gameState = {
+    playersOrder: ['A', 'B'],
+    currentTurn: 'A',
+    phase: 'moving',
+    pendingMoves: [],
+    hasBonusThrow: true,
+    caughtOpponentThisTurn: true,
+  };
+
+  settleTurnAfterMove(gameState, 'A');
+  assert.equal(gameState.currentTurn, 'A');
+  assert.equal(gameState.caughtOpponentThisTurn, false);
+
+  // The bonus throw is played with no capture: turn must pass.
+  settleTurnAfterMove(gameState, 'A');
+  assert.equal(gameState.currentTurn, 'B');
+});
