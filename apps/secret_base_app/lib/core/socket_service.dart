@@ -2150,6 +2150,9 @@ class SocketService extends ChangeNotifier {
     _socket?.emit('game:bomb:answer', {'answer': answer});
   }
 
+  @visibleForTesting
+  void restoreGamesForTest(Map<String, dynamic> games) => _restoreGames(games);
+
   void _restoreGames(Map<String, dynamic> games) {
     try {
       if (games.containsKey('yut')) {
@@ -2193,7 +2196,7 @@ class SocketService extends ChangeNotifier {
       if (games.containsKey('bomb')) {
         final bomb = _m(games['bomb']);
         bombActive = true;
-        bombCurrentPlayer = bomb['holder'] as String?;
+        bombCurrentPlayer = bomb['currentPlayer'] as String?;
         bombDuration = (bomb['timer'] as num?)?.toInt();
         _log('폭탄 복원');
       }
