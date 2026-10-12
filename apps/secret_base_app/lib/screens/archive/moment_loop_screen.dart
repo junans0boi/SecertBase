@@ -159,14 +159,17 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
       _controller.loadWeek(_weekStart);
 
   Future<void> _startCreatePostFlow() async {
-    final created = await Navigator.of(context).push<bool>(
+    final created = await Navigator.of(context).push<Object?>(
       MaterialPageRoute(
         fullscreenDialog: true,
         builder: (_) =>
             _CreateMomentPage(controller: _controller, initialMedia: const []),
       ),
     );
-    if (created == true) await _loadPosts();
+    if (created is DateTime) {
+      setState(() => _weekStart = _mondayOf(created));
+      await _loadPosts();
+    }
   }
 
   Future<void> _editPost(Map<String, dynamic> post) async {
@@ -2136,6 +2139,8 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
   bool _loadingLocations = false;
   bool _todayMoment = false;
   bool _useTodayPrompt = false;
+  DateTime _momentDate = _dateOnly(DateTime.now());
+  bool _dateTouched = false;
 
   static const _maxMedia = 10;
 
@@ -2158,6 +2163,12 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
       final files = await _imagePicker.pickMultipleMedia(limit: remaining);
       if (files.isEmpty) return;
       final media = <_PickedMomentMedia>[];
+      DateTime? suggested;
+      if (_pickedMedia.isEmpty && !_dateTouched) {
+        try {
+          suggested = _dateOnly(await files.first.lastModified());
+        } catch (_) {}
+      }
       for (final file in files) {
         final isVideo = _isVideoFile(file.name);
         if (isVideo) {
@@ -2180,7 +2191,19 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
         }
       }
       if (!mounted) return;
-      setState(() => _pickedMedia.addAll(media));
+      setState(() {
+        _pickedMedia.addAll(media);
+        final today = _dateOnly(DateTime.now());
+        if (suggested != null &&
+            !suggested.isAfter(today) &&
+            suggested != _momentDate) {
+          _momentDate = suggested;
+          if (suggested != today) {
+            _todayMoment = false;
+            _useTodayPrompt = false;
+          }
+        }
+      });
     } catch (_) {
       _toast('미디어를 불러오지 못했어요');
     }
@@ -2271,6 +2294,14 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
     }
     setState(() => _saving = true);
     final now = DateTime.now();
+    final momentAt = DateTime(
+      _momentDate.year,
+      _momentDate.month,
+      _momentDate.day,
+      now.hour,
+      now.minute,
+      now.second,
+    );
     // All media in this upload share the same session_id
     final sessionId = '${now.millisecondsSinceEpoch}';
 
@@ -2281,7 +2312,7 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
           : await _ensureMapPinId(
               location: location,
               caption: caption,
-              now: now,
+              now: momentAt,
             );
       if (location != null && mapPinId == null) {
         _toast('비밀지도 위치를 연결하지 못했어요');
@@ -2291,8 +2322,8 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
       await widget.controller.createMoment(
         MomentDraft(
           caption: caption,
-          takenAt: now,
-          capturedAt: now,
+          takenAt: _momentDate,
+          capturedAt: momentAt,
           sessionId: sessionId,
           todayMoment: _todayMoment,
           mapPinId: mapPinId,
@@ -2307,12 +2338,44 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
               .toList(),
         ),
       );
-      if (mounted) Navigator.pop(context, true);
+      if (mounted) Navigator.pop(context, _momentDate);
     } catch (_) {
       _toast('네트워크 연결을 확인해주세요');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  bool get _isMomentToday => _momentDate == _dateOnly(DateTime.now());
+
+  Future<void> _pickMomentDate() async {
+    final today = _dateOnly(DateTime.now());
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _momentDate,
+      firstDate: DateTime(2020),
+      lastDate: today,
+      helpText: '기록 날짜',
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: ColorScheme.light(
+            primary: kMainRose,
+            onPrimary: Colors.white,
+            surface: kMainPaper,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _momentDate = _dateOnly(picked);
+      _dateTouched = true;
+      if (_momentDate != today) {
+        _todayMoment = false;
+        _useTodayPrompt = false;
+      }
+    });
   }
 
   void _toast(String msg) {
@@ -2488,9 +2551,17 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
 
             const SizedBox(height: 16),
 
+            _MomentDateTile(
+              key: const Key('moment_date_tile'),
+              date: _momentDate,
+              onTap: _saving ? null : _pickMomentDate,
+            ),
+
+            const SizedBox(height: 8),
+
             SwitchListTile.adaptive(
               value: _todayMoment,
-              onChanged: _saving
+              onChanged: _saving || !_isMomentToday
                   ? null
                   : (value) => setState(() {
                       _todayMoment = value;
@@ -2504,7 +2575,9 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
                 style: mainBody(size: 15, weight: FontWeight.w900),
               ),
               subtitle: Text(
-                '오늘의 루프에 사용할 기록으로 지정해요',
+                _isMomentToday
+                    ? '오늘의 루프에 사용할 기록으로 지정해요'
+                    : '오늘 날짜의 순간만 지정할 수 있어요',
                 style: mainBody(size: 12, color: kMainMuted),
               ),
             ),
@@ -2881,6 +2954,58 @@ class _MapLocationPickerSheetState extends State<_MapLocationPickerSheet> {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+class _MomentDateTile extends StatelessWidget {
+  final DateTime date;
+  final VoidCallback? onTap;
+
+  const _MomentDateTile({super.key, required this.date, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final isToday = date == _dateOnly(DateTime.now());
+    const days = ['월', '화', '수', '목', '금', '토', '일'];
+    final label =
+        '${date.year}.${date.month.toString().padLeft(2, '0')}.${date.day.toString().padLeft(2, '0')} (${days[date.weekday - 1]})';
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: isToday ? kMainPaperSoft : kMainRoseSoft,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: isToday ? kMainLine : kMainRose),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.event_rounded, color: kMainRose, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('기록 날짜', style: mainBody(size: 12, color: kMainMuted)),
+                  Text(
+                    isToday ? '$label · 오늘' : label,
+                    style: mainBody(
+                      size: 15,
+                      color: kMainInk,
+                      weight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: kMainMuted),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 String _dateKey(dynamic value) {
   final date = value is DateTime
