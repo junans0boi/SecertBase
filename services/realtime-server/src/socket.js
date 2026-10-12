@@ -10,6 +10,7 @@ import {
 } from "./game-session.js";
 import { query } from "./db.js";
 import { redis } from "./redis.js";
+import { notifier } from "./modules/notifications/index.js";
 import { transferGameReward, getBalance, getEquippedStats, getEquippedItemsInfo } from "./wallet-engine.js";
 import { grantXp, updateMissionProgress } from "./level-engine.js";
 import {
@@ -695,6 +696,14 @@ export const registerSocketHandlers = (io) => {
           lobby.stake = 0;
         }
         lobby.updatedAt = Date.now();
+
+        // Newly opened lobby while partner is away = invite. Redis NX dedupes spam for 60s.
+        if (!lobbyText && presence.length < 2) {
+          const inviteKey = `push:game_invite:${roomCode}:${gameType}`;
+          if ((await redis.set(inviteKey, "1", "EX", 60, "NX")) === "OK") {
+            void notifier.notifyPartner(userId, "game_invite");
+          }
+        }
 
         await redis.set(key, JSON.stringify(lobby), "EX", 1800);
         emitLobby(io, roomCode, lobby);

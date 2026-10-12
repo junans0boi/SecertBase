@@ -10,6 +10,7 @@ import '../../core/socket_service.dart';
 import '../../core/auth_service.dart';
 import '../../core/legal_urls.dart';
 import '../auth/auth_layout.dart';
+import 'notification_settings_screen.dart';
 import '../relationship/relationship_understanding_screen.dart';
 import '../secret_base/secret_base_screen.dart';
 
@@ -145,6 +146,18 @@ class _MoreOverview extends StatelessWidget {
                           MaterialPageRoute(
                             builder: (_) =>
                                 const RelationshipUnderstandingScreen(),
+                          ),
+                        ),
+                      ),
+                      _MoreRow(
+                        icon: Icons.notifications_outlined,
+                        iconColor: kMainRose,
+                        iconBackground: kMainRoseSoft,
+                        title: '알림 설정',
+                        subtitle: '받고 싶은 알림만 골라요',
+                        onTap: () => Navigator.of(context).push<void>(
+                          MaterialPageRoute(
+                            builder: (_) => const NotificationSettingsScreen(),
                           ),
                         ),
                       ),

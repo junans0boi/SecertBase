@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/main_design.dart';
+import '../core/push/push_service.dart';
 import 'arcade/arcade_screen.dart';
 import 'archive/map_screen.dart';
 import 'archive/moment_loop_screen.dart';
@@ -24,6 +25,26 @@ class _HomeShellState extends State<HomeShell> {
     const ArcadeScreen(),
     SettingsScreen(onNavigate: _handleHomeNavigation),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    pendingPushScreen.addListener(_consumePushScreen);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _consumePushScreen());
+  }
+
+  @override
+  void dispose() {
+    pendingPushScreen.removeListener(_consumePushScreen);
+    super.dispose();
+  }
+
+  void _consumePushScreen() {
+    final tab = tabForPushScreen(pendingPushScreen.value);
+    if (tab == null) return;
+    pendingPushScreen.value = null;
+    if (mounted) setState(() => _index = tab);
+  }
 
   void _handleHomeNavigation(int target) {
     switch (target) {
