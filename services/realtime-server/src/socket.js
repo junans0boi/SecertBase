@@ -79,6 +79,7 @@ import {
   startGame as startOldMaidGame,
   drawCard as drawOldMaidCard,
 } from "./oldmaid-engine.js";
+import { TELEPATHY_SESSION_TTL_SEC } from "./telepathy-engine.js";
 import { resolveHanabagiRound } from "./rps-engine.js";
 
 import {
@@ -1039,7 +1040,7 @@ export const registerSocketHandlers = (io) => {
           io.to(roomCode).emit("game:rps:result", event);
           ack({ ok: true, result: event });
         } else {
-          await redis.set(sessionKey, JSON.stringify(session), "EX", 60);
+          await redis.set(sessionKey, JSON.stringify(session), "EX", TELEPATHY_SESSION_TTL_SEC);
           ack({ ok: true, waiting: true });
         }
       });
