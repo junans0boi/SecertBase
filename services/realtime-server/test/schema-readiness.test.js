@@ -8,6 +8,8 @@ const schemaRows = {
     { TABLE_NAME: 'setlog_posts' },
     { TABLE_NAME: 'map_pins' },
     { TABLE_NAME: 'setlog_reactions' },
+    { TABLE_NAME: 'device_tokens' },
+    { TABLE_NAME: 'notification_prefs' },
   ],
   columns: [
     { TABLE_NAME: 'Users', COLUMN_NAME: 'IsDeleted' },
@@ -15,6 +17,11 @@ const schemaRows = {
     { TABLE_NAME: 'setlog_posts', COLUMN_NAME: 'map_pin_id' },
     { TABLE_NAME: 'setlog_posts', COLUMN_NAME: 'session_id' },
     { TABLE_NAME: 'map_pins', COLUMN_NAME: 'media_url' },
+    { TABLE_NAME: 'device_tokens', COLUMN_NAME: 'token' },
+    { TABLE_NAME: 'device_tokens', COLUMN_NAME: 'revoked_at' },
+    { TABLE_NAME: 'notification_prefs', COLUMN_NAME: 'partner_moment' },
+    { TABLE_NAME: 'notification_prefs', COLUMN_NAME: 'today_loop' },
+    { TABLE_NAME: 'notification_prefs', COLUMN_NAME: 'game_invite' },
   ],
 };
 

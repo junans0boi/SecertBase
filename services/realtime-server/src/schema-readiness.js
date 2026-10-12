@@ -11,6 +11,8 @@ export const REQUIRED_SCHEMA = Object.freeze({
   setlog_posts: ['map_pin_id', 'session_id'],
   map_pins: ['media_url'],
   setlog_reactions: [],
+  device_tokens: ['token', 'revoked_at'],
+  notification_prefs: ['partner_moment', 'today_loop', 'game_invite'],
 });
 
 export async function assertSchemaReady({

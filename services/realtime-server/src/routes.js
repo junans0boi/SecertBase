@@ -71,6 +71,8 @@ import {
 } from './modules/moment-loop/http-router.js';
 import { createMomentLoopRepository } from './modules/moment-loop/repository.js';
 import { momentLoopPolicy } from './modules/moment-loop/domain.js';
+import { notifier } from './modules/notifications/index.js';
+import { createNotificationRouter } from './modules/notifications/http-router.js';
 import path from 'path';
 import fs from 'fs';
 
@@ -477,7 +479,9 @@ const momentService = MomentLoopService({
   repository: momentRepository,
   policy: momentLoopPolicy,
   media: momentUploadStore,
+  onMomentCreated: (userId) => notifier.notifyPartner(userId, 'partner_moment'),
 });
+router.use(createNotificationRouter({ queryFn: query }));
 router.use(createMomentLoopRouter({
   service: momentService,
   uploadStore: momentUploadStore,

@@ -44,6 +44,7 @@ export function MomentLoopService({
   policy = momentLoopPolicy,
   media,
   now = businessDate,
+  onMomentCreated = null,
 }) {
   if (!repository) throw new Error('MomentLoopService requires a repository');
   if (!media) throw new Error('MomentLoopService requires a media adapter');
@@ -135,6 +136,8 @@ export function MomentLoopService({
           canReplace: policy.canReplaceTodayMoment,
         });
         keepUpload = true;
+        // Fire-and-forget: a push failure must never fail the post.
+        Promise.resolve(onMomentCreated?.(scope.userId)).catch(() => {});
         return created;
       } finally {
         if (file && !keepUpload) {
