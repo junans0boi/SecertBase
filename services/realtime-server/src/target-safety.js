@@ -2,6 +2,10 @@ import os from 'node:os';
 import path from 'node:path';
 
 const loopbackHosts = new Set(['127.0.0.1', '::1', '[::1]', 'localhost']);
+// Dedicated throwaway instances avoid sharing a developer's default services.
+// Keep a small explicit allowlist; tunneled/remote production targets stay blocked.
+const testDatabasePorts = new Set(['3306', '3399']);
+const testRedisPorts = new Set(['6379', '6399']);
 
 const parseUrl = (value, label) => {
   try {
@@ -50,7 +54,7 @@ const assertSafeDatabase = ({
   if (
     !['mysql:', 'mariadb:'].includes(database.protocol) ||
     !loopbackHosts.has(database.hostname) ||
-    databasePort !== '3306' ||
+    !testDatabasePorts.has(databasePort) ||
     !allowedDatabaseName(databaseName) ||
     !databaseUser.includes('test')
   ) {
@@ -70,9 +74,9 @@ const assertSafeRedisAndUploads = ({
   if (
     !['redis:', 'rediss:'].includes(redis.protocol) ||
     !loopbackHosts.has(redis.hostname) ||
-    redisPort !== '6379'
+    !testRedisPorts.has(redisPort)
   ) {
-    throw new Error('Test Redis URL must use the local port 6379 target');
+    throw new Error('Test Redis URL must use a local port 6379 or 6399 target');
   }
   assertDifferentEndpoint(redis, productionRedisUrl, '6379', 'Redis');
 
@@ -98,7 +102,7 @@ export function assertSafeTestEnvironment({
     label: 'Test database admin URL',
     allowedDatabaseName: (name) => name === 'mysql',
     errorMessage:
-      'Test database admin URL must use a local :3306/mysql target and a test-only user',
+      'Test database admin URL must use a local :3306 or :3399/mysql target and a test-only user',
     productionDatabaseUrl,
   });
   assertSafeRedisAndUploads({

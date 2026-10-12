@@ -72,3 +72,21 @@ test('server config accepts isolated test runtime targets', () => {
   const result = runConfig();
   assert.equal(result.status, 0, result.stderr);
 });
+
+test('server config accepts dedicated disposable database and Redis ports', () => {
+  const result = runConfig({
+    DATABASE_URL: 'mysql://secretbase_test_runner@127.0.0.1:3399/secretbase_test_isolated',
+    REDIS_URL: 'redis://127.0.0.1:6399',
+  });
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('dedicated test ports still reject a known production endpoint', () => {
+  const result = runConfig({
+    DATABASE_URL: 'mysql://secretbase_test_runner@127.0.0.1:3399/secretbase_test_isolated',
+    REDIS_URL: 'redis://127.0.0.1:6399',
+    PRODUCTION_DATABASE_URL: 'mysql://production@localhost:3399/secretbase',
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /known production database/i);
+});
