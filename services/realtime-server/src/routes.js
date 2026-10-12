@@ -5603,7 +5603,21 @@ router.get('/couple/info', async (req, res) => {
       dDay = Math.floor((today - start) / 86400000) + 1;
     }
 
-    res.json({ ok: true, coupleId: row.CoupleId, startDate: startDateStr, dDay, partnerName, partnerCode });
+    const annivResult = await query(
+      `SELECT label, DATE_FORMAT(date, '%Y-%m-%d') AS date FROM anniversaries
+       WHERE couple_id = ? AND repeat_yearly = 1 ORDER BY date ASC`,
+      [row.CoupleId],
+    );
+    let nextAnniversary = null;
+    if (annivResult.rows.length) {
+      const today = new Date();
+      const nearest = annivResult.rows
+        .map((a) => ({ label: a.label, date: a.date, daysUntil: anniversaryDaysUntil(a.date, today) }))
+        .sort((a, b) => a.daysUntil - b.daysUntil)[0];
+      nextAnniversary = nearest;
+    }
+
+    res.json({ ok: true, coupleId: row.CoupleId, startDate: startDateStr, dDay, partnerName, partnerCode, nextAnniversary });
   } catch (err) {
     console.error('[API] /couple/info GET error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
@@ -5641,6 +5655,108 @@ router.patch('/couple/info', async (req, res) => {
     });
   } catch (err) {
     console.error('[API] /couple/info PATCH error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+// ============================================
+// Anniversaries API
+// ============================================
+
+function anniversaryDaysUntil(dateStr, today = new Date()) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  let next = new Date(t.getFullYear(), m - 1, d);
+  if (next < t) next = new Date(t.getFullYear() + 1, m - 1, d);
+  return Math.round((next - t) / 86400000);
+}
+
+router.get('/anniversaries', async (req, res) => {
+  try {
+    const couple = await query(
+      `SELECT CoupleId FROM Couples WHERE Status = 'active' AND (User1Id = ? OR User2Id = ?) LIMIT 1`,
+      [req.auth.userId, req.auth.userId],
+    );
+    if (!couple.rows[0]) return res.status(404).json({ ok: false, reason: 'couple_not_found' });
+    const coupleId = couple.rows[0].CoupleId;
+    const result = await query(
+      `SELECT id, label, DATE_FORMAT(date, '%Y-%m-%d') AS date, repeat_yearly FROM anniversaries WHERE couple_id = ? ORDER BY date ASC`,
+      [coupleId],
+    );
+    const today = new Date();
+    const rows = result.rows.map((a) => ({
+      ...a,
+      repeat_yearly: Boolean(a.repeat_yearly),
+      days_until: a.repeat_yearly ? anniversaryDaysUntil(a.date, today) : null,
+    }));
+    res.json({ ok: true, anniversaries: rows });
+  } catch (err) {
+    console.error('[API] GET /anniversaries error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.post('/anniversaries', async (req, res) => {
+  try {
+    const { label, date, repeat_yearly = true } = req.body;
+    if (!label?.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(String(date ?? ''))) {
+      return res.status(400).json({ ok: false, reason: 'invalid_fields' });
+    }
+    const couple = await query(
+      `SELECT CoupleId FROM Couples WHERE Status = 'active' AND (User1Id = ? OR User2Id = ?) LIMIT 1`,
+      [req.auth.userId, req.auth.userId],
+    );
+    if (!couple.rows[0]) return res.status(404).json({ ok: false, reason: 'couple_not_found' });
+    const coupleId = couple.rows[0].CoupleId;
+    const ins = await query(
+      `INSERT INTO anniversaries (couple_id, label, date, repeat_yearly) VALUES (?, ?, ?, ?)`,
+      [coupleId, label.trim(), date, repeat_yearly ? 1 : 0],
+    );
+    res.status(201).json({ ok: true, anniversary: { id: ins.rows.insertId, label: label.trim(), date, repeat_yearly: Boolean(repeat_yearly) } });
+  } catch (err) {
+    console.error('[API] POST /anniversaries error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.patch('/anniversaries/:id', async (req, res) => {
+  try {
+    const { label, date, repeat_yearly } = req.body;
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ ok: false, reason: 'invalid_id' });
+    const couple = await query(
+      `SELECT CoupleId FROM Couples WHERE Status = 'active' AND (User1Id = ? OR User2Id = ?) LIMIT 1`,
+      [req.auth.userId, req.auth.userId],
+    );
+    if (!couple.rows[0]) return res.status(404).json({ ok: false, reason: 'couple_not_found' });
+    const updates = [];
+    const params = [];
+    if (label?.trim()) { updates.push('label = ?'); params.push(label.trim()); }
+    if (date && /^\d{4}-\d{2}-\d{2}$/.test(String(date))) { updates.push('date = ?'); params.push(date); }
+    if (repeat_yearly !== undefined) { updates.push('repeat_yearly = ?'); params.push(repeat_yearly ? 1 : 0); }
+    if (!updates.length) return res.status(400).json({ ok: false, reason: 'no_changes' });
+    params.push(id, couple.rows[0].CoupleId);
+    await query(`UPDATE anniversaries SET ${updates.join(', ')} WHERE id = ? AND couple_id = ?`, params);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[API] PATCH /anniversaries/:id error:', err);
+    res.status(500).json({ ok: false, reason: 'internal_error' });
+  }
+});
+
+router.delete('/anniversaries/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ ok: false, reason: 'invalid_id' });
+    const couple = await query(
+      `SELECT CoupleId FROM Couples WHERE Status = 'active' AND (User1Id = ? OR User2Id = ?) LIMIT 1`,
+      [req.auth.userId, req.auth.userId],
+    );
+    if (!couple.rows[0]) return res.status(404).json({ ok: false, reason: 'couple_not_found' });
+    await query(`DELETE FROM anniversaries WHERE id = ? AND couple_id = ?`, [id, couple.rows[0].CoupleId]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[API] DELETE /anniversaries/:id error:', err);
     res.status(500).json({ ok: false, reason: 'internal_error' });
   }
 });

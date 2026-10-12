@@ -18,6 +18,7 @@ import '../relationship/fortune_screen.dart';
 import '../relationship/saju_screen.dart';
 import '../relationship/tarot_screen.dart';
 import '../auth/partner_screen.dart';
+import 'anniversaries_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final ValueChanged<int> onNavigate;
@@ -254,6 +255,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final dDay = _couple?.dDay;
     final startDate = _couple?.startDate;
     final partnerName = _couple?.partnerName ?? '상대방';
+    final next = _couple?.nextAnniversary;
     Widget mini(String value, String label) => Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
@@ -261,42 +263,66 @@ class _HomeScreenState extends State<HomeScreen> {
         Text(label, style: mainBody(size: 11, color: kMainMuted)),
       ],
     );
-    return MainCard(
-      radius: 26,
-      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
-      child: Row(
-        children: [
-          Expanded(
-            child: dDay == null
-                ? Text(
-                    '우리의 첫날을 등록해보세요',
-                    style: mainTitle(size: 22, color: kMainRose),
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '$dDay',
-                        style: mainTitle(size: 60, color: kMainRose),
-                      ),
-                      Text(
-                        '함께한 날',
-                        style: mainBody(size: 12, color: kMainMuted),
-                      ),
-                    ],
-                  ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              mini(partnerName, '함께하는 사람'),
-              if (startDate != null) ...[
-                const SizedBox(height: 10),
-                mini(startDate, '시작일'),
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const AnniversariesScreen()),
+      ),
+      child: MainCard(
+        radius: 26,
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
+        child: Row(
+          children: [
+            Expanded(
+              child: dDay == null
+                  ? Text(
+                      '우리의 첫날을 등록해보세요',
+                      style: mainTitle(size: 22, color: kMainRose),
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '$dDay',
+                          style: mainTitle(size: 60, color: kMainRose),
+                        ),
+                        Text(
+                          '함께한 날',
+                          style: mainBody(size: 12, color: kMainMuted),
+                        ),
+                        if (next != null) ...[
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              const Icon(Icons.event_rounded,
+                                  size: 13, color: kMainRose),
+                              const SizedBox(width: 4),
+                              Text(
+                                next.daysUntil == 0
+                                    ? '오늘은 ${next.label}!'
+                                    : 'D-${next.daysUntil} ${next.label}',
+                                style: mainBody(
+                                    size: 11,
+                                    color: kMainRose,
+                                    weight: FontWeight.w700),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                mini(partnerName, '함께하는 사람'),
+                if (startDate != null) ...[
+                  const SizedBox(height: 10),
+                  mini(startDate, '시작일'),
+                ],
               ],
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }

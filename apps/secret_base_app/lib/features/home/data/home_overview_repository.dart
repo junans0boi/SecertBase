@@ -102,10 +102,25 @@ class HomeOverviewRepository {
   Future<HomeCoupleInfo> _loadCouple(ApiClient api) async {
     final body = _jsonObject(await api.getJson('/api/couple/info'));
     if (body['ok'] != true) throw const FormatException('Invalid couple info');
+    NextAnniversary? nextAnniversary;
+    final raw = body['nextAnniversary'];
+    if (raw is Map) {
+      final label = _optionalString(raw['label']);
+      final date = _optionalString(raw['date']);
+      final daysUntil = _optionalInt(raw['daysUntil']);
+      if (label != null && date != null && daysUntil != null) {
+        nextAnniversary = NextAnniversary(
+          label: label,
+          date: date,
+          daysUntil: daysUntil,
+        );
+      }
+    }
     return HomeCoupleInfo(
       partnerName: _optionalString(body['partnerName']),
       dDay: _optionalInt(body['dDay']),
       startDate: _optionalString(body['startDate']),
+      nextAnniversary: nextAnniversary,
     );
   }
 

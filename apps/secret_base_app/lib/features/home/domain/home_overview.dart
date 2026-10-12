@@ -4,12 +4,30 @@ enum HomeSection { couple, memory, assessments, today }
 
 enum HomeAssessmentStatus { notStarted, inProgress, resultReady }
 
+class NextAnniversary {
+  final String label;
+  final String date;
+  final int daysUntil;
+
+  const NextAnniversary({
+    required this.label,
+    required this.date,
+    required this.daysUntil,
+  });
+}
+
 class HomeCoupleInfo {
   final String? partnerName;
   final int? dDay;
   final String? startDate;
+  final NextAnniversary? nextAnniversary;
 
-  const HomeCoupleInfo({this.partnerName, this.dDay, this.startDate});
+  const HomeCoupleInfo({
+    this.partnerName,
+    this.dDay,
+    this.startDate,
+    this.nextAnniversary,
+  });
 }
 
 class HomeMemoryCard {
