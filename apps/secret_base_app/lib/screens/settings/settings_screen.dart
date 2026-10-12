@@ -544,8 +544,10 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
                           ),
                           child: Text(
                             label,
-                            style: mainBody(size: 12, color: kMainMuted)
-                                .copyWith(decoration: TextDecoration.underline),
+                            style: mainBody(
+                              size: 12,
+                              color: kMainMuted,
+                            ).copyWith(decoration: TextDecoration.underline),
                           ),
                         ),
                     ],

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth_service.dart';
+import '../../core/legal_urls.dart';
 import 'auth_layout.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -20,6 +22,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   int _step = 0;
   bool _loading = false;
   bool _showPassword = false;
+  bool _agreed = false;
   String? _error;
 
   final _auth = AuthService();
@@ -126,12 +129,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                       const SizedBox(height: 34),
                       _step == 0 ? _profileForm() : _accountForm(),
+                      if (_step == 1) _consentRow(),
                       if (_error != null) AuthError(_error!),
                       const SizedBox(height: 22),
                       AuthButton(
                         label: _step == 0 ? '다음' : '회원가입',
                         loading: _loading,
-                        onPressed: _step == 0 ? _nextStep : _register,
+                        onPressed: _step == 0
+                            ? _nextStep
+                            : (_agreed ? _register : null),
                       ),
                       if (_step == 1) ...[
                         const SizedBox(height: 8),
@@ -225,6 +231,48 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _consentRow() {
+    Widget link(String label, String url) => InkWell(
+      onTap: () =>
+          launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+      child: Text(
+        label,
+        style: authText(
+          size: 13,
+          color: authPrimary,
+        ).copyWith(decoration: TextDecoration.underline),
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Row(
+        children: [
+          Checkbox(
+            value: _agreed,
+            onChanged: _loading
+                ? null
+                : (v) => setState(() => _agreed = v ?? false),
+          ),
+          Expanded(
+            child: Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 4,
+              children: [
+                link('개인정보 처리방침', kPrivacyUrl),
+                Text('및', style: authText(size: 13, color: authSecondary)),
+                link('이용약관', kTermsUrl),
+                Text(
+                  '에 동의합니다 (필수)',
+                  style: authText(size: 13, color: authSecondary),
+                ),
+              ],
             ),
           ),
         ],
