@@ -111,6 +111,45 @@ class _HomeScreenState extends State<HomeScreen> {
   bool get _homeLoading =>
       _controller.state.status == HomeStatus.loading && _overview == null;
 
+  bool get _needsPartner =>
+      _overview != null &&
+      _couple == null &&
+      !_overview!.failedSections.contains(HomeSection.couple);
+
+  Widget _partnerGuide() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: kMainRoseSoft,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '아직 연결 전이에요',
+            style: mainBody(size: 16, weight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '1. 내 회원코드를 상대방에게 전달해요\n'
+            '2. 또는 상대방 코드를 입력해 연결 요청을 보내요\n'
+            '3. 상대방이 요청을 확인하면 연결돼요',
+            style: mainBody(size: 13),
+          ),
+          const SizedBox(height: 12),
+          FilledButton(
+            onPressed: () => Navigator.of(context).push<void>(
+              MaterialPageRoute(builder: (_) => const PartnerScreen()),
+            ),
+            child: const Text('연결하러 가기'),
+          ),
+        ],
+      ),
+    );
+  }
+
   bool get _homeFailed => _controller.state.status == HomeStatus.failure;
 
   bool get _todayLoadFailed =>
@@ -140,6 +179,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (_needsPartner) ...[
+                      _partnerGuide(),
+                      const SizedBox(height: 12),
+                    ],
                     _featureCard(),
                     const SizedBox(height: 12),
                     _todayEntry(),
