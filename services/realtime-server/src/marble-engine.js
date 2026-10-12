@@ -281,6 +281,9 @@ export function serializeMarbleGame(gameState) {
     coins: Object.fromEntries(
       gameState.playersOrder.map((uid) => [uid, gameState.players[uid]?.coins ?? 0]),
     ),
+    assets: Object.fromEntries(
+      gameState.playersOrder.map((uid) => [uid, calcScore(gameState, uid)]),
+    ),
     pieces: Object.fromEntries(
       Object.entries(gameState.players).map(([player, state]) => [player, state.pieces]),
     ),

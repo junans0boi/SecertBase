@@ -149,6 +149,7 @@ class SocketService extends ChangeNotifier {
   Map<String, List<dynamic>> marblePieceDetails = {};
   Map<String, dynamic> marbleLands = {}; // {pos: {owner, level}}
   Map<String, int> marbleCoins = {}; // {uid: coins}
+  Map<String, int> marbleAssets = {}; // {uid: server-computed total assets}
   int marbleRound = 1;
   Map<String, dynamic>? marbleLandPrompt; // {type, pos, cost, level?}
   Map<String, String> marbleCharacters = {};
@@ -327,6 +328,7 @@ class SocketService extends ChangeNotifier {
     marblePieceDetails = {};
     marbleLands = {};
     marbleCoins = {};
+    marbleAssets = {};
     marbleRound = 1;
     marbleLandPrompt = null;
     marbleCharacters = {};
@@ -2361,6 +2363,12 @@ class SocketService extends ChangeNotifier {
     final coinsRaw = map['coins'];
     if (coinsRaw is Map) {
       marbleCoins = coinsRaw.map(
+        (k, v) => MapEntry('$k', (v as num?)?.toInt() ?? 0),
+      );
+    }
+    final assetsRaw = map['assets'];
+    if (assetsRaw is Map) {
+      marbleAssets = assetsRaw.map(
         (k, v) => MapEntry('$k', (v as num?)?.toInt() ?? 0),
       );
     }

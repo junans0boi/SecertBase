@@ -75,3 +75,20 @@ test('marble purchase, acquisition, and color monopoly use property rules', () =
   assert.equal(hasColorMonopoly(state, 'user1', 1), true);
   assert.equal(hasColorMonopoly(state, 'user2', 1), false);
 });
+
+test('tourist monopoly win reports tourist_monopoly reason', async () => {
+  const { checkMarbleWin } = await import('../src/marble-engine.js');
+  const g = createMarbleGameState('a', 'b');
+  g.lands[8] = { owner: 'a', level: 0 };
+  g.lands[17] = { owner: 'a', level: 0 };
+  assert.deepEqual(checkMarbleWin(g), { winner: 'a', reason: 'tourist_monopoly' });
+});
+
+test('serializeMarbleGame sends authoritative total assets per player', async () => {
+  const { serializeMarbleGame, calcScore } = await import('../src/marble-engine.js');
+  const g = createMarbleGameState('a', 'b');
+  g.lands[1] = { owner: 'a', level: 2 };
+  const s = serializeMarbleGame(g);
+  assert.equal(s.assets.a, calcScore(g, 'a'));
+  assert.equal(s.assets.b, calcScore(g, 'b'));
+});
