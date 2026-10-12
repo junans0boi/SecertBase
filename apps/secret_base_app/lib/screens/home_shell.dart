@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../core/main_design.dart';
 import '../core/push/push_service.dart';
+import '../core/push/push_game_route.dart';
+import '../core/push/push_today_route.dart';
+import '../core/auth_service.dart';
+import '../core/socket_service.dart';
+import '../core/today_api.dart';
 import 'arcade/arcade_screen.dart';
 import 'archive/map_screen.dart';
 import 'archive/moment_loop_screen.dart';
@@ -29,21 +34,59 @@ class _HomeShellState extends State<HomeShell> {
   @override
   void initState() {
     super.initState();
-    pendingPushScreen.addListener(_consumePushScreen);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _consumePushScreen());
+    pendingPushTarget.addListener(_schedulePush);
+    _schedulePush();
   }
 
   @override
   void dispose() {
-    pendingPushScreen.removeListener(_consumePushScreen);
+    pendingPushTarget.removeListener(_schedulePush);
     super.dispose();
   }
 
-  void _consumePushScreen() {
-    final tab = tabForPushScreen(pendingPushScreen.value);
-    if (tab == null) return;
-    pendingPushScreen.value = null;
-    if (mounted) setState(() => _index = tab);
+  void _schedulePush() {
+    if (!mounted || pendingPushTarget.value == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _consumePushTarget());
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  void _consumePushTarget() {
+    if (!mounted) return;
+    final target = pendingPushTarget.value;
+    if (target == null) return;
+    final auth = AuthService();
+    if (auth.token == null || auth.user?['PartnerCode'] == null) return;
+    pendingPushTarget.value = null;
+    Widget? page;
+    switch (target.screen) {
+      case 'moment_detail':
+        if (target.postId != null && target.postId! > 0) {
+          page = MomentLoopScreen(initialPostId: target.postId);
+        }
+      case 'moment_draft':
+        if (target.draftId != null) {
+          page = MomentLoopScreen(initialDraftId: target.draftId);
+        }
+      case 'today_loop':
+        if (auth.token != null) {
+          page = PushTodayRoute(
+            api: TodayApi(baseUrl: auth.baseUrl, token: auth.token!),
+          );
+        }
+      case 'game_invite':
+        if (target.roomCode == null ||
+            target.roomCode == SocketService().roomCode) {
+          page = pushGameLobby(target.gameType);
+        }
+    }
+    if (page == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('알림의 대상을 열 수 없어요.')));
+      return;
+    }
+    final destination = page;
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => destination));
   }
 
   void _handleHomeNavigation(int target) {

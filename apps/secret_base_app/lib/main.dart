@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'core/push/push_service.dart';
+import 'core/push/local_notification_service.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/semantics.dart';
 import 'core/app_theme.dart';
@@ -21,6 +22,7 @@ Future<void> main() async {
   final auth = AuthService();
   await auth.init();
   await YutAudio.instance.loadSettings();
+  await LocalNotificationService.instance.start();
   // Guarded: without Firebase config push is silently disabled.
   auth.beforeLogout = PushService.instance.revoke;
   unawaited(PushService.instance.start());
@@ -89,6 +91,8 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
         api: _auth.apiClient,
         loggedIn: _auth.token != null,
         paired: _auth.user?['PartnerCode'] != null,
+        identity: _auth.user?['UserId'] ?? _auth.user?['id'],
+        authToken: _auth.token,
       ),
     );
     // If logged in and paired, but not connected to socket, try auto-connect

@@ -38,13 +38,80 @@
 </head>
 <body>
   <script>
+    // Supported Firebase JS getToken API: explicitly pass our registration.
+    window.secretBasePush = (() => {
+      let messaging, registration, vapidKey, onOpened;
+      const pending = [];
+      function open(target) {
+        if (onOpened) onOpened(JSON.stringify(target));
+        else pending.push(target);
+      }
+      if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', event => {
+        if (event.data?.type === 'secret-base-push') open(event.data.target);
+      });
+      function loadScript(src) {
+        return new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = src;
+          script.onload = resolve;
+          script.onerror = reject;
+          document.head.appendChild(script);
+        });
+      }
+      return {
+        async initialize(buildConfig, buildVapid, callback) {
+          onOpened = callback;
+          pending.splice(0).forEach(open);
+          let runtime = {};
+          try {
+            const response = await fetch('/firebase-push-config.json', {cache: 'no-store'});
+            if (response.ok) runtime = await response.json();
+          } catch (_) { /* Build defines can configure an offline startup. */ }
+          const config = runtime.firebase || JSON.parse(buildConfig);
+          vapidKey = runtime.vapidKey || buildVapid;
+          if (!vapidKey || !['apiKey', 'appId', 'messagingSenderId', 'projectId']
+              .every(key => typeof config[key] === 'string' && config[key].length > 0) ||
+              !('serviceWorker' in navigator) || !('Notification' in window)) return false;
+          await loadScript('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
+          await loadScript('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
+          messaging = firebase.initializeApp(config, 'secret-base-push').messaging();
+          registration = await navigator.serviceWorker.register(
+            '/firebase-messaging-sw.js?config=' + encodeURIComponent(JSON.stringify(config)),
+            {scope: '/messaging/'});
+          if (!registration.active) await new Promise((resolve, reject) => {
+            const worker = registration.installing || registration.waiting;
+            if (!worker) return reject(new Error('Push worker unavailable'));
+            worker.addEventListener('statechange', () => {
+              if (worker.state === 'activated') resolve();
+              if (worker.state === 'redundant') reject(new Error('Push worker failed'));
+            });
+          });
+          messaging.onMessage(payload => {
+            if (Notification.permission !== 'granted') return;
+            const notification = new Notification(payload.notification?.title || '비밀기지 알림', {
+              body: payload.notification?.body || '', data: payload.data,
+            });
+            notification.onclick = () => { notification.close(); open(payload.data || {}); window.focus(); };
+          });
+          return true;
+        },
+        permissionGranted() { return typeof Notification !== 'undefined' && Notification.permission === 'granted'; },
+        async requestPermission() { return await Notification.requestPermission() === 'granted'; },
+        async getToken() {
+          if (!messaging || Notification.permission !== 'granted') return null;
+          return messaging.getToken({vapidKey, serviceWorkerRegistration: registration});
+        },
+      };
+    })();
+  </script>
+  <script>
     (async function loadFreshFlutter() {
       try {
         if ('serviceWorker' in navigator) {
           const registrations = await navigator.serviceWorker.getRegistrations();
           // Keep the Firebase push worker (own scope); drop everything else.
           await Promise.all(registrations
-            .filter((registration) => !registration.scope.includes('firebase-cloud-messaging-push-scope'))
+            .filter((registration) => new URL(registration.scope).pathname !== '/messaging/')
             .map((registration) => registration.unregister()));
         }
         if ('caches' in window) {

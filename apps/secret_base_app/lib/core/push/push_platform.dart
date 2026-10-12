@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'local_notification_service.dart';
+import 'push_target.dart';
+import 'push_web_stub.dart' if (dart.library.js_interop) 'push_web.dart' as web;
 
 /// Thin seam over Firebase so [PushService] is testable and so a missing
 /// Firebase config can never break the app: [init] throws, the caller catches.
@@ -13,12 +15,13 @@ abstract class PushPlatform {
   Future<String?> getToken();
   Stream<String> get onTokenRefresh;
   Future<bool> requestPermission();
+  Future<bool> permissionGranted();
 
-  /// Emits the payload `screen` when the user taps a notification.
-  Stream<String> get onOpened;
+  /// Emits the full destination when the user taps a notification.
+  Stream<PushTarget> get onOpened;
 
-  /// `screen` of the notification that cold-started the app, if any.
-  Future<String?> initialScreen();
+  /// Destination of the notification that cold-started the app, if any.
+  Future<PushTarget?> initialTarget();
 }
 
 // Web needs explicit options; supply them via --dart-define (see docs/PUSH_SETUP.md).
@@ -32,41 +35,30 @@ const _webOptions = FirebaseOptions(
 const _vapidKey = String.fromEnvironment('FIREBASE_WEB_VAPID_KEY');
 
 class FirebasePushPlatform implements PushPlatform {
-  final _opened = StreamController<String>.broadcast();
-  final _local = FlutterLocalNotificationsPlugin();
+  final _opened = StreamController<PushTarget>.broadcast();
 
   @override
   String get platformName => kIsWeb ? 'web' : 'android';
 
   @override
-  Stream<String> get onOpened => _opened.stream;
+  Stream<PushTarget> get onOpened => _opened.stream;
 
   @override
-  Stream<String> get onTokenRefresh => FirebaseMessaging.instance.onTokenRefresh;
+  Stream<String> get onTokenRefresh =>
+      kIsWeb ? web.onTokenRefresh : FirebaseMessaging.instance.onTokenRefresh;
 
   @override
   Future<void> init() async {
     if (kIsWeb) {
-      if (_webOptions.apiKey.isEmpty || _vapidKey.isEmpty) {
-        throw StateError('Firebase web config not provided');
-      }
-      await Firebase.initializeApp(options: _webOptions);
+      await web.initialize(_webOptions, _vapidKey, _opened.add);
+      return;
     } else {
       await Firebase.initializeApp(); // throws without google-services.json
-      await _local.initialize(
-        settings: const InitializationSettings(
-          android: AndroidInitializationSettings('@mipmap/ic_launcher'),
-        ),
-        onDidReceiveNotificationResponse: (response) {
-          final screen = response.payload;
-          if (screen != null && screen.isNotEmpty) _opened.add(screen);
-        },
-      );
     }
 
     FirebaseMessaging.onMessageOpenedApp.listen((message) {
-      final screen = message.data['screen'];
-      if (screen is String && screen.isNotEmpty) _opened.add(screen);
+      final target = PushTarget.fromData(message.data);
+      if (target != null) _opened.add(target);
     });
     // FCM does not draw a system notification while the app is foregrounded.
     if (!kIsWeb) FirebaseMessaging.onMessage.listen(_showForeground);
@@ -75,38 +67,40 @@ class FirebasePushPlatform implements PushPlatform {
   Future<void> _showForeground(RemoteMessage message) async {
     final n = message.notification;
     if (n == null) return;
-    await _local.show(
+    final target = PushTarget.fromData(message.data);
+    if (target == null) return;
+    await LocalNotificationService.instance.show(
       id: message.hashCode,
-      title: n.title,
-      body: n.body,
-      payload: message.data['screen'] as String?,
-      notificationDetails: const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'secret_base_default',
-          '비밀기지 알림',
-          importance: Importance.high,
-          priority: Priority.high,
-        ),
-      ),
+      title: n.title ?? '비밀기지 알림',
+      body: n.body ?? '',
+      target: target,
     );
   }
 
   @override
-  Future<String?> getToken() => FirebaseMessaging.instance.getToken(
-    vapidKey: kIsWeb ? _vapidKey : null,
-  );
+  Future<String?> getToken() =>
+      kIsWeb ? web.getToken() : FirebaseMessaging.instance.getToken();
+
+  @override
+  Future<bool> permissionGranted() async {
+    if (kIsWeb) return web.permissionGranted();
+    final settings = await FirebaseMessaging.instance.getNotificationSettings();
+    return settings.authorizationStatus == AuthorizationStatus.authorized ||
+        settings.authorizationStatus == AuthorizationStatus.provisional;
+  }
 
   @override
   Future<bool> requestPermission() async {
+    if (kIsWeb) return web.requestPermission();
     final settings = await FirebaseMessaging.instance.requestPermission();
     return settings.authorizationStatus == AuthorizationStatus.authorized ||
         settings.authorizationStatus == AuthorizationStatus.provisional;
   }
 
   @override
-  Future<String?> initialScreen() async {
+  Future<PushTarget?> initialTarget() async {
+    if (kIsWeb) return PushTarget.fromUri(Uri.base);
     final message = await FirebaseMessaging.instance.getInitialMessage();
-    final screen = message?.data['screen'];
-    return screen is String && screen.isNotEmpty ? screen : null;
+    return message == null ? null : PushTarget.fromData(message.data);
   }
 }

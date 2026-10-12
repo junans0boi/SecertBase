@@ -1,27 +1,46 @@
-// Web push service worker. The Firebase JS SDK registers this file under its own
-// scope (/firebase-cloud-messaging-push-scope), separate from the app scope, so
-// index.html's cache-clearing cleanup must skip it (see index.html).
-//
-// TODO(human): replace the placeholders below with the Firebase web app config
-// (same values as the FIREBASE_WEB_* dart-defines). See docs/PUSH_SETUP.md.
-importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
-
-const firebaseConfig = {
-  apiKey: '__FIREBASE_WEB_API_KEY__',
-  appId: '__FIREBASE_WEB_APP_ID__',
-  messagingSenderId: '__FIREBASE_MESSAGING_SENDER_ID__',
-  projectId: '__FIREBASE_PROJECT_ID__',
-};
-
-// Stay inert until configured.
-if (!firebaseConfig.apiKey.startsWith('__')) {
-  firebase.initializeApp(firebaseConfig);
-  // Messages with a `notification` block are displayed by the SDK automatically.
-  firebase.messaging();
-}
-
+// Install the click handler BEFORE Firebase, which otherwise consumes clicks.
 self.addEventListener('notificationclick', (event) => {
+  event.stopImmediatePropagation();
   event.notification.close();
-  event.waitUntil(self.clients.openWindow('/'));
+  const data = event.notification.data || {};
+  const payload = data.FCM_MSG?.data || data;
+  const target = {};
+  for (const key of ['screen', 'post_id', 'game_type', 'room_code', 'draft_id']) {
+    if (payload[key] != null) target[key] = String(payload[key]);
+  }
+  event.waitUntil((async () => {
+    const clients = await self.clients.matchAll({type: 'window', includeUncontrolled: true});
+    const app = clients.find(client => {
+      const url = new URL(client.url);
+      return url.origin === self.location.origin && ['/', '/index.html'].includes(url.pathname);
+    });
+    if (app) {
+      app.postMessage({type: 'secret-base-push', target});
+      await app.focus();
+    } else {
+      const url = new URL('/', self.location.origin);
+      for (const [key, value] of Object.entries(target)) url.searchParams.set(key, value);
+      await self.clients.openWindow(url.href);
+    }
+  })());
 });
+
+// The page registers /messaging/ with the public build/runtime Firebase config.
+// No source edits, placeholder credentials, or Firebase activity when missing.
+let firebaseConfig;
+try {
+  firebaseConfig = JSON.parse(new URLSearchParams(self.location.search).get('config') || 'null');
+} catch (_) { firebaseConfig = null; }
+if (firebaseConfig && ['apiKey', 'appId', 'messagingSenderId', 'projectId']
+    .every(key => typeof firebaseConfig[key] === 'string' && firebaseConfig[key].length > 0)) {
+  importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
+  importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
+  firebase.initializeApp(firebaseConfig);
+  firebase.messaging().onBackgroundMessage(payload => {
+    // Firebase displays notification payloads. Only data-only messages need this.
+    if (payload.notification || !payload.data?.title) return;
+    return self.registration.showNotification(payload.data.title, {
+      body: payload.data.body || '', data: payload.data,
+    });
+  });
+}

@@ -25,8 +25,9 @@ class PushTarget {
       'today_loop',
       'game_invite',
       'moment_draft',
-    ].contains(screen))
+    ].contains(screen)) {
       return null;
+    }
     String? text(String key) {
       final value = data[key];
       return value is String && value.isNotEmpty ? value : null;
@@ -57,10 +58,10 @@ class PushTarget {
 
   Map<String, Object> toData() => {
     'screen': screen,
-    if (postId != null) 'post_id': postId!,
-    if (gameType != null) 'game_type': gameType!,
-    if (roomCode != null) 'room_code': roomCode!,
-    if (draftId != null) 'draft_id': draftId!,
+    'post_id': ?postId,
+    'game_type': ?gameType,
+    'room_code': ?roomCode,
+    'draft_id': ?draftId,
   };
   String toPayload() => jsonEncode(toData());
 }
