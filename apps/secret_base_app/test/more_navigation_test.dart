@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:secret_base_app/core/support_contact.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:secret_base_app/screens/home_shell.dart';
 import 'package:secret_base_app/screens/relationship/relationship_understanding_screen.dart';
 import 'package:secret_base_app/screens/secret_base/secret_base_screen.dart';
@@ -135,5 +136,20 @@ void main() {
     await tester.pump();
     expect(copied, kSupportEmail);
     expect(find.text('이메일 주소를 복사했어요.'), findsOneWidget);
+  });
+
+  testWidgets('more shows app version and build at the bottom', (tester) async {
+    PackageInfo.setMockInitialValues(
+      appName: 'Secret Base',
+      packageName: 'app.secretbase',
+      version: '1.2.3',
+      buildNumber: '45',
+      buildSignature: '',
+    );
+    await tester.pumpWidget(
+      const MaterialApp(home: Scaffold(body: SettingsScreen())),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('버전 1.2.3 (빌드 45)'), findsOneWidget);
   });
 }

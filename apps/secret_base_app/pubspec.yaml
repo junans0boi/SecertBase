@@ -48,6 +48,7 @@ dependencies:
   geolocator: ^14.0.2
   geocoding: ^4.0.0
   exif: ^3.3.0
+  package_info_plus: ^9.0.1
 
 dev_dependencies:
   flutter_test:

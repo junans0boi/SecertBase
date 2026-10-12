@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/app_theme.dart';
 import '../../core/main_design.dart';
@@ -198,12 +199,33 @@ class _MoreOverview extends StatelessWidget {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 24),
+                  const Center(child: _AppVersion()),
                 ],
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _AppVersion extends StatelessWidget {
+  const _AppVersion();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<PackageInfo>(
+      future: PackageInfo.fromPlatform(),
+      builder: (context, snap) {
+        final info = snap.data;
+        if (info == null) return const SizedBox.shrink(); // 실패해도 화면 유지
+        return Text(
+          '버전 ${info.version} (빌드 ${info.buildNumber})',
+          style: mainBody(size: 11, color: kMainMuted),
+        );
+      },
     );
   }
 }
