@@ -124,10 +124,7 @@ export function createMomentLoopRepository({
                         tm.business_date AS today_business_date,
                         tm.revealed_at AS today_revealed_at,
                         viewer_tm.id AS viewer_today_moment_id,
-                        (SELECT JSON_ARRAYAGG(JSON_OBJECT('user_id', r.user_id, 'emoji', r.emoji))
-                         FROM setlog_reactions r
-                         WHERE p.session_id IS NOT NULL AND r.session_id = p.session_id AND r.couple_id = p.couple_id
-                        ) AS session_reactions
+                        sr.session_reactions
                  FROM setlog_posts p
                  LEFT JOIN Users u ON p.user_id = u.UserId
                  LEFT JOIN map_pins mp ON mp.id = p.map_pin_id
@@ -136,6 +133,12 @@ export function createMomentLoopRepository({
                    ON viewer_tm.couple_id = tm.couple_id
                   AND viewer_tm.business_date = tm.business_date
                   AND viewer_tm.user_id = ?
+                 LEFT JOIN (
+                   SELECT session_id, couple_id,
+                          JSON_ARRAYAGG(JSON_OBJECT('user_id', user_id, 'emoji', emoji)) AS session_reactions
+                   FROM setlog_reactions
+                   GROUP BY session_id, couple_id
+                 ) sr ON p.session_id IS NOT NULL AND sr.session_id = p.session_id AND sr.couple_id = p.couple_id
                  WHERE p.couple_id = ?`;
       const params = [viewerUserId, coupleId];
 

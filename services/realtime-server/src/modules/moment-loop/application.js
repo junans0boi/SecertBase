@@ -65,9 +65,6 @@ export function MomentLoopService({
     const id = parseMomentId(value, 'invalid_moment_id');
     const post = await repository.findMoment(id);
     if (!post) throw new MomentLoopError(404, 'moment_not_found');
-    if (Number(post.user_id) !== scope.userId) {
-      throw new MomentLoopError(403, 'moment_author_required');
-    }
     if (Number(post.couple_id) !== scope.coupleId) {
       throw new MomentLoopError(403, 'active_couple_required');
     }

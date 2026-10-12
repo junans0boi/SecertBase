@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
+import 'package:video_thumbnail/video_thumbnail.dart';
 
 import '../../core/auth_service.dart';
 import '../../core/http/api_client.dart';
@@ -20,6 +21,66 @@ import '../../features/moment_loop/domain/moment_edit.dart';
 import '../../features/moment_loop/domain/photo_date.dart';
 import '../../features/moment_loop/presentation/moment_loop_state_view.dart';
 import 'map_screen.dart';
+
+// ── Video thumbnail cache ─────────────────────────────────────────────────────
+final _videoThumbCache = <String, Uint8List?>{};
+
+class _VideoThumb extends StatefulWidget {
+  final String url;
+  final double iconSize;
+  final Widget fallback;
+  const _VideoThumb({required this.url, required this.iconSize, required this.fallback});
+  @override
+  State<_VideoThumb> createState() => _VideoThumbState();
+}
+
+class _VideoThumbState extends State<_VideoThumb> {
+  late Future<Uint8List?> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  Future<Uint8List?> _load() async {
+    if (_videoThumbCache.containsKey(widget.url)) return _videoThumbCache[widget.url];
+    final bytes = await VideoThumbnail.thumbnailData(
+      video: widget.url,
+      imageFormat: ImageFormat.JPEG,
+      maxWidth: 400,
+      quality: 60,
+    );
+    _videoThumbCache[widget.url] = bytes;
+    return bytes;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Uint8List?>(
+      future: _future,
+      builder: (_, snap) {
+        final bytes = snap.data;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            if (bytes != null)
+              Image.memory(bytes, fit: BoxFit.cover)
+            else
+              Container(color: const Color(0xFF1A1A2E)),
+            Center(
+              child: Icon(
+                Icons.play_circle_rounded,
+                color: Colors.white70,
+                size: widget.iconSize,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -836,15 +897,10 @@ class _HighlightStrip extends StatelessWidget {
                                         _StoryFallback(isMine: isMine),
                                   )
                                 : hasMedia && isVideo
-                                ? Container(
-                                    color: const Color(0xFF1A1A2E),
-                                    child: const Center(
-                                      child: Icon(
-                                        Icons.play_arrow_rounded,
-                                        color: Colors.white54,
-                                        size: 22,
-                                      ),
-                                    ),
+                                ? _VideoThumb(
+                                    url: _mediaUrl(auth.baseUrl, mediaUrl),
+                                    iconSize: 22,
+                                    fallback: _StoryFallback(isMine: isMine),
                                   )
                                 : _StoryFallback(isMine: isMine),
                           ),
@@ -1763,16 +1819,13 @@ class _MomentThumb extends StatelessWidget {
             fit: BoxFit.cover,
             errorBuilder: (_, _, _) => fallback,
           )
-        else if (hasMedia && isVideo) ...[
-          Container(color: const Color(0xFF1A1A2E)),
-          Center(
-            child: Icon(
-              Icons.play_circle_rounded,
-              color: Colors.white54,
-              size: iconSize + 6,
-            ),
-          ),
-        ] else
+        else if (hasMedia && isVideo)
+          _VideoThumb(
+            url: _mediaUrl(auth.baseUrl, mediaUrl),
+            iconSize: iconSize + 6,
+            fallback: fallback,
+          )
+        else
           fallback,
         if (group.length > 1)
           Positioned(
@@ -2169,8 +2222,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
             : null,
         centerTitle: true,
         actions: [
-          if (isMine)
-            PopupMenuButton<String>(
+          PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
               onSelected: (value) async {
                 final nav = Navigator.of(context);
@@ -2200,11 +2252,12 @@ class _PostDetailPageState extends State<_PostDetailPage> {
                   child: const Text('오늘의 순간 선택 해제'),
                 ),
                 const PopupMenuItem(value: 'edit', child: Text('수정')),
-                PopupMenuItem(
-                  value: 'delete',
-                  enabled: post['media_edit_locked'] != true,
-                  child: const Text('삭제'),
-                ),
+                if (isMine)
+                  PopupMenuItem(
+                    value: 'delete',
+                    enabled: post['media_edit_locked'] != true,
+                    child: const Text('삭제'),
+                  ),
               ],
             ),
         ],
