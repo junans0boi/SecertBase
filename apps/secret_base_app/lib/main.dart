@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'core/push/push_service.dart';
 import 'core/push/local_notification_service.dart';
+import 'features/moment_loop/application/upload_outbox.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/semantics.dart';
 import 'core/app_theme.dart';
@@ -23,6 +24,8 @@ Future<void> main() async {
   await auth.init();
   await YutAudio.instance.loadSettings();
   await LocalNotificationService.instance.start();
+  UploadOutbox.instance.failureNotifier =
+      LocalNotificationService.instance.showUploadFailure;
   // Guarded: without Firebase config push is silently disabled.
   auth.beforeLogout = PushService.instance.revoke;
   unawaited(PushService.instance.start());
@@ -57,6 +60,7 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
   final _navigatorKey = GlobalKey<NavigatorState>();
   bool _autoConnecting = false;
   bool _reunionNoticeScheduled = false;
+  String? _outboxIdentity;
 
   @override
   void initState() {
@@ -95,6 +99,18 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
         authToken: _auth.token,
       ),
     );
+    final userId = _auth.user?['UserId'] ?? _auth.user?['id'];
+    final roomCode = _auth.user?['RoomCode'];
+    final outboxIdentity =
+        _auth.token == null || userId == null || roomCode == null
+        ? null
+        : '$userId:$roomCode';
+    if (outboxIdentity != _outboxIdentity) {
+      _outboxIdentity = outboxIdentity;
+      if (outboxIdentity != null) {
+        unawaited(UploadOutbox.instance.resume());
+      }
+    }
     // If logged in and paired, but not connected to socket, try auto-connect
     if (_auth.token != null &&
         _auth.user?['PartnerCode'] != null &&

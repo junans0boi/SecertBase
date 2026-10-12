@@ -38,6 +38,10 @@ GET|PATCH /couple/info
 POST   /couple/reunion-notice/seen
 GET|POST /setlog
 PATCH|DELETE /setlog/:id
+PATCH   /setlog/session/:sessionId
+PATCH   /setlog/session/:sessionId/order
+POST|DELETE /device-token
+GET|PUT /notification-prefs
 GET    /retention/today
 POST   /retention/today/view
 PUT|DELETE /retention/today/moment
@@ -535,6 +539,10 @@ Response:
       "tags": "[\"date\"]",
       "taken_at": "2026-06-20",
       "captured_at": "2026-06-20T12:00:00.000Z",
+      "session_id": "upload-session-id",
+      "position": 0,
+      "today_moment": false,
+      "media_edit_locked": false,
       "UserName": "Jun"
     }
   ]
@@ -559,6 +567,9 @@ Fields:
 - `tags`: JSON array string, optional
 - `taken_at`: required `YYYY-MM-DD`
 - `captured_at`: optional timestamp
+- `session_id`: optional immutable upload-group id (generated when omitted)
+- `position`: optional non-negative position within the session
+- `client_request_id`: optional stable per-author idempotency key, max 64 characters. Replaying it returns the existing post with HTTP 200 and removes any newly uploaded duplicate file.
 - `media_type`: optional `text`, `image`, `video`
 - `map_pin_id`: optional Secret Map pin id. The pin must belong to the same user or couple scope.
 - `today_moment`: optional boolean. When true, `taken_at` must equal the current `Asia/Seoul` Business Date and MomentLoop creation plus Today Moment designation commit atomically.
@@ -571,6 +582,24 @@ Response:
   "post": {}
 }
 ```
+
+New posts return HTTP 201. Idempotent replays return HTTP 200 with the same response shape.
+
+### PATCH `/setlog/session/:sessionId`
+
+Updates `caption`, `taken_at`, `tags`, and/or `map_pin_id` for every post in the authenticated author's session. `session_id` cannot be changed. The update is atomic and requires at least one recognized field. Changing the date clears a pending Today Moment designation for a different date; a revealed Today Moment date cannot be changed.
+
+### PATCH `/setlog/session/:sessionId/order`
+
+Body: `{ "order": [postId, ...] }`. The list must contain each post in the authenticated author's session exactly once. Positions are reassigned from zero in the supplied order. Partners cannot reorder another author's session.
+
+Once a session contains a revealed Today Moment, adding or removing its media is rejected. Text and metadata remain editable subject to the revealed-date rule.
+
+### Device notifications
+
+`POST /device-token` accepts `{ "token": "…", "platform": "android|ios|web", "appVersion": "…" }`; registering an existing token transfers it to the authenticated account. `DELETE /device-token` revokes only the caller's matching token. Both require an authenticated JWT.
+
+`GET /notification-prefs` returns the caller's service-notification settings. `PUT /notification-prefs` accepts a partial object containing any of `partner_moment`, `today_loop`, `game_invite`, `quiet_hours_enabled`, `quiet_start`, `quiet_end`, and `reveal_hour`. Quiet-hour times use `HH:MM` in Korea Standard Time; omitted fields retain their current values. Push payloads contain destination identifiers, not captions or location text.
 
 ### DELETE `/setlog/:id`
 

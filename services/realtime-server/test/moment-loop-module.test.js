@@ -41,6 +41,8 @@ const fakeRepository = (overrides = {}) => ({
   toggleReaction: async () => [],
   findMoment: async () => ({ id: 10, user_id: 1, couple_id: 7 }),
   updateMoment: async () => ({ id: 10 }),
+  isRevealedMedia: async () => false,
+  isSessionMediaRevealed: async () => false,
   deleteMoment: async () => '/uploads/moment.jpg',
   readToday: async () => ({ rows: [], viewedAt: null }),
   markTodayViewed: async () => null,
@@ -84,7 +86,14 @@ test('MomentLoop feed is scoped to the actor active couple', async () => {
   const posts = await service.listFeed(actor(2), '2026-07');
 
   assert.deepEqual(feedArgs, { coupleId: 7, viewerUserId: 2, month: '2026-07' });
-  assert.deepEqual(posts, [{ id: 1, user_id: 1, couple_id: 7 }]);
+  assert.deepEqual(posts, [{
+    id: 1,
+    user_id: 1,
+    couple_id: 7,
+    taken_at: null,
+    today_moment: false,
+    media_edit_locked: false,
+  }]);
 });
 
 test('MomentLoop partner cannot edit or delete the author moment', async () => {

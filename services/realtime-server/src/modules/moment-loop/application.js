@@ -1,9 +1,15 @@
+import { randomUUID } from 'node:crypto';
 import { businessDate } from '../../business-date.js';
 import {
   MomentLoopError,
   momentLoopPolicy,
   parseJsonArray,
   parseMomentId,
+  parseMomentPosition,
+  parseClientRequestId,
+  parseMomentSession,
+  parseMomentDate,
+  dateOnly,
   resolveMomentScope,
   shiftDate,
   serializeTodayMomentRow,
@@ -76,30 +82,61 @@ export function MomentLoopService({
         viewerUserId: scope.userId,
         month,
       });
-      return posts.map((post) => policy.maskLockedTodayMoment({
-        post,
-        viewerUserId: scope.userId,
-      }));
+      return posts.map((source) => {
+        const post = policy.maskLockedTodayMoment({
+          post: source,
+          viewerUserId: scope.userId,
+        });
+        const visible = !post.today_locked;
+        return {
+          ...post,
+          taken_at: dateOnly(post.taken_at),
+          today_moment: visible && Boolean(source.today_business_date),
+          media_edit_locked: visible && Boolean(source.today_revealed_at && source.today_business_date),
+        };
+      });
     },
 
     async createMoment(actor, fields = {}, file = null) {
       let keepUpload = false;
       try {
+        const scope = await scopeFor(actor);
+        const clientRequestId = parseClientRequestId(fields.client_request_id);
+        const replay = async () => {
+          if (!clientRequestId) return null;
+          const post = await repository.findByClientRequest({ userId: scope.userId, clientRequestId });
+          if (post && Number(post.couple_id) !== scope.coupleId) {
+            throw new MomentLoopError(409, 'client_request_scope_mismatch');
+          }
+          return post ? { post, created: false } : null;
+        };
+        const existing = await replay();
+        if (existing) return existing;
         validateUploadedMedia(file);
 
         const takenAt = String(fields.taken_at ?? '').trim();
         if (!takenAt) throw new MomentLoopError(400, 'missing_fields');
+        parseMomentDate(takenAt);
+        const position = parseMomentPosition(fields.position);
+        const sessionId = parseMomentSession(fields.session_id) ?? randomUUID();
 
         const mediaTypeFromFile = file?.mimetype?.startsWith('video/') ? 'video' : 'image';
         const mediaType = file ? mediaTypeFromFile : (fields.media_type || 'text');
         if (!['text', 'image', 'video'].includes(mediaType)) {
           throw new MomentLoopError(400, 'invalid_media_type');
         }
+        if (!file && mediaType !== 'text') {
+          throw new MomentLoopError(400, 'media_file_required');
+        }
+        if (file && await repository.isSessionMediaRevealed({
+          coupleId: scope.coupleId, userId: scope.userId, sessionId,
+        })) {
+          throw new MomentLoopError(409, 'today_loop_media_locked');
+        }
         if (mediaType === 'text' && !fields.caption?.trim()) {
           throw new MomentLoopError(400, 'caption_required');
         }
 
-        const scope = await scopeFor(actor);
         const mapPinId = await resolveMapPin(repository, fields.map_pin_id, scope.coupleId);
         const designateAsToday = fields.today_moment === true || fields.today_moment === 'true';
         const today = now();
@@ -119,7 +156,9 @@ export function MomentLoopService({
           }
         }
         const userCode = await repository.getUserCode(scope.userId);
-        const created = await repository.createMoment({
+        let created;
+        try {
+          created = await repository.createMoment({
           coupleId: scope.coupleId,
           userId: scope.userId,
           userCode: userCode || scope.userCode,
@@ -130,15 +169,26 @@ export function MomentLoopService({
           tags: parseJsonArray(fields.tags),
           takenAt: takenAt,
           capturedAt: fields.captured_at || null,
-          sessionId: fields.session_id || null,
+          sessionId,
+          position,
+          clientRequestId,
           designateAsToday,
           todayDate: today,
           canReplace: policy.canReplaceTodayMoment,
-        });
+          });
+        } catch (error) {
+          // The unique key also resolves two concurrent retries after the failed
+          // transaction rolls back. Never turn another database error into success.
+          if (clientRequestId && error.code === 'ER_DUP_ENTRY') {
+            const racedReplay = await replay();
+            if (racedReplay) return racedReplay;
+          }
+          throw error;
+        }
         keepUpload = true;
         // Fire-and-forget: a push failure must never fail the post.
-        Promise.resolve(onMomentCreated?.(scope.userId)).catch(() => {});
-        return created;
+        Promise.resolve().then(() => onMomentCreated?.(scope.userId, created)).catch(() => {});
+        return { post: created, created: true };
       } finally {
         if (file && !keepUpload) {
           await media.remove(file).catch(() => {});
@@ -170,7 +220,12 @@ export function MomentLoopService({
       const hasMapPinId = Object.prototype.hasOwnProperty.call(fields, 'map_pin_id');
 
       if (caption !== null) changes.caption = caption;
-      if (takenAt !== null) changes.takenAt = takenAt;
+      if (takenAt !== null) {
+        changes.takenAt = parseMomentDate(takenAt);
+        if (await repository.isRevealedMedia({ id })) {
+          throw new MomentLoopError(409, 'today_loop_date_locked');
+        }
+      }
       if (hasTags) changes.tags = JSON.stringify(parseJsonArray(fields.tags));
       if (hasMapPinId) {
         changes.mapPinId = fields.map_pin_id ? await resolveMapPin(
@@ -187,8 +242,40 @@ export function MomentLoopService({
       return updated;
     },
 
+    async updateSession(actor, value, fields = {}) {
+      const scope = await scopeFor(actor);
+      const sessionId = parseMomentSession(value);
+      if (!sessionId || Object.prototype.hasOwnProperty.call(fields, 'session_id')) {
+        throw new MomentLoopError(400, 'session_id_immutable');
+      }
+      const changes = {};
+      if (typeof fields.caption === 'string') changes.caption = fields.caption.trim();
+      if (fields.taken_at !== undefined) changes.takenAt = parseMomentDate(fields.taken_at);
+      if (fields.tags !== undefined) changes.tags = JSON.stringify(parseJsonArray(fields.tags));
+      if (Object.prototype.hasOwnProperty.call(fields, 'map_pin_id')) {
+        changes.mapPinId = fields.map_pin_id ? await resolveMapPin(repository, fields.map_pin_id, scope.coupleId) : null;
+      }
+      if (!Object.keys(changes).length) throw new MomentLoopError(400, 'no_changes');
+      return repository.updateSession({ ...scope, sessionId, changes });
+    },
+
+    async reorderSession(actor, value, orderedIds) {
+      const scope = await scopeFor(actor);
+      const sessionId = parseMomentSession(value);
+      if (!sessionId) throw new MomentLoopError(400, 'invalid_session_id');
+      if (!Array.isArray(orderedIds) || orderedIds.some((id) => !Number.isInteger(Number(id)) || Number(id) <= 0)) {
+        throw new MomentLoopError(400, 'invalid_session_order');
+      }
+      const ids = orderedIds.map(Number);
+      if (new Set(ids).size !== ids.length) throw new MomentLoopError(400, 'invalid_session_order');
+      return repository.reorderSession({ ...scope, sessionId, orderedIds: ids });
+    },
+
     async deleteMoment(actor, value) {
-      const { id } = await mutationTarget(actor, value);
+      const { id, post } = await mutationTarget(actor, value);
+      if (post.media_type !== 'text' && await repository.isRevealedMedia({ id })) {
+        throw new MomentLoopError(409, 'today_loop_media_locked');
+      }
       const deletion = await repository.deleteMoment({ id });
       if (deletion === null || deletion?.deleted === false) {
         throw new MomentLoopError(404, 'moment_not_found');

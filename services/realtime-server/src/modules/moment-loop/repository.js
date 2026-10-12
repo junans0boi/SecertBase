@@ -109,6 +109,14 @@ export function createMomentLoopRepository({
       return result.rows[0]?.UserCode ?? null;
     },
 
+    async findByClientRequest({ userId, clientRequestId }) {
+      const result = await queryFn(
+        `${postWithOwnerSql} WHERE p.user_id = ? AND p.client_request_id = ? LIMIT 1`,
+        [userId, clientRequestId],
+      );
+      return result.rows[0] ?? null;
+    },
+
     async listFeed({ coupleId, viewerUserId, month }) {
       let sql = `SELECT p.*, u.Nickname, COALESCE(u.Nickname, u.UserName) AS UserName,
                         mp.place_name AS linked_place_name, mp.category AS linked_place_category,
@@ -161,15 +169,23 @@ export function createMomentLoopRepository({
       takenAt,
       capturedAt,
       sessionId,
+      position = 0,
+      clientRequestId = null,
       designateAsToday,
       todayDate,
       canReplace = canReplaceTodayMoment,
     }) {
       return transactionFn(async (connection) => {
+        const [active] = await connection.execute(
+          `SELECT CoupleId FROM Couples WHERE CoupleId = ? AND Status = 'active'
+           AND (User1Id = ? OR User2Id = ?) FOR UPDATE`,
+          [coupleId, userId, userId],
+        );
+        if (!active[0]) throw new MomentLoopError(409, 'active_couple_required');
         const [result] = await connection.execute(
           `INSERT INTO setlog_posts
-           (couple_id, user_id, map_pin_id, user_code, media_type, media_url, caption, tags, taken_at, captured_at, session_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, NOW()), ?)`,
+           (couple_id, user_id, map_pin_id, user_code, media_type, media_url, caption, tags, taken_at, captured_at, session_id, position, client_request_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, NOW()), ?, ?, ?)`,
           [
             coupleId,
             userId,
@@ -182,6 +198,8 @@ export function createMomentLoopRepository({
             takenAt,
             capturedAt || null,
             sessionId || null,
+            position,
+            clientRequestId,
           ],
         );
 
@@ -232,6 +250,26 @@ export function createMomentLoopRepository({
 
     findMoment,
 
+    async isRevealedMedia({ id }) {
+      const result = await queryFn(
+        `SELECT tm.revealed_at FROM today_moments tm
+         JOIN setlog_posts p ON p.id = tm.setlog_post_id
+         WHERE p.id = ? LIMIT 1`, [id],
+      );
+      return Boolean(result.rows[0]?.revealed_at);
+    },
+
+    async isSessionMediaRevealed({ coupleId, userId, sessionId }) {
+      const result = await queryFn(
+        `SELECT tm.revealed_at FROM today_moments tm
+         JOIN setlog_posts p ON p.id = tm.setlog_post_id
+         WHERE p.couple_id = ? AND p.user_id = ? AND p.session_id = ?
+           AND tm.revealed_at IS NOT NULL LIMIT 1`,
+        [coupleId, userId, sessionId],
+      );
+      return Boolean(result.rows[0]?.revealed_at);
+    },
+
     async updateMoment({ id, changes }) {
       const updates = [];
       const params = [];
@@ -253,6 +291,78 @@ export function createMomentLoopRepository({
         [...params, id],
       );
       return findMoment(id);
+    },
+
+    async updateSession({ coupleId, userId, sessionId, changes }) {
+      return transactionFn(async (connection) => {
+        const [posts] = await connection.execute(
+          `SELECT p.id, p.user_id, p.taken_at, tm.business_date, tm.revealed_at
+           FROM setlog_posts p
+           LEFT JOIN today_moments tm ON tm.setlog_post_id = p.id
+           WHERE p.couple_id = ? AND p.session_id = ?
+           ORDER BY p.id FOR UPDATE`,
+          [coupleId, sessionId],
+        );
+        const ownedPosts = posts.filter((post) => Number(post.user_id) === Number(userId));
+        if (!ownedPosts.length && posts.length) {
+          throw new MomentLoopError(403, 'moment_author_required');
+        }
+        if (!ownedPosts.length) throw new MomentLoopError(404, 'moment_session_not_found');
+        if (changes.takenAt && ownedPosts.some((post) => post.revealed_at)) {
+          throw new MomentLoopError(409, 'today_loop_date_locked');
+        }
+        const updates = [];
+        const params = [];
+        for (const [key, column] of [['caption', 'caption'], ['takenAt', 'taken_at'], ['tags', 'tags'], ['mapPinId', 'map_pin_id']]) {
+          if (!Object.prototype.hasOwnProperty.call(changes, key)) continue;
+          updates.push(`${column} = ?`);
+          params.push(changes[key]);
+        }
+        if (updates.length) {
+          await connection.execute(
+            `UPDATE setlog_posts SET ${updates.join(', ')} WHERE couple_id = ? AND user_id = ? AND session_id = ?`,
+            [...params, coupleId, userId, sessionId],
+          );
+        }
+        if (changes.takenAt) {
+          await connection.execute(
+            `DELETE tm FROM today_moments tm
+             JOIN setlog_posts p ON p.id = tm.setlog_post_id
+             WHERE p.couple_id = ? AND p.user_id = ? AND p.session_id = ?
+               AND tm.revealed_at IS NULL AND tm.business_date <> ?`,
+            [coupleId, userId, sessionId, changes.takenAt],
+          );
+        }
+        const ids = ownedPosts.map((post) => post.id);
+        const [updated] = await connection.execute(
+          `${postWithOwnerSql} WHERE p.id IN (${ids.map(() => '?').join(',')}) ORDER BY p.position, p.id`, ids,
+        );
+        return updated;
+      });
+    },
+
+    async reorderSession({ coupleId, userId, sessionId, orderedIds }) {
+      return transactionFn(async (connection) => {
+        const [posts] = await connection.execute(
+          `SELECT id, user_id FROM setlog_posts WHERE couple_id = ? AND session_id = ? ORDER BY id FOR UPDATE`,
+          [coupleId, sessionId],
+        );
+        const ownedPosts = posts.filter((post) => Number(post.user_id) === Number(userId));
+        if (!ownedPosts.length && posts.length) throw new MomentLoopError(403, 'moment_author_required');
+        if (!ownedPosts.length) throw new MomentLoopError(404, 'moment_session_not_found');
+        const expected = ownedPosts.map((post) => Number(post.id)).sort((a, b) => a - b);
+        if (!expected.length) throw new MomentLoopError(404, 'moment_session_not_found');
+        if (orderedIds.length !== expected.length || [...orderedIds].sort((a, b) => a - b).some((id, i) => id !== expected[i])) {
+          throw new MomentLoopError(400, 'invalid_session_order');
+        }
+        for (const [position, id] of orderedIds.entries()) {
+          await connection.execute('UPDATE setlog_posts SET position = ? WHERE id = ?', [position, id]);
+        }
+        const [updated] = await connection.execute(
+          `${postWithOwnerSql} WHERE p.id IN (${expected.map(() => '?').join(',')}) ORDER BY p.position, p.id`, expected,
+        );
+        return updated;
+      });
     },
 
     async deleteMoment({ id }) {

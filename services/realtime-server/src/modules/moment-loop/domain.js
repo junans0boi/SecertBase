@@ -139,3 +139,43 @@ export function parseMomentId(value, reason = 'invalid_post_id') {
   }
   return id;
 }
+
+export function parseMomentPosition(value) {
+  if (value === undefined || value === null || value === '') return 0;
+  if ((typeof value !== 'number' && typeof value !== 'string')
+      || (typeof value === 'string' && !/^\d+$/.test(value))) {
+    throw new MomentLoopError(400, 'invalid_position');
+  }
+  const position = Number(value);
+  if (!Number.isInteger(position) || position < 0 || position > 32767) {
+    throw new MomentLoopError(400, 'invalid_position');
+  }
+  return position;
+}
+
+export function parseClientRequestId(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string' || !value.trim() || value.length > 64) {
+    throw new MomentLoopError(400, 'invalid_client_request_id');
+  }
+  return value;
+}
+
+export function parseMomentSession(value) {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string' || !value.trim() || value.length > 64) {
+    throw new MomentLoopError(400, 'invalid_session_id');
+  }
+  return value;
+}
+
+export function parseMomentDate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new MomentLoopError(400, 'invalid_taken_at');
+  }
+  const date = new Date(`${value}T12:00:00Z`);
+  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
+    throw new MomentLoopError(400, 'invalid_taken_at');
+  }
+  return value;
+}

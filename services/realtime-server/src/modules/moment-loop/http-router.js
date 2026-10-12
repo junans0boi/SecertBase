@@ -117,13 +117,23 @@ export function createMomentLoopRouter({ service, uploadStore }) {
   }));
 
   router.post('/setlog', uploadRoute('POST /setlog', async (actor, req, res) => {
-    const post = await service.createMoment(actor, req.body, req.file);
-    return res.status(201).json({ ok: true, post });
+    const { post, created } = await service.createMoment(actor, req.body, req.file);
+    return res.status(created ? 201 : 200).json({ ok: true, post });
   }));
 
   router.post('/setlog/reaction', route('POST /setlog/reaction', async (actor, req, res) => {
     const reactions = await service.toggleReaction(actor, req.body);
     return res.json({ ok: true, reactions });
+  }));
+
+  router.patch('/setlog/session/:sessionId/order', route('PATCH /setlog/session/:sessionId/order', async (actor, req, res) => {
+    const posts = await service.reorderSession(actor, req.params.sessionId, req.body?.order);
+    return res.json({ ok: true, posts });
+  }));
+
+  router.patch('/setlog/session/:sessionId', route('PATCH /setlog/session/:sessionId', async (actor, req, res) => {
+    const posts = await service.updateSession(actor, req.params.sessionId, req.body);
+    return res.json({ ok: true, posts });
   }));
 
   router.patch('/setlog/:id', route('PATCH /setlog/:id', async (actor, req, res) => {

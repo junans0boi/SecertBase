@@ -52,6 +52,9 @@ const canonicalMigrations = [
   '0040_moment_loop_reactions.sql',
   '0041_user_deletion_tombstones.sql',
   '0042_map_pin_media_url.sql',
+  '0043_push_notifications.sql',
+  '0044_moment_loop_order_and_requests.sql',
+  '0045_notification_delivery_settings.sql',
 ];
 
 const runMigrationCli = (environment, command, extraArgs = [], extraEnv = {}) =>

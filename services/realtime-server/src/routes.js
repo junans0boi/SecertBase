@@ -479,7 +479,10 @@ const momentService = MomentLoopService({
   repository: momentRepository,
   policy: momentLoopPolicy,
   media: momentUploadStore,
-  onMomentCreated: (userId) => notifier.notifyPartner(userId, 'partner_moment'),
+  onMomentCreated: (userId, post) => notifier.notifyPartner(userId, 'partner_moment', {
+    post_id: post?.id,
+    session_id: post?.session_id,
+  }),
 });
 router.use(createNotificationRouter({ queryFn: query }));
 router.use(createMomentLoopRouter({

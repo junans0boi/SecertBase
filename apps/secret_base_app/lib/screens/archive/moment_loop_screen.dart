@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../core/auth_service.dart';
@@ -55,6 +56,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
   late final bool _ownsController;
   late final UploadOutbox _outbox;
   bool _openedInitialTarget = false;
+  bool _gridView = true;
   String? _storageError;
   late DateTime _weekStart;
   final Set<String> _seenSessionIds = {};
@@ -119,6 +121,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     _outbox = widget.outbox ?? UploadOutbox.instance;
     _outbox.addListener(_onControllerChanged);
     _outbox.feedRevision.addListener(_onFeedChanged);
+    unawaited(_loadViewMode());
     unawaited(_initializeOutbox());
     _loadPosts(initial: true);
   }
@@ -137,6 +140,29 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
 
   void _onControllerChanged() {
     if (mounted) setState(() {});
+  }
+
+  Future<void> _loadViewMode() async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      final gridView = preferences.getBool('moment_loop_grid_view') ?? true;
+      if (mounted && gridView != _gridView) {
+        setState(() => _gridView = gridView);
+      }
+    } catch (_) {
+      // The list remains usable if platform preferences are temporarily absent.
+    }
+  }
+
+  Future<void> _toggleViewMode() async {
+    final next = !_gridView;
+    setState(() => _gridView = next);
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setBool('moment_loop_grid_view', next);
+    } catch (_) {
+      // Keep the in-memory choice for this screen even if persistence fails.
+    }
   }
 
   void _onFeedChanged() {
@@ -630,10 +656,26 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
             ),
 
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              child: Text(
-                _isCurrentWeek ? '이번 주의 순간' : '선택한 주의 순간',
-                style: mainTitle(size: 20, color: kMainInk),
+              padding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _isCurrentWeek ? '이번 주의 순간' : '선택한 주의 순간',
+                      style: mainTitle(size: 20, color: kMainInk),
+                    ),
+                  ),
+                  IconButton(
+                    key: const Key('moment_view_toggle'),
+                    tooltip: _gridView ? '목록으로 보기' : '격자로 보기',
+                    onPressed: _toggleViewMode,
+                    icon: Icon(
+                      _gridView
+                          ? Icons.view_list_rounded
+                          : Icons.grid_view_rounded,
+                    ),
+                  ),
+                ],
               ),
             ),
 
@@ -683,13 +725,21 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
       itemBuilder: (context, i) {
         final day = daysWithGroups[i];
         final dayGroups = byDate[_dateKey(day.toIso8601String())]!;
-        return _DaySection(
-          day: day,
-          groups: dayGroups,
-          auth: _auth,
-          myUserId: _userId,
-          onTap: _openDetail,
-        );
+        return _gridView
+            ? _DayGridSection(
+                day: day,
+                groups: dayGroups,
+                auth: _auth,
+                myUserId: _userId,
+                onTap: _openDetail,
+              )
+            : _DaySection(
+                day: day,
+                groups: dayGroups,
+                auth: _auth,
+                myUserId: _userId,
+                onTap: _openDetail,
+              );
       },
     );
   }
@@ -1404,6 +1454,160 @@ class _NavBtn extends StatelessWidget {
 }
 
 // ── Day Section ───────────────────────────────────────────────────────────────
+
+class _DayGridSection extends StatelessWidget {
+  final DateTime day;
+  final List<List<Map<String, dynamic>>> groups;
+  final AuthService auth;
+  final int? myUserId;
+  final ValueChanged<List<Map<String, dynamic>>> onTap;
+
+  const _DayGridSection({
+    required this.day,
+    required this.groups,
+    required this.auth,
+    required this.myUserId,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 10, 18, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 9),
+            child: Text(
+              '${day.month}월 ${day.day}일 · ${_weekdayLabel(day.weekday)}',
+              style: mainBody(color: kMainMuted, weight: FontWeight.w700),
+            ),
+          ),
+          GridView.builder(
+            key: const Key('moment_three_column_grid'),
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 7,
+              mainAxisSpacing: 7,
+            ),
+            itemCount: groups.length,
+            itemBuilder: (context, index) {
+              final group = groups[index];
+              final first = group.first;
+              final media = group.firstWhere(
+                (post) =>
+                    '${post['media_url'] ?? ''}'.trim().isNotEmpty &&
+                    post['media_type'] != 'text',
+                orElse: () => first,
+              );
+              final url = '${media['media_url'] ?? ''}'.trim();
+              final hasImage =
+                  url.isNotEmpty &&
+                  media['media_type'] == 'image' &&
+                  first['today_locked'] != true;
+              final isVideo =
+                  media['media_type'] == 'video' &&
+                  first['today_locked'] != true;
+              final isMine = '${first['user_id']}' == '$myUserId';
+              return Semantics(
+                button: true,
+                label: '순간 ${index + 1}, ${group.length}개 항목',
+                child: GestureDetector(
+                  onTap: () => onTap(group),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        if (hasImage)
+                          Image.network(
+                            _mediaUrl(auth.baseUrl, url),
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) =>
+                                _StoryFallback(isMine: isMine),
+                          )
+                        else
+                          ColoredBox(
+                            color: isMine ? kMainRoseSoft : kMainSkySoft,
+                            child: Center(
+                              child: Icon(
+                                first['today_locked'] == true
+                                    ? Icons.lock_outline_rounded
+                                    : isVideo
+                                    ? Icons.play_circle_outline_rounded
+                                    : Icons.notes_rounded,
+                                color: isMine ? kMainRose : kMainSky,
+                                size: 30,
+                              ),
+                            ),
+                          ),
+                        if (group.length > 1)
+                          Positioned(
+                            top: 6,
+                            right: 6,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withAlpha(150),
+                                borderRadius: BorderRadius.circular(99),
+                              ),
+                              child: Text(
+                                '${group.length}',
+                                style: mainBody(
+                                  color: Colors.white,
+                                  size: 11,
+                                  weight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ),
+                        if ((first['caption'] as String?)?.isNotEmpty == true)
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            child: Container(
+                              padding: const EdgeInsets.fromLTRB(7, 18, 7, 6),
+                              decoration: const BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [Colors.transparent, Colors.black54],
+                                ),
+                              ),
+                              child: Text(
+                                first['caption'] as String,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: mainBody(
+                                  color: Colors.white,
+                                  size: 10,
+                                  weight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _weekdayLabel(int weekday) =>
+    const ['월', '화', '수', '목', '금', '토', '일'][weekday - 1];
 
 class _DaySection extends StatelessWidget {
   final DateTime day;
@@ -2531,6 +2735,19 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
     return '$stem.jpg';
   }
 
+  void _reorderMedia(int oldIndex, int newIndex) {
+    if (_saving ||
+        oldIndex == newIndex ||
+        oldIndex < 0 ||
+        oldIndex >= _pickedMedia.length) {
+      return;
+    }
+    setState(() {
+      final item = _pickedMedia.removeAt(oldIndex);
+      _pickedMedia.insert(newIndex.clamp(0, _pickedMedia.length), item);
+    });
+  }
+
   static bool _isVideoFile(String name) {
     final ext = name.split('.').last.toLowerCase();
     return ['mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v', '3gp'].contains(ext);
@@ -2783,104 +3000,133 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
                         ),
                       ),
                     )
-                  : SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          ...List.generate(totalMedia, (i) {
-                            final media = _pickedMedia[i];
-                            return Padding(
-                              padding: EdgeInsets.only(
-                                right: 8,
-                                left: i == 0 ? 0 : 0,
-                              ),
-                              child: Stack(
-                                children: [
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(10),
-                                    child: SizedBox(
-                                      width: 72,
-                                      height: 72,
-                                      child: media.isVideo
-                                          ? Container(
-                                              color: const Color(0xFF1A1A2E),
-                                              child: const Center(
-                                                child: Icon(
-                                                  Icons.videocam_rounded,
-                                                  color: Colors.white54,
-                                                  size: 22,
-                                                ),
-                                              ),
-                                            )
-                                          : media.post != null
-                                          ? Image.network(
-                                              _mediaUrl(
-                                                AuthService().baseUrl,
-                                                media.post!.mediaUrl ?? '',
-                                              ),
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (_, _, _) =>
-                                                  const Icon(
-                                                    Icons.photo_outlined,
-                                                  ),
-                                            )
-                                          : Image.memory(
-                                              media.bytes,
-                                              fit: BoxFit.cover,
-                                            ),
-                                    ),
-                                  ),
-                                  if (!_mediaLocked)
-                                    Positioned(
-                                      top: 3,
-                                      right: 3,
-                                      child: GestureDetector(
-                                        onTap: _saving
-                                            ? null
-                                            : () => setState(
-                                                () => _pickedMedia.removeAt(i),
-                                              ),
-                                        child: Container(
-                                          width: 18,
-                                          height: 18,
-                                          decoration: BoxDecoration(
-                                            color: Colors.black54,
-                                            borderRadius: BorderRadius.circular(
-                                              9,
-                                            ),
+                  : Row(
+                      children: [
+                        Expanded(
+                          child: ReorderableListView.builder(
+                            key: const Key('moment_media_reorder_list'),
+                            scrollDirection: Axis.horizontal,
+                            buildDefaultDragHandles: false,
+                            itemExtent: 80,
+                            itemCount: totalMedia,
+                            onReorderItem: _mediaLocked
+                                ? (_, _) {}
+                                : _reorderMedia,
+                            itemBuilder: (context, i) {
+                              final media = _pickedMedia[i];
+                              return Semantics(
+                                key: ValueKey('media_${media.name}'),
+                                label: '미디어 ${media.name}',
+                                child: ReorderableDelayedDragStartListener(
+                                  key: ValueKey(media.key),
+                                  index: i,
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: Stack(
+                                      children: [
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            10,
                                           ),
-                                          child: const Icon(
-                                            Icons.close_rounded,
-                                            size: 12,
-                                            color: Colors.white,
+                                          child: SizedBox(
+                                            width: 72,
+                                            height: 72,
+                                            child: media.isVideo
+                                                ? Container(
+                                                    color: const Color(
+                                                      0xFF1A1A2E,
+                                                    ),
+                                                    child: const Center(
+                                                      child: Icon(
+                                                        Icons.videocam_rounded,
+                                                        color: Colors.white54,
+                                                        size: 22,
+                                                      ),
+                                                    ),
+                                                  )
+                                                : media.post != null
+                                                ? Image.network(
+                                                    _mediaUrl(
+                                                      AuthService().baseUrl,
+                                                      media.post!.mediaUrl ??
+                                                          '',
+                                                    ),
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder: (_, _, _) =>
+                                                        const Icon(
+                                                          Icons.photo_outlined,
+                                                        ),
+                                                  )
+                                                : Image.memory(
+                                                    media.bytes,
+                                                    fit: BoxFit.cover,
+                                                  ),
                                           ),
                                         ),
-                                      ),
+                                        if (!_mediaLocked)
+                                          Positioned(
+                                            top: 3,
+                                            right: 3,
+                                            child: GestureDetector(
+                                              onTap: _saving
+                                                  ? null
+                                                  : () => setState(
+                                                      () => _pickedMedia
+                                                          .removeAt(i),
+                                                    ),
+                                              child: Container(
+                                                width: 18,
+                                                height: 18,
+                                                decoration: BoxDecoration(
+                                                  color: Colors.black54,
+                                                  borderRadius:
+                                                      BorderRadius.circular(9),
+                                                ),
+                                                child: const Icon(
+                                                  Icons.close_rounded,
+                                                  size: 12,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        if (!_mediaLocked && totalMedia > 1)
+                                          const Positioned(
+                                            left: 3,
+                                            bottom: 3,
+                                            child: Icon(
+                                              Icons.drag_indicator_rounded,
+                                              color: Colors.white,
+                                              size: 16,
+                                            ),
+                                          ),
+                                      ],
                                     ),
-                                ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        if (canAddMore)
+                          GestureDetector(
+                            onTap: _showMediaPicker,
+                            child: Container(
+                              width: 72,
+                              height: 72,
+                              decoration: BoxDecoration(
+                                color: kMainPaperSoft,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: kMainLine),
                               ),
-                            );
-                          }),
-                          if (canAddMore)
-                            GestureDetector(
-                              onTap: _showMediaPicker,
-                              child: Container(
-                                width: 72,
-                                height: 72,
-                                decoration: BoxDecoration(
-                                  color: kMainPaperSoft,
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(color: kMainLine),
-                                ),
-                                child: const Icon(
-                                  Icons.add_rounded,
-                                  color: kMainSub,
-                                  size: 22,
-                                ),
+                              child: const Icon(
+                                Icons.add_rounded,
+                                color: kMainSub,
+                                size: 22,
                               ),
                             ),
-                        ],
-                      ),
+                          ),
+                      ],
                     ),
             ),
 

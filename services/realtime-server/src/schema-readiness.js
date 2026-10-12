@@ -8,11 +8,14 @@ const defaultQuery = async (...args) => {
 // migration, so a missing deployment fails at startup with an actionable error.
 export const REQUIRED_SCHEMA = Object.freeze({
   Users: ['IsDeleted', 'DeletedAt'],
-  setlog_posts: ['map_pin_id', 'session_id'],
+  setlog_posts: ['map_pin_id', 'session_id', 'position', 'client_request_id'],
   map_pins: ['media_url'],
   setlog_reactions: [],
   device_tokens: ['token', 'revoked_at'],
-  notification_prefs: ['partner_moment', 'today_loop', 'game_invite'],
+  notification_prefs: [
+    'partner_moment', 'today_loop', 'game_invite',
+    'quiet_hours_enabled', 'quiet_start', 'quiet_end', 'reveal_hour',
+  ],
 });
 
 export async function assertSchemaReady({
