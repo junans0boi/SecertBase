@@ -91,6 +91,9 @@ class UploadOutbox extends ChangeNotifier {
     for (final record in await store.load()) {
       _records[record['id'] as String] = record;
     }
+    for (final record in _records.values.where((r) => r['status'] == 'complete').toList()) {
+      await _cleanupCompleted(record);
+    }
     _changed();
   }();
 
@@ -541,6 +544,7 @@ class UploadOutbox extends ChangeNotifier {
         }
         record['status'] = 'complete';
         await _checkpoint(record);
+        await _cleanupCompleted(record);
       } catch (error) {
         record['status'] = 'failed';
         record['error'] = mapMomentLoopError(error).code;
@@ -559,6 +563,20 @@ class UploadOutbox extends ChangeNotifier {
   Future<void> _checkpoint(Map<String, dynamic> record) async {
     await store.save(record['id'] as String, record);
     _changed();
+  }
+
+  Future<void> _cleanupCompleted(Map<String, dynamic> record) async {
+    try {
+      for (final item in (record['items'] as List).cast<Map>()) {
+        if (item['name'] != null) await store.removeMedia(item['key'] as String);
+      }
+      final id = record['id'] as String;
+      await store.removeDraft(id);
+      _records.remove(id);
+      _changed();
+    } catch (_) {
+      // The durable completion checkpoint lets the next startup retry cleanup.
+    }
   }
 
   Future<void> _patch(String path, Map<String, dynamic> fields) async {

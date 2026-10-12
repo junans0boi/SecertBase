@@ -56,6 +56,14 @@ class DocumentOutboxStore implements OutboxStore {
   }
 
   @override
+  Future<void> removeDraft(String id) async {
+    _validateKey(id);
+    final root = await _root();
+    final file = File('${root.path}/$id.json');
+    if (await file.exists()) await file.delete();
+  }
+
+  @override
   Future<void> writeMedia(String key, Uint8List bytes) async {
     _validateKey(key);
     final root = await _root();
@@ -67,5 +75,13 @@ class DocumentOutboxStore implements OutboxStore {
     _validateKey(key);
     final root = await _root();
     return File('${root.path}/$key.media').readAsBytes();
+  }
+
+  @override
+  Future<void> removeMedia(String key) async {
+    _validateKey(key);
+    final root = await _root();
+    final file = File('${root.path}/$key.media');
+    if (await file.exists()) await file.delete();
   }
 }

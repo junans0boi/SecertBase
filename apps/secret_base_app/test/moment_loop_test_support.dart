@@ -24,9 +24,17 @@ class MemoryOutboxStore implements OutboxStore {
     records[id] = Map<String, dynamic>.from(jsonDecode(jsonEncode(record)));
   }
   @override
+  Future<void> removeDraft(String id) async {
+    records.remove(id);
+  }
+  @override
   Future<void> writeMedia(String key, Uint8List bytes) async {
     files[key] = Uint8List.fromList(bytes);
   }
   @override
   Future<Uint8List> readMedia(String key) async => Uint8List.fromList(files[key]!);
+  @override
+  Future<void> removeMedia(String key) async {
+    files.remove(key);
+  }
 }

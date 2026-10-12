@@ -9,8 +9,10 @@ import 'outbox_store_unsupported.dart'
 abstract class OutboxStore {
   Future<List<Map<String, dynamic>>> load();
   Future<void> save(String id, Map<String, dynamic> record);
+  Future<void> removeDraft(String id);
   Future<void> writeMedia(String key, Uint8List bytes);
   Future<Uint8List> readMedia(String key);
+  Future<void> removeMedia(String key);
 }
 
 OutboxStore createOutboxStore() => platform.createStore();

@@ -35,6 +35,14 @@ class IndexedDbOutboxStore implements OutboxStore {
   }
 
   @override
+  Future<void> removeDraft(String id) async {
+    final db = await _open();
+    final tx = db.transaction('drafts', idbModeReadWrite);
+    await tx.objectStore('drafts').delete(id);
+    await tx.completed;
+  }
+
+  @override
   Future<void> writeMedia(String key, Uint8List bytes) async {
     final db = await _open();
     final tx = db.transaction('media', idbModeReadWrite);
@@ -50,5 +58,13 @@ class IndexedDbOutboxStore implements OutboxStore {
     await tx.completed;
     if (value is! List) throw StateError('Missing persisted outbox media');
     return Uint8List.fromList(value.cast<int>());
+  }
+
+  @override
+  Future<void> removeMedia(String key) async {
+    final db = await _open();
+    final tx = db.transaction('media', idbModeReadWrite);
+    await tx.objectStore('media').delete(key);
+    await tx.completed;
   }
 }

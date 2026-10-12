@@ -363,6 +363,8 @@ void main() {
       );
       await recovered.resume();
       expect(recovered.drafts, isEmpty);
+      expect(store.records, isEmpty);
+      expect(store.files, isEmpty);
       expect(requests, hasLength(3));
       expect(requests.map((r) => r.fields['position']).toList(), [
         '0',
@@ -454,6 +456,8 @@ void main() {
       await running;
       expect(queue.drafts, isEmpty);
       expect(queue.feedRevision.value, 1);
+      expect(store.records, isEmpty);
+      expect(store.files, isEmpty);
     },
   );
 }
