@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 import { z } from "zod";
 import { assertSafeTestRuntime } from "./target-safety.js";
 
-dotenv.config();
+dotenv.config({ override: true });
 
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
