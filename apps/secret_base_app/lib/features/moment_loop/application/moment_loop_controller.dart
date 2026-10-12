@@ -163,6 +163,9 @@ class MomentLoopController extends ChangeNotifier {
                 mapPinId: moment.mapPinId,
                 linkedPlaceName: moment.linkedPlaceName,
                 todayLocked: moment.todayLocked,
+                position: moment.position,
+                mediaEditLocked: moment.mediaEditLocked,
+                todayMoment: moment.todayMoment,
                 reactions: reactions,
                 extra: moment.extra,
               )
@@ -230,6 +233,9 @@ class MomentLoopController extends ChangeNotifier {
         mapPinId: moment.mapPinId,
         linkedPlaceName: moment.linkedPlaceName,
         todayLocked: moment.todayLocked,
+        position: moment.position,
+        mediaEditLocked: moment.mediaEditLocked,
+        todayMoment: moment.todayMoment,
         reactions: reactions,
         extra: moment.extra,
       );

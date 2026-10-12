@@ -213,6 +213,10 @@ class HttpMomentLoopRepository implements MomentLoopRepository {
       mapPinId: _int(raw['map_pin_id']),
       linkedPlaceName: _string(raw['linked_place_name']),
       todayLocked: raw['today_locked'] == true || raw['today_locked'] == 1,
+      position: _int(raw['position']) ?? 0,
+      mediaEditLocked:
+          raw['media_edit_locked'] == true || raw['media_edit_locked'] == 1,
+      todayMoment: raw['today_moment'] == true || raw['today_moment'] == 1,
       reactions: _reactions(raw['session_reactions']),
       extra: raw,
     );

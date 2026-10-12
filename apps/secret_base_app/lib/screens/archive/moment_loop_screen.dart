@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -10,8 +11,11 @@ import '../../core/http/api_client.dart';
 import '../../core/main_design.dart';
 import '../../core/main_hero.dart';
 import '../../features/moment_loop/application/moment_loop_controller.dart';
+import '../../features/moment_loop/application/upload_outbox.dart';
 import '../../features/moment_loop/data/moment_loop_repository.dart';
+import '../../features/moment_loop/data/moment_image_compressor.dart';
 import '../../features/moment_loop/domain/moment.dart';
+import '../../features/moment_loop/domain/moment_edit.dart';
 import '../../features/moment_loop/domain/photo_date.dart';
 import '../../features/moment_loop/presentation/moment_loop_state_view.dart';
 import 'map_screen.dart';
@@ -23,6 +27,10 @@ class MomentLoopScreen extends StatefulWidget {
   final String? baseUrl;
   final int? userId;
   final MomentLoopController? controller;
+  final UploadOutbox? outbox;
+  final int? initialPostId;
+  final String? initialDraftId;
+  final Future<List<MomentMedia>> Function()? mediaPicker;
 
   const MomentLoopScreen({
     super.key,
@@ -30,6 +38,10 @@ class MomentLoopScreen extends StatefulWidget {
     this.baseUrl,
     this.userId,
     this.controller,
+    this.outbox,
+    this.initialPostId,
+    this.initialDraftId,
+    this.mediaPicker,
   });
 
   @override
@@ -41,12 +53,29 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
   late final ApiClient _apiClient;
   late final MomentLoopController _controller;
   late final bool _ownsController;
+  late final UploadOutbox _outbox;
+  bool _openedInitialTarget = false;
+  String? _storageError;
   late DateTime _weekStart;
   final Set<String> _seenSessionIds = {};
 
   List<Map<String, dynamic>> get _posts => _controller.state.moments
       .map((moment) => moment.toLegacyMap())
       .toList(growable: false);
+
+  List<String> _momentTags(Object? value) {
+    if (value is List) {
+      return value.map((tag) => '$tag').toList(growable: false);
+    }
+    if (value is String && value.isNotEmpty) {
+      return value
+          .split(',')
+          .map((tag) => tag.trim())
+          .where((tag) => tag.isNotEmpty)
+          .toList();
+    }
+    return const ['#momentloop'];
+  }
 
   String? get _error {
     final error = _controller.state.error;
@@ -87,12 +116,18 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
       _ownsController = true;
     }
     _controller.addListener(_onControllerChanged);
+    _outbox = widget.outbox ?? UploadOutbox.instance;
+    _outbox.addListener(_onControllerChanged);
+    _outbox.feedRevision.addListener(_onFeedChanged);
+    unawaited(_initializeOutbox());
     _loadPosts(initial: true);
   }
 
   @override
   void dispose() {
     _controller.removeListener(_onControllerChanged);
+    _outbox.removeListener(_onControllerChanged);
+    _outbox.feedRevision.removeListener(_onFeedChanged);
     if (_ownsController) {
       _controller.dispose();
       _apiClient.close();
@@ -102,6 +137,32 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
 
   void _onControllerChanged() {
     if (mounted) setState(() {});
+  }
+
+  void _onFeedChanged() {
+    if (mounted) unawaited(_loadPosts());
+  }
+
+  Future<void> _initializeOutbox() async {
+    try {
+      await _outbox.initialize();
+      if (mounted && widget.initialDraftId != null && !_openedInitialTarget) {
+        _openedInitialTarget = true;
+        await _openDraft(widget.initialDraftId!);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _storageError = '기기의 임시저장 공간을 열지 못했어요');
+    }
+  }
+
+  void _resumeUploads() {
+    unawaited(
+      _outbox.resume().catchError((Object _) {
+        if (mounted) {
+          setState(() => _storageError = '임시저장을 읽지 못했어요. 저장 공간을 확인해주세요');
+        }
+      }),
+    );
   }
 
   static DateTime _mondayOf(DateTime d) {
@@ -127,7 +188,14 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
       groupMap.putIfAbsent(key, () => []).add(post);
     }
     final groups = groupMap.values.map((g) {
-      g.sort((a, b) => (a['id'] as int? ?? 0).compareTo(b['id'] as int? ?? 0));
+      g.sort((a, b) {
+        final order = (a['position'] as int? ?? 0).compareTo(
+          b['position'] as int? ?? 0,
+        );
+        return order != 0
+            ? order
+            : (a['id'] as int? ?? 0).compareTo(b['id'] as int? ?? 0);
+      });
       return g;
     }).toList();
     groups.sort((a, b) {
@@ -149,66 +217,211 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     final map = <String, List<List<Map<String, dynamic>>>>{};
     for (final group in _groups) {
       final key = _dateKey(
-        group.first['captured_at'] ?? group.first['taken_at'],
+        group.first['taken_at'] ?? group.first['captured_at'],
       );
       map.putIfAbsent(key, () => []).add(group);
     }
     return map;
   }
 
-  Future<void> _loadPosts({bool initial = false}) =>
-      _controller.loadWeek(_weekStart);
+  Future<void> _loadPosts({bool initial = false}) async {
+    await _controller.loadWeek(_weekStart);
+    if (!mounted ||
+        _openedInitialTarget ||
+        widget.initialPostId == null ||
+        widget.initialDraftId != null) {
+      return;
+    }
+    if (_controller.state.status != MomentLoopStatus.ready) return;
+    _openedInitialTarget = true;
+    final groups = _groups
+        .where((g) => g.any((p) => p['id'] == widget.initialPostId))
+        .toList();
+    if (groups.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('이 순간을 찾을 수 없어요')));
+    } else {
+      _openDetail(groups.single, initialPostId: widget.initialPostId);
+    }
+  }
 
   Future<void> _startCreatePostFlow() async {
     final created = await Navigator.of(context).push<Object?>(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) =>
-            _CreateMomentPage(controller: _controller, initialMedia: const []),
+        builder: (_) => _CreateMomentPage(
+          controller: _controller,
+          outbox: _outbox,
+          initialMedia: const [],
+          mediaPicker: widget.mediaPicker,
+        ),
       ),
     );
     if (created is DateTime) {
       setState(() => _weekStart = _mondayOf(created));
+      _resumeUploads();
       await _loadPosts();
     }
   }
 
   Future<void> _editPost(Map<String, dynamic> post) async {
-    final controller = TextEditingController(text: '${post['caption'] ?? ''}');
-    final caption = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('순간 수정'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          minLines: 2,
-          maxLines: 5,
-          decoration: const InputDecoration(labelText: '남길 말'),
+    final selected = _controller.state.moments.firstWhere(
+      (p) => p.id == post['id'],
+    );
+    final original =
+        _controller.state.moments
+            .where((p) => p.sessionKey == selected.sessionKey)
+            .toList()
+          ..sort((a, b) => a.position.compareTo(b.position));
+    final first = original.first;
+    final fields = MomentDraft(
+      caption: first.caption ?? '',
+      takenAt: DateTime.tryParse(first.takenAt ?? '') ?? DateTime.now(),
+      capturedAt: DateTime.tryParse(first.capturedAt ?? '') ?? DateTime.now(),
+      sessionId: first.sessionId ?? '',
+      mapPinId: first.mapPinId,
+      tags: _momentTags(first.extra['tags']),
+    );
+    final result = await Navigator.of(context).push<DateTime>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => _CreateMomentPage(
+          controller: _controller,
+          outbox: _outbox,
+          initialMedia: const [],
+          mediaPicker: widget.mediaPicker,
+          edit: MomentEdit(
+            original: original,
+            fields: fields,
+            items: original.map(MomentEditItem.existing).toList(),
+          ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('취소'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('저장'),
-          ),
-        ],
       ),
     );
-    controller.dispose();
-    if (caption == null || caption.isEmpty) return;
-    try {
-      await _controller.updateCaption(int.parse('${post['id']}'), caption);
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('순간을 수정하지 못했어요')));
-      }
+    if (result != null && mounted) {
+      // Close the stale detail; the feed will refresh as the worker checkpoints.
+      Navigator.of(context).pop();
+      _resumeUploads();
     }
+  }
+
+  Future<void> _openDraft(String id) async {
+    final draft = await _outbox.readDraft(id);
+    final edit = await _outbox.readEdit(id);
+    if (!mounted) return;
+    if (draft == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('이 임시저장을 찾을 수 없어요')));
+      return;
+    }
+    if (_outbox.drafts.any(
+      (d) => d.id == id && d.status == UploadDraftStatus.uploading,
+    )) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('이 순간을 업로드하고 있어요')));
+      return;
+    }
+    final saved = await Navigator.of(context).push<DateTime>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => _CreateMomentPage(
+          controller: _controller,
+          outbox: _outbox,
+          draftId: id,
+          initialDraft: draft,
+          edit: edit,
+          initialMedia: const [],
+          mediaPicker: widget.mediaPicker,
+        ),
+      ),
+    );
+    if (saved != null && mounted) _resumeUploads();
+  }
+
+  void _showDrafts() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => AnimatedBuilder(
+        animation: _outbox,
+        builder: (_, _) => SafeArea(
+          child: SizedBox(
+            height: MediaQuery.sizeOf(context).height * .55,
+            child: Column(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('임시저장된 순간'),
+                ),
+                Expanded(
+                  child: ListView(
+                    children: _outbox.drafts
+                        .map(
+                          (draft) => ListTile(
+                            key: Key('moment_draft_${draft.id}'),
+                            title: Text(
+                              draft.caption,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              draft.status == UploadDraftStatus.failed
+                                  ? '업로드 실패 · ${draft.uploadedCount}/${draft.fileCount} 완료'
+                                  : '업로드 대기 · ${draft.uploadedCount}/${draft.fileCount} 완료',
+                            ),
+                            onTap: draft.status == UploadDraftStatus.uploading
+                                ? null
+                                : () {
+                                    Navigator.pop(sheetContext);
+                                    unawaited(_openDraft(draft.id));
+                                  },
+                            trailing:
+                                draft.status == UploadDraftStatus.uploading
+                                ? const SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : IconButton(
+                                    tooltip: '다시 업로드',
+                                    onPressed: _resumeUploads,
+                                    icon: const Icon(Icons.refresh),
+                                  ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openDetail(List<Map<String, dynamic>> group, {int? initialPostId}) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _PostDetailPage(
+          group: group,
+          auth: _auth,
+          myUserId: _userId,
+          initialPostId: initialPostId,
+          onEdit: _editPost,
+          onDelete: _deletePost,
+          onReactionToggle: (sessionId, emoji) =>
+              _controller.toggleReaction(sessionId: sessionId, emoji: emoji),
+          onDesignateToday: (id) => _controller.designateToday(id),
+          onRemoveTodayDesignation: _controller.removeTodayDesignation,
+        ),
+      ),
+    );
   }
 
   Future<void> _deletePost(Map<String, dynamic> post) async {
@@ -373,6 +586,19 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
             ),
 
             const SizedBox(height: 14),
+            if (_storageError != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Text(_storageError!),
+              ),
+            if (_outbox.drafts.isNotEmpty)
+              ListTile(
+                key: const Key('moment_drafts_entry'),
+                dense: true,
+                leading: const Icon(Icons.cloud_upload_outlined),
+                title: Text('임시저장 ${_outbox.drafts.length}개'),
+                onTap: _showDrafts,
+              ),
 
             // ── Story highlights ─────────────────────────────────────────────
             if (_posts.isNotEmpty)
@@ -462,24 +688,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
           groups: dayGroups,
           auth: _auth,
           myUserId: _userId,
-          onTap: (group) {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => _PostDetailPage(
-                  group: group,
-                  auth: _auth,
-                  myUserId: _userId,
-                  onEdit: _editPost,
-                  onDelete: _deletePost,
-                  onReactionToggle: (sessionId, emoji) => _controller
-                      .toggleReaction(sessionId: sessionId, emoji: emoji),
-                  onDesignateToday: (postId) =>
-                      _controller.designateToday(postId),
-                  onRemoveTodayDesignation: _controller.removeTodayDesignation,
-                ),
-              ),
-            );
-          },
+          onTap: _openDetail,
         );
       },
     );
@@ -1577,6 +1786,7 @@ class _PostDetailPage extends StatefulWidget {
   final List<Map<String, dynamic>> group;
   final AuthService auth;
   final int? myUserId;
+  final int? initialPostId;
   final Future<void> Function(Map<String, dynamic>) onEdit;
   final Future<void> Function(Map<String, dynamic>) onDelete;
   final Future<List<MomentReaction>> Function(String sessionId, String emoji)
@@ -1588,6 +1798,7 @@ class _PostDetailPage extends StatefulWidget {
     required this.group,
     required this.auth,
     required this.myUserId,
+    this.initialPostId,
     required this.onEdit,
     required this.onDelete,
     required this.onReactionToggle,
@@ -1616,7 +1827,11 @@ class _PostDetailPageState extends State<_PostDetailPage> {
   @override
   void initState() {
     super.initState();
-    _pageCtrl = PageController();
+    final target = widget.group.indexWhere(
+      (p) => p['id'] == widget.initialPostId,
+    );
+    _current = target < 0 ? 0 : target;
+    _pageCtrl = PageController(initialPage: _current);
     _loadReactions();
   }
 
@@ -1781,7 +1996,11 @@ class _PostDetailPageState extends State<_PostDetailPage> {
                   child: const Text('오늘의 순간 선택 해제'),
                 ),
                 const PopupMenuItem(value: 'edit', child: Text('수정')),
-                const PopupMenuItem(value: 'delete', child: Text('삭제')),
+                PopupMenuItem(
+                  value: 'delete',
+                  enabled: post['media_edit_locked'] != true,
+                  child: const Text('삭제'),
+                ),
               ],
             ),
         ],
@@ -2092,11 +2311,40 @@ class _PickedMomentMedia {
   final String name;
   final Uint8List bytes;
   final bool isVideo;
+  final Moment? post;
+  final String? clientRequestId;
+  final String key;
   _PickedMomentMedia({
     required this.name,
     required this.bytes,
     required this.isVideo,
-  });
+    this.post,
+    this.clientRequestId,
+  }) : key = post != null
+           ? 'post_${post.id}'
+           : clientRequestId ?? UploadOutbox.newId();
+
+  factory _PickedMomentMedia.fromMedia(MomentMedia media) => _PickedMomentMedia(
+    name: media.name,
+    bytes: media.bytes,
+    isVideo: media.isVideo,
+    clientRequestId: media.clientRequestId,
+  );
+  factory _PickedMomentMedia.fromPost(Moment post) => _PickedMomentMedia(
+    name: post.mediaUrl?.split('/').last ?? '기존 기록',
+    bytes: Uint8List(0),
+    isVideo: post.isVideo,
+    post: post,
+  );
+  MomentMedia toMedia() => MomentMedia(
+    name: name,
+    bytes: bytes,
+    isVideo: isVideo,
+    clientRequestId: clientRequestId,
+  );
+  MomentEditItem toEditItem() => post != null
+      ? MomentEditItem.existing(post!)
+      : MomentEditItem.added(toMedia());
 }
 
 class _SelectedMapLocation {
@@ -2120,10 +2368,20 @@ class _MapLocationPickerResult {
 
 class _CreateMomentPage extends StatefulWidget {
   final MomentLoopController controller;
+  final UploadOutbox outbox;
   final List<_PickedMomentMedia> initialMedia;
+  final MomentDraft? initialDraft;
+  final MomentEdit? edit;
+  final String? draftId;
+  final Future<List<MomentMedia>> Function()? mediaPicker;
   const _CreateMomentPage({
     required this.controller,
+    required this.outbox,
     required this.initialMedia,
+    this.initialDraft,
+    this.edit,
+    this.draftId,
+    this.mediaPicker,
   });
 
   @override
@@ -2144,11 +2402,40 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
   bool _dateTouched = false;
 
   static const _maxMedia = 10;
+  bool get _editing => widget.edit != null;
+  bool get _dateLocked =>
+      widget.edit?.original.any((p) => p.mediaEditLocked) == true;
+  bool get _mediaLocked =>
+      _dateLocked || (_editing && widget.edit!.fields.sessionId.isEmpty);
+  MomentDraft? get _initial => widget.initialDraft ?? widget.edit?.fields;
 
   @override
   void initState() {
     super.initState();
-    _pickedMedia = List<_PickedMomentMedia>.of(widget.initialMedia);
+    final initial = _initial;
+    _pickedMedia = widget.edit != null
+        ? widget.edit!.items
+              .map(
+                (item) => item.post != null
+                    ? _PickedMomentMedia.fromPost(item.post!)
+                    : _PickedMomentMedia.fromMedia(item.media!),
+              )
+              .toList()
+        : initial != null
+        ? initial.media.map(_PickedMomentMedia.fromMedia).toList()
+        : List<_PickedMomentMedia>.of(widget.initialMedia);
+    if (initial != null) {
+      _captionCtrl.text = initial.caption;
+      _momentDate = _dateOnly(initial.takenAt);
+      _dateTouched = true;
+      _todayMoment = initial.todayMoment;
+      if (initial.mapPinId != null) {
+        _selectedLocation = _SelectedMapLocation(
+          id: initial.mapPinId,
+          name: widget.edit?.original.first.linkedPlaceName ?? '연결된 위치',
+        );
+      }
+    }
   }
 
   @override
@@ -2158,9 +2445,30 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
   }
 
   Future<void> _showMediaPicker() async {
+    if (_mediaLocked || _saving) return;
     final remaining = _maxMedia - _pickedMedia.length;
     if (remaining <= 0) return;
     try {
+      if (widget.mediaPicker != null) {
+        final picked = await widget.mediaPicker!();
+        final normalized = <_PickedMomentMedia>[];
+        for (final item in picked.take(remaining)) {
+          normalized.add(
+            _PickedMomentMedia.fromMedia(
+              item.isVideo
+                  ? item
+                  : MomentMedia(
+                      name: _jpegName(item.name),
+                      bytes: compressMomentImage(item.bytes),
+                      isVideo: false,
+                      clientRequestId: item.clientRequestId,
+                    ),
+            ),
+          );
+        }
+        if (mounted) setState(() => _pickedMedia.addAll(normalized));
+        return;
+      }
       final files = await _imagePicker.pickMultipleMedia(limit: remaining);
       if (files.isEmpty) return;
       final media = <_PickedMomentMedia>[];
@@ -2182,8 +2490,13 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
           if (wantsSuggestion && suggested == null && media.isEmpty) {
             suggested = await exifCaptureDate(bytes);
           }
+          final compressed = compressMomentImage(bytes);
           media.add(
-            _PickedMomentMedia(name: file.name, bytes: bytes, isVideo: false),
+            _PickedMomentMedia(
+              name: _jpegName(file.name),
+              bytes: compressed,
+              isVideo: false,
+            ),
           );
         }
       }
@@ -2209,6 +2522,13 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
     } catch (_) {
       _toast('미디어를 불러오지 못했어요');
     }
+  }
+
+  String _jpegName(String name) {
+    final stem = name.contains('.')
+        ? name.substring(0, name.lastIndexOf('.'))
+        : name;
+    return '$stem.jpg';
   }
 
   static bool _isVideoFile(String name) {
@@ -2271,26 +2591,10 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
     if (location != null) setState(() => _selectedLocation = location);
   }
 
-  Future<int?> _ensureMapPinId({
-    required _SelectedMapLocation location,
-    required String caption,
-    required DateTime now,
-  }) async {
-    if (!location.isNew) return location.id;
-    return widget.controller.createMapPin(
-      MomentMapPinDraft(
-        name: location.name,
-        category: location.category,
-        visitDate: now,
-        memo: caption,
-      ),
-    );
-  }
-
   Future<void> _saveMoment() async {
     if (_saving) return;
     final caption = _captionCtrl.text.trim();
-    if (caption.isEmpty) {
+    if (caption.isEmpty && _pickedMedia.isEmpty) {
       _toast('오늘 남기고 싶은 장면을 적어주세요');
       return;
     }
@@ -2305,44 +2609,51 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
       now.second,
     );
     // All media in this upload share the same session_id
-    final sessionId = '${now.millisecondsSinceEpoch}';
+    final sessionId = _initial?.sessionId ?? UploadOutbox.newId();
 
     try {
-      final location = _selectedLocation;
-      final mapPinId = location == null
-          ? null
-          : await _ensureMapPinId(
-              location: location,
-              caption: caption,
-              now: momentAt,
-            );
-      if (location != null && mapPinId == null) {
-        _toast('비밀지도 위치를 연결하지 못했어요');
-        return;
-      }
-
-      await widget.controller.createMoment(
-        MomentDraft(
-          caption: caption,
-          takenAt: _momentDate,
-          capturedAt: momentAt,
-          sessionId: sessionId,
-          todayMoment: _todayMoment,
-          mapPinId: mapPinId,
-          media: _pickedMedia
-              .map(
-                (media) => MomentMedia(
-                  name: media.name,
-                  bytes: media.bytes,
-                  isVideo: media.isVideo,
-                ),
-              )
-              .toList(),
-        ),
+      final draft = MomentDraft(
+        caption: caption,
+        takenAt: _momentDate,
+        capturedAt: _editing ? _initial!.capturedAt : momentAt,
+        sessionId: sessionId,
+        todayMoment: !_editing && _todayMoment,
+        mapPinId: _selectedLocation?.id,
+        tags: _initial?.tags ?? const ['#momentloop'],
+        media: _pickedMedia
+            .where((media) => media.post == null)
+            .map((media) => media.toMedia())
+            .toList(),
       );
+      if (widget.draftId != null) {
+        await widget.outbox.replace(
+          widget.draftId!,
+          draft,
+          editItems: _editing
+              ? _pickedMedia.map((m) => m.toEditItem()).toList()
+              : null,
+        );
+      } else if (_editing) {
+        await widget.outbox.enqueueEdit(
+          MomentEdit(
+            original: widget.edit!.original,
+            fields: draft,
+            items: _pickedMedia.map((m) => m.toEditItem()).toList(),
+          ),
+        );
+      } else {
+        await widget.outbox.enqueue(draft);
+      }
       if (mounted) Navigator.pop(context, _momentDate);
+    } on MomentLoopException catch (error) {
+      _toast(switch (error.code) {
+        'today_loop_date_locked' => '공개된 오늘의 순간은 날짜를 바꿀 수 없어요',
+        'today_loop_locked' => '공개된 오늘의 순간은 사진을 추가·삭제할 수 없어요',
+        'draft_busy' => '이 순간을 업로드하고 있어요. 완료 후 수정해주세요',
+        _ => '임시저장하지 못했어요. 입력한 내용은 화면에 남아 있어요',
+      });
     } catch (_) {
-      _toast('네트워크 연결을 확인해주세요');
+      _toast('기기에 임시저장하지 못했어요. 저장 공간을 확인해주세요');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -2392,7 +2703,7 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
   @override
   Widget build(BuildContext context) {
     final totalMedia = _pickedMedia.length;
-    final canAddMore = totalMedia < _maxMedia;
+    final canAddMore = totalMedia < _maxMedia && !_mediaLocked && !_saving;
 
     return Scaffold(
       backgroundColor: kMainPaper,
@@ -2406,7 +2717,14 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
           color: kMainInk,
         ),
         centerTitle: true,
-        title: Text('새 순간', style: mainTitle(size: 24)),
+        title: Text(
+          _editing
+              ? '순간 수정'
+              : widget.draftId != null
+              ? '임시저장 수정'
+              : '새 순간',
+          style: mainTitle(size: 24),
+        ),
         actions: [
           TextButton(
             onPressed: _saving ? null : _saveMoment,
@@ -2417,7 +2735,7 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : Text(
-                    '공유',
+                    _editing || widget.draftId != null ? '저장' : '공유',
                     style: mainBody(
                       color: kMainRose,
                       weight: FontWeight.w900,
@@ -2494,36 +2812,51 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
                                                 ),
                                               ),
                                             )
+                                          : media.post != null
+                                          ? Image.network(
+                                              _mediaUrl(
+                                                AuthService().baseUrl,
+                                                media.post!.mediaUrl ?? '',
+                                              ),
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (_, _, _) =>
+                                                  const Icon(
+                                                    Icons.photo_outlined,
+                                                  ),
+                                            )
                                           : Image.memory(
                                               media.bytes,
                                               fit: BoxFit.cover,
                                             ),
                                     ),
                                   ),
-                                  Positioned(
-                                    top: 3,
-                                    right: 3,
-                                    child: GestureDetector(
-                                      onTap: () => setState(
-                                        () => _pickedMedia.removeAt(i),
-                                      ),
-                                      child: Container(
-                                        width: 18,
-                                        height: 18,
-                                        decoration: BoxDecoration(
-                                          color: Colors.black54,
-                                          borderRadius: BorderRadius.circular(
-                                            9,
+                                  if (!_mediaLocked)
+                                    Positioned(
+                                      top: 3,
+                                      right: 3,
+                                      child: GestureDetector(
+                                        onTap: _saving
+                                            ? null
+                                            : () => setState(
+                                                () => _pickedMedia.removeAt(i),
+                                              ),
+                                        child: Container(
+                                          width: 18,
+                                          height: 18,
+                                          decoration: BoxDecoration(
+                                            color: Colors.black54,
+                                            borderRadius: BorderRadius.circular(
+                                              9,
+                                            ),
                                           ),
-                                        ),
-                                        child: const Icon(
-                                          Icons.close_rounded,
-                                          size: 12,
-                                          color: Colors.white,
+                                          child: const Icon(
+                                            Icons.close_rounded,
+                                            size: 12,
+                                            color: Colors.white,
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
                                 ],
                               ),
                             );
@@ -2552,38 +2885,51 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
             ),
 
             const SizedBox(height: 16),
+            if (_dateLocked)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: Text(
+                  '공개된 오늘의 순간은 사진 추가·삭제와 날짜 변경이 잠겨 있어요. 글·위치는 수정할 수 있어요.',
+                ),
+              ),
+            if (_editing && !_dateLocked && _initial!.sessionId.isEmpty)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: Text('이전 형식의 기록은 글·날짜·위치를 수정할 수 있어요.'),
+              ),
 
             _MomentDateTile(
               key: const Key('moment_date_tile'),
               date: _momentDate,
-              onTap: _saving ? null : _pickMomentDate,
+              onTap: _saving || _dateLocked ? null : _pickMomentDate,
             ),
 
             const SizedBox(height: 8),
 
-            SwitchListTile.adaptive(
-              value: _todayMoment,
-              onChanged: _saving || !_isMomentToday
-                  ? null
-                  : (value) => setState(() {
-                      _todayMoment = value;
-                      if (!value) _useTodayPrompt = false;
-                    }),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-              // ON must be unmistakable: a pale track was read as "off".
-              activeTrackColor: kMainRose,
-              activeThumbColor: Colors.white,
-              title: Text(
-                '오늘의 순간으로 남기기',
-                style: mainBody(size: 15, weight: FontWeight.w900),
+            if (!_editing)
+              SwitchListTile.adaptive(
+                value: _todayMoment,
+                onChanged: _saving || !_isMomentToday
+                    ? null
+                    : (value) => setState(() {
+                        _todayMoment = value;
+                        if (!value) _useTodayPrompt = false;
+                      }),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                // ON must be unmistakable: a pale track was read as "off".
+                activeTrackColor: kMainRose,
+                activeThumbColor: Colors.white,
+                title: Text(
+                  '오늘의 순간으로 남기기',
+                  style: mainBody(size: 15, weight: FontWeight.w900),
+                ),
+                subtitle: Text(
+                  _isMomentToday
+                      ? '오늘의 루프에 사용할 기록으로 지정해요'
+                      : '오늘 날짜의 순간만 지정할 수 있어요',
+                  style: mainBody(size: 12, color: kMainMuted),
+                ),
               ),
-              subtitle: Text(
-                _isMomentToday
-                    ? '오늘의 루프에 사용할 기록으로 지정해요'
-                    : '오늘 날짜의 순간만 지정할 수 있어요',
-                style: mainBody(size: 12, color: kMainMuted),
-              ),
-            ),
 
             if (_todayMoment) ...[
               const SizedBox(height: 4),

@@ -1,12 +1,37 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:secret_base_app/screens/archive/moment_loop_screen.dart';
+import 'moment_loop_test_support.dart';
 
 void main() {
+  testWidgets('save closes the editor within 500ms while upload is pending', (tester) async {
+    final pending = Completer<http.Response>();
+    final api = MockClient((request) async {
+      if (request.method == 'POST') return pending.future;
+      return http.Response('{"ok":true,"posts":[],"pins":[]}', 200);
+    });
+    final queue = testOutbox(api);
+    await tester.pumpWidget(MaterialApp(home: MomentLoopScreen(
+      client: api, baseUrl: 'https://secretbase.example', userId: 7, outbox: queue,
+    )));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('moment_empty_create')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, '기록 보존');
+    await tester.tap(find.text('공유'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 499));
+    expect(find.text('새 순간'), findsNothing);
+    expect(queue.drafts.single.caption, '기록 보존');
+    pending.complete(http.Response('{"ok":true,"post":{"id":10,"user_id":7}}', 201));
+    await tester.pumpAndSettle();
+    expect(queue.drafts, isEmpty);
+  });
   testWidgets('empty MomentLoop explains the week and offers one clear CTA', (
     tester,
   ) async {
@@ -25,6 +50,7 @@ void main() {
           client: api,
           baseUrl: 'https://secretbase.example',
           userId: 7,
+          outbox: testOutbox(api),
         ),
       ),
     );
@@ -78,6 +104,7 @@ void todayMomentFlagTests() {
           client: api,
           baseUrl: 'https://secretbase.example',
           userId: 7,
+          outbox: testOutbox(api),
         ),
       ),
     );
@@ -154,6 +181,7 @@ void momentDateTests() {
           client: api,
           baseUrl: 'https://secretbase.example',
           userId: 7,
+          outbox: testOutbox(api),
         ),
       ),
     );

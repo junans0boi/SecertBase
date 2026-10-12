@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 
@@ -23,43 +25,53 @@ class HttpMediaUploadService implements MediaUploadService {
 
     for (var index = 0; index < mediaItems.length; index++) {
       final media = mediaItems[index];
-      if (media != null && media.bytes.length > maxFileBytes) {
-        throw const MomentLoopException('media_too_large');
-      }
-
-      final fields = <String, String>{
-        'caption': draft.caption,
-        'tags': '["#momentloop"]',
-        'taken_at': _dateOnly(draft.takenAt),
-        'captured_at': _mysqlDateTime(draft.capturedAt),
-        'session_id': draft.sessionId,
-        if (draft.todayMoment && index == 0) 'today_moment': 'true',
-        if (draft.mapPinId != null) 'map_pin_id': '${draft.mapPinId}',
-      };
-      final files = media == null
-          ? const <http.MultipartFile>[]
-          : [
-              http.MultipartFile.fromBytes(
-                'media',
-                media.bytes,
-                filename: media.name,
-                contentType: MediaType.parse(
-                  _mimeFor(media.name, media.isVideo),
-                ),
-              ),
-            ];
-
-      final body = await apiClient.sendMultipart(
-        '/api/setlog',
-        fields: fields,
-        files: files,
-      );
-      if (body is! Map || body['ok'] != true || body['post'] is! Map) {
-        throw const MomentLoopException('invalid_response');
-      }
-      uploaded.add(Map<String, dynamic>.from(body['post'] as Map));
+      uploaded.add(await uploadOne(draft, media: media, position: index));
     }
     return uploaded;
+  }
+
+  /// One acknowledged row at a time so the durable outbox can checkpoint it.
+  Future<Map<String, dynamic>> uploadOne(
+    MomentDraft draft, {
+    MomentMedia? media,
+    required int position,
+    String? clientRequestId,
+  }) async {
+    if (media != null && media.bytes.length > maxFileBytes) {
+      throw const MomentLoopException('media_too_large');
+    }
+
+    final fields = <String, String>{
+      'caption': draft.caption,
+      'tags': jsonEncode(draft.tags),
+      'taken_at': _dateOnly(draft.takenAt),
+      'captured_at': _mysqlDateTime(draft.capturedAt),
+      if (draft.sessionId.isNotEmpty) 'session_id': draft.sessionId,
+      'position': '$position',
+      'client_request_id': ?clientRequestId,
+      if (draft.todayMoment && position == 0) 'today_moment': 'true',
+      if (draft.mapPinId != null) 'map_pin_id': '${draft.mapPinId}',
+    };
+    final files = media == null
+        ? const <http.MultipartFile>[]
+        : [
+            http.MultipartFile.fromBytes(
+              'media',
+              media.bytes,
+              filename: media.name,
+              contentType: MediaType.parse(_mimeFor(media.name, media.isVideo)),
+            ),
+          ];
+
+    final body = await apiClient.sendMultipart(
+      '/api/setlog',
+      fields: fields,
+      files: files,
+    );
+    if (body is! Map || body['ok'] != true || body['post'] is! Map) {
+      throw const MomentLoopException('invalid_response');
+    }
+    return Map<String, dynamic>.from(body['post'] as Map);
   }
 
   String _mimeFor(String name, bool isVideo) {

@@ -28,6 +28,8 @@ void main() {
                 'caption': '잠긴 기록',
                 'session_id': 'session-7',
                 'today_locked': true,
+                'position': 3,
+                'media_edit_locked': true,
                 'session_reactions': '[{"user_id":1,"emoji":"❤️"}]',
               },
             ],
@@ -42,6 +44,8 @@ void main() {
       ).fetchFeed(DateTime(2026, 10, 5));
 
       expect(feed.single.todayLocked, isTrue);
+      expect(feed.single.toLegacyMap()['position'], 3);
+      expect(feed.single.toLegacyMap()['media_edit_locked'], isTrue);
       expect(feed.single.userName, '상대');
       expect(feed.single.reactions.single.emoji, '❤️');
     },
@@ -100,6 +104,7 @@ void main() {
       expect(captured.fields['taken_at'], '2026-10-08');
       expect(captured.fields['today_moment'], 'true');
       expect(captured.fields['map_pin_id'], '22');
+      expect(captured.fields['position'], '0');
       expect(captured.files.single.field, 'media');
       expect(captured.files.single.filename, 'photo.png');
     },

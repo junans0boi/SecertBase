@@ -13,6 +13,9 @@ class Moment {
   final int? mapPinId;
   final String? linkedPlaceName;
   final bool todayLocked;
+  final int position;
+  final bool mediaEditLocked;
+  final bool todayMoment;
   final List<MomentReaction> reactions;
   final Map<String, dynamic> extra;
 
@@ -29,6 +32,9 @@ class Moment {
     this.mapPinId,
     this.linkedPlaceName,
     this.todayLocked = false,
+    this.position = 0,
+    this.mediaEditLocked = false,
+    this.todayMoment = false,
     this.reactions = const [],
     this.extra = const {},
   });
@@ -58,6 +64,9 @@ class Moment {
     'map_pin_id': mapPinId,
     'linked_place_name': linkedPlaceName,
     'today_locked': todayLocked,
+    'position': position,
+    'media_edit_locked': mediaEditLocked,
+    'today_moment': todayMoment,
     'session_reactions': reactions
         .map((reaction) => reaction.toJson())
         .toList(),
@@ -77,11 +86,13 @@ class MomentMedia {
   final String name;
   final Uint8List bytes;
   final bool isVideo;
+  final String? clientRequestId;
 
   const MomentMedia({
     required this.name,
     required this.bytes,
     required this.isVideo,
+    this.clientRequestId,
   });
 }
 
@@ -93,6 +104,7 @@ class MomentDraft {
   final bool todayMoment;
   final int? mapPinId;
   final List<MomentMedia> media;
+  final List<String> tags;
 
   const MomentDraft({
     required this.caption,
@@ -102,6 +114,7 @@ class MomentDraft {
     this.todayMoment = false,
     this.mapPinId,
     this.media = const [],
+    this.tags = const ['#momentloop'],
   });
 
   MomentDraft copyWith({int? mapPinId}) => MomentDraft(
@@ -112,6 +125,7 @@ class MomentDraft {
     todayMoment: todayMoment,
     mapPinId: mapPinId ?? this.mapPinId,
     media: media,
+    tags: tags,
   );
 }
 
