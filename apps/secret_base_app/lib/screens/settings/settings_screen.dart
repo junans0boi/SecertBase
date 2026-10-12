@@ -8,6 +8,7 @@ import '../../core/main_design.dart';
 import '../../core/main_hero.dart';
 import '../../core/socket_service.dart';
 import '../../core/auth_service.dart';
+import '../../core/legal_urls.dart';
 import '../auth/auth_layout.dart';
 import '../relationship/relationship_understanding_screen.dart';
 import '../secret_base/secret_base_screen.dart';
@@ -529,6 +530,28 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
             Center(
               child: Column(
                 children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      for (final (label, url) in [
+                        ('개인정보 처리방침', kPrivacyUrl),
+                        ('이용약관', kTermsUrl),
+                      ])
+                        TextButton(
+                          onPressed: () => launchUrl(
+                            Uri.parse(url),
+                            mode: LaunchMode.externalApplication,
+                          ),
+                          child: Text(
+                            label,
+                            style: mainBody(
+                              size: 12,
+                              color: kMainMuted,
+                            ).copyWith(decoration: TextDecoration.underline),
+                          ),
+                        ),
+                    ],
+                  ),
                   Text(
                     '스테디투비비드 | 2026년 7월 설립',
                     style: mainBody(size: 11, color: kMainMuted),

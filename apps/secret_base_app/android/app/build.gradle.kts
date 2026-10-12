@@ -1,9 +1,37 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+// android/key.properties (gitignored), ticket env vars, or legacy RELEASE_* env vars.
+val keyProps = Properties().apply {
+    val f = rootProject.file("key.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+fun releaseProp(name: String): String? {
+    keyProps.getProperty(name)?.takeIf { it.isNotBlank() }?.let { return it }
+
+    val ticketEnvName = when (name) {
+        "storeFile" -> "KEYSTORE_PATH"
+        "storePassword" -> "KEYSTORE_PASSWORD"
+        "keyAlias" -> "KEY_ALIAS"
+        "keyPassword" -> "KEY_PASSWORD"
+        else -> null
+    }
+    ticketEnvName?.let { System.getenv(it)?.takeIf { value -> value.isNotBlank() } }
+        ?.let { return it }
+
+    val legacyEnvName = "RELEASE_" + name.replace(Regex("([A-Z])"), "_$1").uppercase()
+    System.getenv(legacyEnvName)?.takeIf { it.isNotBlank() }?.let { return it }
+
+    return if (name == "storeFile") "keystore/release.jks" else null
+}
+val hasReleaseKey = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+    .all { !releaseProp(it).isNullOrBlank() }
 
 android {
     namespace = "com.secretbase.secret_base_app"
@@ -30,11 +58,26 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (hasReleaseKey) {
+            create("release") {
+                storeFile = rootProject.file(releaseProp("storeFile")!!)
+                storePassword = releaseProp("storePassword")
+                keyAlias = releaseProp("keyAlias")
+                keyPassword = releaseProp("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Release keystore if configured; otherwise fall back to debug signing
+            // so `flutter run --release` and CI without secrets keep working.
+            signingConfig = if (hasReleaseKey) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }
