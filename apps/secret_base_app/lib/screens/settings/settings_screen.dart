@@ -16,6 +16,8 @@ import '../auth/auth_layout.dart';
 import 'notification_settings_screen.dart';
 import '../relationship/relationship_understanding_screen.dart';
 import '../secret_base/secret_base_screen.dart';
+import '../archive/heart_exchange_screen.dart';
+import '../date_roulette_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final ValueChanged<int>? onNavigate;
@@ -162,6 +164,18 @@ class _MoreOverview extends StatelessWidget {
                         subtitle: '둘이서 즐기는 게임',
                         onTap: () => _goToTab(3),
                       ),
+                      _MoreRow(
+                        icon: Icons.casino_outlined,
+                        iconColor: kMainSage,
+                        iconBackground: kMainSageSoft,
+                        title: '데이트 룰렛',
+                        subtitle: '오늘 데이트 어디서 할까?',
+                        onTap: () => Navigator.of(context).push<void>(
+                          MaterialPageRoute(
+                            builder: (_) => const DateRouletteScreen(),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 20),
@@ -196,6 +210,18 @@ class _MoreOverview extends StatelessWidget {
                           MaterialPageRoute(
                             builder: (_) =>
                                 const RelationshipUnderstandingScreen(),
+                          ),
+                        ),
+                      ),
+                      _MoreRow(
+                        icon: Icons.favorite_border_rounded,
+                        iconColor: kMainPeach,
+                        iconBackground: kMainPeachSoft,
+                        title: '마음 교감',
+                        subtitle: '10시의 질문 · 커플 밸런스 · 소원권',
+                        onTap: () => Navigator.of(context).push<void>(
+                          MaterialPageRoute(
+                            builder: (_) => const HeartExchangeScreen(),
                           ),
                         ),
                       ),
