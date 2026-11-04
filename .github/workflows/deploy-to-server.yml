@@ -25,5 +25,5 @@ jobs:
             
             echo "==> Running deploy script"
             # Google Client ID와 함께 배포 스크립트 실행
-            export GOOGLE_CLIENT_ID="19945781974-c4hpcrejbrub3gosqcotejbh5rpoqvsg.apps.googleusercontent.com"
+            export GOOGLE_CLIENT_ID="999734545507-blrukf3rd81kse4j5bjhm93ppsoaniat.apps.googleusercontent.com"
             ./scripts/deploy_server.sh
