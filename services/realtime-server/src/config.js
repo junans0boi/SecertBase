@@ -2,11 +2,20 @@ import dotenv from "dotenv";
 import { z } from "zod";
 import { assertSafeTestRuntime } from "./target-safety.js";
 
-dotenv.config({ override: true });
+// 테스트에서는 .env를 읽지 않는다(운영 .env가 테스트 환경을 덮어쓰는 것을 막는다).
+if (process.env.NODE_ENV !== "test") {
+  dotenv.config({ override: true });
+}
 
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PUBLIC_FEATURE_SET: z.enum(["mvp", "legacy"]).default("mvp"),
+  // 결제 검증이 없는 데모 프리미엄 활성화. 개발 환경에서만 true로 둔다.
+  ALLOW_DEMO_PREMIUM: z
+    .string()
+    .optional()
+    .default("false")
+    .transform((value) => value === "true"),
   PORT: z.coerce.number().int().min(1).max(65535).default(4100),
   CORS_ORIGIN: z
     .string()

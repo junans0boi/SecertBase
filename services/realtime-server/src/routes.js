@@ -60,6 +60,7 @@ import {
   buildSharedCounselingContext,
 } from './relationship-context-builder.js';
 import {
+  createAccountActiveChecker,
   disabledFeature,
   mvpRestFeatureGate,
   requireAuth,
@@ -75,6 +76,8 @@ import { notifier } from './modules/notifications/index.js';
 import { createNotificationRouter } from './modules/notifications/http-router.js';
 import path from 'path';
 import fs from 'fs';
+import { clientIpKey, createRateLimiter, emailKey } from './shared/rate-limit.js';
+import { extensionForMime, isAllowedUploadMime } from './shared/upload-safety.js';
 
 const router = express.Router();
 const googleClient = new OAuth2Client();
@@ -248,7 +251,27 @@ const sendAfterglowError = (res, error) => {
 // ============================================
 
 // 회원가입
-router.post('/auth/register', async (req, res) => {
+// 로그인·가입·구글 인증 시도 제한(테스트에서는 비활성화).
+// IP 기준 제한은 프록시가 클라이언트 IP를 넘길 때만 적용되고, 이메일 기준 제한은 항상 적용된다.
+const authLimiterEnabled = config.NODE_ENV !== 'test';
+const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
+const ONE_HOUR_MS = 60 * 60 * 1000;
+const loginLimiters = [
+  createRateLimiter({ windowMs: FIFTEEN_MINUTES_MS, max: 100, keyFn: clientIpKey('login'), enabled: authLimiterEnabled }),
+  createRateLimiter({ windowMs: FIFTEEN_MINUTES_MS, max: 15, keyFn: emailKey('login'), enabled: authLimiterEnabled }),
+];
+const registerLimiters = [
+  createRateLimiter({ windowMs: ONE_HOUR_MS, max: 20, keyFn: clientIpKey('register'), enabled: authLimiterEnabled }),
+  createRateLimiter({ windowMs: ONE_HOUR_MS, max: 5, keyFn: emailKey('register'), enabled: authLimiterEnabled }),
+];
+const googleLoginLimiter = createRateLimiter({
+  windowMs: FIFTEEN_MINUTES_MS,
+  max: 100,
+  keyFn: clientIpKey('google'),
+  enabled: authLimiterEnabled,
+});
+
+router.post('/auth/register', ...registerLimiters, async (req, res) => {
   try {
     const { email, password, user_name, full_name, nickname, birth_date } = req.body;
     const fullName = String(full_name || user_name || '').trim();
@@ -307,7 +330,7 @@ router.post('/auth/register', async (req, res) => {
 });
 
 // 로그인
-router.post('/auth/login', async (req, res) => {
+router.post('/auth/login', ...loginLimiters, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -323,7 +346,11 @@ router.post('/auth/login', async (req, res) => {
       return res.status(401).json({ ok: false, reason: 'invalid_credentials' });
     }
 
-    const isMatch = await bcrypt.compare(password, user.PasswordHash?.toString());
+    // 구글로만 가입한 계정(비밀번호 해시 없음)이나 잘못된 입력은 서버 오류가 아니라 일반 인증 실패로 처리한다.
+    const storedHash = user.PasswordHash?.toString();
+    const isMatch = typeof password === 'string' && storedHash
+      ? await bcrypt.compare(password, storedHash)
+      : false;
 
     if (!isMatch) {
       return res.status(401).json({ ok: false, reason: 'invalid_credentials' });
@@ -378,6 +405,7 @@ router.post(
 
 router.post(
   '/auth/google',
+  googleLoginLimiter,
   async (req, res) => {
   try {
     const { idToken } = req.body;
@@ -467,7 +495,11 @@ router.post(
   },
 );
 
-router.use(requireAuth(config.JWT_SECRET));
+const isAccountActive = createAccountActiveChecker({ queryFn: query });
+router.use(requireAuth(config.JWT_SECRET, {
+  // 통합 테스트는 DB 스키마를 직접 구성하므로 테스트 환경에서는 계정 확인을 건너뛴다.
+  isAccountActive: config.NODE_ENV === 'test' ? undefined : isAccountActive,
+}));
 router.use(mvpRestFeatureGate(config.PUBLIC_FEATURE_SET));
 
 const momentUploadStore = createMomentUploadStore({ config });
@@ -3263,6 +3295,8 @@ router.delete('/user', async (req, res) => {
       req.app.locals.io?.in(couple.RoomCode).disconnectSockets(true);
     }
 
+    // 탈퇴한 계정의 토큰이 캐시 때문에 잠시라도 통과하지 않도록 즉시 무효화한다.
+    isAccountActive.invalidate(userId);
     res.json({ ok: true });
   } catch (err) {
     console.error('[API] /user DELETE error:', err);
@@ -3311,7 +3345,7 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + '.' + file.mimetype.split('/')[1]);
+    cb(null, file.fieldname + '-' + uniqueSuffix + '.' + (extensionForMime(file.mimetype) ?? 'bin'));
   }
 });
 
@@ -3319,11 +3353,8 @@ const upload = multer({
   storage,
   limits: { fileSize: 30 * 1024 * 1024 }, // 30MB
   fileFilter: (req, file, cb) => {
-    const ok = file.mimetype.startsWith('image/') ||
-                file.mimetype.startsWith('video/') ||
-                file.mimetype.startsWith('audio/') ||
-                file.mimetype === 'application/octet-stream';
-    if (ok) cb(null, true);
+    // 확장자 화이트리스트에 있는 형식만 허용한다(image/svg+xml, image/html 등은 거부).
+    if (isAllowedUploadMime(file.mimetype)) cb(null, true);
     else cb(new Error('Invalid file type'));
   }
 });
@@ -5256,10 +5287,14 @@ router.patch('/wish-tickets/:id/use', async (req, res) => {
       return res.status(403).json({ ok: false, reason: 'forbidden_user' });
     }
 
-    await query(
-      "UPDATE wish_tickets SET status = 'used', used_at = NOW() WHERE id = ?",
+    // 사용 가능한 상태에서만 사용 처리한다(이미 사용·취소된 소원권은 다시 쓸 수 없다).
+    const used = await query(
+      "UPDATE wish_tickets SET status = 'used', used_at = NOW() WHERE id = ? AND status IN ('available', 'requested')",
       [id]
     );
+    if (!used.rows?.affectedRows) {
+      return res.status(409).json({ ok: false, reason: 'ticket_not_usable' });
+    }
     await addTimelineEvent({
       coupleId: ticket.couple_id,
       eventType: 'wish_ticket_used',
@@ -5291,10 +5326,13 @@ router.patch('/wish-tickets/:id/cancel', async (req, res) => {
       return res.status(403).json({ ok: false, reason: 'forbidden_user' });
     }
 
-    await query(
-      "UPDATE wish_tickets SET status = 'canceled' WHERE id = ?",
+    const canceled = await query(
+      "UPDATE wish_tickets SET status = 'canceled' WHERE id = ? AND status IN ('available', 'requested')",
       [id]
     );
+    if (!canceled.rows?.affectedRows) {
+      return res.status(409).json({ ok: false, reason: 'ticket_not_cancelable' });
+    }
     res.json({ ok: true });
   } catch (err) {
     console.error('[API] /wish-tickets/:id/cancel PATCH error:', err);
@@ -6216,6 +6254,10 @@ router.get('/premium/status', async (req, res) => {
 // 프리미엄 구독 활성화 (결제 완료 후 호출)
 router.post('/premium/activate', async (req, res) => {
   try {
+    // 결제 검증(스토어 영수증/웹훅)이 없으므로 운영에서는 활성화하지 않는다. 개발에서만 명시적으로 허용한다.
+    if (!config.ALLOW_DEMO_PREMIUM) {
+      return res.status(403).json({ ok: false, reason: 'payment_verification_required' });
+    }
     const { user_id, payment_key, payment_method, plan } = req.body;
     if (!user_id) return res.status(400).json({ ok: false, reason: 'missing_fields' });
 
@@ -6609,7 +6651,7 @@ router.post('/shop/coupons/issue', async (req, res) => {
        JOIN Users u  ON u.UserCode  = ?
        JOIN Users u1 ON u1.UserId   = c.User1Id
        JOIN Users u2 ON u2.UserId   = c.User2Id
-       WHERE u.UserId = c.User1Id OR u.UserId = c.User2Id LIMIT 1`,
+       WHERE (u.UserId = c.User1Id OR u.UserId = c.User2Id) AND c.Status = 'active' LIMIT 1`,
       [req.auth.userCode]
     );
     const coupleRow = coupleRows[0];
@@ -7954,6 +7996,44 @@ const insertCounselingMessage = async ({ sessionId, role, authorUserId = null, c
   );
 };
 
+const COUNSELING_CRISIS_REPLY =
+  '지금 많이 힘드셨겠어요. 이야기해 주셔서 고마워요. 혼자 감당하지 않으셔도 괜찮아요. '
+  + '지금 위험하다고 느끼거나 자신을 해칠 것 같다면 바로 112나 119에 연락해 주세요. '
+  + '아래 도움 기관 안내도 함께 확인해 주세요.';
+
+// 위기 신호가 있는 상담 메시지는 AI 답변 없이 안전 안내로 응답한다(외부 LLM으로도 보내지 않는다).
+const respondCounselingCrisis = async (req, res, { session, content, reason, loadSession }) => {
+  await insertCounselingMessage({
+    sessionId: session.session_id,
+    role: 'user',
+    authorUserId: req.auth.userId,
+    content,
+  });
+  await insertCounselingMessage({
+    sessionId: session.session_id,
+    role: 'assistant',
+    content: COUNSELING_CRISIS_REPLY,
+  });
+  await query(
+    `UPDATE relationship_counseling_sessions
+     SET last_message_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+     WHERE session_id = ?`,
+    [session.session_id],
+  );
+  const updated = await loadSession(session.session_id, req.auth.userId);
+  return res.status(201).json({
+    ok: true,
+    session: counselingSessionPayload(updated),
+    messages: await getCounselingMessages(session.session_id),
+    safety: { required: true, status: 'pending', reason },
+    ...buildSafetyResources({
+      locationPermission: String(req.body?.locationPermission ?? 'denied'),
+      countryCode: req.body?.countryCode,
+      adminArea: req.body?.adminArea,
+    }),
+  });
+};
+
 const createCounselingSession = async ({ scope, userId, coupleId, title }) => {
   const inserted = await query(
     `INSERT INTO relationship_counseling_sessions
@@ -8032,6 +8112,15 @@ router.post('/relationship/counseling/private/sessions/:sessionId/messages', asy
     if (session.status !== 'active') return res.status(409).json({ ok: false, reason: 'counseling_session_archived' });
     const content = normalizeCounselingMessage(req.body?.content);
     if (!content) return res.status(400).json({ ok: false, reason: 'invalid_message' });
+    const crisisReason = detectRiskCandidate(content);
+    if (crisisReason) {
+      return respondCounselingCrisis(req, res, {
+        session,
+        content,
+        reason: crisisReason,
+        loadSession: getPrivateCounselingSession,
+      });
+    }
     await insertCounselingMessage({
       sessionId: session.session_id,
       role: 'user',
@@ -8121,6 +8210,15 @@ router.post('/relationship/counseling/shared/sessions/:sessionId/messages', asyn
     if (session.status !== 'active') return res.status(409).json({ ok: false, reason: 'counseling_session_archived' });
     const content = normalizeCounselingMessage(req.body?.content);
     if (!content) return res.status(400).json({ ok: false, reason: 'invalid_message' });
+    const crisisReason = detectRiskCandidate(content);
+    if (crisisReason) {
+      return respondCounselingCrisis(req, res, {
+        session,
+        content,
+        reason: crisisReason,
+        loadSession: getSharedCounselingSession,
+      });
+    }
     await insertCounselingMessage({
       sessionId: session.session_id,
       role: 'user',

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { normalizeMomentClip } from '../../moment-clip.js';
 import { AccessContextError, getAuthenticatedActor } from '../../shared/access-context.js';
+import { extensionForMime } from '../../shared/upload-safety.js';
 import {
   MOMENT_MEDIA_MAX_BYTES,
   MomentLoopError,
@@ -24,7 +25,7 @@ export function createMomentUploadStore({
     destination: (req, file, callback) => callback(null, config.UPLOADS_ROOT),
     filename: (req, file, callback) => {
       const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1E9)}`;
-      const extension = file.mimetype?.split('/')[1] || 'bin';
+      const extension = extensionForMime(file.mimetype) || 'bin';
       callback(null, `${file.fieldname}-${uniqueSuffix}.${extension}`);
     },
   });

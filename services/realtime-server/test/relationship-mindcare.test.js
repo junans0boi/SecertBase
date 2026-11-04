@@ -77,3 +77,16 @@ test('explicit safety response either resumes or gives fixed immediate guidance'
   assert.equal(unsafe.safety.status, 'needs_immediate_help');
   assert.match(unsafe.lastAssistantText, /즉시 도움/);
 });
+
+test('risk detection ignores spacing and covers common self-harm expressions', () => {
+  for (const text of ['죽고싶어', '죽 고 싶 어', '자살하고 싶다', '극단적 선택을 할까', '극단적선택', '옥상에서 뛰어내리고 싶어', '목숨을 끊고 싶다']) {
+    assert.equal(detectRiskCandidate(text), 'self_harm', text);
+  }
+  assert.equal(detectRiskCandidate('때리고싶은 마음이 들어요'), 'harm_to_others');
+});
+
+test('risk detection stays quiet for ordinary relationship talk', () => {
+  for (const text of ['오늘 데이트가 즐거웠어요', '서운한 마음이 있어요', '', null, undefined]) {
+    assert.equal(detectRiskCandidate(text), null);
+  }
+});

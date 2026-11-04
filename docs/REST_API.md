@@ -60,7 +60,7 @@ GET    /history/export
 
 Pairing requires recipient acceptance. Separation makes the Couple inactive
 without deleting shared data; accepting a new request between the same two
-users restores that Couple. MomentLoop mutations are author-only. Active
+users restores that Couple. MomentLoop edits are allowed for both partners of an active Couple, while only the author can delete a moment (`moment_author_required`). Active
 partners share Map edits, while only the pin creator can delete; linked pins
 are archived instead of hard-deleted. `/history` and its ZIP export are
 available only while waiting for pairing and include only the caller's authored

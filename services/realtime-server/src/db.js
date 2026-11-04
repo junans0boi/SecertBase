@@ -42,7 +42,8 @@ export async function query(text, params = []) {
     console.log('[DB] Query executed', { text: text.substring(0, 50), duration, rowCount: rows.length });
     return { rows };
   } catch (err) {
-    console.error('[DB] Query error:', { text, params, error: err.message });
+    // 파라미터에는 이메일·해시·푸시 토큰 등이 있을 수 있어 로그에 남기지 않는다.
+    console.error('[DB] Query error:', { text: text.substring(0, 200), paramCount: params.length, error: err.message });
     throw err;
   }
 }

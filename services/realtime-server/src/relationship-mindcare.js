@@ -155,7 +155,11 @@ export const createMindcareState = () => {
 const riskRules = Object.freeze([
   {
     key: 'self_harm',
-    words: ['죽고 싶', '죽어버리', '자해', '내 몸을 해치', '살고 싶지 않'],
+    words: [
+      '죽고 싶', '죽어버리', '죽을래', '죽고만 싶', '자해', '내 몸을 해치', '살고 싶지 않',
+      '자살', '극단적 선택', '극단적인 선택', '뛰어내리', '목숨을 끊', '삶을 끝', '생을 마감',
+      '사라지고 싶', '없어지고 싶',
+    ],
   },
   {
     key: 'harm_to_others',
@@ -167,10 +171,17 @@ const riskRules = Object.freeze([
   },
 ]);
 
+// 공백을 모두 제거해 비교한다. 띄어쓰기 없이 쓴 표현("죽고싶어")도 감지하기 위함이다.
+const compactText = (value) => String(value ?? '').normalize('NFKC').toLowerCase().replace(/\s+/g, '');
+const compactRiskRules = riskRules.map((rule) => ({
+  key: rule.key,
+  words: rule.words.map(compactText),
+}));
+
 export const detectRiskCandidate = (value) => {
-  const normalized = String(value ?? '').normalize('NFKC').toLowerCase();
-  if (!normalized) return null;
-  return riskRules.find((rule) => rule.words.some((word) => normalized.includes(word)))?.key ?? null;
+  const compact = compactText(value);
+  if (!compact) return null;
+  return compactRiskRules.find((rule) => rule.words.some((word) => compact.includes(word)))?.key ?? null;
 };
 
 const selectedLabel = (step, input) => {

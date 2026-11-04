@@ -269,7 +269,11 @@ export function MomentLoopService({
     },
 
     async deleteMoment(actor, value) {
-      const { id, post } = await mutationTarget(actor, value);
+      const { id, post, scope } = await mutationTarget(actor, value);
+      // 수정은 활성 커플의 파트너에게 허용하지만, 삭제는 작성자만 할 수 있다.
+      if (Number(post.user_id) !== scope.userId) {
+        throw new MomentLoopError(403, 'moment_author_required');
+      }
       if (post.media_type !== 'text' && await repository.isRevealedMedia({ id })) {
         throw new MomentLoopError(409, 'today_loop_media_locked');
       }

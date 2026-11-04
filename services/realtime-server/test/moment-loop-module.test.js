@@ -96,25 +96,35 @@ test('MomentLoop feed is scoped to the actor active couple', async () => {
   }]);
 });
 
-test('MomentLoop partner cannot edit or delete the author moment', async () => {
+test('MomentLoop partner can edit the author moment but cannot delete it', async () => {
   let updateCalled = false;
   let deleteCalled = false;
   const repository = fakeRepository({
-    updateMoment: async () => { updateCalled = true; },
+    updateMoment: async () => { updateCalled = true; return { id: 10 }; },
     deleteMoment: async () => { deleteCalled = true; return '/uploads/nope'; },
   });
   const service = MomentLoopService({ repository, media: fakeMedia() });
 
-  await assert.rejects(
-    service.updateMoment(actor(2), 10, { caption: 'tampered' }),
-    (error) => error.status === 403 && error.reason === 'moment_author_required',
-  );
+  // 파트너의 수정은 허용된다(정책: 활성 커플의 파트너는 서로의 기록을 수정할 수 있다).
+  await service.updateMoment(actor(2), 10, { caption: 'edited together' });
+  assert.equal(updateCalled, true);
+
+  // 삭제는 작성자만 가능하다.
   await assert.rejects(
     service.deleteMoment(actor(2), 10),
     (error) => error.status === 403 && error.reason === 'moment_author_required',
   );
-  assert.equal(updateCalled, false);
   assert.equal(deleteCalled, false);
+});
+
+test('MomentLoop author can still delete their own moment', async () => {
+  let deleteCalled = false;
+  const repository = fakeRepository({
+    deleteMoment: async () => { deleteCalled = true; return '/uploads/mine'; },
+  });
+  const service = MomentLoopService({ repository, media: fakeMedia() });
+  await service.deleteMoment(actor(1), 10);
+  assert.equal(deleteCalled, true);
 });
 
 test('MomentLoop rejects oversized and unsupported media before persistence', async () => {

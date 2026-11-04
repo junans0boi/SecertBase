@@ -2,6 +2,7 @@ import cors from 'cors';
 import express from 'express';
 import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { setUploadResponseHeaders } from '../shared/upload-safety.js';
 
 const legalWebRoot = fileURLToPath(new URL('../../../../apps/secret_base_app/web/', import.meta.url));
 
@@ -21,6 +22,16 @@ export function createApp({
   app.locals.config = config;
   app.locals.redis = redis;
 
+  app.disable('x-powered-by');
+  // 리버스 프록시(nginx/Caddy) 한 단계를 신뢰해 req.ip가 실제 클라이언트 IP가 되게 한다.
+  app.set('trust proxy', 1);
+  app.use((_, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    next();
+  });
+
   app.use(cors({ origin: config.CORS_ORIGIN, credentials: true }));
   app.use(express.json());
 
@@ -36,7 +47,7 @@ export function createApp({
   app.use('/legal', express.static(`${legalWebRoot}/legal`));
 
   if (config.UPLOADS_ROOT) {
-    app.use('/uploads', express.static(config.UPLOADS_ROOT));
+    app.use('/uploads', express.static(config.UPLOADS_ROOT, { setHeaders: setUploadResponseHeaders }));
   }
 
   app.get('/health', async (_, res) => {

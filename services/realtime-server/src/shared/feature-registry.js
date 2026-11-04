@@ -46,7 +46,8 @@ export const disabledResponse = (feature) => ({
 });
 
 export const featureForRestPath = (requestPath) => {
-  const path = String(requestPath ?? '').replace(/^\/api(?=\/|$)/, '') || '/';
+  // Express 라우터는 기본적으로 대소문자를 구분하지 않으므로 게이트도 소문자로 정규화해 비교한다.
+  const path = String(requestPath ?? '').toLowerCase().replace(/^\/api(?=\/|$)/, '') || '/';
   for (const [prefix, feature] of disabledRestPrefixes) {
     if (path === prefix || path.startsWith(`${prefix}/`)) return feature;
   }

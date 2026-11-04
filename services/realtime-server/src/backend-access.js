@@ -12,7 +12,38 @@ import {
 
 export { PUBLIC_GAME_TYPES } from './shared/feature-registry.js';
 
-export const requireAuth = (secret) => (req, res, next) => {
+// 탈퇴했거나 존재하지 않는 계정의 토큰을 거부하기 위한 계정 활성 확인기.
+// 결과는 짧은 시간 캐시한다. DB 오류는 요청을 막지 않고(fail-open) 로그만 남긴다.
+export const createAccountActiveChecker = ({
+  queryFn,
+  ttlMs = 30_000,
+  now = Date.now,
+  log = console,
+  maxEntries = 5000,
+} = {}) => {
+  if (typeof queryFn !== 'function') throw new TypeError('queryFn is required');
+  const cache = new Map();
+  const check = async (userId) => {
+    const t = now();
+    const hit = cache.get(userId);
+    if (hit && hit.expiresAt > t) return hit.active;
+    try {
+      const result = await queryFn('SELECT IsDeleted FROM Users WHERE UserId = ? LIMIT 1', [userId]);
+      const row = result?.rows?.[0];
+      const active = Boolean(row) && !row.IsDeleted;
+      if (cache.size >= maxEntries) cache.delete(cache.keys().next().value);
+      cache.set(userId, { active, expiresAt: t + ttlMs });
+      return active;
+    } catch (error) {
+      log.error('[Auth] account status check failed', error?.message);
+      return true;
+    }
+  };
+  check.invalidate = (userId) => cache.delete(Number(userId));
+  return check;
+};
+
+export const requireAuth = (secret, { isAccountActive } = {}) => (req, res, next) => {
   const match = (req.get('authorization') || '').match(/^Bearer\s+(.+)$/i);
   if (!match) {
     return res.status(401).json({
@@ -20,6 +51,11 @@ export const requireAuth = (secret) => (req, res, next) => {
       error: { code: 'AUTH_REQUIRED' },
     });
   }
+
+  const reject = () => res.status(401).json({
+    ok: false,
+    error: { code: 'AUTH_INVALID' },
+  });
 
   try {
     const payload = jwt.verify(match[1], secret);
@@ -40,12 +76,13 @@ export const requireAuth = (secret) => (req, res, next) => {
       }
       throw error;
     }
-    next();
+    if (typeof isAccountActive !== 'function') return next();
+    return Promise.resolve(isAccountActive(userId)).then(
+      (active) => (active ? next() : reject()),
+      () => next(),
+    );
   } catch {
-    return res.status(401).json({
-      ok: false,
-      error: { code: 'AUTH_INVALID' },
-    });
+    return reject();
   }
 };
 
