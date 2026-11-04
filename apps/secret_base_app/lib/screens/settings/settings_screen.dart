@@ -644,9 +644,8 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
                   ),
                   const SizedBox(height: 4),
                   GestureDetector(
-                    onTap: () => launchUrl(
-                      Uri(scheme: 'mailto', path: kSupportEmail),
-                    ),
+                    onTap: () =>
+                        launchUrl(Uri(scheme: 'mailto', path: kSupportEmail)),
                     child: Text(
                       '고객센터: $kSupportEmail',
                       style: mainBody(

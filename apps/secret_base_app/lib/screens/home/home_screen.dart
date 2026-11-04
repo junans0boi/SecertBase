@@ -264,9 +264,9 @@ class _HomeScreenState extends State<HomeScreen> {
       ],
     );
     return GestureDetector(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const AnniversariesScreen()),
-      ),
+      onTap: () => Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const AnniversariesScreen())),
       child: MainCard(
         radius: 26,
         padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
@@ -293,17 +293,21 @@ class _HomeScreenState extends State<HomeScreen> {
                           const SizedBox(height: 6),
                           Row(
                             children: [
-                              const Icon(Icons.event_rounded,
-                                  size: 13, color: kMainRose),
+                              const Icon(
+                                Icons.event_rounded,
+                                size: 13,
+                                color: kMainRose,
+                              ),
                               const SizedBox(width: 4),
                               Text(
                                 next.daysUntil == 0
                                     ? '오늘은 ${next.label}!'
                                     : 'D-${next.daysUntil} ${next.label}',
                                 style: mainBody(
-                                    size: 11,
-                                    color: kMainRose,
-                                    weight: FontWeight.w700),
+                                  size: 11,
+                                  color: kMainRose,
+                                  weight: FontWeight.w700,
+                                ),
                               ),
                             ],
                           ),

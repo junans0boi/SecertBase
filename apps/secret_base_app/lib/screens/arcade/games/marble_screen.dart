@@ -1390,7 +1390,8 @@ class _MarbleResultDialogState extends State<_MarbleResultDialog>
     if (!isMe) return ('패배', Colors.white38, '😢');
     return switch (reason) {
       'bankrupt' => ('파산 승리!', const Color(0xFFFB923C), '💀'),
-      'tourist_monopoly' || 'double_monopoly' => ('독점 승리!', const Color(0xFFFFD700), '🏆'),
+      'tourist_monopoly' ||
+      'double_monopoly' => ('독점 승리!', const Color(0xFFFFD700), '🏆'),
       'line_monopoly' => ('라인 독점 승리!', const Color(0xFFFFD700), '🏆'),
       'timeout' => ('자산 승리!', Colors.white, '⏱️'),
       _ => ('승리!', const Color(0xFFFFD700), '🏆'),

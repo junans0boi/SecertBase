@@ -20,10 +20,7 @@ class _AnniversariesScreenState extends State<AnniversariesScreen> {
   @override
   void initState() {
     super.initState();
-    _api = ApiClient(
-      baseUrl: _auth.baseUrl,
-      tokenProvider: () => _auth.token,
-    );
+    _api = ApiClient(baseUrl: _auth.baseUrl, tokenProvider: () => _auth.token);
     _load();
   }
 
@@ -57,9 +54,9 @@ class _AnniversariesScreenState extends State<AnniversariesScreen> {
       setState(() => _items.removeWhere((a) => a['id'] == id));
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('삭제하지 못했어요')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('삭제하지 못했어요')));
       }
     }
   }
@@ -75,16 +72,19 @@ class _AnniversariesScreenState extends State<AnniversariesScreen> {
 
     try {
       if (existing != null) {
-        await _api.patchJson('/api/anniversaries/${existing['id']}', body: result);
+        await _api.patchJson(
+          '/api/anniversaries/${existing['id']}',
+          body: result,
+        );
       } else {
         await _api.postJson('/api/anniversaries', body: result);
       }
       await _load();
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('저장하지 못했어요')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('저장하지 못했어요')));
       }
     }
   }
@@ -106,95 +106,101 @@ class _AnniversariesScreenState extends State<AnniversariesScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _items.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.event_available_rounded,
-                          size: 56, color: kMainRoseSoft),
-                      const SizedBox(height: 12),
-                      Text(
-                        '기념일을 추가해보세요',
-                        style: mainBody(size: 15, color: kMainMuted),
-                      ),
-                      const SizedBox(height: 16),
-                      FilledButton.icon(
-                        onPressed: () => _showForm(),
-                        icon: const Icon(Icons.add_rounded),
-                        label: const Text('기념일 추가'),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: kMainRose,
-                        ),
-                      ),
-                    ],
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.event_available_rounded,
+                    size: 56,
+                    color: kMainRoseSoft,
                   ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  itemCount: _items.length,
-                  itemBuilder: (_, i) {
-                    final a = _items[i];
-                    final daysUntil = a['days_until'];
-                    final daysLabel = daysUntil == null
-                        ? ''
-                        : daysUntil == 0
-                            ? '오늘!'
-                            : 'D-$daysUntil';
-                    return ListTile(
-                      leading: Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: kMainRoseSoft,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.favorite_rounded,
-                            color: kMainRose, size: 22),
-                      ),
-                      title: Text(
-                        '${a['label']}',
-                        style: mainBody(
-                            size: 15, weight: FontWeight.w700),
-                      ),
-                      subtitle: Text(
-                        '${a['date']}${a['repeat_yearly'] == true ? ' · 매년 반복' : ''}',
-                        style: mainBody(size: 12, color: kMainMuted),
-                      ),
-                      trailing: daysLabel.isNotEmpty
-                          ? Text(
-                              daysLabel,
-                              style: mainBody(
-                                  size: 13,
-                                  color: kMainRose,
-                                  weight: FontWeight.w700),
-                            )
-                          : null,
-                      onTap: () => _showForm(a),
-                      onLongPress: () async {
-                        final confirmed = await showDialog<bool>(
-                          context: context,
-                          builder: (_) => AlertDialog(
-                            title: const Text('삭제할까요?'),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, false),
-                                child: const Text('취소'),
-                              ),
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, true),
-                                child: const Text('삭제',
-                                    style: TextStyle(color: Colors.red)),
-                              ),
-                            ],
+                  const SizedBox(height: 12),
+                  Text(
+                    '기념일을 추가해보세요',
+                    style: mainBody(size: 15, color: kMainMuted),
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: () => _showForm(),
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('기념일 추가'),
+                    style: FilledButton.styleFrom(backgroundColor: kMainRose),
+                  ),
+                ],
+              ),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              itemCount: _items.length,
+              itemBuilder: (_, i) {
+                final a = _items[i];
+                final daysUntil = a['days_until'];
+                final daysLabel = daysUntil == null
+                    ? ''
+                    : daysUntil == 0
+                    ? '오늘!'
+                    : 'D-$daysUntil';
+                return ListTile(
+                  leading: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: kMainRoseSoft,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.favorite_rounded,
+                      color: kMainRose,
+                      size: 22,
+                    ),
+                  ),
+                  title: Text(
+                    '${a['label']}',
+                    style: mainBody(size: 15, weight: FontWeight.w700),
+                  ),
+                  subtitle: Text(
+                    '${a['date']}${a['repeat_yearly'] == true ? ' · 매년 반복' : ''}',
+                    style: mainBody(size: 12, color: kMainMuted),
+                  ),
+                  trailing: daysLabel.isNotEmpty
+                      ? Text(
+                          daysLabel,
+                          style: mainBody(
+                            size: 13,
+                            color: kMainRose,
+                            weight: FontWeight.w700,
                           ),
-                        );
-                        if (confirmed == true) {
-                          await _delete(int.parse('${a['id']}'));
-                        }
-                      },
+                        )
+                      : null,
+                  onTap: () => _showForm(a),
+                  onLongPress: () async {
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (_) => AlertDialog(
+                        title: const Text('삭제할까요?'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('취소'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text(
+                              '삭제',
+                              style: TextStyle(color: Colors.red),
+                            ),
+                          ),
+                        ],
+                      ),
                     );
+                    if (confirmed == true) {
+                      await _delete(int.parse('${a['id']}'));
+                    }
                   },
-                ),
+                );
+              },
+            ),
     );
   }
 }
@@ -219,9 +225,8 @@ class _AnniversaryFormState extends State<_AnniversaryForm> {
     _labelCtrl = TextEditingController(
       text: widget.existing?['label'] as String? ?? '',
     );
-    _date = DateTime.tryParse(
-          widget.existing?['date'] as String? ?? '',
-        ) ??
+    _date =
+        DateTime.tryParse(widget.existing?['date'] as String? ?? '') ??
         DateTime.now();
     _repeatYearly = (widget.existing?['repeat_yearly'] as bool?) ?? true;
   }

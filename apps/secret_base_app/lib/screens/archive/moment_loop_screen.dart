@@ -29,7 +29,11 @@ class _VideoThumb extends StatefulWidget {
   final String url;
   final double iconSize;
   final Widget fallback;
-  const _VideoThumb({required this.url, required this.iconSize, required this.fallback});
+  const _VideoThumb({
+    required this.url,
+    required this.iconSize,
+    required this.fallback,
+  });
   @override
   State<_VideoThumb> createState() => _VideoThumbState();
 }
@@ -44,7 +48,9 @@ class _VideoThumbState extends State<_VideoThumb> {
   }
 
   Future<Uint8List?> _load() async {
-    if (_videoThumbCache.containsKey(widget.url)) return _videoThumbCache[widget.url];
+    if (_videoThumbCache.containsKey(widget.url)) {
+      return _videoThumbCache[widget.url];
+    }
     final bytes = await VideoThumbnail.thumbnailData(
       video: widget.url,
       imageFormat: ImageFormat.JPEG,
@@ -326,7 +332,9 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
   List<List<Map<String, dynamic>>> get _filteredGroups {
     if (_selectedTag == null) return _groups;
     return _groups
-        .where((g) => g.any((p) => _momentTags(p['tags']).contains(_selectedTag)))
+        .where(
+          (g) => g.any((p) => _momentTags(p['tags']).contains(_selectedTag)),
+        )
         .toList();
   }
 
@@ -1015,13 +1023,16 @@ class _MonthCalendarSheetState extends State<_MonthCalendarSheet> {
                 ),
                 IconButton(
                   icon: const Icon(Icons.chevron_right_rounded),
-                  onPressed: DateTime(_month.year, _month.month + 1)
-                          .isAfter(DateTime.now())
+                  onPressed:
+                      DateTime(
+                        _month.year,
+                        _month.month + 1,
+                      ).isAfter(DateTime.now())
                       ? null
                       : () => setState(
-                            () => _month =
-                                DateTime(_month.year, _month.month + 1),
-                          ),
+                          () =>
+                              _month = DateTime(_month.year, _month.month + 1),
+                        ),
                 ),
               ],
             ),
@@ -2525,43 +2536,43 @@ class _PostDetailPageState extends State<_PostDetailPage> {
         centerTitle: true,
         actions: [
           PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
-              onSelected: (value) async {
-                final nav = Navigator.of(context);
-                if (value == 'today') {
-                  await _designateTodayMoment(post);
-                } else if (value == 'today_remove') {
-                  await _removeTodayDesignation();
-                } else if (value == 'edit') {
-                  await widget.onEdit(post);
-                  if (!mounted) return;
-                  setState(() {});
-                } else if (value == 'delete') {
-                  await widget.onDelete(post);
-                  if (!mounted) return;
-                  nav.pop();
-                }
-              },
-              itemBuilder: (_) => [
+            icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
+            onSelected: (value) async {
+              final nav = Navigator.of(context);
+              if (value == 'today') {
+                await _designateTodayMoment(post);
+              } else if (value == 'today_remove') {
+                await _removeTodayDesignation();
+              } else if (value == 'edit') {
+                await widget.onEdit(post);
+                if (!mounted) return;
+                setState(() {});
+              } else if (value == 'delete') {
+                await widget.onDelete(post);
+                if (!mounted) return;
+                nav.pop();
+              }
+            },
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                value: 'today',
+                enabled: !_designatingToday,
+                child: const Text('오늘의 순간으로 선택'),
+              ),
+              PopupMenuItem(
+                value: 'today_remove',
+                enabled: !_designatingToday,
+                child: const Text('오늘의 순간 선택 해제'),
+              ),
+              const PopupMenuItem(value: 'edit', child: Text('수정')),
+              if (isMine)
                 PopupMenuItem(
-                  value: 'today',
-                  enabled: !_designatingToday,
-                  child: const Text('오늘의 순간으로 선택'),
+                  value: 'delete',
+                  enabled: post['media_edit_locked'] != true,
+                  child: const Text('삭제'),
                 ),
-                PopupMenuItem(
-                  value: 'today_remove',
-                  enabled: !_designatingToday,
-                  child: const Text('오늘의 순간 선택 해제'),
-                ),
-                const PopupMenuItem(value: 'edit', child: Text('수정')),
-                if (isMine)
-                  PopupMenuItem(
-                    value: 'delete',
-                    enabled: post['media_edit_locked'] != true,
-                    child: const Text('삭제'),
-                  ),
-              ],
-            ),
+            ],
+          ),
         ],
       ),
       body: Column(
@@ -2779,8 +2790,11 @@ class _PostDetailPageState extends State<_PostDetailPage> {
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.chat_bubble_outline_rounded,
-                            color: Colors.white54, size: 16),
+                        Icon(
+                          Icons.chat_bubble_outline_rounded,
+                          color: Colors.white54,
+                          size: 16,
+                        ),
                         SizedBox(width: 6),
                         Text(
                           '댓글 보기',
@@ -2866,13 +2880,16 @@ class _CommentSheetState extends State<_CommentSheet> {
       if (!mounted) return;
       final comment = body['comment'];
       if (comment != null) {
-        setState(() => _comments.add(Map<String, dynamic>.from(comment as Map)));
+        setState(
+          () => _comments.add(Map<String, dynamic>.from(comment as Map)),
+        );
       }
       _ctrl.clear();
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('댓글을 저장하지 못했어요')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('댓글을 저장하지 못했어요')));
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -2887,8 +2904,9 @@ class _CommentSheetState extends State<_CommentSheet> {
       setState(() => _comments.removeWhere((c) => c['id'] == commentId));
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('댓글을 삭제하지 못했어요')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('댓글을 삭제하지 못했어요')));
       }
     }
   }
@@ -2953,8 +2971,7 @@ class _CommentSheetState extends State<_CommentSheet> {
                   itemCount: _comments.length,
                   itemBuilder: (_, i) {
                     final c = _comments[i];
-                    final isMine =
-                        '${c['user_id']}' == '${widget.myUserId}';
+                    final isMine = '${c['user_id']}' == '${widget.myUserId}';
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 6),
                       child: Row(
@@ -2989,8 +3006,11 @@ class _CommentSheetState extends State<_CommentSheet> {
                               onTap: () => _delete(c),
                               child: const Padding(
                                 padding: EdgeInsets.only(left: 8, top: 2),
-                                child: Icon(Icons.close_rounded,
-                                    color: Colors.white38, size: 16),
+                                child: Icon(
+                                  Icons.close_rounded,
+                                  color: Colors.white38,
+                                  size: 16,
+                                ),
                               ),
                             ),
                         ],

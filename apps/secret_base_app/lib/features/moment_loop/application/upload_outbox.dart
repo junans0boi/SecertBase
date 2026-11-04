@@ -91,7 +91,8 @@ class UploadOutbox extends ChangeNotifier {
     for (final record in await store.load()) {
       _records[record['id'] as String] = record;
     }
-    for (final record in _records.values.where((r) => r['status'] == 'complete').toList()) {
+    for (final record
+        in _records.values.where((r) => r['status'] == 'complete').toList()) {
       await _cleanupCompleted(record);
     }
     _changed();
@@ -568,7 +569,9 @@ class UploadOutbox extends ChangeNotifier {
   Future<void> _cleanupCompleted(Map<String, dynamic> record) async {
     try {
       for (final item in (record['items'] as List).cast<Map>()) {
-        if (item['name'] != null) await store.removeMedia(item['key'] as String);
+        if (item['name'] != null) {
+          await store.removeMedia(item['key'] as String);
+        }
       }
       final id = record['id'] as String;
       await store.removeDraft(id);
