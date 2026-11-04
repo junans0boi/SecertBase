@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS setlog_comments (
   id BIGINT NOT NULL AUTO_INCREMENT,
-  post_id BIGINT NOT NULL,
+  post_id INT NOT NULL,
   couple_id BIGINT NOT NULL,
   user_id BIGINT NOT NULL,
   body TEXT NOT NULL,
