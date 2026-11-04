@@ -487,7 +487,9 @@ function _afterDeckResolved(state, playerId, events) {
     [playerId]: calculateScore(state.captures[playerId]),
     [opponentId]: calculateScore(state.captures[opponentId] ?? []),
   };
-  const st = { ...state, scores, lastEvents: events };
+  // eventsTurn: 이벤트가 발생한 턴. 다음 턴 상태에도 lastEvents가 남으므로
+  // 클라이언트가 같은 안내를 두 번 띄우지 않도록 구분값을 준다.
+  const st = { ...state, scores, lastEvents: events, eventsTurn: state.turn };
   const canGo = (id) => scores[id].total >= 7 && scores[id].total > (st.lastGoScore?.[id] ?? 0);
 
   // 폭탄이나 정상적인 마지막 턴으로 양쪽 손패가 먼저 소진될 수 있다.

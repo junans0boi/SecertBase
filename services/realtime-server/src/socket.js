@@ -1882,6 +1882,13 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         const sameOptions = session?.options?.length === options.length &&
           session.options.every((option, index) => option === options[index]);
         if (sessionId && !sameOptions) return ack({ ok: false, reason: "invalid_options" });
+        // 상대가 이미 답한 진행 중 문제가 있는데 다른 문제로 답하면, 상대의 답을 버리지 않고
+        // 거절한다(클라이언트는 상대가 풀고 있는 문제로 맞춰 다시 고른다).
+        const partnerAnswered = session && !session.revealed && !session.expired &&
+          Object.keys(session.choices ?? {}).some((uid) => uid !== userId);
+        if (!sameOptions && partnerAnswered) {
+          return ack({ ok: false, reason: "options_mismatch", options: session.options, sessionId: session.id });
+        }
         if (!sameOptions) session = null;
         // Legacy clients do not carry a round id; their next selection starts
         // another question even if its options happen to be identical.
