@@ -43,3 +43,6 @@ services/realtime-server/.env*
 # Temp/Trash
 trash/
 uno/
+
+# Local backups
+backups/

@@ -68,16 +68,31 @@ rm -f build/web/index.html.bak
 sed -i.bak "s/\"main.dart.js\"/\"main.dart.js?v=$BUILD_ID\"/" build/web/flutter_bootstrap.js
 rm -f build/web/flutter_bootstrap.js.bak
 
+echo "==> Running DB migrations"
+cd "$REPO_DIR/services/realtime-server"
+node scripts/migrate.js up
+
+cd "$REPO_DIR/apps/secret_base_app"
+
+WEB_BACKUP_ROOT="${WEB_BACKUP_ROOT:-$HOME/web-backups}"
+LATEST_SNAPSHOT=""
+if [ -d "$WEB_ROOT" ] && [ -n "$(ls -A "$WEB_ROOT" 2>/dev/null)" ]; then
+  LATEST_SNAPSHOT="$WEB_BACKUP_ROOT/web-$(date +%Y%m%d%H%M%S)"
+  echo "==> Snapshotting current web root to $LATEST_SNAPSHOT"
+  mkdir -p "$LATEST_SNAPSHOT"
+  rsync -a "$WEB_ROOT/" "$LATEST_SNAPSHOT/"
+  # keep only the newest 5 snapshots
+  ls -1d "$WEB_BACKUP_ROOT"/web-* 2>/dev/null | sort -r | tail -n +6 | while IFS= read -r old; do
+    rm -rf "$old"
+  done
+fi
+
 echo "==> Syncing web build to $WEB_ROOT"
 rsync -a --delete build/web/ "$WEB_ROOT/"
 
 echo "==> Restoring flutter-modified files after build"
 cd "$REPO_DIR"
 git checkout -- apps/secret_base_app/analysis_options.yaml apps/secret_base_app/pubspec.lock 2>/dev/null || true
-
-echo "==> Running DB migrations"
-cd "$REPO_DIR/services/realtime-server"
-node scripts/migrate.js up
 
 echo "==> Restarting realtime server with PM2"
 cd "$REPO_DIR/services/realtime-server"
@@ -89,17 +104,20 @@ fi
 pm2 save
 
 echo "==> Verifying health"
-for attempt in {1..10}; do
+for attempt in {1..30}; do
   if curl -fsS http://localhost:4100/health; then
     echo
     echo "Deploy complete."
     exit 0
   fi
 
-  echo "Health check failed, retrying ($attempt/10)..."
+  echo "Health check failed, retrying ($attempt/30)..."
   sleep 1
 done
 
 echo
 echo "Realtime server did not become healthy in time."
+if [ -n "$LATEST_SNAPSHOT" ]; then
+  echo "Manual web rollback hint: rsync -a --delete \"$LATEST_SNAPSHOT/\" \"$WEB_ROOT/\""
+fi
 exit 1

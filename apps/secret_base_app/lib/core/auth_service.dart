@@ -47,7 +47,18 @@ class AuthService extends ChangeNotifier {
   late final ApiClient _apiClient = ApiClient(
     baseUrl: baseUrl,
     tokenProvider: () => _token,
+    onUnauthorized: _handleUnauthorized,
   );
+
+  bool _loggingOut = false;
+
+  /// A 401 while a session token exists means the token is no longer valid.
+  /// Login/register calls send no token (_token == null), so they never match.
+  void _handleUnauthorized() {
+    if (_token == null || _loggingOut) return;
+    _loggingOut = true;
+    unawaited(logout().whenComplete(() => _loggingOut = false));
+  }
 
   String get baseUrl => serverBaseUrl;
   ApiClient get apiClient => _apiClient;
@@ -398,7 +409,9 @@ class AuthService extends ChangeNotifier {
       notifyListeners();
       return _user;
     } on ApiException catch (error) {
-      if (error.statusCode == 401) await logout();
+      if (error.statusCode == 401 && !_loggingOut && _token != null) {
+        await logout();
+      }
       return null;
     } catch (e) {
       debugPrint('[Auth] Get profile error: $e');

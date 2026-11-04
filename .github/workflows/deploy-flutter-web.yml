@@ -48,10 +48,14 @@ jobs:
         working-directory: apps/secret_base_app
         env:
           SOCKET_URL: ${{ vars.SOCKET_URL }}
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID || '999734545507-blrukf3rd81kse4j5bjhm93ppsoaniat.apps.googleusercontent.com' }}
         run: |
           DEFINE_ARGS=""
           if [ -n "$SOCKET_URL" ]; then
             DEFINE_ARGS="--dart-define=SOCKET_URL=$SOCKET_URL"
+          fi
+          if [ -n "$GOOGLE_CLIENT_ID" ]; then
+            DEFINE_ARGS="$DEFINE_ARGS --dart-define=GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID"
           fi
           flutter build web --release --base-href "/SecertBase/" --no-wasm-dry-run $DEFINE_ARGS
 

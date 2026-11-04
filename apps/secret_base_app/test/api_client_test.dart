@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -137,4 +138,53 @@ void main() {
       );
     },
   );
+
+  test('times out a hung request with an ApiException', () async {
+    final api = ApiClient(
+      baseUrl: 'https://example.test',
+      tokenProvider: () => null,
+      timeout: const Duration(milliseconds: 50),
+      client: MockClient((_) => Completer<http.Response>().future),
+    );
+
+    await expectLater(
+      api.getJson('api/hung'),
+      throwsA(
+        isA<ApiException>()
+            .having((error) => error.statusCode, 'status', isNull)
+            .having((error) => error.code, 'code', 'timeout')
+            .having(
+              (error) => error.message,
+              'message',
+              'Network request timed out',
+            ),
+      ),
+    );
+  });
+
+  test('invokes onUnauthorized on 401 only', () async {
+    var calls = 0;
+    ApiClient build(int status) => ApiClient(
+      baseUrl: 'https://example.test',
+      tokenProvider: () => 'token',
+      onUnauthorized: () => calls++,
+      client: MockClient((_) async => http.Response('{}', status)),
+    );
+
+    await expectLater(
+      build(500).getJson('api/x'),
+      throwsA(isA<ApiException>()),
+    );
+    await expectLater(
+      build(403).getJson('api/x'),
+      throwsA(isA<ApiException>()),
+    );
+    expect(calls, 0);
+
+    await expectLater(
+      build(401).getJson('api/x'),
+      throwsA(isA<ApiException>()),
+    );
+    expect(calls, 1);
+  });
 }

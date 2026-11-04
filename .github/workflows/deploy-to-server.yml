@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: deploy-to-server
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: Deploy to Server 2

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -11,13 +12,22 @@ class ApiClient {
   final TokenProvider _tokenProvider;
   final http.Client _client;
   final bool _ownsClient;
+  final Duration _timeout;
+  final Duration _uploadTimeout;
+  final void Function()? _onUnauthorized;
 
   ApiClient({
     required String baseUrl,
     required TokenProvider tokenProvider,
     http.Client? client,
+    Duration timeout = const Duration(seconds: 20),
+    Duration uploadTimeout = const Duration(seconds: 60),
+    void Function()? onUnauthorized,
   }) : _baseUri = _normalizeBaseUri(baseUrl),
        _tokenProvider = tokenProvider,
+       _timeout = timeout,
+       _uploadTimeout = uploadTimeout,
+       _onUnauthorized = onUnauthorized,
        _client = client ?? http.Client(),
        _ownsClient = client == null;
 
@@ -69,11 +79,17 @@ class ApiClient {
     request.files.addAll(files);
 
     try {
-      final streamed = await _client.send(request);
-      final response = await http.Response.fromStream(streamed);
+      final response = await _sendWithTimeout(request, _uploadTimeout);
       return _decodeResponse(response);
     } on ApiException {
       rethrow;
+    } on TimeoutException catch (error) {
+      throw ApiException(
+        statusCode: null,
+        code: 'timeout',
+        message: 'Network request timed out',
+        cause: error,
+      );
     } on Object catch (error) {
       throw ApiException(
         statusCode: null,
@@ -101,11 +117,17 @@ class ApiClient {
     if (body != null) request.body = jsonEncode(body);
 
     try {
-      final streamed = await _client.send(request);
-      final response = await http.Response.fromStream(streamed);
+      final response = await _sendWithTimeout(request, _timeout);
       return _decodeResponse(response);
     } on ApiException {
       rethrow;
+    } on TimeoutException catch (error) {
+      throw ApiException(
+        statusCode: null,
+        code: 'timeout',
+        message: 'Network request timed out',
+        cause: error,
+      );
     } on Object catch (error) {
       throw ApiException(
         statusCode: null,
@@ -114,6 +136,18 @@ class ApiClient {
         cause: error,
       );
     }
+  }
+
+  Future<http.Response> _sendWithTimeout(
+    http.BaseRequest request,
+    Duration timeout,
+  ) {
+    Future<http.Response> run() async {
+      final streamed = await _client.send(request);
+      return http.Response.fromStream(streamed);
+    }
+
+    return run().timeout(timeout);
   }
 
   Map<String, String> _requestHeaders(
@@ -154,6 +188,7 @@ class ApiClient {
     }
 
     if (!isSuccess) {
+      if (response.statusCode == 401) _onUnauthorized?.call();
       final json = decoded is Map ? Map<String, dynamic>.from(decoded) : null;
       throw ApiException(
         statusCode: response.statusCode,
