@@ -59,10 +59,31 @@ Lobby events:
 game:lobby:join
 game:lobby:leave
 game:lobby:select_character
+game:lobby:set_stake  { gameType, stake }        (host only, stake games only)
+game:lobby:ready      { gameType, ready: bool }  (non-host consent for staked games)
 game:lobby:start
-game:lobby:updated
-game:lobby:started
+game:lobby:updated    (includes `stake`, `ready: { [userCode]: true }`)
+game:lobby:started    (metadata: { stake, gameId, yutBgm? })
 ```
+
+**Stakes are server-authoritative (2026-11, #183).** Only `yut`, `uno*`, `tank`
+and `gostop` settle stakes. When the stake is above 0, every non-host player must
+send `game:lobby:ready { ready: true }` before the host can start
+(`partner_not_ready` otherwise); changing the stake resets readiness.
+`game:lobby:start` stores a pending game (`pending:{room}:{type}`, 120 s) with the
+agreed stake and a `gameId`. The creation events (`game:yut:new`, `game:uno:new`,
+`game:tank:new`, `game:gostop:new`) ignore any stake in their payload and consume
+the pending game; without one the game is free. Settlement uses `<type>:<gameId>`
+as the idempotency reference and runs before the Redis state is deleted.
+
+**Restart (rematch) protocol.** `game:restart:request { gameType }` records the
+request for 30 s (`yut`, `uno`, `bomb`, `marble`, `tank`; others →
+`unsupported_game`). `game:restart:respond { accept, gameType }` is accepted only
+from the other player while that request exists (`no_restart_request` otherwise).
+
+**Rejections.** Every game handler acks `{ ok: false, reason }` on failure and
+`{ ok: false, reason: "internal_error" }` if it throws. The app shows the reason
+as a short notice.
 
 Only `yut`, `bomb`, and `rps` are accepted lobby game types in the MVP.
 
@@ -86,7 +107,7 @@ game:session:enter  { gameType }   → { ok: true }
 game:session:leave  { gameType }   → { ok: true }
 ```
 
-The server adds the socket to a game-view subroom on `enter` and removes it on `leave` or disconnect. When the last viewer leaves, the active game state is deleted from Redis. `game:lobby:join` checks the subroom before creating a new lobby: if an active game has viewers, the joining socket is added to the subroom and a `resumed` result is returned instead of a lobby object. Unknown (non-public) `gameType` values are rejected by the socket feature gate.
+The server adds the socket to a game-view subroom on `enter` and removes it on `leave` or disconnect. When the last viewer leaves, the active game state is deleted from Redis after a 90 second grace period (re-entering cancels it). `game:lobby:join` checks the subroom before creating a new lobby: if an active game has viewers, the joining socket is added to the subroom and a `resumed` result is returned instead of a lobby object. Unknown (non-public) `gameType` values are rejected by the socket feature gate.
 
 Game events:
 
@@ -96,8 +117,39 @@ game:bomb:new / answer / state
 game:rps:start / pick / state / cancelled
 ```
 
-Yut and Bomb state is stored in the Couple's Redis namespace and returned by
-`session:restore` after reconnect. An interrupted RPS round is not restored; if a user disconnects during an active RPS round, the server deletes the Redis state and emits `game:rps:cancelled` (reason: `player_disconnected`) to the room.
+Yut, One Card, Go-Stop, Marble and Bomb state is returned in `session:restore`
+`activeGames`. For blackjack, oldmaid, penalty, bowling, tank and catch the server
+re-sends the game's normal update event to the restoring socket and lists them in
+`restored`. Their `start`/`new` events also resume an unfinished game
+(`{ ok: true, resumed: true }`) instead of rejecting with `game_in_progress`.
+An RPS round is cancelled (`game:rps:cancelled`, reason `player_disconnected`)
+only when a participant has no remaining socket in the room.
+
+### Tank Battle 2.0 (`game:tank:*`)
+
+```text
+client → server
+  game:tank:new                                  (stake from the lobby only)
+  game:tank:select  { tankClass: rhino|falcon|mole|turtle }
+  game:tank:move    { delta: -10..10 }
+  game:tank:weapon  { weapon }
+  game:tank:fire    { angle?, power?, weapon? }  (aim is sent only when firing)
+  game:tank:aim     { angle, power }             (legacy; never broadcast)
+server → client (per-viewer masked: opponent angle/power hidden, class hidden while selecting)
+  game:tank:started / updated   full state
+  game:tank:shot                { shooter, weapon, angle, power, events[], paths, impact, blastR, damage }
+  game:tank:moved               { by, events[] }          (crate pickups, blocked)
+  game:tank:timeout             { player, count, forfeited, events }
+  game:tank:ended               { winner|'draw', reason: ko|mutual_ko|afk|time|time_draw, summary, series, state }
+```
+
+Phases: `select` → `aiming` → `result`. Turns last 30 s (server timer,
+`turnDeadline`); three consecutive timeouts forfeit. Sudden death starts at turn
+20 (damage ×1.5), turn 30 decides by HP ratio. `events[]` entries carry `stage`
+(cluster bomblets use stage 1) and types `shell`, `blast`, `mound`, `damage`,
+`shield`, `crate`, `crate_drop`, `fall`, `teleport`, `split`, `heal`,
+`buff_used`, `sudden_death`. Rematches go through the restart protocol and keep
+the series score and stake.
 
 If a partner deletes their account (via `DELETE /user`), the remaining partner's socket receives `partner:disconnected` (reason: `partner_deleted_account`) and is disconnected from the room.
 

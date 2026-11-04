@@ -1,7 +1,7 @@
 # 03. Wayfinder Map — 놀이 게임 전면 정비 + 탱크 대작전 2.0
 
-> 라벨: `wayfinder:map` · 트래커: 로컬 마크다운. `gh` CLI가 없어서 wayfinder의 기본 폴백을 씁니다.
-> 티켓 파일 위치: `issues/NN-*.md`. 각 티켓의 "Blocked by"가 의존 관계를 나타냅니다.
+> 라벨: `wayfinder:map` · GitHub 이슈: Map #179 · Spec #177 · Grilling #178 · 티켓 #180–#200 (네이티브 하위 이슈와 blocked-by 관계로 연결).
+> 로컬 사본: `issues/NN-*.md`.
 
 ## Destination
 
