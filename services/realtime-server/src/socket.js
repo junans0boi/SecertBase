@@ -124,7 +124,9 @@ import {
   declareGoStop,
   resolveGostopTerminalState,
   serializeFor as serializeGostopFor,
+  forfeitGostop,
 } from "./gostop-engine.js";
+import { createAfkWatcher, afkGameTypeForEvent } from "./game-afk.js";
 
 // ── 방(room) 단위 직렬 뮤텍스 ─────────────────────────────────────────────────
 // Node.js는 단일 스레드지만 await 사이에 이벤트 루프가 다른 요청을 처리할 수 있어
@@ -530,7 +532,8 @@ async function settleAndEmitWallet(io, roomCode, winnerId, loserId, stake, gameR
 
 // 모든 소켓 핸들러의 동기/비동기 예외를 포착한다. 핸들러 하나의 DB 오류가
 // unhandledRejection으로 프로세스를 종료시키지 않고, 요청자는 실패 ack를 받는다.
-export function installHandlerSafetyNet(socket, logger = console) {
+// afterHandler(event, args): 핸들러가 끝난 뒤 호출(잠수 감시 갱신 등). 실패는 로그만 남긴다.
+export function installHandlerSafetyNet(socket, logger = console, afterHandler = null) {
   const rawOn = socket.on.bind(socket);
   socket.on = (event, handler) => rawOn(event, (...args) => {
     const ack = typeof args.at(-1) === "function" ? args.at(-1) : null;
@@ -538,9 +541,16 @@ export function installHandlerSafetyNet(socket, logger = console) {
       logger.error(`[socket] ${event} handler failed: ${err?.stack ?? err}`);
       try { ack?.({ ok: false, reason: "internal_error" }); } catch { /* ack already closed */ }
     };
+    const after = () => {
+      if (!afterHandler) return;
+      Promise.resolve()
+        .then(() => afterHandler(event, args))
+        .catch((err) => logger.error(`[socket] ${event} after-hook failed: ${err?.message ?? err}`));
+    };
     try {
       const result = handler(...args);
-      if (result && typeof result.then === "function") result.catch(report);
+      if (result && typeof result.then === "function") result.then(after, report);
+      else after();
     } catch (err) {
       report(err);
     }
@@ -928,11 +938,179 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
     if (state?.phase === "aiming" && !tankTimers.has(roomCode)) scheduleTankTimer(roomCode, state);
   };
 
+  // ── 턴제 게임 공통 잠수(AFK) 기권패 ──────────────────────────────────────────
+  // 차례인 사람이 90초 동안 아무것도 하지 않으면(60초에 경고) 상대의 기권승이다.
+  // 지는 쪽이 앱을 꺼 버려도 판이 무한 대기하거나 정산 없이 사라지지 않는다.
+  const notPicked = (startRolls, players) => players.find((p) => startRolls?.[p] == null) ?? null;
+  const emitGostopRoom = async (roomCode, eventName, state) => {
+    const sockets = await io.in(roomCode).fetchSockets();
+    for (const sock of sockets) {
+      if (sock.data.userId) sock.emit(eventName, serializeGostopFor(state, sock.data.userId));
+    }
+  };
+  // 판돈 게임의 기권 정산: 정산 → 결과 기록 → 상태 삭제.
+  const settleForfeit = async (roomCode, { gameType, missionKey, key, winner, loser, stake, gameId }) => {
+    if (winner && loser && stake > 0) {
+      const wallet = await settleAndEmitWallet(io, roomCode, winner, loser, stake, `${gameType}:${gameId}`);
+      if (!wallet.ok) io.to(roomCode).emit("wallet:settle_failed", { gameType, reason: wallet.reason });
+    }
+    await recordGameOutcome(roomCode, { winner, players: [winner, loser], gameType, missionKey, stake, gameId });
+    await redis.del(key);
+  };
+  const afkAdapters = {
+    yut: {
+      key: yutGameKey,
+      playersOf: (s) => s.playersOrder ?? [],
+      waitingOn: (s) => {
+        if (s.winner) return null;
+        if (s.phase === "roll_order") return notPicked(s.startRolls, s.playersOrder ?? []);
+        if (s.phase === "order_countdown") return null;
+        return s.currentTurn ?? null;
+      },
+      forfeit: async (roomCode, s, loser, winner) => {
+        io.to(roomCode).emit("game:yut:ended", { winner, reason: "forfeit" });
+        await settleForfeit(roomCode, {
+          gameType: "yut", missionKey: "yut", key: yutGameKey(roomCode), winner, loser,
+          stake: s.stake ?? 0, gameId: s.gameId ?? s.id,
+        });
+      },
+    },
+    uno: {
+      key: unoGameKey,
+      playersOf: (s) => s.players ?? [],
+      waitingOn: (s) => (s.winner ? null : s.currentPlayer ?? null),
+      forfeit: async (roomCode, s, loser, winner) => {
+        io.to(roomCode).emit("game:uno:ended", { winner, reason: "forfeit" });
+        await settleForfeit(roomCode, {
+          gameType: "uno", missionKey: "onecard", key: unoGameKey(roomCode), winner, loser,
+          stake: s.stake ?? 0, gameId: s.gameId ?? `legacy-${roomCode}`,
+        });
+      },
+    },
+    marble: {
+      key: marbleGameKey,
+      playersOf: (s) => s.playersOrder ?? [],
+      waitingOn: (s) => {
+        if (s.winner || s.winReason === "timeout_draw") return null;
+        if (s.phase === "roll_order") return notPicked(s.startRolls, s.playersOrder ?? []);
+        if (s.phase === "order_countdown") return null;
+        if (s.pendingLandAction?.userId) return s.pendingLandAction.userId;
+        return s.currentTurn ?? null;
+      },
+      forfeit: async (roomCode, s, loser, winner) => {
+        io.to(roomCode).emit("game:marble:ended", { winner, winReason: "forfeit", finalScores: null });
+        await redis.del(marbleGameKey(roomCode));
+        await recordGameOutcome(roomCode, { winner, players: s.playersOrder, gameType: "marble" });
+      },
+    },
+    gostop: {
+      key: gostopGameKey,
+      playersOf: (s) => s.players ?? [],
+      waitingOn: (s) => {
+        if (["finished", "nageori", "chongtong"].includes(s.phase)) return null;
+        if (s.settlementStatus === "pending") return null;
+        if (s.phase === "shake_choice") return s.shakePlayerId ?? null;
+        return s.players?.[s.currentPlayerIdx] ?? null;
+      },
+      forfeit: async (roomCode, s, loser, winner) => {
+        const finished = forfeitGostop(s, winner);
+        const st = finished.settlement;
+        if (st && st.amount > 0) {
+          const wallet = await settleAndEmitWallet(io, roomCode, st.winnerId, st.loserId, st.amount, finished.gameId ?? `gostop:${roomCode}:forfeit`);
+          if (!wallet.ok) {
+            const pending = { ...finished, settlementStatus: "pending", settlementError: wallet.reason ?? "wallet_settlement_failed" };
+            await redis.set(gostopGameKey(roomCode), JSON.stringify(pending), "EX", 7200);
+            await emitGostopRoom(roomCode, "game:gostop:settlement_pending", pending);
+            return;
+          }
+        }
+        await recordGameOutcome(roomCode, { winner, players: s.players, gameType: "gostop", stake: st?.amount ?? 0, gameId: finished.gameId ?? null });
+        await redis.del(gostopGameKey(roomCode));
+        await emitGostopRoom(roomCode, "game:gostop:ended", { ...finished, settlementStatus: "settled" });
+      },
+    },
+    blackjack: {
+      key: (rc) => `game:${rc}:blackjack`,
+      playersOf: (s) => s.players ?? [],
+      waitingOn: (s) => (s.status === "playing" && s.phase !== "round_result" ? s.currentTurn ?? null : null),
+      forfeit: async (roomCode, s, loser, winner) => {
+        const finished = { ...s, status: "finished", currentTurn: null, result: { ...(s.result ?? {}), winner, loser, reason: "forfeit" } };
+        await redis.set(`game:${roomCode}:blackjack`, JSON.stringify(finished), "EX", 3600);
+        await emitBlackjackState(io, roomCode, finished);
+        await recordGameOutcome(roomCode, { winner, players: s.players, gameType: "blackjack" });
+      },
+    },
+    oldmaid: {
+      key: (rc) => `game:${rc}:oldmaid`,
+      playersOf: (s) => Object.keys(s.players ?? {}),
+      waitingOn: (s) => (s.status === "playing" ? s.turn ?? null : null),
+      forfeit: async (roomCode, s, loser, winner) => {
+        const finished = { ...s, status: "finished", result: { winner, loser, reason: "forfeit" } };
+        await redis.set(`game:${roomCode}:oldmaid`, JSON.stringify(finished), "EX", 3600);
+        await emitOldMaidState(io, roomCode, finished);
+        await recordGameOutcome(roomCode, { winner, players: [winner, loser], gameType: "oldmaid" });
+      },
+    },
+    bowling: {
+      key: (rc) => `game:${rc}:bowling`,
+      playersOf: (s) => Object.keys(s.scores ?? {}),
+      waitingOn: (s) => (s.status === "playing" ? s.turn ?? null : null),
+      forfeit: async (roomCode, s, loser, winner) => {
+        const finished = { ...s, status: "finished", result: { winner, scores: s.scores, reason: "forfeit" } };
+        await redis.set(`game:${roomCode}:bowling`, JSON.stringify(finished), "EX", 3600);
+        io.to(roomCode).emit("game:bowling:updated", withBowlingFrames(finished));
+        await recordGameOutcome(roomCode, { winner, players: Object.keys(s.scores), gameType: "bowling" });
+      },
+    },
+    penalty: {
+      key: (rc) => `game:${rc}:penalty`,
+      playersOf: (s) => Object.keys(s.scores ?? {}),
+      // 한 사람만 제출했을 때 나머지 한 사람을 기다린다(둘 다 안 냈으면 감시하지 않음).
+      waitingOn: (s) => {
+        if (s.status !== "playing") return null;
+        const pair = [String(s.kicker), String(s.keeper)];
+        const missing = pair.filter((p) => s.submissions?.[p] === undefined);
+        return missing.length === 1 ? missing[0] : null;
+      },
+      forfeit: async (roomCode, s, loser, winner) => {
+        const finished = { ...s, status: "finished", submissions: {}, result: { winner, scores: s.scores, reason: "forfeit" } };
+        await redis.set(`game:${roomCode}:penalty`, JSON.stringify(finished), "EX", 3600);
+        io.to(roomCode).emit("game:penalty:updated", maskPenaltyState(finished));
+        await recordGameOutcome(roomCode, { winner, players: Object.keys(s.scores), gameType: "penalty" });
+      },
+    },
+    pirate: {
+      key: pirateKey,
+      playersOf: (s) => s.players ?? [],
+      waitingOn: (s) => s.currentTurn ?? null,
+      forfeit: async (roomCode, s, loser, winner) => {
+        await redis.del(pirateKey(roomCode));
+        io.to(roomCode).emit("game:pirate:exploded", { loser, bombSlot: s.bombSlot, forfeit: true, at: Date.now() });
+        await recordGameOutcome(roomCode, { winner, players: s.players, gameType: "pirate" });
+      },
+    },
+    rps: {
+      key: rpsGameKey,
+      playersOf: (s) => s.players ?? [],
+      waitingOn: (s) => {
+        if (s.gameWinner) return null;
+        const missing = (s.players ?? []).filter((p) => s.picks?.[p] === undefined);
+        return missing.length === 1 ? missing[0] : null;
+      },
+      forfeit: async (roomCode, s, loser) => {
+        await redis.del(rpsGameKey(roomCode));
+        io.to(roomCode).emit("game:rps:cancelled", { reason: "afk", by: loser });
+      },
+    },
+  };
+  const afkWatcher = createAfkWatcher({ io, redis, timerApi, withRoomLock, adapters: afkAdapters });
+
   io.httpServer?.once("close", () => {
     for (const roomCode of telepathyTimers.keys()) clearTelepathyTimer(roomCode);
     for (const roomCode of [...bombTimers.keys()]) clearBombTimer(roomCode);
     for (const key of [...sessionCleanupTimers.keys()]) cancelSessionCleanup(key);
     for (const roomCode of [...tankTimers.keys()]) clearTankTimer(roomCode);
+    afkWatcher.clearAll();
   });
   const publishTelepathyResult = async (roomCode, session, extra = {}) => {
     const event = { ...telepathyResult(session), ...extra };
@@ -966,7 +1144,11 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
   };
   installSocketAuthentication(io, config.JWT_SECRET, resolveSocketSession);
   io.on("connection", (socket) => {
-    installHandlerSafetyNet(socket);
+    installHandlerSafetyNet(socket, console, (event, args) => {
+      const gameType = afkGameTypeForEvent(event, args[0]);
+      if (gameType) return afkWatcher.refresh(socket.data.roomCode, gameType);
+      return undefined;
+    });
     installSocketFeatureGate(socket, config.PUBLIC_FEATURE_SET);
     registerGameSessionHandlers(socket, { io, redis, scheduler: sessionScheduler });
     socket.on("session:join", async (payload, ackRaw) => {

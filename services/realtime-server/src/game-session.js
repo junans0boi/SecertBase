@@ -23,7 +23,9 @@ export const activeGameKey = (roomCode, gameType) => {
 
 // 마지막 뷰어가 나간 뒤 상태를 지우기까지의 유예 시간. 두 사람이 동시에 잠깐
 // 앱을 내려도(백그라운드 전환, 네트워크 순단) 진행 중인 판이 사라지지 않게 한다.
-export const SESSION_CLEANUP_GRACE_MS = 90_000;
+// 잠수 기권 시간(90초)보다 길게 잡아, 차례인 사람이 나가 버린 판은 삭제되기 전에
+// 기권패로 정산된다(지는 쪽이 나가서 정산을 피하는 구멍 차단).
+export const SESSION_CLEANUP_GRACE_MS = 150_000;
 const cleanupKey = (roomCode, gameType) => `${roomCode}:${gameType}`;
 
 export const getViewerCount = (io, roomCode, gameType) => {

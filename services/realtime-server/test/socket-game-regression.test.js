@@ -550,3 +550,49 @@ test('session restore re-sends a running blackjack round to the reconnecting pla
   assert.ok(restored.restored.includes('blackjack'));
   assert.ok(views.length >= 1);
 });
+
+test('AFK: an idle one card player is warned at 60s and forfeits at 90s with one recorded result', async t => {
+  const f = await fixture(t);
+  t.mock.timers.enable({ apis: ['Date'], now: 5_000_000 });
+  const warnings = [];
+  const ended = [];
+  f.clients[1].on('game:afk:warning', e => warnings.push(e));
+  f.clients[1].on('game:uno:ended', e => ended.push(e));
+  assert.equal((await f.call(0, 'game:uno:new', {})).ok, true);
+  await flush();
+  const state = JSON.parse(await f.redis.get(`uno:${f.roomCode}:game`));
+  const idle = state.currentPlayer;
+  f.tick(60_000);
+  await flush();
+  assert.equal(warnings.length, 1);
+  assert.equal(warnings[0].player, idle);
+  f.tick(30_000);
+  await flush();
+  assert.equal(ended.length, 1);
+  assert.equal(ended[0].reason, 'forfeit');
+  assert.notEqual(ended[0].winner, idle);
+  assert.equal(f.results.length, 1);
+  assert.equal(await f.redis.get(`uno:${f.roomCode}:game`), null);
+});
+
+test('AFK: acting resets the clock and a finished game is never forfeited', async t => {
+  const f = await fixture(t);
+  t.mock.timers.enable({ apis: ['Date'], now: 6_000_000 });
+  const ended = [];
+  f.clients[0].on('game:bowling:updated', s => { if (s.status === 'finished') ended.push(s); });
+  assert.equal((await f.call(0, 'game:bowling:start', {})).ok, true);
+  await flush();
+  f.tick(80_000);
+  await flush();
+  const before = JSON.parse(await f.redis.get(`game:${f.roomCode}:bowling`));
+  const roller = before.turn === 'ALPHA-code' ? 0 : 1;
+  assert.equal((await f.call(roller, 'game:bowling:roll', { aim: 0, curve: 0 })).ok, true);
+  await flush();
+  f.tick(80_000); // 이전 시계 기준이면 이미 90초가 지났다
+  await flush();
+  assert.equal(ended.length, 0, 'the roll restarted the 90 second clock');
+  f.tick(10_000);
+  await flush();
+  assert.equal(ended.length, 1);
+  assert.equal(ended[0].result.reason, 'forfeit');
+});

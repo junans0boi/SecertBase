@@ -732,7 +732,10 @@ function _settleWin(state, winnerId, reasonEvents) {
   if (gwangbak) multiplier *= 2;
 
   // 베팅액: 점수 × 점당 × 배수
-  const points = reasonEvents.includes('chongtong') ? CHONGTONG_POINTS : winnerScore.total;
+  // 기권승(잠수 기권)은 최소 7점(승리 기준점)으로 정산한다.
+  const points = reasonEvents.includes('chongtong')
+    ? CHONGTONG_POINTS
+    : reasonEvents.includes('forfeit') ? Math.max(winnerScore.total, 7) : winnerScore.total;
   const amount = points * state.perPointBet * multiplier;
 
   const settlement = {
@@ -762,6 +765,16 @@ function _settleWin(state, winnerId, reasonEvents) {
     settlement,
     lastEvents: reasonEvents,
   };
+}
+
+// ── 기권(잠수) ───────────────────────────────────────────────────
+// 차례인 플레이어가 제한 시간 동안 행동하지 않으면 상대의 기권승으로 정산한다.
+export function forfeitGostop(state, winnerId) {
+  state = normalizeGostopGameState(state);
+  const scores = Object.fromEntries(
+    state.players.map(playerId => [playerId, calculateScore(state.captures[playerId] ?? [])]),
+  );
+  return _settleWin({ ...state, scores }, winnerId, ['forfeit']);
 }
 
 // ── 기타 유틸 ────────────────────────────────────────────────────
