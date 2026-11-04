@@ -74,6 +74,8 @@ class SocketService extends ChangeNotifier {
   int? lastDice;
   String? lastRoulette;
   List<String>? lastRouletteOptions;
+  int? lastRouletteIndex;
+  int rouletteSeq = 0; // 새 결과가 올 때마다 증가(휠 회전 트리거)
   String? rpsResult;
   Map<String, String>? rpsChoices;
   bool? telepathySuccess;
@@ -574,6 +576,8 @@ class SocketService extends ChangeNotifier {
     socket.on('game:roulette:result', (data) {
       final map = _m(data);
       lastRoulette = map['selected'] as String?;
+      lastRouletteIndex = (map['index'] as num?)?.toInt();
+      rouletteSeq++;
       final rawOptions = map['options'];
       if (rawOptions is List) {
         lastRouletteOptions = rawOptions.whereType<String>().toList();
@@ -694,7 +698,8 @@ class SocketService extends ChangeNotifier {
     });
 
     // 상대 연결이 끊겨 서버가 판을 취소하면 대기 화면에서 빠져나온다.
-    socket.on('game:rps:cancelled', (_) {
+    socket.on('game:rps:cancelled', (data) {
+      final cancelReason = _m(data)['reason'];
       rpsMode = null;
       rpsActive = false;
       rpsPlayers = [];
@@ -709,7 +714,11 @@ class SocketService extends ChangeNotifier {
       rpsRoundWinner = null;
       rpsGameWinner = null;
       rpsRoundHistory = [];
-      _setGameNotice('상대 연결이 끊겨 가위바위보 판이 취소되었어요.');
+      if (cancelReason == 'afk') {
+        notifyListeners(); // 잠수 안내는 game:afk:forfeit에서 이미 표시했다.
+      } else {
+        _setGameNotice('상대 연결이 끊겨 가위바위보 판이 취소되었어요.');
+      }
     });
 
     socket.on('game:telepathy:result', (data) {
@@ -885,6 +894,14 @@ class SocketService extends ChangeNotifier {
         marbleLastRoll = Map<String, dynamic>.from(roll);
       }
       marbleLastRollAt = DateTime.now().millisecondsSinceEpoch;
+      final byMe = map['by'] == userId;
+      if (map['jailed'] == true) {
+        _setGameNotice(
+          byMe ? '블랙사이트에 갇혀 이번 턴은 쉬어요. 더블이 나오면 탈출해요.' : '상대가 블랙사이트에 갇혀 턴을 쉬어요.',
+        );
+      } else if (map['jailEscape'] == true) {
+        _setGameNotice(byMe ? '더블! 블랙사이트를 탈출했어요.' : '상대가 더블로 블랙사이트를 탈출했어요.');
+      }
       notifyListeners();
     });
 
@@ -1242,6 +1259,26 @@ class SocketService extends ChangeNotifier {
       tankMoveEvents = events is List ? events : [];
       tankMoveSeq++;
       notifyListeners();
+    });
+
+    // 턴제 게임 공통 잠수 감시: 60초 경고, 90초 기권패
+    socket.on('game:afk:warning', (data) {
+      final map = _m(data);
+      final secondsLeft = (map['secondsLeft'] as num?)?.toInt() ?? 30;
+      _setGameNotice(
+        map['player'] == userId
+            ? '$secondsLeft초 안에 진행하지 않으면 기권패로 처리돼요!'
+            : '상대가 $secondsLeft초 안에 진행하지 않으면 기권승이에요.',
+      );
+    });
+
+    socket.on('game:afk:forfeit', (data) {
+      final map = _m(data);
+      _setGameNotice(
+        map['loser'] == userId
+            ? '제한 시간 동안 진행하지 않아 기권패 처리됐어요.'
+            : '상대가 제한 시간 동안 진행하지 않아 기권승했어요!',
+      );
     });
 
     socket.on('wallet:settle_failed', (_) {
@@ -1868,7 +1905,13 @@ class SocketService extends ChangeNotifier {
   void rollDice() => _socket?.emit('game:dice:roll');
 
   void spinRoulette(List<String> options) =>
-      _socket?.emit('game:roulette:spin', {'options': options});
+      _emitGame('game:roulette:spin', {'options': options});
+
+  /// 내 항목을 서버에 올려 두면, 누가 돌리든 두 사람의 항목을 합쳐서 돌린다.
+  void proposeRoulette(List<String> options) {
+    if (options.length < 2 || options.length > 12) return;
+    _socket?.emit('game:roulette:propose', {'options': options});
+  }
 
   void playRps(String choice) {
     rpsResult = null;

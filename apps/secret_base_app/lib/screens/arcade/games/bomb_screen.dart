@@ -20,6 +20,7 @@ class _BombScreenState extends State<BombScreen>
   final _answerCtrl = TextEditingController();
   Timer? _timer;
   int _remaining = 0;
+  int? _timerStartedFor; // 타이머를 맞춘 판의 startTime (재시작 감지용)
   late AnimationController _pulseCtrl;
   late Animation<double> _pulse;
 
@@ -49,7 +50,10 @@ class _BombScreenState extends State<BombScreen>
   void _rebuild() {
     if (!mounted) return;
     setState(() {});
-    if (_socket.bombActive && _timer == null) {
+    // 새 판(재시작 포함)이면 startTime이 바뀐다: 남은 시간을 다시 맞춘다.
+    if (_socket.bombActive &&
+        (_timer == null || _timerStartedFor != _socket.bombStartTime)) {
+      _timer?.cancel();
       _startTimer();
     } else if (!_socket.bombActive) {
       _timer?.cancel();
@@ -61,6 +65,7 @@ class _BombScreenState extends State<BombScreen>
   }
 
   void _startTimer() {
+    _timerStartedFor = _socket.bombStartTime;
     _remaining = _socket.bombDuration ?? 30;
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
@@ -103,6 +108,8 @@ class _BombScreenState extends State<BombScreen>
                   child: _ExplodeScreen(
                     loser: sock.bombLoser!,
                     userId: sock.userId,
+                    onRestart: () => sock.newBombGame(),
+                    onExit: () => Navigator.of(context).pop(),
                   ),
                 )
               else if (!sock.bombActive) ...[
@@ -553,7 +560,14 @@ class _StartPanelState extends State<_StartPanel> {
 class _ExplodeScreen extends StatelessWidget {
   final String loser;
   final String? userId;
-  const _ExplodeScreen({required this.loser, required this.userId});
+  final VoidCallback onRestart;
+  final VoidCallback onExit;
+  const _ExplodeScreen({
+    required this.loser,
+    required this.userId,
+    required this.onRestart,
+    required this.onExit,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -572,6 +586,19 @@ class _ExplodeScreen extends StatelessWidget {
               fontWeight: FontWeight.w800,
             ),
             textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          // 폭발 뒤 막다른 화면이 되지 않도록 다음 행동을 준다.
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              OutlinedButton(onPressed: onExit, child: const Text('나가기')),
+              const SizedBox(width: 12),
+              ElevatedButton(
+                onPressed: onRestart,
+                child: const Text('다시 하기'),
+              ),
+            ],
           ),
         ],
       ),

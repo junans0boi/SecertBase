@@ -19,6 +19,8 @@ class _RouletteScreenState extends State<RouletteScreen>
   late AnimationController _spinCtrl;
   late Animation<double> _spin;
   bool _spinning = false;
+  int _seenSeq = 0;
+  double _turns = 3; // 서버가 고른 칸이 위쪽 포인터에 오도록 계산한 총 회전 수
 
   final List<String> _options = ['야식', '벌칙', '결제자', '면제권', '산책', '게임'];
   final _editCtrl = TextEditingController();
@@ -40,8 +42,12 @@ class _RouletteScreenState extends State<RouletteScreen>
       duration: const Duration(milliseconds: 2000),
     );
     _spin = CurvedAnimation(parent: _spinCtrl, curve: Curves.easeOut);
+    _seenSeq = _socket.rouletteSeq;
     _socket.addListener(_rebuild);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _propose());
   }
+
+  void _propose() => _socket.proposeRoulette(List<String>.from(_options));
 
   @override
   void dispose() {
@@ -53,34 +59,51 @@ class _RouletteScreenState extends State<RouletteScreen>
 
   void _rebuild() {
     if (!mounted) return;
-    final opts = _socket.lastRouletteOptions;
-    if (opts != null && opts.isNotEmpty) {
-      setState(
-        () => _options
-          ..clear()
-          ..addAll(opts),
-      );
-    } else {
+    // 새 결과가 왔을 때만 돈다(다른 알림마다 휠이 다시 돌거나 항목이 되돌아가지 않게).
+    if (_socket.rouletteSeq == _seenSeq) {
       setState(() {});
+      return;
     }
+    _seenSeq = _socket.rouletteSeq;
+    final opts = _socket.lastRouletteOptions;
+    final index = _socket.lastRouletteIndex ?? 0;
+    final count = (opts != null && opts.isNotEmpty) ? opts.length : _options.length;
+    setState(() {
+      _spinning = true;
+      if (opts != null && opts.isNotEmpty) {
+        _options
+          ..clear()
+          ..addAll(opts);
+      }
+      // 칸 i는 위쪽에서 시계 방향으로 i번째. 그 칸의 가운데가 위쪽 포인터에 오도록 회전한다.
+      final segment = count == 0 ? 0.0 : (index + 0.5) / count;
+      _turns = 3 + (1 - segment);
+    });
     _spinCtrl.forward(from: 0).then((_) {
       if (mounted) setState(() => _spinning = false);
     });
   }
 
   void _spin2() {
-    if (_spinning || _options.isEmpty) return;
-    setState(() => _spinning = true);
-    _socket.spinRoulette(_options);
+    if (_spinning) return;
+    if (_options.length < 2 || _options.length > 12) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('항목은 2개 이상 12개 이하로 정해 주세요')),
+      );
+      return;
+    }
+    _socket.spinRoulette(List<String>.from(_options));
   }
 
   void _addOption() {
     final text = _editCtrl.text.trim();
     if (text.isEmpty) return;
+    if (_options.length >= 12) return;
     setState(() {
       _options.add(text);
       _editCtrl.clear();
     });
+    _propose();
   }
 
   @override
@@ -107,15 +130,30 @@ class _RouletteScreenState extends State<RouletteScreen>
   }
 
   Widget _buildWheel(String? result) {
-    return AnimatedBuilder(
+    final wheel = AnimatedBuilder(
       animation: _spin,
       builder: (_, child) {
-        return Transform.rotate(angle: _spin.value * 2 * pi * 3, child: child);
+        return Transform.rotate(
+          angle: _spin.value * 2 * pi * _turns,
+          child: child,
+        );
       },
       child: SizedBox(
         width: 200,
         height: 200,
         child: CustomPaint(painter: _WheelPainter(_options, _colors)),
+      ),
+    );
+    // 위쪽 포인터: 멈춘 칸이 결과다.
+    return SizedBox(
+      width: 200,
+      height: 222,
+      child: Stack(
+        alignment: Alignment.topCenter,
+        children: [
+          Positioned(top: 18, child: wheel),
+          const Icon(Icons.arrow_drop_down_rounded, size: 40, color: kText),
+        ],
       ),
     );
   }
@@ -147,7 +185,10 @@ class _RouletteScreenState extends State<RouletteScreen>
               final i = e.key;
               final opt = e.value;
               return GestureDetector(
-                onLongPress: () => setState(() => _options.removeAt(i)),
+                onLongPress: () {
+                  setState(() => _options.removeAt(i));
+                  _propose();
+                },
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
