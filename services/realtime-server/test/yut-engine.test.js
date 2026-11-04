@@ -17,6 +17,7 @@ import {
   resetYutTurnThrows,
   serializeYutGame,
   settleTurnAfterMove,
+  pruneUnusableBackdo,
 } from '../src/yut-engine.js';
 
 function withMockedRandom(values, run) {
@@ -357,21 +358,74 @@ test('resolveYutMove applies carried movement and capture to the game state', ()
   assert.equal(gameState.caughtOpponentThisTurn, true);
 });
 
-test('catch plus bonus throw grants a single extra throw, not a second one', () => {
+test('catch bonus and yut/mo bonus are independent: both extra throws are granted', () => {
+  // 조작 순서와 무관하게 잡기 1회 = 추가 던지기 1회 (#190)
   const gameState = {
     playersOrder: ['A', 'B'],
     currentTurn: 'A',
     phase: 'moving',
     pendingMoves: [],
     hasBonusThrow: true,
+    captureBonusThrows: 1,
     caughtOpponentThisTurn: true,
   };
 
-  settleTurnAfterMove(gameState, 'A');
+  settleTurnAfterMove(gameState, 'A'); // 윷/모 보너스 사용
+  assert.equal(gameState.currentTurn, 'A');
+  settleTurnAfterMove(gameState, 'A'); // 잡기 보너스 사용
   assert.equal(gameState.currentTurn, 'A');
   assert.equal(gameState.caughtOpponentThisTurn, false);
+  settleTurnAfterMove(gameState, 'A'); // 더 없음
+  assert.equal(gameState.currentTurn, 'B');
+});
 
-  // The bonus throw is played with no capture: turn must pass.
+test('two separate captures grant two extra throws', () => {
+  const gameState = { playersOrder: ['A', 'B'], currentTurn: 'A', phase: 'moving', pendingMoves: [] };
+  recordCapture(gameState, 1);
+  recordCapture(gameState, 2);
+  assert.equal(gameState.captureBonusThrows, 2);
+  settleTurnAfterMove(gameState, 'A');
+  settleTurnAfterMove(gameState, 'A');
+  assert.equal(gameState.currentTurn, 'A');
   settleTurnAfterMove(gameState, 'A');
   assert.equal(gameState.currentTurn, 'B');
+});
+
+test('pruneUnusableBackdo discards backdo when no piece is on the board (soft-lock fix)', () => {
+  const gameState = {
+    pendingMoves: [-1],
+    players: { A: { pieces: [
+      { id: 0, position: 0, lastPos: 0, finished: false },
+      { id: 1, position: 20, lastPos: 20, finished: true },
+    ] } },
+  };
+  assert.equal(pruneUnusableBackdo(gameState, 'A'), 1);
+  assert.deepEqual(gameState.pendingMoves, []);
+});
+
+test('pruneUnusableBackdo keeps backdo while another move could bring a piece out', () => {
+  const gameState = {
+    pendingMoves: [4, -1],
+    players: { A: { pieces: [{ id: 0, position: 0, lastPos: 0, finished: false }] } },
+  };
+  assert.equal(pruneUnusableBackdo(gameState, 'A'), 0);
+  assert.deepEqual(gameState.pendingMoves, [4, -1]);
+});
+
+test('a finishing piece does not capture an opponent waiting on the goal corner', () => {
+  const gameState = {
+    playersOrder: ['A', 'B'],
+    currentTurn: 'A',
+    phase: 'moving',
+    pendingMoves: [5],
+    players: {
+      A: { pieces: [{ id: 0, position: 18, lastPos: 17, finished: false }] },
+      B: { pieces: [{ id: 0, position: 20, lastPos: 1, finished: false }] },
+    },
+  };
+  const result = resolveYutMove(gameState, 'A', { pieceId: 0 });
+  assert.equal(result.ok, true);
+  assert.equal(gameState.players.A.pieces[0].finished, true);
+  assert.equal(result.capturedPieces.length, 0);
+  assert.equal(gameState.players.B.pieces[0].position, 20);
 });

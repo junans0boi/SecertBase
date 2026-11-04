@@ -232,6 +232,7 @@ export function createYutGameState(player1, player2, options = {}) {
     pendingMoves: [],
     hasBonusThrow: false,
     caughtOpponentThisTurn: false,
+    captureBonusThrows: 0,
     winner: null,
     lastThrow: null,
     // Throws made by the current player before the turn settles. This is
@@ -260,14 +261,40 @@ export function resetYutTurnThrows(gameState) {
   return gameState.turnThrows;
 }
 
+// 잡기로 얻은 추가 던지기 수. 구버전 상태(caughtOpponentThisTurn만 있음)는 1로 본다.
+function _captureBonus(gameState) {
+  const count = Number(gameState.captureBonusThrows) || 0;
+  return count > 0 ? count : (gameState.caughtOpponentThisTurn ? 1 : 0);
+}
+function _setCaptureBonus(gameState, count) {
+  gameState.captureBonusThrows = count;
+  gameState.caughtOpponentThisTurn = count > 0;
+}
+
 /**
- * Remember that the mover captured at least one opponent piece this turn.
- * The extra turn is granted once per turn, after every pending move settles.
+ * Remember that the mover captured opponent pieces. Every capturing move
+ * grants one extra throw, independent of the order in which pending moves
+ * and bonus throws are played (윷/모 보너스와 별개로 누적).
  */
 export function recordCapture(gameState, capturedCount) {
   if (capturedCount > 0) {
-    gameState.caughtOpponentThisTurn = true;
+    _setCaptureBonus(gameState, _captureBonus(gameState) + 1);
   }
+}
+
+/**
+ * Drop backdo (-1) results that can no longer be used: when only backdos are
+ * pending and no piece is on the board, nothing can move and the turn would
+ * soft-lock. Returns the number of discarded backdos (낙 처리).
+ */
+export function pruneUnusableBackdo(gameState, userId) {
+  const pieces = gameState.players?.[userId]?.pieces ?? [];
+  const pending = gameState.pendingMoves ?? [];
+  if (pending.length === 0 || !pending.every((m) => m === YUT_RESULTS.BACKDO)) return 0;
+  if (hasBackdoMove(pieces)) return 0;
+  const removed = pending.length;
+  gameState.pendingMoves = [];
+  return removed;
 }
 
 /**
@@ -280,16 +307,15 @@ export function settleTurnAfterMove(gameState, userId) {
     return;
   }
   if (gameState.hasBonusThrow) {
-    // Consume one bonus throw; a capture on the same turn is covered by this
-    // extra throw, so clear it instead of granting a second one later.
+    // 윷/모 보너스 던지기를 먼저 쓴다. 잡기 보너스는 남아 다음 정산에서 쓴다.
     gameState.hasBonusThrow = false;
-    gameState.caughtOpponentThisTurn = false;
     gameState.currentTurn = userId;
     gameState.phase = "throwing";
     return;
   }
-  if (gameState.caughtOpponentThisTurn) {
-    gameState.caughtOpponentThisTurn = false;
+  const captureBonus = _captureBonus(gameState);
+  if (captureBonus > 0) {
+    _setCaptureBonus(gameState, captureBonus - 1);
     gameState.currentTurn = userId;
   } else {
     gameState.currentTurn = getNextPlayer(gameState, userId);
@@ -354,7 +380,8 @@ export function resolveYutMove(
 
   gameState.pendingMoves.splice(moveIndex, 1);
   const carriedPieces = getCarriedPieces(piece, playerState.pieces);
-  const stackedPieces = moveResult.position > 0
+  // 완주(골인)한 말은 판 위에 없다: 참먹이(20)에 있는 말을 업거나 잡지 않는다.
+  const stackedPieces = moveResult.position > 0 && !moveResult.finished
     ? playerState.pieces.filter(
         (candidate) =>
           candidate.id !== pieceId &&
@@ -365,15 +392,17 @@ export function resolveYutMove(
   applyMoveToPieces(carriedPieces, moveResult);
 
   const resolvedDefenderStats = defenderStats ?? gameState.playerStats?.[opponentId] ?? {};
-  const captureResult = resolveCapture(
-    piece.position,
-    opponentState.pieces,
-    {
-      resistPct: Math.min(resolvedDefenderStats.piece_catch_resist_pct ?? 0, 15),
-      safePct: Math.min(resolvedDefenderStats.piece_safe_zone_pct ?? 0, 15),
-      random,
-    },
-  );
+  const captureResult = moveResult.finished
+    ? { capturedPieces: [], blockedPieces: [] }
+    : resolveCapture(
+      piece.position,
+      opponentState.pieces,
+      {
+        resistPct: Math.min(resolvedDefenderStats.piece_catch_resist_pct ?? 0, 15),
+        safePct: Math.min(resolvedDefenderStats.piece_safe_zone_pct ?? 0, 15),
+        random,
+      },
+    );
   recordCapture(gameState, captureResult.capturedPieces.length);
 
   return {

@@ -171,6 +171,10 @@ function _piValue(card) {
 const HONGDAN_MONTHS = new Set([1, 2, 3]);
 const CHEONGDAN_MONTHS = new Set([6, 9, 10]);
 const GODORI_MONTHS = new Set([2, 4, 8]);
+// 초단: 4·5·7월 띠(무늬 없는 단)
+const CHODAN_MONTHS = new Set([4, 5, 7]);
+// 상대 피를 1장 뺏는 이벤트
+const PI_STEAL_EVENTS = new Set(['ssok', 'ddadak', 'pansseuri', 'bomb', 'ppeok_recover']);
 const CHONGTONG_POINTS = 5;
 
 export function calculateScore(captures) {
@@ -184,8 +188,9 @@ export function calculateScore(captures) {
   const hasRain = brights.some(c => c.subtype === SUB.RAIN);
   let gwangScore = 0;
   if (gwangCount >= 3) {
+    // 비광 감점은 3광(비삼광 2점)에만 적용된다. 4광은 비광이 있어도 4점, 5광은 15점.
     const base = gwangCount === 3 ? 3 : gwangCount === 4 ? 4 : 15;
-    gwangScore = hasRain ? base - 1 : base;
+    gwangScore = gwangCount === 3 && hasRain ? base - 1 : base;
   }
 
   // 열끗
@@ -202,12 +207,14 @@ export function calculateScore(captures) {
     ribbons.some(r => r.month === m && r.subtype === SUB.RED)).length ? 3 : 0;
   const cheongdanBonus = CHEONGDAN_MONTHS.size === [...CHEONGDAN_MONTHS].filter(m =>
     ribbons.some(r => r.month === m && r.subtype === SUB.BLUE)).length ? 3 : 0;
+  const chodanBonus = [...CHODAN_MONTHS].every(m =>
+    ribbons.some(r => r.month === m && !r.subtype)) ? 3 : 0;
 
   // 피
   const piTotal = junks.reduce((s, c) => s + _piValue(c), 0);
   const piScore = piTotal >= 10 ? piTotal - 9 : 0;
 
-  const total = gwangScore + animScore + godoriScore + ribScore + hongdanBonus + cheongdanBonus + piScore;
+  const total = gwangScore + animScore + godoriScore + ribScore + hongdanBonus + cheongdanBonus + chodanBonus + piScore;
   return {
     total,
     gwangScore,
@@ -220,6 +227,7 @@ export function calculateScore(captures) {
     ribCount,
     hongdanBonus,
     cheongdanBonus,
+    chodanBonus,
     piScore,
     piTotal,
   };
@@ -278,6 +286,8 @@ export function createGostopGameState(p1Id, p2Id, opts = {}) {
     hands,
     captures,
     goCount,
+    lastGoScore: { [p1Id]: 0, [p2Id]: 0 },  // 직전 고 시점 점수(오르지 않으면 고 불가)
+    ppeokMonths: [],                         // 바닥에 뻑으로 쌓인 월
     baseMultiplier: opts.baseMultiplier ?? 1,  // 나가리 이월 배수
     shakeMultiplier: 1,
     bombMultiplier: 1,
@@ -332,6 +342,7 @@ function _resolveDeckFlip(state, playerId, context = {}) {
   const {
     playedCard = null,
     initialMatches = [],
+    pairedMonth = null, // 손패로 바닥 두 장 중 한 장만 먹은 월(따닥 판정용)
   } = context;
 
   if (state.deck.length === 0) {
@@ -352,7 +363,11 @@ function _resolveDeckFlip(state, playerId, context = {}) {
   // 한 장을 맞춘 뒤 같은 월을 뒤집으면 세 장 모두 바닥에 남긴다.
   if (initialMatches.length === 1 && playedCard && deckCard.month === playedCard.month) {
     events.push('ppeok');
-    st = { ...st, field: [...st.field, deckCard] };
+    st = {
+      ...st,
+      field: [...st.field, deckCard],
+      ppeokMonths: [...new Set([...(st.ppeokMonths ?? []), deckCard.month])],
+    };
     return _afterDeckResolved(st, playerId, events);
   }
 
@@ -376,6 +391,8 @@ function _resolveDeckFlip(state, playerId, context = {}) {
     st = { ...st, field: [...st.field, deckCard] };
   } else if (matches.length === 1) {
     st = _capture(st, playerId, [deckCard, matches[0]]);
+    // 손패로 같은 월 한 장을 먹은 뒤 덱에서 그 월이 나와 나머지까지 먹으면 따닥.
+    if (pairedMonth === deckCard.month) events.push('ddadak');
     if (st.field.length === 0) events.push('pansseuri');
   } else if (matches.length === 2) {
     events.push('ddadak_pending');
@@ -387,10 +404,40 @@ function _resolveDeckFlip(state, playerId, context = {}) {
     return { ...st, phase: 'deck_choice' };
   } else {
     st = _capture(st, playerId, [deckCard, ...matches]);
+    if ((st.ppeokMonths ?? []).includes(deckCard.month)) {
+      events.push('ppeok_recover');
+      st = { ...st, ppeokMonths: st.ppeokMonths.filter(m => m !== deckCard.month) };
+    }
     if (st.field.length === 0) events.push('pansseuri');
   }
 
   return _afterDeckResolved(st, playerId, events);
+}
+
+// ── 내부: 피 뺏기 ────────────────────────────────────────────────
+// 쪽·따닥·판쓸이·폭탄·뻑 회수 1건당 상대 피 1장(일반피 우선)을 가져온다.
+function _stealPi(state, thiefId, count) {
+  if (count <= 0) return state;
+  const victimId = state.players.find(p => p !== thiefId);
+  let victim = [...(state.captures[victimId] ?? [])];
+  const stolen = [];
+  for (let i = 0; i < count; i++) {
+    const junks = victim.filter(c => c.type === T.JUNK);
+    if (junks.length === 0) break;
+    const pick = junks.find(c => c.subtype !== SUB.DOUBLE) ?? junks[0];
+    victim = victim.filter(c => c.id !== pick.id);
+    stolen.push(pick);
+  }
+  if (stolen.length === 0) return state;
+  return {
+    ...state,
+    captures: {
+      ...state.captures,
+      [victimId]: victim,
+      [thiefId]: [...state.captures[thiefId], ...stolen],
+    },
+    lastStolen: { by: thiefId, count: stolen.length },
+  };
 }
 
 // ── 내부: 덱 처리 후 공통 ────────────────────────────────────────
@@ -432,11 +479,16 @@ export function resolveGostopTerminalState(state) {
 }
 
 function _afterDeckResolved(state, playerId, events) {
+  const stealCount = events.filter(e => PI_STEAL_EVENTS.has(e)).length;
+  state = _stealPi({ ...state, lastStolen: null }, playerId, stealCount);
+  const opponentId = state.players.find(p => p !== playerId);
   const scores = {
     ...state.scores,
     [playerId]: calculateScore(state.captures[playerId]),
+    [opponentId]: calculateScore(state.captures[opponentId] ?? []),
   };
   const st = { ...state, scores, lastEvents: events };
+  const canGo = (id) => scores[id].total >= 7 && scores[id].total > (st.lastGoScore?.[id] ?? 0);
 
   // 폭탄이나 정상적인 마지막 턴으로 양쪽 손패가 먼저 소진될 수 있다.
   // 덱이 남아 있어도 더 이상 낼 카드가 없으므로 즉시 점수를 비교한다.
@@ -445,16 +497,17 @@ function _afterDeckResolved(state, playerId, events) {
   }
 
   // 덱 소진 체크
-  if (st.deck.length === 0 && scores[playerId].total < 7) {
+  if (st.deck.length === 0 && !canGo(playerId)) {
     const otherId = st.players.find(p => p !== playerId);
-    if (scores[otherId].total < 7) return _checkNageori(st);
-    // 상대가 7점 이상: 상대 go_stop_choice
+    if (!canGo(otherId)) return _checkNageori(st);
+    // 상대가 새로 점수를 냈다: 상대 go_stop_choice
     const otherIdx = st.players.indexOf(otherId);
     return { ...st, phase: 'go_stop_choice', currentPlayerIdx: otherIdx };
   }
 
-  // 7점 이상이면 고/스톱 선택
-  if (scores[playerId].total >= 7) {
+  // 7점 이상이면서 직전 고 이후 점수가 올랐을 때만 고/스톱 선택
+  // (점수 변화 없이 매 턴 고를 외쳐 배수를 부풀리는 것을 막는다)
+  if (canGo(playerId)) {
     return { ...st, phase: 'go_stop_choice' };
   }
 
@@ -472,13 +525,18 @@ function _checkNageori(state) {
 
 // ── 내부: 다음 턴 ────────────────────────────────────────────────
 function _nextTurn(state) {
-  const nextIdx = state.currentPlayerIdx === 0 ? 1 : 0;
+  const otherIdx = state.currentPlayerIdx === 0 ? 1 : 0;
+  // 폭탄으로 손패를 3장 한꺼번에 쓴 쪽은 먼저 손패가 바닥난다. 손패가 빈 사람에게
+  // 턴을 넘기면 낼 카드가 없어 게임이 멈추므로, 손패가 남은 사람이 계속 낸다.
+  const otherHasCards = (state.hands[state.players[otherIdx]] ?? []).length > 0;
+  const nextIdx = otherHasCards ? otherIdx : state.currentPlayerIdx;
   return {
     ...state,
     phase: 'playing',
     currentPlayerIdx: nextIdx,
     pending: null,
-    lastEvents: [],
+    // 이번 턴 이벤트(쪽/뻑 등)는 다음 턴 상태에도 남겨 클라이언트가 안내할 수 있게 한다.
+    lastEvents: state.lastEvents ?? [],
     turn: state.turn + 1,
   };
 }
@@ -506,14 +564,34 @@ export function playHandCard(state, playerId, cardId) {
 
   // 두 장 이상은 손패 카드와 함께 즉시 포획한다. 한 장 이하는
   // 덱 결과까지 본 뒤 쪽/뻑을 판정해야 하므로 바닥에 잠시 남긴다.
-  if (initialMatches.length >= 2) {
-    if (initialMatches.length === 2) events.push('ddadak');
+  if (initialMatches.length === 2) {
+    // 바닥 두 장 중 한 장만 먹는다(선택 UI가 없어 더 가치 있는 패를 자동 선택).
+    // 덱에서 같은 월이 나오면 나머지까지 먹으며 따닥이 된다.
+    const best = [...initialMatches].sort((a, b) => _cardValue(b) - _cardValue(a))[0];
+    st = _capture(st, playerId, [card, best]);
+    if (st.field.length === 0) events.push('pansseuri');
+    return _resolveDeckFlip({ ...st, lastEvents: events }, playerId, { pairedMonth: card.month });
+  }
+  if (initialMatches.length >= 3) {
     st = _capture(st, playerId, [card, ...initialMatches]);
+    if ((st.ppeokMonths ?? []).includes(card.month)) {
+      events.push('ppeok_recover');
+      st = { ...st, ppeokMonths: st.ppeokMonths.filter(m => m !== card.month) };
+    }
     if (st.field.length === 0) events.push('pansseuri');
     return _resolveDeckFlip({ ...st, lastEvents: events }, playerId);
   }
 
   return _resolveDeckFlip(st, playerId, { playedCard: card, initialMatches });
+}
+
+// 자동 선택용 패 가치: 광 > 열끗 > 띠 > 쌍피 > 피
+function _cardValue(card) {
+  if (card.type === T.BRIGHT) return 5;
+  if (card.type === T.ANIMAL) return 4;
+  if (card.type === T.RIBBON) return 3;
+  if (card.subtype === SUB.DOUBLE) return 2;
+  return 1;
 }
 
 // ── 흔들기 선언 ──────────────────────────────────────────────────
@@ -574,7 +652,7 @@ export function playBomb(state, playerId, month) {
   let st = {
     ...state,
     hands: { ...state.hands, [playerId]: hand },
-    lastEvents: [...state.lastEvents, 'bomb'],
+    lastEvents: ['bomb'],
     bombMultiplier: state.bombMultiplier * 2,
   };
   st = _capture(st, playerId, [...handCards.slice(0, 3), fieldCards[0]]);
@@ -593,8 +671,8 @@ export function selectDeckCapture(state, playerId, fieldCardId) {
   const chosen = fieldOptions.find(c => c.id === fieldCardId);
   if (!chosen) throw new Error('invalid field card choice');
 
+  // 덱 카드가 바닥 두 장과 맞아 한 장을 고른 경우는 따닥이 아니다(라벨 오표시 수정).
   const events = [...state.lastEvents.filter(e => e !== 'ddadak_pending')];
-  events.push('ddadak');
 
   // 선택한 필드 카드 1개만 포획 (나머지 남음)
   let st = _capture(state, playerId, [card, chosen]);
@@ -615,9 +693,13 @@ export function declareGoStop(state, playerId, decision) {
     return _settleWin(state, playerId, []);
   }
 
-  // GO 선언
+  // GO 선언: 이 시점 점수를 기록해 두고, 점수가 더 올라야 다음 고/스톱 기회가 열린다.
   const goCount = { ...state.goCount, [playerId]: state.goCount[playerId] + 1 };
-  return _nextTurn({ ...state, goCount, phase: 'playing' });
+  const lastGoScore = {
+    ...(state.lastGoScore ?? {}),
+    [playerId]: state.scores[playerId]?.total ?? 0,
+  };
+  return _nextTurn({ ...state, goCount, lastGoScore, phase: 'playing' });
 }
 
 // ── 정산 ─────────────────────────────────────────────────────────
