@@ -125,6 +125,19 @@ re-sends the game's normal update event to the restoring socket and lists them i
 An RPS round is cancelled (`game:rps:cancelled`, reason `player_disconnected`)
 only when a participant has no remaining socket in the room.
 
+### Turn timeout (AFK) for turn-based games
+
+For `yut`, `uno`, `gostop`, `marble`, `blackjack`, `oldmaid`, `bowling`,
+`penalty`, `pirate` and `rps` the server watches the player it is waiting for.
+After 60 s without a state-changing action it emits
+`game:afk:warning { gameType, player, secondsLeft }`; after 90 s it emits
+`game:afk:forfeit { gameType, loser, winner }` and ends the game through that
+game's normal end event with reason `forfeit` (stakes settle, results are
+recorded; RPS is cancelled with reason `afk`). Simultaneous-choice games only
+time out when exactly one player has answered. The resumable-game cleanup grace
+(150 s) is longer than the AFK limit so an abandoned game is forfeited, not
+silently deleted.
+
 ### Tank Battle 2.0 (`game:tank:*`)
 
 ```text
