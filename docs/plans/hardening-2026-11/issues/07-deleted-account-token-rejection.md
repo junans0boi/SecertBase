@@ -4,9 +4,9 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done (closed) - https://github.com/junans0boi/SecertBase/issues/208
 
-- [ ] 탈퇴(IsDeleted) 계정은 401 또는 403을 받는다
-- [ ] 활성 계정은 영향받지 않는다
-- [ ] 확인 결과는 짧은 시간 캐시되고 탈퇴 시 무효화된다
-- [ ] DB 오류는 fail-open이며 로그에 남는다
+- [x] 탈퇴(IsDeleted) 계정은 401 또는 403을 받는다
+- [x] 활성 계정은 영향받지 않는다
+- [x] 확인 결과는 짧은 시간 캐시되고 탈퇴 시 무효화된다
+- [x] DB 오류는 fail-open이며 로그에 남는다

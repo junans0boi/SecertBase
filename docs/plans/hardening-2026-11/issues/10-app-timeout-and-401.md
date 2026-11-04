@@ -4,9 +4,9 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done (closed) - https://github.com/junans0boi/SecertBase/issues/212
 
-- [ ] 타임아웃이 ApiException(timeout)으로 보고된다
-- [ ] 토큰을 보낸 요청의 401만 로그아웃 콜백을 부른다
-- [ ] 로그인·가입의 401(잘못된 자격)은 로그아웃을 일으키지 않는다
-- [ ] format, analyze, test가 통과한다
+- [x] 타임아웃이 ApiException(timeout)으로 보고된다
+- [x] 토큰을 보낸 요청의 401만 로그아웃 콜백을 부른다
+- [x] 로그인·가입의 401(잘못된 자격)은 로그아웃을 일으키지 않는다
+- [x] format, analyze, test가 통과한다

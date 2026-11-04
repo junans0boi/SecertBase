@@ -1,6 +1,6 @@
 # Wayfinder Map: 하드닝 2026-11
 
-**Label:** `wayfinder:map`
+**Label:** `wayfinder:map` · GitHub: [#215](https://github.com/junans0boi/SecertBase/issues/215) · Spec: [#202](https://github.com/junans0boi/SecertBase/issues/202)
 
 ## Destination
 
@@ -14,18 +14,18 @@
 
 ## Decisions so far
 
-- [게이트 대소문자 우회 차단](issues/01-gate-case-insensitive.md): 경로를 소문자로 정규화해 비교한다.
-- [프리미엄은 검증 없이 활성화하지 않는다](issues/02-premium-activation-disabled.md): 기본 거부, 개발 설정으로만 허용.
-- [상담 위기 감지](issues/03-counseling-crisis-detection.md): 상담 경로에서 LLM 호출 전에 감지하고 안전 안내 반환.
-- [업로드 하드닝](issues/04-upload-hardening.md): 확장자 화이트리스트와 서빙 헤더.
-- [로그인 제한과 보안 헤더](issues/05-auth-rate-limit-and-headers.md): 자체 제한기와 기본 헤더.
-- [MomentLoop 삭제는 작성자만](issues/06-moment-delete-author-only.md): 수정은 파트너 허용 유지.
-- [탈퇴 계정 토큰 거부](issues/07-deleted-account-token-rejection.md): 짧은 TTL 캐시로 확인.
-- [소소한 서버 결함](issues/08-small-backend-fixes.md): 해시 없는 로그인, 로그 마스킹, 푸시 폐기, 쿠폰, 소원권.
-- [테스트와 운영 환경 분리](issues/09-test-env-isolation.md): 테스트에서는 `.env`를 읽지 않는다.
-- [앱 타임아웃과 401 처리](issues/10-app-timeout-and-401.md)
-- [안드로이드 자동 백업 끄기](issues/11-android-backup-off.md)
-- [배포 안전장치와 워크플로 정리](issues/12-deploy-safety.md)
+- [게이트 대소문자 우회 차단](issues/01-gate-case-insensitive.md) [#203](https://github.com/junans0boi/SecertBase/issues/203): 경로를 소문자로 정규화해 비교한다.
+- [프리미엄은 검증 없이 활성화하지 않는다](issues/02-premium-activation-disabled.md) [#204](https://github.com/junans0boi/SecertBase/issues/204): 기본 거부, 개발 설정으로만 허용.
+- [상담 위기 감지](issues/03-counseling-crisis-detection.md) [#207](https://github.com/junans0boi/SecertBase/issues/207): 상담 경로에서 LLM 호출 전에 감지하고 안전 안내 반환.
+- [업로드 하드닝](issues/04-upload-hardening.md) [#205](https://github.com/junans0boi/SecertBase/issues/205): 확장자 화이트리스트와 서빙 헤더.
+- [로그인 제한과 보안 헤더](issues/05-auth-rate-limit-and-headers.md) [#206](https://github.com/junans0boi/SecertBase/issues/206): 자체 제한기와 기본 헤더.
+- [MomentLoop 삭제는 작성자만](issues/06-moment-delete-author-only.md) [#210](https://github.com/junans0boi/SecertBase/issues/210): 수정은 파트너 허용 유지.
+- [탈퇴 계정 토큰 거부](issues/07-deleted-account-token-rejection.md) [#208](https://github.com/junans0boi/SecertBase/issues/208): 짧은 TTL 캐시로 확인.
+- [소소한 서버 결함](issues/08-small-backend-fixes.md) [#209](https://github.com/junans0boi/SecertBase/issues/209): 해시 없는 로그인, 로그 마스킹, 푸시 폐기, 쿠폰, 소원권.
+- [테스트와 운영 환경 분리](issues/09-test-env-isolation.md) [#211](https://github.com/junans0boi/SecertBase/issues/211): 테스트에서는 `.env`를 읽지 않는다.
+- [앱 타임아웃과 401 처리](issues/10-app-timeout-and-401.md) [#212](https://github.com/junans0boi/SecertBase/issues/212)
+- [안드로이드 자동 백업 끄기](issues/11-android-backup-off.md) [#214](https://github.com/junans0boi/SecertBase/issues/214)
+- [배포 안전장치와 워크플로 정리](issues/12-deploy-safety.md) [#213](https://github.com/junans0boi/SecertBase/issues/213)
 
 ## Not yet specified
 

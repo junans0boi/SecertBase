@@ -4,9 +4,9 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done (closed) - https://github.com/junans0boi/SecertBase/issues/210
 
-- [ ] 파트너의 삭제 시도가 moment_author_required로 거부된다
-- [ ] 작성자 삭제와 파트너 수정은 계속 동작한다
-- [ ] 실패하던 테스트가 정책에 맞게 갱신되어 통과한다
-- [ ] REST 문서의 MomentLoop 변경 정책 문구가 일치한다
+- [x] 파트너의 삭제 시도가 moment_author_required로 거부된다
+- [x] 작성자 삭제와 파트너 수정은 계속 동작한다
+- [x] 실패하던 테스트가 정책에 맞게 갱신되어 통과한다
+- [x] REST 문서의 MomentLoop 변경 정책 문구가 일치한다

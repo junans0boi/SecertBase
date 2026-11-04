@@ -4,8 +4,8 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done (closed) - https://github.com/junans0boi/SecertBase/issues/211
 
-- [ ] NODE_ENV=test에서는 .env를 읽지 않는다
-- [ ] 운영(NODE_ENV 미설정/production)에서는 기존처럼 .env가 적용된다
-- [ ] 서버 임시 사본에서 전체 테스트가 통과한다
+- [x] NODE_ENV=test에서는 .env를 읽지 않는다
+- [x] 운영(NODE_ENV 미설정/production)에서는 기존처럼 .env가 적용된다
+- [x] 서버 임시 사본에서 전체 테스트가 통과한다

@@ -4,10 +4,10 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done (closed) - https://github.com/junans0boi/SecertBase/issues/209
 
-- [ ] 구글 가입 계정의 비밀번호 로그인이 500 대신 401이다
-- [ ] DB 에러 로그에 params가 없다
-- [ ] invalid-argument로 토큰이 폐기되지 않는다
-- [ ] 비활성 커플의 파트너는 쿠폰 대상이 아니다
-- [ ] used/canceled 소원권은 재사용·취소되지 않는다
+- [x] 구글 가입 계정의 비밀번호 로그인이 500 대신 401이다
+- [x] DB 에러 로그에 params가 없다
+- [x] invalid-argument로 토큰이 폐기되지 않는다
+- [x] 비활성 커플의 파트너는 쿠폰 대상이 아니다
+- [x] used/canceled 소원권은 재사용·취소되지 않는다

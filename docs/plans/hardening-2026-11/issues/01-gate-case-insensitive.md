@@ -4,8 +4,8 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done (closed) - https://github.com/junans0boi/SecertBase/issues/203
 
-- [ ] 대문자·혼합 대소문자 경로가 비활성 기능으로 판정된다
-- [ ] 기존 소문자 경로 동작은 그대로다
-- [ ] legacy 기능 세트에서는 모든 경로가 통과한다
+- [x] 대문자·혼합 대소문자 경로가 비활성 기능으로 판정된다
+- [x] 기존 소문자 경로 동작은 그대로다
+- [x] legacy 기능 세트에서는 모든 경로가 통과한다

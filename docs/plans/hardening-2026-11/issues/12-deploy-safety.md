@@ -4,11 +4,11 @@
 
 **Blocked by:** 09
 
-**Status:** ready-for-agent
+**Status:** done (closed) - https://github.com/junans0boi/SecertBase/issues/213
 
-- [ ] 마이그레이션이 웹 rsync보다 먼저 실행된다
-- [ ] 직전 웹 빌드가 최근 5개까지 보관된다
-- [ ] 헬스체크가 30회 시도한다
-- [ ] bash -n 문법 검사를 통과한다
-- [ ] deploy-to-server에 concurrency가 있다
-- [ ] Pages 빌드에 GOOGLE_CLIENT_ID가 전달된다
+- [x] 마이그레이션이 웹 rsync보다 먼저 실행된다
+- [x] 직전 웹 빌드가 최근 5개까지 보관된다
+- [x] 헬스체크가 30회 시도한다
+- [x] bash -n 문법 검사를 통과한다
+- [x] deploy-to-server에 concurrency가 있다
+- [x] Pages 빌드에 GOOGLE_CLIENT_ID가 전달된다

@@ -4,9 +4,9 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done (closed) - https://github.com/junans0boi/SecertBase/issues/205
 
-- [ ] 허용 목록 밖 MIME은 거부된다
-- [ ] 저장 파일의 확장자는 화이트리스트에서만 정해진다
-- [ ] 서빙 응답에 nosniff와 샌드박스 CSP가 붙는다
-- [ ] 기존 정상 업로드(jpeg, png, webp, mp4 등)는 계속 동작한다
+- [x] 허용 목록 밖 MIME은 거부된다
+- [x] 저장 파일의 확장자는 화이트리스트에서만 정해진다
+- [x] 서빙 응답에 nosniff와 샌드박스 CSP가 붙는다
+- [x] 기존 정상 업로드(jpeg, png, webp, mp4 등)는 계속 동작한다

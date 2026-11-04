@@ -4,9 +4,9 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done (closed) - https://github.com/junans0boi/SecertBase/issues/206
 
-- [ ] 한도 초과 시 429와 Retry-After를 반환한다
-- [ ] 한도는 윈도우가 지나면 풀린다
-- [ ] 정상 사용 흐름은 영향받지 않는다
-- [ ] 응답에 nosniff, frame 차단, referrer 정책 헤더가 있다
+- [x] 한도 초과 시 429와 Retry-After를 반환한다
+- [x] 한도는 윈도우가 지나면 풀린다
+- [x] 정상 사용 흐름은 영향받지 않는다
+- [x] 응답에 nosniff, frame 차단, referrer 정책 헤더가 있다

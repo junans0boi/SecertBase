@@ -4,6 +4,6 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done (closed) - https://github.com/junans0boi/SecertBase/issues/214
 
-- [ ] 매니페스트에 allowBackup=false가 설정된다
+- [x] 매니페스트에 allowBackup=false가 설정된다
