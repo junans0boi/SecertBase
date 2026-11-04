@@ -60,6 +60,12 @@ class SocketService extends ChangeNotifier {
   int lobbyStake = 0;
   int lobbyStartedStake = 0;
   String? lobbyResumedGameType;
+  // 판돈이 걸린 판에서 비방장이 누른 준비 완료 여부(서버 기준)
+  Map<String, bool> lobbyReady = {};
+
+  // 서버가 게임 동작을 거부했을 때 사용자에게 보여줄 안내 (GameMenuListener가 표시)
+  String? gameNotice;
+  int gameNoticeSeq = 0;
 
   // wallet
   int? walletBalance;
@@ -217,6 +223,9 @@ class SocketService extends ChangeNotifier {
   int catchMaxRounds = 6;
   Map<String, int> catchScores = {};
   String? catchPhase; // 'drawing' | 'guessed' | 'timeout' | 'gameover'
+  // 서버 기준 라운드 남은 시간(재접속·이어하기 시 타이머 보정용)
+  int? catchRemainingMs;
+  int catchRoundSeq = 0;
   String? catchGameWinner;
   String? catchHint;
   List<Map<String, dynamic>> catchGuessLog = [];
@@ -242,6 +251,13 @@ class SocketService extends ChangeNotifier {
   Map<String, dynamic>? tankState;
   Map<String, dynamic>? tankLastShot;
   String? tankWinner;
+  String? tankEndReason;
+  Map<String, dynamic>? tankSummary;
+  Map<String, int> tankSeries = {};
+  Map<String, dynamic>? tankTimeoutEvent;
+  int tankTimeoutSeq = 0;
+  List<dynamic> tankMoveEvents = [];
+  int tankMoveSeq = 0;
 
   // 고스톱 (2인 맞고)
   bool gostopActive = false;
@@ -390,6 +406,11 @@ class SocketService extends ChangeNotifier {
     tankState = null;
     tankLastShot = null;
     tankWinner = null;
+    tankEndReason = null;
+    tankSummary = null;
+    tankSeries = {};
+    tankTimeoutEvent = null;
+    tankMoveEvents = [];
     gostopActive = false;
     gostopState = null;
     gostopSettlement = null;
@@ -501,6 +522,10 @@ class SocketService extends ChangeNotifier {
       lobbyPlayers = players is List ? players.map((e) => '$e').toList() : [];
       lobbyCharacterSelections = _stringMap(map['characterSelections']);
       lobbyStake = (map['stake'] as num?)?.toInt() ?? 0;
+      final readyRaw = map['ready'];
+      lobbyReady = readyRaw is Map
+          ? readyRaw.map((k, v) => MapEntry('$k', v == true))
+          : <String, bool>{};
       final emojis = _stringMap(map['profileEmojis']);
       if (emojis.isNotEmpty) profileEmojis = emojis;
       final nicks = _stringMap(map['nicknames']);
@@ -668,6 +693,25 @@ class SocketService extends ChangeNotifier {
       notifyListeners();
     });
 
+    // 상대 연결이 끊겨 서버가 판을 취소하면 대기 화면에서 빠져나온다.
+    socket.on('game:rps:cancelled', (_) {
+      rpsMode = null;
+      rpsActive = false;
+      rpsPlayers = [];
+      rpsScores = {};
+      rpsRound = 0;
+      rpsMukjippaPhase = null;
+      rpsMukjippaAttacker = null;
+      rpsLastChoices = null;
+      rpsLastFingers = null;
+      rpsLastGuesses = null;
+      rpsLastTotal = null;
+      rpsRoundWinner = null;
+      rpsGameWinner = null;
+      rpsRoundHistory = [];
+      _setGameNotice('상대 연결이 끊겨 가위바위보 판이 취소되었어요.');
+    });
+
     socket.on('game:telepathy:result', (data) {
       final map = _m(data);
       telepathySuccess = map['success'] == true;
@@ -685,7 +729,11 @@ class SocketService extends ChangeNotifier {
       pirateActive = true;
       pirateTotalSlots = (map['slots'] as num?)?.toInt() ?? 8;
       pirateCurrentTurn = map['currentTurn'] as String?;
-      piratePickedSlots = [];
+      // 재접속 시 서버가 이미 꽂힌 칼 목록을 보내준다.
+      final rawSlots = map['pickedSlots'];
+      piratePickedSlots = rawSlots is List
+          ? rawSlots.map((e) => (e as num).toInt()).toList()
+          : <int>[];
       pirateLoser = null;
       pirateBombSlot = null;
       final players = map['players'];
@@ -697,7 +745,13 @@ class SocketService extends ChangeNotifier {
     socket.on('game:pirate:slot_picked', (data) {
       final map = _m(data);
       final slot = (map['slot'] as num?)?.toInt();
-      if (slot != null) piratePickedSlots = [...piratePickedSlots, slot];
+      final serverSlots = map['pickedSlots'];
+      if (serverSlots is List) {
+        // 서버 배열을 그대로 쓴다(중복 수신 시에도 어긋나지 않음).
+        piratePickedSlots = serverSlots.map((e) => (e as num).toInt()).toList();
+      } else if (slot != null && !piratePickedSlots.contains(slot)) {
+        piratePickedSlots = [...piratePickedSlots, slot];
+      }
       pirateCurrentTurn = map['nextTurn'] as String?;
       _log('해적룰렛 선택: $slot → 다음 $pirateCurrentTurn');
       notifyListeners();
@@ -1143,7 +1197,11 @@ class SocketService extends ChangeNotifier {
       tankState = _m(data);
       tankLastShot = null;
       tankWinner = null;
+      tankEndReason = null;
+      tankSummary = null;
       tankActive = true;
+      final series = _m(tankState?['series']);
+      tankSeries = series.map((k, v) => MapEntry(k, (v as num?)?.toInt() ?? 0));
       _log('탱크 대작전 시작');
       notifyListeners();
     });
@@ -1161,10 +1219,33 @@ class SocketService extends ChangeNotifier {
     });
 
     socket.on('game:tank:ended', (data) {
-      tankWinner = _m(data)['winner'] as String?;
+      final map = _m(data);
+      tankWinner = map['winner'] as String?;
+      tankEndReason = map['reason'] as String?;
+      tankSummary = map['summary'] is Map ? _m(map['summary']) : null;
+      final series = _m(map['series']);
+      tankSeries = series.map((k, v) => MapEntry(k, (v as num?)?.toInt() ?? 0));
+      if (map['state'] is Map) tankState = _m(map['state']);
       tankActive = false;
-      _log('탱크 게임 종료: 승자 $tankWinner');
+      _log('탱크 게임 종료: 승자 $tankWinner ($tankEndReason)');
       notifyListeners();
+    });
+
+    socket.on('game:tank:timeout', (data) {
+      tankTimeoutEvent = _m(data);
+      tankTimeoutSeq++;
+      notifyListeners();
+    });
+
+    socket.on('game:tank:moved', (data) {
+      final events = _m(data)['events'];
+      tankMoveEvents = events is List ? events : [];
+      tankMoveSeq++;
+      notifyListeners();
+    });
+
+    socket.on('wallet:settle_failed', (_) {
+      _setGameNotice('코인 정산이 지연되고 있어요. 잠시 후 잔액을 확인해 주세요.');
     });
 
     socket.on('game:gostop:started', (data) {
@@ -1255,6 +1336,8 @@ class SocketService extends ChangeNotifier {
     socket.on('game:catch:started', (data) {
       final map = _m(data);
       applyRoundStart(map);
+      catchRemainingMs = (map['remainingMs'] as num?)?.toInt();
+      catchRoundSeq++;
       _log('캐치마인드 시작 round=$catchRound, drawer=$catchDrawer');
       notifyListeners();
     });
@@ -1262,6 +1345,8 @@ class SocketService extends ChangeNotifier {
     socket.on('game:catch:round_start', (data) {
       final map = _m(data);
       applyRoundStart(map);
+      catchRemainingMs = null;
+      catchRoundSeq++;
       _onCatchClear?.call(); // 새 라운드 = 캔버스 클리어
       _log('캐치마인드 라운드 시작 round=$catchRound, drawer=$catchDrawer');
       notifyListeners();
@@ -1359,7 +1444,7 @@ class SocketService extends ChangeNotifier {
   void requestRestart(String gameType) {
     restartWaiting = true;
     notifyListeners();
-    _socket?.emit('game:restart:request', {'gameType': gameType});
+    _emitGame('game:restart:request', {'gameType': gameType});
   }
 
   void respondToRestart(bool accept, String gameType) {
@@ -1659,25 +1744,109 @@ class SocketService extends ChangeNotifier {
   }
 
   void startGameLobby(String gameType) {
-    _socket?.emitWithAck(
-      'game:lobby:start',
-      {'gameType': gameType},
-      ack: (r) {
-        final map = _m(r);
-        if (map['ok'] != true) {
-          _log('게임 시작 실패: ${map['reason']}');
-        }
-      },
-    );
+    _emitGame('game:lobby:start', {'gameType': gameType});
   }
 
   void setLobbyStake(String gameType, int stake) {
     lobbyStake = stake;
+    lobbyReady = {};
     notifyListeners();
-    _socket?.emit('game:lobby:set_stake', {
-      'gameType': gameType,
-      'stake': stake,
-    });
+    _emitGame('game:lobby:set_stake', {'gameType': gameType, 'stake': stake});
+  }
+
+  /// 판돈이 걸린 판에서 비방장이 금액에 동의(준비 완료)한다.
+  void setLobbyReady(String gameType, bool ready) {
+    final me = userId;
+    if (me != null) {
+      lobbyReady = {...lobbyReady, me: ready};
+      notifyListeners();
+    }
+    _emitGame('game:lobby:ready', {'gameType': gameType, 'ready': ready});
+  }
+
+  // ── 서버 거부 사유 안내 ────────────────────────────────────────────────────
+
+  static const Set<String> _silentGameReasons = {
+    'wrong_answer',
+    'time_up',
+    'already_selected',
+    'waiting',
+  };
+
+  static const Map<String, String> _gameReasonMessages = {
+    'not_joined': '방에 연결되어 있지 않아요.',
+    'not_connected': '서버에 연결되어 있지 않아요. 잠시 후 다시 시도해 주세요.',
+    'need_two_players': '두 사람이 모두 접속해야 해요.',
+    'not_your_turn': '아직 내 차례가 아니에요.',
+    'not your turn': '아직 내 차례가 아니에요.',
+    'game_in_progress': '이미 진행 중인 게임이 있어요.',
+    'no_game': '진행 중인 게임이 없어요. 다시 시작해 주세요.',
+    'invalid_payload': '요청 형식이 올바르지 않아요.',
+    'internal_error': '서버에서 오류가 발생했어요. 잠시 후 다시 시도해 주세요.',
+    'partner_not_ready': '상대가 아직 준비 완료를 누르지 않았어요.',
+    'not_host': '방장만 할 수 있어요.',
+    'host_cannot_ready': '방장은 준비 완료를 누를 필요가 없어요.',
+    'stake_not_supported': '이 게임은 판돈을 걸 수 없어요.',
+    'invalid_stake': '선택할 수 없는 판돈이에요.',
+    'must_choose_drawn_card': '뽑은 카드를 낼지 먼저 정해 주세요.',
+    'must_draw_or_defend': '공격 카드를 막거나 카드를 받아야 해요.',
+    'round_not_over': '아직 라운드 시간이 남아 있어요.',
+    'hint_used': '힌트는 라운드당 한 번만 쓸 수 있어요.',
+    'blocked': '경사가 너무 가팔라서 올라갈 수 없어요.',
+    'not enough fuel': '연료가 부족해요.',
+    'out of ammo': '탄약이 없어요.',
+    'weapon not owned': '사용할 수 없는 무기예요.',
+    'wrong phase': '지금은 할 수 없는 동작이에요.',
+    'no_restart_request': '재시작 요청이 만료되었어요.',
+    'unsupported_game': '이 게임은 재시작을 지원하지 않아요.',
+    'options_mismatch': '상대가 다른 문제를 풀고 있어요. 같은 문제로 맞춰 주세요.',
+    'already_submitted': '이미 선택했어요.',
+    'land_action_pending': '영지 선택을 먼저 마쳐 주세요.',
+    'must_move_first': '먼저 말을 움직여 주세요.',
+    'not_a_player': '이 게임의 참가자가 아니에요.',
+  };
+
+  void _setGameNotice(String message) {
+    gameNotice = message;
+    gameNoticeSeq++;
+    notifyListeners();
+  }
+
+  void clearGameNotice() {
+    gameNotice = null;
+  }
+
+  /// ack를 받아 거부 사유를 안내하는 게임 이벤트 전송.
+  void _emitGame(
+    String event, [
+    Map<String, dynamic>? payload,
+    void Function(Map<String, dynamic> ack)? onAck,
+  ]) {
+    final socket = _socket;
+    if (socket == null) {
+      _setGameNotice(_gameReasonMessages['not_connected']!);
+      return;
+    }
+    socket.emitWithAck(
+      event,
+      payload ?? <String, dynamic>{},
+      ack: (r) {
+        final map = _m(r);
+        final failed = map['ok'] == false || map['error'] != null;
+        final rawReason = map['reason'] ?? map['error'];
+        // 사유 없는 거부는 대개 이미 처리된 중복 요청(예: 두 기기가 동시에 보낸 타임아웃)이라 조용히 넘긴다.
+        if (failed && rawReason != null) {
+          final reason = '$rawReason';
+          _log('$event 거부: $reason');
+          if (!_silentGameReasons.contains(reason)) {
+            _setGameNotice(
+              _gameReasonMessages[reason] ?? '요청을 처리하지 못했어요. ($reason)',
+            );
+          }
+        }
+        onAck?.call(map);
+      },
+    );
   }
 
   void clearLobbyStart() {
@@ -1709,15 +1878,15 @@ class SocketService extends ChangeNotifier {
   }
 
   void startRpsGame(String mode) {
-    _socket?.emit('game:rps:start', {'mode': mode});
+    _emitGame('game:rps:start', {'mode': mode});
   }
 
   void pickRps(String choice) {
-    _socket?.emit('game:rps:pick', {'choice': choice});
+    _emitGame('game:rps:pick', {'choice': choice});
   }
 
   void pickHanabagi(int fingers, int guess) {
-    _socket?.emit('game:rps:pick', {'fingers': fingers, 'guess': guess});
+    _emitGame('game:rps:pick', {'fingers': fingers, 'guess': guess});
   }
 
   void clearRpsRound() {
@@ -1728,42 +1897,43 @@ class SocketService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 서버가 reset_done을 방 전체에 보내면 그때 상태를 비운다(낙관적 초기화 금지:
+  /// 서버가 거부하면 화면과 서버 상태가 어긋난다).
   void resetRpsGame() {
-    rpsMode = null;
-    rpsActive = false;
-    rpsPlayers = [];
-    rpsScores = {};
-    rpsRound = 0;
-    rpsMukjippaPhase = null;
-    rpsMukjippaAttacker = null;
-    rpsLastChoices = null;
-    rpsLastFingers = null;
-    rpsLastGuesses = null;
-    rpsLastTotal = null;
-    rpsRoundWinner = null;
-    rpsGameWinner = null;
-    rpsRoundHistory = [];
-    notifyListeners();
-    _socket?.emit('game:rps:reset');
+    _emitGame('game:rps:reset');
   }
 
-  void playTelepathy(String choice, List<String> options) {
+  /// [onMismatch]: 상대가 이미 다른 문제에 답해 둔 경우 서버가 그 문제의 보기를 알려준다.
+  /// 화면은 같은 문제로 이동해 다시 고르게 한다(상대의 답을 버리지 않기 위해).
+  void playTelepathy(
+    String choice,
+    List<String> options, {
+    void Function(List<String> partnerOptions)? onMismatch,
+  }) {
     telepathySuccess = null;
     telepathySelected = null;
     telepathyChoices = null;
     notifyListeners();
-    _socket?.emit('game:telepathy:select', {
-      'choice': choice,
-      'options': options,
-    });
+    _emitGame(
+      'game:telepathy:select',
+      {'choice': choice, 'options': options},
+      (ack) {
+        if (ack['reason'] == 'options_mismatch') {
+          final raw = ack['options'];
+          onMismatch?.call(
+            raw is List ? raw.map((e) => '$e').toList() : const <String>[],
+          );
+        }
+      },
+    );
   }
 
   void startPirate(int slots) {
-    _socket?.emit('game:pirate:start', {'slots': slots});
+    _emitGame('game:pirate:start', {'slots': slots});
   }
 
   void pickPirateSlot(int slot) {
-    _socket?.emit('game:pirate:pick', {'slot': slot});
+    _emitGame('game:pirate:pick', {'slot': slot});
   }
 
   void resetPirate() {
@@ -1774,25 +1944,25 @@ class SocketService extends ChangeNotifier {
     pirateBombSlot = null;
     piratePlayers = [];
     notifyListeners();
-    _socket?.emit('game:pirate:reset', {});
+    _emitGame('game:pirate:reset', {});
   }
 
   // ── blackjack ─────────────────────────────────────────────────────────────
 
   void startBlackjack() {
-    _socket?.emit('game:blackjack:start', {});
+    _emitGame('game:blackjack:start', {});
   }
 
   void hitBlackjack() {
-    _socket?.emit('game:blackjack:hit', {});
+    _emitGame('game:blackjack:hit', {});
   }
 
   void standBlackjack() {
-    _socket?.emit('game:blackjack:stand', {});
+    _emitGame('game:blackjack:stand', {});
   }
 
   void nextBlackjackRound() {
-    _socket?.emit('game:blackjack:next_round', {});
+    _emitGame('game:blackjack:next_round', {});
   }
 
   // ── oldmaid (도둑잡기) ──────────────────────────────────────────────────
@@ -1818,41 +1988,59 @@ class SocketService extends ChangeNotifier {
   }
 
   void drawOldMaidCard(String cardId) {
-    _socket?.emit('game:oldmaid:draw', {'cardId': cardId});
+    _emitGame('game:oldmaid:draw', {'cardId': cardId});
   }
 
   // ── penalty (패널티킥) ──────────────────────────────────────────────────
 
   void startPenalty() {
-    _socket?.emit('game:penalty:start', {});
+    _emitGame('game:penalty:start', {});
   }
 
   void submitPenaltyChoice(int choice) {
-    _socket?.emit('game:penalty:submit', {'choice': choice});
+    _emitGame('game:penalty:submit', {'choice': choice});
   }
 
   // ── bowling (볼링) ───────────────────────────────────────────────────────
 
   void startBowling() {
-    _socket?.emit('game:bowling:start', {});
+    _emitGame('game:bowling:start', {});
   }
 
-  void rollBowling(int pins, {double aim = 0, double curve = 0}) {
-    _socket?.emit('game:bowling:roll', {
-      'pins': pins,
-      'aim': aim,
-      'curve': curve,
+  /// 투구: 서버가 같은 결정론적 시뮬레이션으로 핀 수를 정하고, 손 떨림이 반영된
+  /// 실제 조준값(aim/curve)을 돌려준다. 화면은 그 값으로 연출해 점수와 일치시킨다.
+  void throwBowling(
+    double aim,
+    double curve,
+    void Function(double aim, double curve, int pins) onResult, {
+    void Function()? onRejected,
+  }) {
+    _emitGame('game:bowling:roll', {'aim': aim, 'curve': curve}, (ack) {
+      if (ack['ok'] == true) {
+        onResult(
+          (ack['aim'] as num?)?.toDouble() ?? aim,
+          (ack['curve'] as num?)?.toDouble() ?? curve,
+          (ack['pins'] as num?)?.toInt() ?? 0,
+        );
+      } else {
+        onRejected?.call();
+      }
     });
   }
 
   // ── tank 대작전 ───────────────────────────────────────────────────────────
 
-  void startTank({int stake = 0}) {
-    _socket?.emit('game:tank:new', {'stake': stake});
+  /// 판돈은 로비에서 합의된 값을 서버가 적용한다(클라이언트가 보내지 않는다).
+  void startTank() {
+    _emitGame('game:tank:new');
+  }
+
+  void selectTankClass(String tankClass) {
+    _emitGame('game:tank:select', {'tankClass': tankClass});
   }
 
   void moveTank(int delta) {
-    _socket?.emit('game:tank:move', {'delta': delta});
+    _emitGame('game:tank:move', {'delta': delta});
   }
 
   void aimTank(int angle, int power) {
@@ -1860,20 +2048,17 @@ class SocketService extends ChangeNotifier {
   }
 
   void selectTankWeapon(String weapon) {
-    _socket?.emit('game:tank:weapon', {'weapon': weapon});
+    _emitGame('game:tank:weapon', {'weapon': weapon});
   }
 
-  void fireTank() {
-    _socket?.emitWithAck(
-      'game:tank:fire',
-      null,
-      ack: (r) {
-        final map = _m(r);
-        if (map['ok'] != true) {
-          _log('탱크 발사 실패: ${map['reason'] ?? map['error']}');
-        }
-      },
-    );
+  /// 조준은 화면에서만 하고, 발사할 때 각도·파워·무기를 함께 보낸다
+  /// (발사 전까지 상대에게 조준값이 공개되지 않는다).
+  void fireTank({required int angle, required int power, required String weapon}) {
+    _emitGame('game:tank:fire', {
+      'angle': angle,
+      'power': power,
+      'weapon': weapon,
+    });
   }
 
   // ── 고스톱 (2인 맞고) ─────────────────────────────────────────────────────
@@ -1965,7 +2150,7 @@ class SocketService extends ChangeNotifier {
       _onItemEffect = cb;
 
   void startCatch({int maxRounds = 6}) {
-    _socket?.emit('game:catch:start', {'maxRounds': maxRounds});
+    _emitGame('game:catch:start', {'maxRounds': maxRounds});
   }
 
   void sendCatchDraw(
@@ -1989,34 +2174,24 @@ class SocketService extends ChangeNotifier {
   }
 
   void guessCatch(String text) {
-    _socket?.emit('game:catch:guess', {'text': text});
+    _emitGame('game:catch:guess', {'text': text});
   }
 
   void requestCatchHint() {
-    _socket?.emit('game:catch:hint_req');
+    _emitGame('game:catch:hint_req');
   }
 
   void timeoutCatch() {
-    _socket?.emit('game:catch:timeout');
+    _emitGame('game:catch:timeout');
   }
 
   void nextCatchRound() {
-    _socket?.emit('game:catch:next');
+    _emitGame('game:catch:next');
   }
 
+  /// 서버의 reset_done 이벤트가 오면 상태를 비운다(낙관적 초기화 금지).
   void resetCatch() {
-    catchActive = false;
-    catchDrawer = null;
-    catchWord = null;
-    catchWordLen = 0;
-    catchRound = 0;
-    catchScores = {};
-    catchPhase = null;
-    catchGameWinner = null;
-    catchHint = null;
-    catchGuessLog = [];
-    notifyListeners();
-    _socket?.emit('game:catch:reset');
+    _emitGame('game:catch:reset');
   }
 
   void newYutGame({Map<String, String>? characters, String? bgm, int? stake}) {
@@ -2025,13 +2200,12 @@ class SocketService extends ChangeNotifier {
       payload['characters'] = characters;
     }
     if (bgm != null) payload['bgm'] = bgm;
-    final finalStake = stake ?? (lobbyStartedStake > 0 ? lobbyStartedStake : 0);
-    if (finalStake > 0) payload['stake'] = finalStake;
-    _socket?.emit('game:yut:new', payload);
+    // 판돈은 서버가 로비 합의값으로 적용한다(payload의 stake는 무시됨).
+    _emitGame('game:yut:new', payload);
   }
 
-  void rollYutStartDice() => _socket?.emit('game:yut:roll_start');
-  void throwYut() => _socket?.emit('game:yut:throw');
+  void rollYutStartDice() => _emitGame('game:yut:roll_start');
+  void throwYut() => _emitGame('game:yut:throw');
   void moveYut(int pieceId, {int moveIndex = 0, int? backdoDir}) {
     final payload = <String, dynamic>{
       'pieceId': pieceId,
@@ -2076,23 +2250,23 @@ class SocketService extends ChangeNotifier {
     if (characters != null && characters.isNotEmpty) {
       payload['characters'] = characters;
     }
-    _socket?.emit('game:marble:new', payload);
+    _emitGame('game:marble:new', payload);
   }
 
-  void rollMarbleStartDice() => _socket?.emit('game:marble:roll_start');
-  void rollMarble() => _socket?.emit('game:marble:roll');
+  void rollMarbleStartDice() => _emitGame('game:marble:roll_start');
+  void rollMarble() => _emitGame('game:marble:roll');
 
   void moveMarble(int pieceId, {int moveIndex = 0}) {
     final payload = <String, dynamic>{
       'pieceId': pieceId,
       'moveIndex': moveIndex,
     };
-    _socket?.emit('game:marble:move', payload);
+    _emitGame('game:marble:move', payload);
   }
 
   void actMarbleLand(String action, int pos) {
     marbleLandPrompt = null;
-    _socket?.emit('game:marble:land_act', {'action': action, 'pos': pos});
+    _emitGame('game:marble:land_act', {'action': action, 'pos': pos});
   }
 
   void dismissMarbleLandPrompt() {
@@ -2108,7 +2282,7 @@ class SocketService extends ChangeNotifier {
 
   void newUnoGame({String? mode, int? stake}) {
     final finalStake = stake ?? (lobbyStartedStake > 0 ? lobbyStartedStake : 0);
-    _socket?.emit('game:uno:new', {
+    _emitGame('game:uno:new', {
       'mode': mode ?? selectedUnoMode,
       if (finalStake > 0) 'stake': finalStake,
     });
@@ -2119,14 +2293,14 @@ class SocketService extends ChangeNotifier {
     if (color != null) {
       payload['declaredColor'] = color;
     }
-    _socket?.emit('game:uno:play', payload);
+    _emitGame('game:uno:play', payload);
   }
 
-  void drawUnoCard() => _socket?.emit('game:uno:draw');
+  void drawUnoCard() => _emitGame('game:uno:draw');
   void passUnoDrawChoice() =>
-      _socket?.emit('game:uno:draw_decision', {'play': false});
-  void callUno() => _socket?.emit('game:uno:call');
-  void catchUno() => _socket?.emit('game:uno:catch');
+      _emitGame('game:uno:draw_decision', {'play': false});
+  void callUno() => _emitGame('game:uno:call');
+  void catchUno() => _emitGame('game:uno:catch');
   void pressUnoButton() {
     if (unoPendingCall) {
       callUno();
@@ -2137,17 +2311,17 @@ class SocketService extends ChangeNotifier {
     }
   }
 
-  void challengeDraw4() => _socket?.emit('game:uno:challenge');
+  void challengeDraw4() => _emitGame('game:uno:challenge');
   void discardAllUno() => _socket?.emit('game:uno:discard_all');
   void sendUnoReaction(String type) =>
       _socket?.emit('game:uno:reaction', {'type': type});
 
   void newBombGame({int duration = 30}) =>
-      _socket?.emit('game:bomb:new', {'duration': duration});
+      _emitGame('game:bomb:new', {'duration': duration});
   void answerBomb(String answer) {
     bombLastAnswerCorrect = null;
     notifyListeners();
-    _socket?.emit('game:bomb:answer', {'answer': answer});
+    _emitGame('game:bomb:answer', {'answer': answer});
   }
 
   @visibleForTesting
@@ -2155,6 +2329,14 @@ class SocketService extends ChangeNotifier {
 
   void _restoreGames(Map<String, dynamic> games) {
     try {
+      // 끊긴 동안 끝난 이어하기 게임이 "진행 중"으로 남지 않도록 응답에 없는 게임은 비활성화한다.
+      if (!games.containsKey('yut')) yutActive = false;
+      if (!games.containsKey('uno')) unoActive = false;
+      if (!games.containsKey('marble')) marbleActive = false;
+      if (!games.containsKey('bomb')) bombActive = false;
+      if (!games.containsKey('gostop') && !gostopSettlementPending) {
+        gostopActive = false;
+      }
       if (games.containsKey('yut')) {
         final yut = _m(games['yut']);
         _applyYutState(yut);
@@ -2198,6 +2380,9 @@ class SocketService extends ChangeNotifier {
         bombActive = true;
         bombCurrentPlayer = bomb['currentPlayer'] as String?;
         bombDuration = (bomb['timer'] as num?)?.toInt();
+        bombQuestion = bomb['question'] as String? ?? bombQuestion;
+        bombStartTime = (bomb['startTime'] as num?)?.toInt() ?? bombStartTime;
+        bombCategory = bomb['category'] as String? ?? bombCategory;
         _log('폭탄 복원');
       }
       // 마블 게임 복원
@@ -2325,6 +2510,9 @@ class SocketService extends ChangeNotifier {
     final nextGameId = map['id'] as String? ?? marbleGameId ?? 'active';
     if (nextGameId != marbleGameId) {
       marbleChatMessages = [];
+      // 새 판: 이전 판 결과가 다시 뜨지 않게 지운다.
+      marbleWinner = null;
+      marbleWinReason = null;
     }
     marbleActive = true;
     marbleGameId = nextGameId;

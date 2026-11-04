@@ -7,6 +7,9 @@ import '../../core/yut_audio.dart';
 const _kStakeOptions = [0, 500, 1000, 3000];
 const _kGostopStakeOptions = [0, 100, 500, 1000];
 
+/// 판돈을 실제로 정산하는 게임. 서버 STAKE_GAME_TYPES와 같아야 한다.
+const kStakeGameTypes = {'yut', 'uno', 'tank', 'gostop'};
+
 class GameLobbyScreen extends StatefulWidget {
   final String gameType;
   final String title;
@@ -145,7 +148,7 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
             _socket.startBowling();
             break;
           case 'tank':
-            _socket.startTank(stake: _socket.lobbyStartedStake);
+            _socket.startTank();
             break;
           case 'gostop':
             _socket.startGostop(perPointBet: _socket.lobbyStartedStake);
@@ -160,9 +163,19 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
     final isHost =
         _socket.userId != null && _socket.userId == _socket.lobbyHost;
     final hasTwoPlayers = _socket.lobbyPlayers.length >= 2;
-    final canStart = isHost && hasTwoPlayers;
+    final usesStake = kStakeGameTypes.contains(widget.gameType);
+    // 판돈이 걸린 판은 상대(비방장)가 금액에 동의해야 시작할 수 있다.
+    final needsReady = usesStake && _socket.lobbyStake > 0;
+    final partnersReady = _socket.lobbyPlayers
+        .where((p) => p != _socket.lobbyHost)
+        .every((p) => _socket.lobbyReady[p] == true);
+    final canStart = isHost && hasTwoPlayers && (!needsReady || partnersReady);
 
-    final startLabel = canStart ? '게임 시작' : '상대방을 기다리는 중';
+    final startLabel = canStart
+        ? '게임 시작'
+        : (hasTwoPlayers && needsReady && !partnersReady)
+        ? '상대의 판돈 동의를 기다리는 중'
+        : '상대방을 기다리는 중';
 
     return Stack(
       children: [
@@ -271,13 +284,15 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
                             ],
                           ),
                           const SizedBox(height: 18),
-                          _StakeSelector(
-                            gameType: widget.gameType,
-                            isHost: isHost,
-                            stake: _socket.lobbyStake,
-                            color: widget.color,
-                          ),
-                          const SizedBox(height: 18),
+                          if (kStakeGameTypes.contains(widget.gameType)) ...[
+                            _StakeSelector(
+                              gameType: widget.gameType,
+                              isHost: isHost,
+                              stake: _socket.lobbyStake,
+                              color: widget.color,
+                            ),
+                            const SizedBox(height: 18),
+                          ],
                           if (isHost)
                             SizedBox(
                               width: double.infinity,
@@ -308,6 +323,17 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
                                 ),
                               ),
                             )
+                          else if (kStakeGameTypes.contains(widget.gameType) &&
+                              _socket.lobbyStake > 0)
+                            _ReadyButton(
+                              ready:
+                                  _socket.lobbyReady[_socket.userId ?? ''] ==
+                                  true,
+                              stake: _socket.lobbyStake,
+                              color: widget.color,
+                              onChanged: (ready) =>
+                                  _socket.setLobbyReady(widget.gameType, ready),
+                            )
                           else
                             Text(
                               '방장이 게임을 시작할 때까지 기다려주세요',
@@ -328,6 +354,61 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// 비방장의 판돈 동의 버튼. 방장이 금액을 바꾸면 서버가 동의를 초기화한다.
+class _ReadyButton extends StatelessWidget {
+  final bool ready;
+  final int stake;
+  final Color color;
+  final ValueChanged<bool> onChanged;
+
+  const _ReadyButton({
+    required this.ready,
+    required this.stake,
+    required this.color,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          ready
+              ? '$stake코인 판돈에 동의했어요. 방장이 시작하면 바로 시작돼요.'
+              : '이 판에는 $stake코인이 걸려 있어요. 동의하면 준비 완료를 눌러 주세요.',
+          textAlign: TextAlign.center,
+          style: mainBody(size: 13, color: kMainSub),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          height: 48,
+          child: OutlinedButton(
+            onPressed: () => onChanged(!ready),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: ready ? kMainPaper : color,
+              backgroundColor: ready ? color : Colors.transparent,
+              side: BorderSide(color: color, width: 1.5),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            child: Text(
+              ready ? '준비 완료 취소' : '준비 완료',
+              style: mainBody(
+                size: 15,
+                color: ready ? kMainPaper : color,
+                weight: FontWeight.w800,
+                height: 1,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -250,6 +250,8 @@ class _BowlingScreenState extends State<BowlingScreen>
   String? _fxEvent; // STRIKE / SPARE / GUTTER
   String? _appliedRollKey; // "<playerId>:<rollIndex>" of last animated roll
   final Map<String, List<bool>> _deckCache = {};
+  // 내 투구 직전의 롤 목록. 서버 상태가 연출보다 먼저 갱신되므로 컷신 판정에 쓴다.
+  List<int>? _myRollsBeforeThrow;
 
   @override
   void initState() {
@@ -390,19 +392,39 @@ class _BowlingScreenState extends State<BowlingScreen>
     final myId = _socket.userId;
     if (_isRolling || state == null || myId == null || !_isMyTurn) return;
 
+    final rollsBefore = _rollsOf(state, myId);
     _deck = _deckForRolls(
-      _rollsOf(state, myId),
+      rollsBefore,
       _deckCache[myId],
       history: _historyOf(state),
       playerId: myId,
     );
-    _activeSim = _simulateRoll(_deck, _aim, _curve);
-    _fallStartT.clear();
-    _fallDir.clear();
+    // 서버가 핀 수를 정한다. 손 떨림이 반영된 실제 조준값을 받은 뒤 그 값으로
+    // 같은 결정론적 시뮬레이션을 돌려 연출하므로 화면과 점수가 일치한다.
     _isReplay = false;
     _isRolling = true;
+    _myRollsBeforeThrow = rollsBefore;
+    _appliedRollKey = '$myId:${rollsBefore.length}';
     setState(() {});
-    _rollCtrl.forward(from: 0);
+    _socket.throwBowling(
+      _aim,
+      _curve,
+      (aim, curve, pins) {
+        if (!mounted) return;
+        _activeSim = _simulateRoll(_deck, aim, curve);
+        _fallStartT.clear();
+        _fallDir.clear();
+        setState(() {});
+        _rollCtrl.forward(from: 0);
+      },
+      onRejected: () {
+        if (!mounted) return;
+        setState(() {
+          _isRolling = false;
+          _myRollsBeforeThrow = null;
+        });
+      },
+    );
   }
 
   void _onRollTick() {
@@ -434,17 +456,12 @@ class _BowlingScreenState extends State<BowlingScreen>
     }
     if (actorId.isNotEmpty) _deckCache[actorId] = List.of(_deck);
 
-    // Report my roll to the server right away (before the cutscene) so the
-    // opponent's replay starts as early as possible.
-    if (!_isReplay && state != null) {
-      _appliedRollKey = '$myId:${_rollsOf(state, myId).length}';
-      _socket.rollBowling(sim.pinsDown, aim: _aim, curve: _curve);
-    }
-
+    // 내 투구는 이미 서버가 처리했다(던질 때 ack로 결과를 받음).
     // Cutscene
     String? event;
-    if (!_isReplay && state != null) {
-      final ctx = _nextRollContext(_rollsOf(state, myId));
+    final rollsBefore = _myRollsBeforeThrow;
+    if (!_isReplay && rollsBefore != null) {
+      final ctx = _nextRollContext(rollsBefore);
       if (ctx != null) {
         final clearedDeck = !_deck.contains(true);
         if (clearedDeck && ctx.rollInFrame == 0) {
@@ -468,6 +485,7 @@ class _BowlingScreenState extends State<BowlingScreen>
     if (!mounted) return;
     final wasMyRoll = !_isReplay;
     setState(() {
+      _myRollsBeforeThrow = null;
       _isRolling = false;
       _isReplay = false;
       _replayEvent = null;

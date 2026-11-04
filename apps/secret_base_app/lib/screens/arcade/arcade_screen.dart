@@ -27,6 +27,8 @@ import 'games/marble_screen.dart';
 import '../shop/shop_screen.dart';
 import '../../widgets/game_session_presence.dart';
 
+const _kUnrankedGames = {'telepathy', 'dice'};
+
 class ArcadeScreen extends StatefulWidget {
   const ArcadeScreen({super.key});
 
@@ -239,6 +241,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
         parsed[e.key] = {
           'wins': (v['wins'] as num?)?.toInt() ?? 0,
           'losses': (v['losses'] as num?)?.toInt() ?? 0,
+          'draws': (v['draws'] as num?)?.toInt() ?? 0,
           'total': (v['total'] as num?)?.toInt() ?? 0,
         };
       }
@@ -250,6 +253,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     final r = _records[gameType];
     final wins = r?['wins'] ?? 0;
     final losses = r?['losses'] ?? 0;
+    final draws = r?['draws'] ?? 0;
     final total = r?['total'] ?? 0;
     return MainCard(
       radius: 26,
@@ -290,6 +294,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                   children: [
                     _RecordStat('승', '$wins', kMainSky),
                     _RecordStat('패', '$losses', kMainRose),
+                    if (draws > 0) _RecordStat('무', '$draws', kMainMuted),
                     _RecordStat(
                       '승률',
                       total > 0 ? '${(wins * 100 ~/ total)}%' : '-',
@@ -478,11 +483,18 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       _ => false,
     };
 
+    // 게임에서 돌아오면 기록과 잔액을 다시 불러온다.
+    void refresh(_) {
+      if (!mounted) return;
+      _fetchRecords();
+      _fetchBalance();
+    }
+
     if (isActive) {
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => _screen(game.type)),
-      );
+      ).then(refresh);
       return;
     }
 
@@ -499,7 +511,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
           gameScreen: _screen(game.type),
         ),
       ),
-    );
+    ).then(refresh);
   }
 
   Widget _buildStoryIcon(int idx) {
@@ -649,11 +661,13 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        // Future: stats row
+        // 승패가 없는 협동·도구성 게임(텔레파시·주사위)에는 기록 카드를 두지 않는다.
         Row(
           children: [
-            Expanded(child: _buildRecordCard(game.type)),
-            const SizedBox(width: 10),
+            if (!_kUnrankedGames.contains(game.type)) ...[
+              Expanded(child: _buildRecordCard(game.type)),
+              const SizedBox(width: 10),
+            ],
             Expanded(child: _buildWalletCard()),
           ],
         ),

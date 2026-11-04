@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/app_theme.dart';
 import '../core/socket_service.dart';
+import 'game_notice_listener.dart';
 
 /// ⋮ button to place in GameScaffold actions
 class GameMenuButton extends StatelessWidget {
@@ -262,7 +263,9 @@ class _GameMenuListenerState extends State<GameMenuListener> {
           ),
         ],
       ),
-    ).then((_) => setState(() => _disconnectDialogShown = false));
+    ).then((_) {
+      if (mounted) setState(() => _disconnectDialogShown = false);
+    });
   }
 
   void _showRestartDialog() {
@@ -309,9 +312,11 @@ class _GameMenuListenerState extends State<GameMenuListener> {
           ),
         ],
       ),
-    ).then((_) => setState(() => _restartDialogShown = false));
+    ).then((_) {
+      if (mounted) setState(() => _restartDialogShown = false);
+    });
   }
 
   @override
-  Widget build(BuildContext context) => widget.child;
+  Widget build(BuildContext context) => GameNoticeListener(child: widget.child);
 }

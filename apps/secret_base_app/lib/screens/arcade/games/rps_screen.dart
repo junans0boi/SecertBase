@@ -109,6 +109,14 @@ class _RpsScreenState extends State<RpsScreen> with TickerProviderStateMixin {
       return;
     }
 
+    // 판이 리셋·취소되면(상대 연결 끊김 등) 대기/선택 상태에서 빠져나온다.
+    if (!active && mode == null && _phase != _Phase.idle) {
+      _chantTimer?.cancel();
+      _phase = _Phase.idle;
+      _tapped = false;
+      _fixedModeStartRequested = false;
+    }
+
     if (!active && mode == null && fixedMode != null && _isHost) {
       _ensureFixedModeStarted();
       return;
@@ -223,8 +231,14 @@ class _RpsScreenState extends State<RpsScreen> with TickerProviderStateMixin {
 
   // ── picks ─────────────────────────────────────────────────────────────────
 
-  bool get _isHost =>
-      _socket.userId != null && _socket.lobbyHost == _socket.userId;
+  // 로비 방장이 모드를 고르되, 방장 정보가 없거나(푸시·재접속으로 진입) 방장이 방을
+  // 떠났으면 누구나 고를 수 있다. 서버는 참가자 누구나 시작·리셋을 허용한다.
+  bool get _isHost {
+    final me = _socket.userId;
+    if (me == null) return false;
+    final host = _socket.lobbyHost;
+    return host == null || host == me || !_socket.presenceUsers.contains(host);
+  }
 
   void _startMode(String mode) {
     _mukCarryover = null;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/app_theme.dart';
+import 'game_notice_listener.dart';
 
 class GameScaffold extends StatelessWidget {
   final String title;
@@ -56,14 +57,16 @@ class GameScaffold extends StatelessWidget {
             )
           : null,
       body: SafeArea(
-        child: fullBleed
-            ? child
-            : Center(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: maxContentWidth),
-                  child: child,
+        child: GameNoticeListener(
+          child: fullBleed
+              ? child
+              : Center(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: maxContentWidth),
+                    child: child,
+                  ),
                 ),
-              ),
+        ),
       ),
     );
   }

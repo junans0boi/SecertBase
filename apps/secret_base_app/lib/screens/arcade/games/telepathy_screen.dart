@@ -268,7 +268,27 @@ class _TelepathyScreenState extends State<TelepathyScreen> {
       _myChoice = opt;
       _waiting = true;
     });
-    _socket.playTelepathy(opt, _currentQ.options);
+    _socket.playTelepathy(
+      opt,
+      _currentQ.options,
+      onMismatch: (partnerOptions) {
+        if (!mounted) return;
+        // 상대가 풀고 있는 문제로 맞춘다(이번 라운드에서 같은 보기의 문제를 찾는다).
+        final idx = _roundQuestions.indexWhere(
+          (q) =>
+              q.options.length == partnerOptions.length &&
+              List.generate(
+                q.options.length,
+                (i) => q.options[i] == partnerOptions[i],
+              ).every((same) => same),
+        );
+        setState(() {
+          if (idx >= 0) _questionIndex = idx;
+          _myChoice = null;
+          _waiting = false;
+        });
+      },
+    );
   }
 
   void _nextQuestion() {
