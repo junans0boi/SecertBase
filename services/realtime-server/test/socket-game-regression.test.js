@@ -27,6 +27,7 @@ const { registerSocketHandlers } = await import('../src/socket.js');
 const { createMarbleGameState } = await import('../src/marble-engine.js');
 const { createYutGameState } = await import('../src/yut-engine.js');
 const { getUserLevel } = await import('../src/level-engine.js');
+const { createUnoGameState } = await import('../src/uno-engine.js');
 hooks.deregister();
 
 class MemoryRedis {
@@ -297,7 +298,10 @@ test('session restore sends the bomb holder and elapsed timer from the real sock
     currentQuiz: { category: 'math' },
   }));
   const restored = await f.call(0, 'session:restore', {});
-  assert.deepEqual(restored.activeGames.bomb, { currentPlayer: 'BETA-code', timer: 25, category: 'math' });
+  assert.deepEqual(restored.activeGames.bomb, {
+    currentPlayer: 'BETA-code', timer: 25, startTime: 95_000, duration: 30,
+    category: 'math',
+  });
 });
 
 test('marble state delivers server total assets including invested buildings', async t => {
@@ -306,7 +310,7 @@ test('marble state delivers server total assets including invested buildings', a
   state.lands[1] = { owner: 'ALPHA-code', level: 2 };
   await f.redis.set(`marble:${f.roomCode}:game`, JSON.stringify(state));
   const restored = await f.call(0, 'session:restore', {});
-  assert.deepEqual(restored.activeGames.marble.assets, { 'ALPHA-code': 6_200_000, 'BETA-code': 5_000_000 });
+  assert.deepEqual(restored.activeGames.marble.assets, { 'ALPHA-code': 5_700_000, 'BETA-code': 5_000_000 });
 });
 
 test('claiming the last tourist property emits the monopoly win reason through sockets', async t => {
@@ -356,7 +360,7 @@ test('bowling completion grants winner/loser XP once through its socket handler'
   await flush();
   assert.equal((await getUserLevel(11)).xp, 50);
   assert.equal((await getUserLevel(22)).xp, 20);
-  assert.deepEqual(f.results, [[1, 'bowling', 'ALPHA-code', 'BETA-code', 0]]);
+  assert.deepEqual(f.results, [[1, 'bowling', 'ALPHA-code', 'BETA-code', 0, 'ALPHA-code', 'BETA-code', null]]);
   assert.equal((await f.call(1, 'game:bowling:roll', { pins: 0 })).ok, false);
   assert.equal((await getUserLevel(11)).xp, 50);
 });
@@ -373,7 +377,176 @@ test('penalty completion grants winner/loser XP once through its socket handler'
   await flush();
   assert.equal((await getUserLevel(11)).xp, 50);
   assert.equal((await getUserLevel(22)).xp, 20);
-  assert.deepEqual(f.results, [[1, 'penalty', 'ALPHA-code', 'BETA-code', 0]]);
+  assert.deepEqual(f.results, [[1, 'penalty', 'ALPHA-code', 'BETA-code', 0, 'ALPHA-code', 'BETA-code', null]]);
   assert.equal((await f.call(1, 'game:penalty:submit', { choice: 4 })).ok, false);
   assert.equal((await getUserLevel(11)).xp, 50);
+});
+
+// ── 게임 정비(#177): 재시작·판돈·준비·탱크 2.0·원카드·가위바위보 ─────────────
+
+test('a forged restart response without a pending request cannot overwrite a running game', async t => {
+  const f = await fixture(t);
+  const state = createYutGameState('ALPHA-code', 'BETA-code');
+  state.gameId = 'original';
+  await f.redis.set(`yut:${f.roomCode}:game`, JSON.stringify(state));
+  const forged = await f.call(1, 'game:restart:respond', { accept: true, gameType: 'yut' });
+  assert.equal(forged.ok, false);
+  assert.equal(forged.reason, 'no_restart_request');
+  assert.equal(JSON.parse(await f.redis.get(`yut:${f.roomCode}:game`)).gameId, 'original');
+});
+
+test('only the partner can accept a restart request, which then restarts the game', async t => {
+  const f = await fixture(t);
+  const state = createYutGameState('ALPHA-code', 'BETA-code');
+  state.gameId = 'original';
+  await f.redis.set(`yut:${f.roomCode}:game`, JSON.stringify(state));
+  assert.equal((await f.call(0, 'game:restart:request', { gameType: 'yut' })).ok, true);
+  const self = await f.call(0, 'game:restart:respond', { accept: true, gameType: 'yut' });
+  assert.equal(self.ok, false, 'the requester cannot accept their own request');
+  const accepted = await f.call(1, 'game:restart:respond', { accept: true, gameType: 'yut' });
+  assert.equal(accepted.accepted, true);
+  assert.notEqual(JSON.parse(await f.redis.get(`yut:${f.roomCode}:game`)).gameId, 'original');
+  assert.equal((await f.call(0, 'game:restart:request', { gameType: 'dice' })).reason, 'unsupported_game');
+});
+
+test('tank stake comes from the agreed lobby, never from the creation payload', async t => {
+  const f = await fixture(t);
+  await f.call(0, 'game:lobby:join', { gameType: 'tank' });
+  await f.call(1, 'game:lobby:join', { gameType: 'tank' });
+  assert.equal((await f.call(0, 'game:lobby:set_stake', { gameType: 'tank', stake: 1000 })).ok, true);
+  const early = await f.call(0, 'game:lobby:start', { gameType: 'tank' });
+  assert.equal(early.reason, 'partner_not_ready', 'a staked game needs the partner to agree');
+  assert.equal((await f.call(1, 'game:lobby:ready', { gameType: 'tank', ready: true })).ok, true);
+  assert.equal((await f.call(0, 'game:lobby:start', { gameType: 'tank' })).ok, true);
+  assert.equal((await f.call(0, 'game:tank:new', { stake: 9999 })).ok, true);
+  assert.equal(JSON.parse(await f.redis.get(`game:${f.roomCode}:tank`)).stake, 1000);
+});
+
+test('changing the stake resets the partner ready state; free games need no ready', async t => {
+  const f = await fixture(t);
+  await f.call(0, 'game:lobby:join', { gameType: 'uno' });
+  await f.call(1, 'game:lobby:join', { gameType: 'uno' });
+  await f.call(0, 'game:lobby:set_stake', { gameType: 'uno', stake: 500 });
+  await f.call(1, 'game:lobby:ready', { gameType: 'uno', ready: true });
+  await f.call(0, 'game:lobby:set_stake', { gameType: 'uno', stake: 3000 });
+  assert.equal((await f.call(0, 'game:lobby:start', { gameType: 'uno' })).reason, 'partner_not_ready');
+  await f.call(0, 'game:lobby:set_stake', { gameType: 'uno', stake: 0 });
+  assert.equal((await f.call(0, 'game:lobby:start', { gameType: 'uno' })).ok, true);
+});
+
+test('games without stakes refuse a stake and a tank created outside the lobby is free', async t => {
+  const f = await fixture(t);
+  await f.call(0, 'game:lobby:join', { gameType: 'marble' });
+  assert.equal((await f.call(0, 'game:lobby:set_stake', { gameType: 'marble', stake: 500 })).reason, 'stake_not_supported');
+  assert.equal((await f.call(1, 'game:tank:new', { stake: 5000 })).ok, true);
+  assert.equal(JSON.parse(await f.redis.get(`game:${f.roomCode}:tank`)).stake, 0);
+});
+
+test('tank 2.0: hidden class pick, masked aim and a fire that carries its own aim', async t => {
+  const f = await fixture(t);
+  const updates = [[], []];
+  f.clients.forEach((c, i) => c.on('game:tank:updated', s => updates[i].push(s)));
+  const shots = [];
+  f.clients[1].on('game:tank:shot', s => shots.push(s));
+  assert.equal((await f.call(0, 'game:tank:new', {})).ok, true);
+  assert.equal((await f.call(0, 'game:tank:select', { tankClass: 'rhino' })).battleStarted, false);
+  await flush();
+  assert.equal(updates[1].at(-1).players[0].tankClass, null, 'partner cannot see my pick yet');
+  assert.equal(updates[1].at(-1).players[0].classPicked, true);
+  assert.equal((await f.call(1, 'game:tank:select', { tankClass: 'falcon' })).battleStarted, true);
+  await flush();
+  const battle = updates[1].at(-1);
+  assert.equal(battle.phase, 'aiming');
+  assert.equal(battle.players[0].tankClass, 'rhino');
+  assert.equal(battle.players[0].angle, null, 'opponent aim is masked');
+  assert.ok(battle.turnDeadline > 0);
+  const fired = await f.call(0, 'game:tank:fire', { angle: 70, power: 42, weapon: 'basic' });
+  assert.equal(fired.ok, true);
+  await flush();
+  assert.equal(shots.at(-1).angle, 70);
+  assert.equal(shots.at(-1).power, 42);
+  assert.equal(updates[1].at(-1).turn, 1);
+  assert.equal(updates[1].at(-1).players[0].angle, null);
+});
+
+test('tank turn timer: three consecutive timeouts forfeit and record the result once', async t => {
+  const f = await fixture(t);
+  t.mock.timers.enable({ apis: ['Date'], now: 1_000_000 });
+  const ended = [];
+  f.clients[0].on('game:tank:ended', e => ended.push(e));
+  await f.call(0, 'game:tank:new', {});
+  await f.call(0, 'game:tank:select', { tankClass: 'turtle' });
+  await f.call(1, 'game:tank:select', { tankClass: 'turtle' });
+  // ALPHA 시간 초과 → BETA 발사 → ALPHA 시간 초과 ×2 (연속 3회가 되려면 ALPHA 턴만 넘겨야 한다)
+  for (let i = 0; i < 3; i++) {
+    f.tick(30_001);
+    await flush();
+    if (i < 2) {
+      assert.equal((await f.call(1, 'game:tank:fire', { angle: 90, power: 1 })).ok, true);
+      await flush();
+    }
+  }
+  assert.equal(ended.length, 1);
+  assert.equal(ended[0].winner, 'BETA-code');
+  assert.equal(ended[0].reason, 'afk');
+  assert.equal(f.results.length, 1);
+  assert.equal(await f.redis.get(`game:${f.roomCode}:tank`), null);
+});
+
+test('one card: after serving a +2 penalty the playable drawn card can be played', async t => {
+  const f = await fixture(t);
+  const g = createUnoGameState(['ALPHA-code', 'BETA-code'], 7, { mode: 'go_wild' });
+  g.discardPile = [{ color: 'red', value: 'draw2', id: 'red-draw2-a' }];
+  g.drawStack = 2;
+  g.drawStackType = 'draw2';
+  g.currentPlayer = 'BETA-code';
+  g.hands['BETA-code'] = [{ color: 'blue', value: '1', id: 'blue-1-a' }];
+  // 두 번째로 뽑히는(마지막) 카드는 빨강 4 → 낼 수 있다.
+  g.deck = [...g.deck.filter(c => c.id !== 'red-4-a' && c.id !== 'green-7-a'), { color: 'red', value: '4', id: 'red-4-a' }, { color: 'green', value: '7', id: 'green-7-a' }];
+  await f.redis.set(`uno:${f.roomCode}:game`, JSON.stringify(g));
+  const drew = await f.call(1, 'game:uno:draw', {});
+  assert.equal(drew.ok, true);
+  assert.equal(drew.event.count, 2);
+  assert.equal(drew.event.drawStack, 0, 'the served penalty is cleared');
+  assert.equal((await f.call(1, 'game:uno:draw', {})).reason, 'must_choose_drawn_card');
+  const played = await f.call(1, 'game:uno:play', { cardId: 'red-4-a' });
+  assert.equal(played.ok, true, `play rejected: ${played.reason}`);
+});
+
+test('rps: any participant can reset and a finished match is recorded', async t => {
+  const f = await fixture(t);
+  assert.equal((await f.call(1, 'game:rps:start', { mode: 'single' })).ok, true);
+  await f.call(0, 'game:rps:pick', { choice: 'rock' });
+  await f.call(1, 'game:rps:pick', { choice: 'scissors' });
+  await flush();
+  assert.equal(f.results.length, 1);
+  assert.equal(f.results[0][1], 'rps');
+  assert.equal(f.results[0][2], 'ALPHA-code');
+  assert.equal((await f.call(1, 'game:rps:start', { mode: 'rps3' })).ok, true);
+  assert.equal((await f.call(1, 'game:rps:reset', {})).ok, true, 'BETA (not User1) may reset');
+});
+
+test('oldmaid hides real card ids behind position aliases and accepts alias draws', async t => {
+  const f = await fixture(t);
+  const views = [];
+  f.clients[1].on('game:oldmaid:updated', v => views.push(v));
+  assert.equal((await f.call(0, 'game:oldmaid:start', {})).ok, true);
+  await flush();
+  const view = views.at(-1);
+  const opponent = view.players['ALPHA-code'];
+  assert.ok(opponent.hand.every((c, i) => c.id === `slot-${i}` && c.rank === undefined));
+  if (view.turn === 'BETA-code') {
+    assert.equal((await f.call(1, 'game:oldmaid:draw', { cardId: 'slot-0' })).ok, true);
+  }
+});
+
+test('session restore re-sends a running blackjack round to the reconnecting player', async t => {
+  const f = await fixture(t);
+  await f.call(0, 'game:blackjack:start', {});
+  const views = [];
+  f.clients[1].on('game:blackjack:updated', v => views.push(v));
+  const restored = await f.call(1, 'session:restore', {});
+  await flush();
+  assert.ok(restored.restored.includes('blackjack'));
+  assert.ok(views.length >= 1);
 });

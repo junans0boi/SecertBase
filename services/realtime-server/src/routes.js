@@ -6341,6 +6341,7 @@ router.get('/arcade/records', async (req, res) => {
       `SELECT game_type,
               SUM(winner_user_code = ?) AS wins,
               SUM(loser_user_code = ?)  AS losses,
+              SUM(is_draw = 1)          AS draws,
               COUNT(*)                  AS total
        FROM game_results
        WHERE couple_id = ? ${typeFilter}
@@ -6351,9 +6352,10 @@ router.get('/arcade/records', async (req, res) => {
     const records = {};
     for (const r of rows) {
       records[r.game_type] = {
-        wins: Number(r.wins),
-        losses: Number(r.losses),
-        total: Number(r.total),
+        wins: Number(r.wins ?? 0),
+        losses: Number(r.losses ?? 0),
+        draws: Number(r.draws ?? 0),
+        total: Number(r.total ?? 0),
       };
     }
     res.json({ ok: true, records });
