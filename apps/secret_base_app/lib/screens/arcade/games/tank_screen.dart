@@ -566,7 +566,8 @@ class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
     _preShotState = _stableState ?? _socket.tankState;
     _playback = pb;
     _hapticStages.clear();
-    if ((shot['shooter'] as num?)?.toInt() == _myIndex && pb.shells.isNotEmpty) {
+    if ((shot['shooter'] as num?)?.toInt() == _myIndex &&
+        pb.shells.isNotEmpty) {
       _myLastTrace = pb.shells.first.path;
     }
     _playCtrl.duration = Duration(milliseconds: pb.totalMs.round());
@@ -635,7 +636,8 @@ class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
     if (me == null) return const [];
     final terrain = (state['terrain'] as List).cast<num>();
     final wind = (state['wind'] as num?)?.toDouble() ?? 0;
-    final gravity = _kGravity * ((state['gravityMul'] as num?)?.toDouble() ?? 1);
+    final gravity =
+        _kGravity * ((state['gravityMul'] as num?)?.toDouble() ?? 1);
     final rad = _angle * math.pi / 180;
     final speed = _power * _kSpeedScale;
     var vx = math.cos(rad) * speed;
@@ -717,7 +719,13 @@ class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
             ),
             const SizedBox(height: 6),
             Text(
-              '전장: ${look.name}${themeId == 'moon' ? ' · 중력이 약하고 바람이 없어요' : themeId == 'snow' ? ' · 바람이 강해요' : themeId == 'desert' ? ' · 언덕이 높고 바람이 세요' : ''}',
+              '전장: ${look.name}${themeId == 'moon'
+                  ? ' · 중력이 약하고 바람이 없어요'
+                  : themeId == 'snow'
+                  ? ' · 바람이 강해요'
+                  : themeId == 'desert'
+                  ? ' · 언덕이 높고 바람이 세요'
+                  : ''}',
               textAlign: TextAlign.center,
               style: mainBody(
                 size: 13,
@@ -1578,11 +1586,7 @@ class _StatsTable extends StatelessWidget {
         '${(mine?['accuracy'] as num?)?.toInt() ?? 0}%',
         '${(theirs?['accuracy'] as num?)?.toInt() ?? 0}%',
       ),
-      (
-        '직격',
-        '${_stat(mine, 'directHits')}',
-        '${_stat(theirs, 'directHits')}',
-      ),
+      ('직격', '${_stat(mine, 'directHits')}', '${_stat(theirs, 'directHits')}'),
       ('최대 한 방', '${_stat(mine, 'maxHit')}', '${_stat(theirs, 'maxHit')}'),
       ('보급 획득', '${_stat(mine, 'crates')}', '${_stat(theirs, 'crates')}'),
     ];
@@ -1621,7 +1625,10 @@ class _StatsTable extends StatelessWidget {
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(r.$1, style: mainBody(size: 12, color: kMainSub)),
+                    child: Text(
+                      r.$1,
+                      style: mainBody(size: 12, color: kMainSub),
+                    ),
                   ),
                   SizedBox(
                     width: 64,
@@ -1799,11 +1806,13 @@ class _BattlefieldPainter extends CustomPainter {
       final p = Map<String, dynamic>.from(players[i] as Map);
       final angle = i == myIndex
           ? myAngle
-          : (opponentAngle ??
-                (p['facingRight'] == true ? 45.0 : 135.0));
+          : (opponentAngle ?? (p['facingRight'] == true ? 45.0 : 135.0));
       _drawTank(
         canvas,
-        Offset((p['col'] as num).toDouble() * cw, (p['row'] as num).toDouble() * ch),
+        Offset(
+          (p['col'] as num).toDouble() * cw,
+          (p['row'] as num).toDouble() * ch,
+        ),
         cw,
         ch,
         i == myIndex,
@@ -1981,10 +1990,7 @@ class _BattlefieldPainter extends CustomPainter {
     final len = cw * (cls == 'rhino' ? 2.8 : 2.4);
     canvas.drawLine(
       turret,
-      Offset(
-        turret.dx + math.cos(rad) * len,
-        turret.dy + math.sin(rad) * len,
-      ),
+      Offset(turret.dx + math.cos(rad) * len, turret.dy + math.sin(rad) * len),
       Paint()
         ..color = dark
         ..strokeWidth = cw * (cls == 'rhino' ? 1.1 : 0.85)
@@ -2009,7 +2015,10 @@ class _BattlefieldPainter extends CustomPainter {
         ..lineTo(tip.dx + cw * 0.8, tip.dy - ch * 0.7)
         ..lineTo(tip.dx, tip.dy)
         ..close();
-      canvas.drawPath(marker, Paint()..color = Colors.white.withValues(alpha: 0.9));
+      canvas.drawPath(
+        marker,
+        Paint()..color = Colors.white.withValues(alpha: 0.9),
+      );
     }
   }
 
@@ -2040,7 +2049,11 @@ class _BattlefieldPainter extends CustomPainter {
         );
       }
       final hp = Offset(pts[head].dx * cw, pts[head].dy * ch);
-      canvas.drawCircle(hp, 6, Paint()..color = Colors.orange.withValues(alpha: 0.35));
+      canvas.drawCircle(
+        hp,
+        6,
+        Paint()..color = Colors.orange.withValues(alpha: 0.35),
+      );
       canvas.drawCircle(hp, 3.2, Paint()..color = Colors.yellowAccent);
       canvas.drawCircle(hp, 1.5, Paint()..color = Colors.white);
     }
@@ -2055,24 +2068,42 @@ class _BattlefieldPainter extends CustomPainter {
         canvas.drawCircle(
           Offset(b.col * cw, center.dy),
           b.radius * cw * (0.5 + t),
-          Paint()..color = const Color(0xFFC9A26B).withValues(alpha: (1 - t) * 0.6),
+          Paint()
+            ..color = const Color(0xFFC9A26B).withValues(alpha: (1 - t) * 0.6),
         );
         continue;
       }
       final alpha = (1 - t).clamp(0.0, 1.0);
       final radius = b.radius * cw * (0.6 + t * 1.6);
-      canvas.drawCircle(center, radius, Paint()..color = Colors.deepOrange.withValues(alpha: alpha * 0.75));
-      canvas.drawCircle(center, radius * 0.6, Paint()..color = Colors.orangeAccent.withValues(alpha: alpha * 0.85));
-      canvas.drawCircle(center, radius * 0.28, Paint()..color = Colors.white.withValues(alpha: alpha * 0.8));
+      canvas.drawCircle(
+        center,
+        radius,
+        Paint()..color = Colors.deepOrange.withValues(alpha: alpha * 0.75),
+      );
+      canvas.drawCircle(
+        center,
+        radius * 0.6,
+        Paint()..color = Colors.orangeAccent.withValues(alpha: alpha * 0.85),
+      );
+      canvas.drawCircle(
+        center,
+        radius * 0.28,
+        Paint()..color = Colors.white.withValues(alpha: alpha * 0.8),
+      );
       // 파편 입자
       final rand = math.Random((b.col * 31 + b.row * 7).round());
-      final debris = Paint()..color = const Color(0xFF6B4A2B).withValues(alpha: alpha);
+      final debris = Paint()
+        ..color = const Color(0xFF6B4A2B).withValues(alpha: alpha);
       for (int i = 0; i < 14; i++) {
         final dir = rand.nextDouble() * math.pi * 2;
         final speed = (0.6 + rand.nextDouble()) * b.radius * cw * 1.8;
         final dx = math.cos(dir) * speed * t;
         final dy = math.sin(dir) * speed * t + 40 * t * t; // 중력
-        canvas.drawCircle(center.translate(dx, dy), 1.4 + rand.nextDouble() * 1.6, debris);
+        canvas.drawCircle(
+          center.translate(dx, dy),
+          1.4 + rand.nextDouble() * 1.6,
+          debris,
+        );
       }
     }
 

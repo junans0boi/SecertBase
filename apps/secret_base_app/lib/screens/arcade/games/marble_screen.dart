@@ -1413,7 +1413,8 @@ class _MarbleResultDialogState extends State<_MarbleResultDialog>
       'line_monopoly' => '한 라인을 완전히 점령했습니다',
       'timeout' => '30라운드 후 자산으로 결정됐습니다',
       'timeout_draw' => '30라운드 후 동점으로 무승부',
-      'forfeit' => isMe ? '상대가 제한 시간 안에 진행하지 않아 기권했어요' : '제한 시간 안에 진행하지 않아 기권패했어요',
+      'forfeit' =>
+        isMe ? '상대가 제한 시간 안에 진행하지 않아 기권했어요' : '제한 시간 안에 진행하지 않아 기권패했어요',
       _ => '게임이 종료됐습니다',
     };
   }

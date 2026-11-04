@@ -1957,18 +1957,16 @@ class SocketService extends ChangeNotifier {
     telepathySelected = null;
     telepathyChoices = null;
     notifyListeners();
-    _emitGame(
-      'game:telepathy:select',
-      {'choice': choice, 'options': options},
-      (ack) {
-        if (ack['reason'] == 'options_mismatch') {
-          final raw = ack['options'];
-          onMismatch?.call(
-            raw is List ? raw.map((e) => '$e').toList() : const <String>[],
-          );
-        }
-      },
-    );
+    _emitGame('game:telepathy:select', {'choice': choice, 'options': options}, (
+      ack,
+    ) {
+      if (ack['reason'] == 'options_mismatch') {
+        final raw = ack['options'];
+        onMismatch?.call(
+          raw is List ? raw.map((e) => '$e').toList() : const <String>[],
+        );
+      }
+    });
   }
 
   void startPirate(int slots) {
@@ -2096,7 +2094,11 @@ class SocketService extends ChangeNotifier {
 
   /// 조준은 화면에서만 하고, 발사할 때 각도·파워·무기를 함께 보낸다
   /// (발사 전까지 상대에게 조준값이 공개되지 않는다).
-  void fireTank({required int angle, required int power, required String weapon}) {
+  void fireTank({
+    required int angle,
+    required int power,
+    required String weapon,
+  }) {
     _emitGame('game:tank:fire', {
       'angle': angle,
       'power': power,

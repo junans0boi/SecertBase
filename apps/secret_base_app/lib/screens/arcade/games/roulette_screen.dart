@@ -67,7 +67,9 @@ class _RouletteScreenState extends State<RouletteScreen>
     _seenSeq = _socket.rouletteSeq;
     final opts = _socket.lastRouletteOptions;
     final index = _socket.lastRouletteIndex ?? 0;
-    final count = (opts != null && opts.isNotEmpty) ? opts.length : _options.length;
+    final count = (opts != null && opts.isNotEmpty)
+        ? opts.length
+        : _options.length;
     setState(() {
       _spinning = true;
       if (opts != null && opts.isNotEmpty) {
@@ -87,9 +89,9 @@ class _RouletteScreenState extends State<RouletteScreen>
   void _spin2() {
     if (_spinning) return;
     if (_options.length < 2 || _options.length > 12) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('항목은 2개 이상 12개 이하로 정해 주세요')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('항목은 2개 이상 12개 이하로 정해 주세요')));
       return;
     }
     _socket.spinRoulette(List<String>.from(_options));

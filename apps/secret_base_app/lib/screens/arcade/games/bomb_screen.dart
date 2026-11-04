@@ -594,10 +594,7 @@ class _ExplodeScreen extends StatelessWidget {
             children: [
               OutlinedButton(onPressed: onExit, child: const Text('나가기')),
               const SizedBox(width: 12),
-              ElevatedButton(
-                onPressed: onRestart,
-                child: const Text('다시 하기'),
-              ),
+              ElevatedButton(onPressed: onRestart, child: const Text('다시 하기')),
             ],
           ),
         ],
