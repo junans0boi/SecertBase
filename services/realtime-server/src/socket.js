@@ -59,8 +59,6 @@ import {
   passBomb,
 } from "./bomb-engine.js";
 
-import { TELEPATHY_RESPONSE_TIMEOUT_MS, TELEPATHY_SESSION_TTL_SEC, telepathyResult } from "./telepathy-engine.js";
-
 import {
   initBowlingGame,
   rollFrame as rollBowlingFrame,
@@ -243,12 +241,6 @@ const rpsStartSchema = z.object({
 
 const rpsPickSchema = z.object({
   choice: z.enum(["rock", "paper", "scissors"]).optional(),
-});
-
-const telepathySchema = z.object({
-  choice: z.string().min(1).max(100),
-  options: z.array(z.string().min(1).max(100)).min(2).max(10),
-  sessionId: z.string().min(1).max(100).optional(),
 });
 
 const yutMoveSchema = z.object({
@@ -499,7 +491,6 @@ const defaultState = {
   lastDice: null,
   lastRoulette: null,
   lastRps: null,
-  lastTelepathy: null,
   lastPirate: null,
   updatedAt: null,
 };
@@ -662,12 +653,6 @@ const emitMarbleState = (io, roomCode, eventName, gameState, extra = {}) => {
 
 
 export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeout } } = {}) => {
-  const telepathyTimers = new Map();
-  const clearTelepathyTimer = (roomCode) => {
-    const entry = telepathyTimers.get(roomCode);
-    if (entry) timerApi.clearTimeout(entry.timer);
-    telepathyTimers.delete(roomCode);
-  };
   // 폭탄 돌리기: 서버가 제한 시간에 직접 폭발을 처리한다(답을 안 내고 버티는 치트 방지).
   const bombTimers = new Map();
   const clearBombTimer = (roomCode) => {
@@ -951,43 +936,12 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
   const allowReaction = createReactionLimiter();
 
   io.httpServer?.once("close", () => {
-    for (const roomCode of telepathyTimers.keys()) clearTelepathyTimer(roomCode);
     for (const roomCode of [...bombTimers.keys()]) clearBombTimer(roomCode);
     for (const key of [...sessionCleanupTimers.keys()]) cancelSessionCleanup(key);
     for (const roomCode of [...tankTimers.keys()]) clearTankTimer(roomCode);
     afkWatcher.clearAll();
     for (const mod of GAME_MODULES) mod.dispose?.();
   });
-  const publishTelepathyResult = async (roomCode, session, extra = {}) => {
-    const event = { ...telepathyResult(session), ...extra };
-    session.result = event;
-    await redis.set(`telepathy:${roomCode}:session`, JSON.stringify(session), "EX", TELEPATHY_SESSION_TTL_SEC);
-    const stateText = await redis.get(roomKey(roomCode));
-    const state = stateText ? JSON.parse(stateText) : defaultState;
-    await redis.set(roomKey(roomCode), JSON.stringify({ ...state, lastTelepathy: event, updatedAt: event.at }));
-    io.to(roomCode).emit("game:telepathy:result", event);
-    return event;
-  };
-  const scheduleTelepathyExpiry = (roomCode, session) => {
-    clearTelepathyTimer(roomCode);
-    const entry = { sessionId: session.id, timer: null };
-    entry.timer = timerApi.setTimeout(() => {
-      void withRoomLock(roomCode, async () => {
-        // An already queued callback must not remove a newer round's timer.
-        if (telepathyTimers.get(roomCode) !== entry) return;
-        telepathyTimers.delete(roomCode);
-        const sessionKey = `telepathy:${roomCode}:session`;
-        const raw = await redis.get(sessionKey);
-        if (!raw) return;
-        const current = JSON.parse(raw);
-        if (current.id !== session.id || current.revealed || current.expired) return;
-        current.expired = true;
-        await publishTelepathyResult(roomCode, current, { expired: true });
-      }).catch(err => console.error("[telepathy] expiry failed:", err.message));
-    }, Math.max(0, session.deadlineAt - Date.now()));
-    entry.timer.unref?.();
-    telepathyTimers.set(roomCode, entry);
-  };
   installSocketAuthentication(io, config.JWT_SECRET, resolveSocketSession);
   io.on("connection", (socket) => {
     installHandlerSafetyNet(socket, console, (event, args) => {
@@ -1039,19 +993,6 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
 
       emitPresence(io, roomCode);
 
-      // Redis survives a process restart; restore its original deadline when
-      // either participant rejoins rather than leaving the stored round stuck.
-      await withRoomLock(roomCode, async () => {
-        const key = `telepathy:${roomCode}:session`;
-        const raw = await redis.get(key);
-        if (!raw) return;
-        const session = JSON.parse(raw);
-        if (session.revealed || session.expired) return;
-        session.id ??= randomUUID();
-        session.deadlineAt ??= (session.updatedAt ?? Date.now()) + TELEPATHY_RESPONSE_TIMEOUT_MS;
-        await redis.set(key, JSON.stringify(session), "EX", TELEPATHY_SESSION_TTL_SEC);
-        scheduleTelepathyExpiry(roomCode, session);
-      });
       ack({ ok: true, state, roomCode, userId });
     });
 
@@ -1828,77 +1769,6 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         await redis.del(rpsGameKey(roomCode));
         io.to(roomCode).emit("game:rps:reset_done");
         ack({ ok: true });
-      });
-    });
-
-    socket.on("game:telepathy:select", async (payload, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const roomCode = socket.data.roomCode;
-      const userId = socket.data.userId;
-      if (!roomCode || !userId) {
-        ack({ ok: false, reason: "not_joined" });
-        return;
-      }
-
-      const parsed = telepathySchema.safeParse(payload);
-      if (!parsed.success) {
-        ack({ ok: false, reason: "invalid_payload" });
-        return;
-      }
-
-      await withRoomLock(roomCode, async () => {
-        const { choice, options, sessionId } = parsed.data;
-        if (!options.includes(choice)) {
-          ack({ ok: false, reason: 'invalid_choice' });
-          return;
-        }
-        const sessionKey = `telepathy:${roomCode}:session`;
-        const existing = await redis.get(sessionKey);
-        let session = existing ? JSON.parse(existing) : null;
-        if (sessionId && session?.id !== sessionId) {
-          return ack({ ok: false, reason: "stale_session" });
-        }
-        const sameOptions = session?.options?.length === options.length &&
-          session.options.every((option, index) => option === options[index]);
-        if (sessionId && !sameOptions) return ack({ ok: false, reason: "invalid_options" });
-        // 상대가 이미 답한 진행 중 문제가 있는데 다른 문제로 답하면, 상대의 답을 버리지 않고
-        // 거절한다(클라이언트는 상대가 풀고 있는 문제로 맞춰 다시 고른다).
-        const partnerAnswered = session && !session.revealed && !session.expired &&
-          Object.keys(session.choices ?? {}).some((uid) => uid !== userId);
-        if (!sameOptions && partnerAnswered) {
-          return ack({ ok: false, reason: "options_mismatch", options: session.options, sessionId: session.id });
-        }
-        if (!sameOptions) session = null;
-        // Legacy clients do not carry a round id; their next selection starts
-        // another question even if its options happen to be identical.
-        if (session?.revealed && !sessionId) session = null;
-        session ??= {
-          id: randomUUID(), choices: {}, options, revealed: false,
-          deadlineAt: Date.now() + TELEPATHY_RESPONSE_TIMEOUT_MS,
-        };
-        // Preserve pending choices created by the pre-deadline implementation.
-        session.id ??= randomUUID();
-        session.deadlineAt ??= (session.updatedAt ?? Date.now()) + TELEPATHY_RESPONSE_TIMEOUT_MS;
-        if (session.revealed && session.result) {
-          socket.emit("game:telepathy:result", session.result);
-          return ack({ ok: true, result: session.result });
-        }
-        if (session.choices[userId] && session.choices[userId] !== choice) {
-          return ack({ ok: false, reason: "already_selected" });
-        }
-        session.choices[userId] = choice;
-        session.updatedAt = Date.now();
-
-        if (Object.keys(session.choices).length === 2) {
-          session.revealed = true;
-          clearTelepathyTimer(roomCode);
-          const event = await publishTelepathyResult(roomCode, session);
-          ack({ ok: true, result: event });
-        } else {
-          await redis.set(sessionKey, JSON.stringify(session), "EX", TELEPATHY_SESSION_TTL_SEC);
-          if (!session.expired) scheduleTelepathyExpiry(roomCode, session);
-          ack({ ok: true, waiting: true, sessionId: session.id, deadlineAt: session.deadlineAt });
-        }
       });
     });
 

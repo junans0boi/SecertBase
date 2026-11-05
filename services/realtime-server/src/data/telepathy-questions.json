@@ -1,0 +1,2882 @@
+[
+  {
+    "id": "light-001",
+    "cat": "light",
+    "a": "여름",
+    "b": "겨울",
+    "emojiA": "🌞",
+    "emojiB": "⛄",
+    "spicy": false
+  },
+  {
+    "id": "light-002",
+    "cat": "light",
+    "a": "봄",
+    "b": "가을",
+    "emojiA": "🌸",
+    "emojiB": "🍁",
+    "spicy": false
+  },
+  {
+    "id": "light-003",
+    "cat": "light",
+    "a": "강아지",
+    "b": "고양이",
+    "emojiA": "🐶",
+    "emojiB": "🐱",
+    "spicy": false
+  },
+  {
+    "id": "light-004",
+    "cat": "light",
+    "a": "비 오는 날",
+    "b": "눈 오는 날",
+    "emojiA": "☔",
+    "emojiB": "❄️",
+    "spicy": false
+  },
+  {
+    "id": "light-005",
+    "cat": "light",
+    "a": "아침형 인간",
+    "b": "올빼미형 인간",
+    "emojiA": "🌅",
+    "emojiB": "🦉",
+    "spicy": false
+  },
+  {
+    "id": "light-006",
+    "cat": "light",
+    "a": "공포 영화",
+    "b": "로맨스 영화",
+    "emojiA": "👻",
+    "emojiB": "💕",
+    "spicy": false
+  },
+  {
+    "id": "light-007",
+    "cat": "light",
+    "a": "잔잔한 발라드",
+    "b": "신나는 댄스곡",
+    "emojiA": "🎤",
+    "emojiB": "🕺",
+    "spicy": false
+  },
+  {
+    "id": "light-008",
+    "cat": "light",
+    "a": "원작 소설",
+    "b": "영화판",
+    "emojiA": "📖",
+    "emojiB": "🎞️",
+    "spicy": false
+  },
+  {
+    "id": "light-009",
+    "cat": "light",
+    "a": "해돋이",
+    "b": "해넘이",
+    "emojiA": "🌅",
+    "emojiB": "🌇",
+    "spicy": false
+  },
+  {
+    "id": "light-010",
+    "cat": "light",
+    "a": "빨간색",
+    "b": "파란색",
+    "emojiA": "❤️",
+    "emojiB": "💙",
+    "spicy": false
+  },
+  {
+    "id": "light-011",
+    "cat": "light",
+    "a": "꽃다발",
+    "b": "작은 화분",
+    "emojiA": "💐",
+    "emojiB": "🪴",
+    "spicy": false
+  },
+  {
+    "id": "light-012",
+    "cat": "light",
+    "a": "사진 찍기",
+    "b": "사진 찍히기",
+    "emojiA": "📸",
+    "emojiB": "🤳",
+    "spicy": false
+  },
+  {
+    "id": "light-013",
+    "cat": "light",
+    "a": "소설책",
+    "b": "만화책",
+    "emojiA": "📚",
+    "emojiB": "📒",
+    "spicy": false
+  },
+  {
+    "id": "light-014",
+    "cat": "light",
+    "a": "운동화",
+    "b": "구두",
+    "emojiA": "👟",
+    "emojiB": "👞",
+    "spicy": false
+  },
+  {
+    "id": "light-015",
+    "cat": "light",
+    "a": "향수 냄새",
+    "b": "섬유유연제 향",
+    "emojiA": "🌺",
+    "emojiB": "🧺",
+    "spicy": false
+  },
+  {
+    "id": "light-016",
+    "cat": "light",
+    "a": "별 보기",
+    "b": "불꽃놀이",
+    "emojiA": "🌌",
+    "emojiB": "🎆",
+    "spicy": false
+  },
+  {
+    "id": "light-017",
+    "cat": "light",
+    "a": "바늘 시계",
+    "b": "숫자 시계",
+    "emojiA": "🕰️",
+    "emojiB": "⌚",
+    "spicy": false
+  },
+  {
+    "id": "light-018",
+    "cat": "light",
+    "a": "문자",
+    "b": "전화",
+    "emojiA": "💬",
+    "emojiB": "📞",
+    "spicy": false
+  },
+  {
+    "id": "light-019",
+    "cat": "light",
+    "a": "이어폰",
+    "b": "헤드폰",
+    "emojiA": "🎧",
+    "emojiB": "🎵",
+    "spicy": false
+  },
+  {
+    "id": "light-020",
+    "cat": "light",
+    "a": "종이책",
+    "b": "전자책",
+    "emojiA": "📗",
+    "emojiB": "📱",
+    "spicy": false
+  },
+  {
+    "id": "light-021",
+    "cat": "light",
+    "a": "드라마 몰아보기",
+    "b": "매주 기다리기",
+    "emojiA": "📺",
+    "emojiB": "⏳",
+    "spicy": false
+  },
+  {
+    "id": "light-022",
+    "cat": "light",
+    "a": "셀카",
+    "b": "풍경 사진",
+    "emojiA": "🤳",
+    "emojiB": "🏞️",
+    "spicy": false
+  },
+  {
+    "id": "light-023",
+    "cat": "light",
+    "a": "반팔",
+    "b": "긴팔",
+    "emojiA": "👕",
+    "emojiB": "🧥",
+    "spicy": false
+  },
+  {
+    "id": "light-024",
+    "cat": "light",
+    "a": "모자",
+    "b": "선글라스",
+    "emojiA": "🧢",
+    "emojiB": "🕶️",
+    "spicy": false
+  },
+  {
+    "id": "light-025",
+    "cat": "light",
+    "a": "액션 영화",
+    "b": "코미디 영화",
+    "emojiA": "💥",
+    "emojiB": "😂",
+    "spicy": false
+  },
+  {
+    "id": "light-026",
+    "cat": "light",
+    "a": "퍼즐 맞추기",
+    "b": "그림 그리기",
+    "emojiA": "🧩",
+    "emojiB": "🎨",
+    "spicy": false
+  },
+  {
+    "id": "light-027",
+    "cat": "light",
+    "a": "달콤한 바닐라 향",
+    "b": "상큼한 시트러스 향",
+    "emojiA": "🍦",
+    "emojiB": "🍋",
+    "spicy": false
+  },
+  {
+    "id": "light-028",
+    "cat": "light",
+    "a": "흑백 사진",
+    "b": "컬러 사진",
+    "emojiA": "🖤",
+    "emojiB": "🌈",
+    "spicy": false
+  },
+  {
+    "id": "light-029",
+    "cat": "light",
+    "a": "큰 가방",
+    "b": "작은 가방",
+    "emojiA": "👜",
+    "emojiB": "👛",
+    "spicy": false
+  },
+  {
+    "id": "light-030",
+    "cat": "light",
+    "a": "금 액세서리",
+    "b": "은 액세서리",
+    "emojiA": "💛",
+    "emojiB": "🤍",
+    "spicy": false
+  },
+  {
+    "id": "light-031",
+    "cat": "light",
+    "a": "손글씨 다이어리",
+    "b": "휴대폰 메모",
+    "emojiA": "✍️",
+    "emojiB": "📲",
+    "spicy": false
+  },
+  {
+    "id": "light-032",
+    "cat": "light",
+    "a": "헬스장 운동",
+    "b": "공원 달리기",
+    "emojiA": "🏋️",
+    "emojiB": "🏃",
+    "spicy": false
+  },
+  {
+    "id": "light-033",
+    "cat": "light",
+    "a": "레트로 감성",
+    "b": "최신 유행",
+    "emojiA": "📼",
+    "emojiB": "✨",
+    "spicy": false
+  },
+  {
+    "id": "light-034",
+    "cat": "light",
+    "a": "뮤지컬",
+    "b": "콘서트",
+    "emojiA": "🎭",
+    "emojiB": "🎸",
+    "spicy": false
+  },
+  {
+    "id": "light-035",
+    "cat": "light",
+    "a": "미술관",
+    "b": "박물관",
+    "emojiA": "🖼️",
+    "emojiB": "🏛️",
+    "spicy": false
+  },
+  {
+    "id": "light-036",
+    "cat": "light",
+    "a": "장미",
+    "b": "해바라기",
+    "emojiA": "🌹",
+    "emojiB": "🌻",
+    "spicy": false
+  },
+  {
+    "id": "light-037",
+    "cat": "light",
+    "a": "예능 프로그램",
+    "b": "다큐멘터리",
+    "emojiA": "🤣",
+    "emojiB": "🎥",
+    "spicy": false
+  },
+  {
+    "id": "light-038",
+    "cat": "light",
+    "a": "귀여운 캐릭터",
+    "b": "시크한 디자인",
+    "emojiA": "🧸",
+    "emojiB": "🖤",
+    "spicy": false
+  },
+  {
+    "id": "light-039",
+    "cat": "light",
+    "a": "짧은 머리",
+    "b": "긴 머리",
+    "emojiA": "💇",
+    "emojiB": "👱",
+    "spicy": false
+  },
+  {
+    "id": "light-040",
+    "cat": "light",
+    "a": "노란 조명",
+    "b": "하얀 조명",
+    "emojiA": "💡",
+    "emojiB": "🔦",
+    "spicy": false
+  },
+  {
+    "id": "food-001",
+    "cat": "food",
+    "a": "짜장면",
+    "b": "짬뽕",
+    "emojiA": "🥢",
+    "emojiB": "🌶️",
+    "spicy": false
+  },
+  {
+    "id": "food-002",
+    "cat": "food",
+    "a": "후라이드 치킨",
+    "b": "양념 치킨",
+    "emojiA": "🍗",
+    "emojiB": "🍯",
+    "spicy": false
+  },
+  {
+    "id": "food-003",
+    "cat": "food",
+    "a": "탕수육 부먹",
+    "b": "탕수육 찍먹",
+    "emojiA": "🥣",
+    "emojiB": "🥢",
+    "spicy": false
+  },
+  {
+    "id": "food-004",
+    "cat": "food",
+    "a": "물냉면",
+    "b": "비빔냉면",
+    "emojiA": "🧊",
+    "emojiB": "🌶️",
+    "spicy": false
+  },
+  {
+    "id": "food-005",
+    "cat": "food",
+    "a": "아이스 커피",
+    "b": "따뜻한 커피",
+    "emojiA": "🧊",
+    "emojiB": "☕",
+    "spicy": false
+  },
+  {
+    "id": "food-006",
+    "cat": "food",
+    "a": "떡볶이",
+    "b": "순대",
+    "emojiA": "🍢",
+    "emojiB": "🫕",
+    "spicy": false
+  },
+  {
+    "id": "food-007",
+    "cat": "food",
+    "a": "피자",
+    "b": "햄버거",
+    "emojiA": "🍕",
+    "emojiB": "🍔",
+    "spicy": false
+  },
+  {
+    "id": "food-008",
+    "cat": "food",
+    "a": "삼겹살",
+    "b": "소고기",
+    "emojiA": "🥓",
+    "emojiB": "🥩",
+    "spicy": false
+  },
+  {
+    "id": "food-009",
+    "cat": "food",
+    "a": "회 한 접시",
+    "b": "고기 한 판",
+    "emojiA": "🐟",
+    "emojiB": "🍖",
+    "spicy": false
+  },
+  {
+    "id": "food-010",
+    "cat": "food",
+    "a": "달콤한 디저트",
+    "b": "짭짤한 과자",
+    "emojiA": "🍰",
+    "emojiB": "🥨",
+    "spicy": false
+  },
+  {
+    "id": "food-011",
+    "cat": "food",
+    "a": "아침엔 밥",
+    "b": "아침엔 빵",
+    "emojiA": "🍚",
+    "emojiB": "🍞",
+    "spicy": false
+  },
+  {
+    "id": "food-012",
+    "cat": "food",
+    "a": "라면에 계란",
+    "b": "라면에 치즈",
+    "emojiA": "🥚",
+    "emojiB": "🧀",
+    "spicy": false
+  },
+  {
+    "id": "food-013",
+    "cat": "food",
+    "a": "민트초코 좋아",
+    "b": "민트초코 싫어",
+    "emojiA": "🍫",
+    "emojiB": "🙅",
+    "spicy": false
+  },
+  {
+    "id": "food-014",
+    "cat": "food",
+    "a": "붕어빵 머리부터",
+    "b": "붕어빵 꼬리부터",
+    "emojiA": "🐟",
+    "emojiB": "🐠",
+    "spicy": false
+  },
+  {
+    "id": "food-015",
+    "cat": "food",
+    "a": "수박",
+    "b": "참외",
+    "emojiA": "🍉",
+    "emojiB": "🍈",
+    "spicy": false
+  },
+  {
+    "id": "food-016",
+    "cat": "food",
+    "a": "딸기",
+    "b": "포도",
+    "emojiA": "🍓",
+    "emojiB": "🍇",
+    "spicy": false
+  },
+  {
+    "id": "food-017",
+    "cat": "food",
+    "a": "아주 매운맛",
+    "b": "순한 맛",
+    "emojiA": "🔥",
+    "emojiB": "🍼",
+    "spicy": false
+  },
+  {
+    "id": "food-018",
+    "cat": "food",
+    "a": "야식으로 족발",
+    "b": "야식으로 보쌈",
+    "emojiA": "🐷",
+    "emojiB": "🥬",
+    "spicy": false
+  },
+  {
+    "id": "food-019",
+    "cat": "food",
+    "a": "김치찌개",
+    "b": "된장찌개",
+    "emojiA": "🍲",
+    "emojiB": "🥘",
+    "spicy": false
+  },
+  {
+    "id": "food-020",
+    "cat": "food",
+    "a": "콜라",
+    "b": "사이다",
+    "emojiA": "🥤",
+    "emojiB": "🫧",
+    "spicy": false
+  },
+  {
+    "id": "food-021",
+    "cat": "food",
+    "a": "컵라면",
+    "b": "삼각김밥",
+    "emojiA": "🍜",
+    "emojiB": "🍙",
+    "spicy": false
+  },
+  {
+    "id": "food-022",
+    "cat": "food",
+    "a": "팥빙수",
+    "b": "아이스크림",
+    "emojiA": "🍧",
+    "emojiB": "🍦",
+    "spicy": false
+  },
+  {
+    "id": "food-023",
+    "cat": "food",
+    "a": "마라탕",
+    "b": "쌀국수",
+    "emojiA": "🌶️",
+    "emojiB": "🍜",
+    "spicy": false
+  },
+  {
+    "id": "food-024",
+    "cat": "food",
+    "a": "돈가스",
+    "b": "제육볶음",
+    "emojiA": "🍛",
+    "emojiB": "🍖",
+    "spicy": false
+  },
+  {
+    "id": "food-025",
+    "cat": "food",
+    "a": "샐러드",
+    "b": "샌드위치",
+    "emojiA": "🥗",
+    "emojiB": "🥪",
+    "spicy": false
+  },
+  {
+    "id": "food-026",
+    "cat": "food",
+    "a": "사과 껍질째",
+    "b": "사과 깎아서",
+    "emojiA": "🍎",
+    "emojiB": "🔪",
+    "spicy": false
+  },
+  {
+    "id": "food-027",
+    "cat": "food",
+    "a": "꼬들꼬들 라면",
+    "b": "푹 익힌 라면",
+    "emojiA": "🍜",
+    "emojiB": "🍲",
+    "spicy": false
+  },
+  {
+    "id": "food-028",
+    "cat": "food",
+    "a": "고수 듬뿍",
+    "b": "고수 빼 주세요",
+    "emojiA": "🌿",
+    "emojiB": "🚫",
+    "spicy": false
+  },
+  {
+    "id": "food-029",
+    "cat": "food",
+    "a": "밀떡",
+    "b": "쌀떡",
+    "emojiA": "🍢",
+    "emojiB": "🍡",
+    "spicy": false
+  },
+  {
+    "id": "food-030",
+    "cat": "food",
+    "a": "치즈 케이크",
+    "b": "초코 케이크",
+    "emojiA": "🧀",
+    "emojiB": "🍫",
+    "spicy": false
+  },
+  {
+    "id": "food-031",
+    "cat": "food",
+    "a": "카페라테",
+    "b": "아메리카노",
+    "emojiA": "🥛",
+    "emojiB": "☕",
+    "spicy": false
+  },
+  {
+    "id": "food-032",
+    "cat": "food",
+    "a": "곱창",
+    "b": "막창",
+    "emojiA": "🔥",
+    "emojiB": "🍢",
+    "spicy": false
+  },
+  {
+    "id": "food-033",
+    "cat": "food",
+    "a": "한식",
+    "b": "양식",
+    "emojiA": "🍚",
+    "emojiB": "🍝",
+    "spicy": false
+  },
+  {
+    "id": "food-034",
+    "cat": "food",
+    "a": "무한리필 고깃집",
+    "b": "코스 요리",
+    "emojiA": "🍖",
+    "emojiB": "🍷",
+    "spicy": false
+  },
+  {
+    "id": "food-035",
+    "cat": "food",
+    "a": "새우튀김",
+    "b": "오징어튀김",
+    "emojiA": "🍤",
+    "emojiB": "🦑",
+    "spicy": false
+  },
+  {
+    "id": "food-036",
+    "cat": "food",
+    "a": "해장은 국밥",
+    "b": "해장은 라면",
+    "emojiA": "🍲",
+    "emojiB": "🍜",
+    "spicy": false
+  },
+  {
+    "id": "food-037",
+    "cat": "food",
+    "a": "군고구마",
+    "b": "군밤",
+    "emojiA": "🍠",
+    "emojiB": "🌰",
+    "spicy": false
+  },
+  {
+    "id": "food-038",
+    "cat": "food",
+    "a": "집밥",
+    "b": "외식",
+    "emojiA": "🏠",
+    "emojiB": "🍽️",
+    "spicy": false
+  },
+  {
+    "id": "food-039",
+    "cat": "food",
+    "a": "핫도그",
+    "b": "추로스",
+    "emojiA": "🌭",
+    "emojiB": "🥨",
+    "spicy": false
+  },
+  {
+    "id": "food-040",
+    "cat": "food",
+    "a": "찐만두",
+    "b": "군만두",
+    "emojiA": "🥟",
+    "emojiB": "🍳",
+    "spicy": false
+  },
+  {
+    "id": "date-001",
+    "cat": "date",
+    "a": "집 데이트",
+    "b": "밖 데이트",
+    "emojiA": "🏠",
+    "emojiB": "🌆",
+    "spicy": false
+  },
+  {
+    "id": "date-002",
+    "cat": "date",
+    "a": "놀이공원",
+    "b": "수족관",
+    "emojiA": "🎢",
+    "emojiB": "🐠",
+    "spicy": false
+  },
+  {
+    "id": "date-003",
+    "cat": "date",
+    "a": "영화관",
+    "b": "집에서 영화",
+    "emojiA": "🎬",
+    "emojiB": "🛋️",
+    "spicy": false
+  },
+  {
+    "id": "date-004",
+    "cat": "date",
+    "a": "계획 데이트",
+    "b": "즉흥 데이트",
+    "emojiA": "📋",
+    "emojiB": "🎲",
+    "spicy": false
+  },
+  {
+    "id": "date-005",
+    "cat": "date",
+    "a": "낮 데이트",
+    "b": "밤 데이트",
+    "emojiA": "☀️",
+    "emojiB": "🌙",
+    "spicy": false
+  },
+  {
+    "id": "date-006",
+    "cat": "date",
+    "a": "줄 서는 맛집",
+    "b": "한산한 동네 식당",
+    "emojiA": "⏳",
+    "emojiB": "🍽️",
+    "spicy": false
+  },
+  {
+    "id": "date-007",
+    "cat": "date",
+    "a": "커플룩",
+    "b": "각자 스타일",
+    "emojiA": "👕",
+    "emojiB": "🕶️",
+    "spicy": false
+  },
+  {
+    "id": "date-008",
+    "cat": "date",
+    "a": "전시회",
+    "b": "공연",
+    "emojiA": "🖼️",
+    "emojiB": "🎭",
+    "spicy": false
+  },
+  {
+    "id": "date-009",
+    "cat": "date",
+    "a": "드라이브",
+    "b": "산책",
+    "emojiA": "🚗",
+    "emojiB": "🚶",
+    "spicy": false
+  },
+  {
+    "id": "date-010",
+    "cat": "date",
+    "a": "방탈출",
+    "b": "보드게임 카페",
+    "emojiA": "🔐",
+    "emojiB": "🎲",
+    "spicy": false
+  },
+  {
+    "id": "date-011",
+    "cat": "date",
+    "a": "한강 피크닉",
+    "b": "루프톱 카페",
+    "emojiA": "🧺",
+    "emojiB": "☕",
+    "spicy": false
+  },
+  {
+    "id": "date-012",
+    "cat": "date",
+    "a": "사진 많이 찍기",
+    "b": "눈으로만 담기",
+    "emojiA": "📸",
+    "emojiB": "👀",
+    "spicy": false
+  },
+  {
+    "id": "date-013",
+    "cat": "date",
+    "a": "데이트 비용 반반",
+    "b": "번갈아 내기",
+    "emojiA": "⚖️",
+    "emojiB": "🔄",
+    "spicy": false
+  },
+  {
+    "id": "date-014",
+    "cat": "date",
+    "a": "기념일 레스토랑",
+    "b": "기념일 집밥",
+    "emojiA": "🍷",
+    "emojiB": "🏠",
+    "spicy": false
+  },
+  {
+    "id": "date-015",
+    "cat": "date",
+    "a": "노래방",
+    "b": "오락실",
+    "emojiA": "🎤",
+    "emojiB": "🕹️",
+    "spicy": false
+  },
+  {
+    "id": "date-016",
+    "cat": "date",
+    "a": "쇼핑 데이트",
+    "b": "운동 데이트",
+    "emojiA": "🛍️",
+    "emojiB": "🏸",
+    "spicy": false
+  },
+  {
+    "id": "date-017",
+    "cat": "date",
+    "a": "공방 체험",
+    "b": "쿠킹 클래스",
+    "emojiA": "🏺",
+    "emojiB": "🍳",
+    "spicy": false
+  },
+  {
+    "id": "date-018",
+    "cat": "date",
+    "a": "야경 명소",
+    "b": "일출 명소",
+    "emojiA": "🌃",
+    "emojiB": "🌅",
+    "spicy": false
+  },
+  {
+    "id": "date-019",
+    "cat": "date",
+    "a": "자전거 타기",
+    "b": "오리배 타기",
+    "emojiA": "🚲",
+    "emojiB": "🦆",
+    "spicy": false
+  },
+  {
+    "id": "date-020",
+    "cat": "date",
+    "a": "만화카페",
+    "b": "찜질방",
+    "emojiA": "📚",
+    "emojiB": "♨️",
+    "spicy": false
+  },
+  {
+    "id": "date-021",
+    "cat": "date",
+    "a": "동네 한 바퀴",
+    "b": "요즘 핫플 탐방",
+    "emojiA": "🏘️",
+    "emojiB": "🔥",
+    "spicy": false
+  },
+  {
+    "id": "date-022",
+    "cat": "date",
+    "a": "브런치 데이트",
+    "b": "심야 야식 데이트",
+    "emojiA": "🥞",
+    "emojiB": "🍗",
+    "spicy": false
+  },
+  {
+    "id": "date-023",
+    "cat": "date",
+    "a": "비 오는 날 집콕",
+    "b": "비 맞으며 산책",
+    "emojiA": "🌧️",
+    "emojiB": "☔",
+    "spicy": false
+  },
+  {
+    "id": "date-024",
+    "cat": "date",
+    "a": "걸어서 1시간",
+    "b": "택시로 10분",
+    "emojiA": "🚶",
+    "emojiB": "🚕",
+    "spicy": false
+  },
+  {
+    "id": "date-025",
+    "cat": "date",
+    "a": "볼링",
+    "b": "당구",
+    "emojiA": "🎳",
+    "emojiB": "🎱",
+    "spicy": false
+  },
+  {
+    "id": "date-026",
+    "cat": "date",
+    "a": "즉석 사진 부스",
+    "b": "캐리커처 그리기",
+    "emojiA": "📷",
+    "emojiB": "🎨",
+    "spicy": false
+  },
+  {
+    "id": "date-027",
+    "cat": "date",
+    "a": "야구장",
+    "b": "축구장",
+    "emojiA": "⚾",
+    "emojiB": "⚽",
+    "spicy": false
+  },
+  {
+    "id": "date-028",
+    "cat": "date",
+    "a": "꽃구경",
+    "b": "단풍 구경",
+    "emojiA": "🌸",
+    "emojiB": "🍁",
+    "spicy": false
+  },
+  {
+    "id": "date-029",
+    "cat": "date",
+    "a": "전통시장 구경",
+    "b": "백화점 구경",
+    "emojiA": "🏮",
+    "emojiB": "🏬",
+    "spicy": false
+  },
+  {
+    "id": "date-030",
+    "cat": "date",
+    "a": "서점 데이트",
+    "b": "카페 투어",
+    "emojiA": "📖",
+    "emojiB": "☕",
+    "spicy": false
+  },
+  {
+    "id": "date-031",
+    "cat": "date",
+    "a": "하루 종일 붙어 있기",
+    "b": "반나절 알차게",
+    "emojiA": "🫶",
+    "emojiB": "⏰",
+    "spicy": false
+  },
+  {
+    "id": "date-032",
+    "cat": "date",
+    "a": "코스는 내가 짜기",
+    "b": "코스는 네가 짜기",
+    "emojiA": "🗺️",
+    "emojiB": "💁",
+    "spicy": false
+  },
+  {
+    "id": "date-033",
+    "cat": "date",
+    "a": "실내 클라이밍",
+    "b": "실내 수영장",
+    "emojiA": "🧗",
+    "emojiB": "🏊",
+    "spicy": false
+  },
+  {
+    "id": "date-034",
+    "cat": "date",
+    "a": "동물 카페",
+    "b": "식물 카페",
+    "emojiA": "🐾",
+    "emojiB": "🌿",
+    "spicy": false
+  },
+  {
+    "id": "date-035",
+    "cat": "date",
+    "a": "북적이는 축제",
+    "b": "조용한 공원",
+    "emojiA": "🎪",
+    "emojiB": "🌳",
+    "spicy": false
+  },
+  {
+    "id": "date-036",
+    "cat": "date",
+    "a": "평일 저녁 데이트",
+    "b": "주말 종일 데이트",
+    "emojiA": "🌆",
+    "emojiB": "📅",
+    "spicy": false
+  },
+  {
+    "id": "date-037",
+    "cat": "date",
+    "a": "맛집 찾아가기",
+    "b": "집에서 요리하기",
+    "emojiA": "🍽️",
+    "emojiB": "🍳",
+    "spicy": false
+  },
+  {
+    "id": "date-038",
+    "cat": "date",
+    "a": "귀신의 집",
+    "b": "회전목마",
+    "emojiA": "👻",
+    "emojiB": "🎠",
+    "spicy": false
+  },
+  {
+    "id": "date-039",
+    "cat": "date",
+    "a": "낚시",
+    "b": "등산",
+    "emojiA": "🎣",
+    "emojiB": "🥾",
+    "spicy": false
+  },
+  {
+    "id": "date-040",
+    "cat": "date",
+    "a": "팝업 스토어",
+    "b": "플리마켓",
+    "emojiA": "🛍️",
+    "emojiB": "🧺",
+    "spicy": false
+  },
+  {
+    "id": "travel-001",
+    "cat": "travel",
+    "a": "바다",
+    "b": "산",
+    "emojiA": "🌊",
+    "emojiB": "⛰️",
+    "spicy": false
+  },
+  {
+    "id": "travel-002",
+    "cat": "travel",
+    "a": "국내 여행",
+    "b": "해외 여행",
+    "emojiA": "🏞️",
+    "emojiB": "✈️",
+    "spicy": false
+  },
+  {
+    "id": "travel-003",
+    "cat": "travel",
+    "a": "빡빡한 일정",
+    "b": "여유로운 일정",
+    "emojiA": "🗓️",
+    "emojiB": "🍹",
+    "spicy": false
+  },
+  {
+    "id": "travel-004",
+    "cat": "travel",
+    "a": "깔끔한 호텔",
+    "b": "독채 펜션",
+    "emojiA": "🏨",
+    "emojiB": "🏡",
+    "spicy": false
+  },
+  {
+    "id": "travel-005",
+    "cat": "travel",
+    "a": "캠핑",
+    "b": "호캉스",
+    "emojiA": "⛺",
+    "emojiB": "🛎️",
+    "spicy": false
+  },
+  {
+    "id": "travel-006",
+    "cat": "travel",
+    "a": "기차 여행",
+    "b": "자동차 여행",
+    "emojiA": "🚆",
+    "emojiB": "🚗",
+    "spicy": false
+  },
+  {
+    "id": "travel-007",
+    "cat": "travel",
+    "a": "비행기 창가",
+    "b": "비행기 통로",
+    "emojiA": "🪟",
+    "emojiB": "🚶",
+    "spicy": false
+  },
+  {
+    "id": "travel-008",
+    "cat": "travel",
+    "a": "온천 여행",
+    "b": "스키장 여행",
+    "emojiA": "♨️",
+    "emojiB": "⛷️",
+    "spicy": false
+  },
+  {
+    "id": "travel-009",
+    "cat": "travel",
+    "a": "짐 넉넉하게",
+    "b": "짐 가볍게",
+    "emojiA": "🧳",
+    "emojiB": "🎒",
+    "spicy": false
+  },
+  {
+    "id": "travel-010",
+    "cat": "travel",
+    "a": "맛집 위주",
+    "b": "관광지 위주",
+    "emojiA": "🍜",
+    "emojiB": "🗺️",
+    "spicy": false
+  },
+  {
+    "id": "travel-011",
+    "cat": "travel",
+    "a": "기념품 잔뜩",
+    "b": "사진만 잔뜩",
+    "emojiA": "🎁",
+    "emojiB": "📸",
+    "spicy": false
+  },
+  {
+    "id": "travel-012",
+    "cat": "travel",
+    "a": "섬 여행",
+    "b": "도시 여행",
+    "emojiA": "🏝️",
+    "emojiB": "🏙️",
+    "spicy": false
+  },
+  {
+    "id": "travel-013",
+    "cat": "travel",
+    "a": "새벽 출발",
+    "b": "느지막이 출발",
+    "emojiA": "🌄",
+    "emojiB": "😴",
+    "spicy": false
+  },
+  {
+    "id": "travel-014",
+    "cat": "travel",
+    "a": "가이드 투어",
+    "b": "자유 여행",
+    "emojiA": "🚩",
+    "emojiB": "🧭",
+    "spicy": false
+  },
+  {
+    "id": "travel-015",
+    "cat": "travel",
+    "a": "렌터카",
+    "b": "대중교통",
+    "emojiA": "🚙",
+    "emojiB": "🚌",
+    "spicy": false
+  },
+  {
+    "id": "travel-016",
+    "cat": "travel",
+    "a": "짧은 여행 자주",
+    "b": "긴 여행 한 번",
+    "emojiA": "🔁",
+    "emojiB": "🌍",
+    "spicy": false
+  },
+  {
+    "id": "travel-017",
+    "cat": "travel",
+    "a": "수영장 있는 숙소",
+    "b": "바다 보이는 숙소",
+    "emojiA": "🏊",
+    "emojiB": "🌊",
+    "spicy": false
+  },
+  {
+    "id": "travel-018",
+    "cat": "travel",
+    "a": "유럽",
+    "b": "동남아",
+    "emojiA": "🏰",
+    "emojiB": "🌴",
+    "spicy": false
+  },
+  {
+    "id": "travel-019",
+    "cat": "travel",
+    "a": "숙소에서 푹 쉬기",
+    "b": "밤늦게까지 구경",
+    "emojiA": "🛏️",
+    "emojiB": "🌃",
+    "spicy": false
+  },
+  {
+    "id": "travel-020",
+    "cat": "travel",
+    "a": "현지 음식 도전",
+    "b": "익숙한 음식",
+    "emojiA": "🍲",
+    "emojiB": "🍔",
+    "spicy": false
+  },
+  {
+    "id": "travel-021",
+    "cat": "travel",
+    "a": "유명 관광지",
+    "b": "숨은 명소",
+    "emojiA": "📍",
+    "emojiB": "🔍",
+    "spicy": false
+  },
+  {
+    "id": "travel-022",
+    "cat": "travel",
+    "a": "사막 투어",
+    "b": "정글 탐험",
+    "emojiA": "🏜️",
+    "emojiB": "🌿",
+    "spicy": false
+  },
+  {
+    "id": "travel-023",
+    "cat": "travel",
+    "a": "크루즈 여행",
+    "b": "배낭여행",
+    "emojiA": "🛳️",
+    "emojiB": "🎒",
+    "spicy": false
+  },
+  {
+    "id": "travel-024",
+    "cat": "travel",
+    "a": "눈 덮인 북쪽 나라",
+    "b": "따뜻한 남쪽 나라",
+    "emojiA": "❄️",
+    "emojiB": "🌺",
+    "spicy": false
+  },
+  {
+    "id": "travel-025",
+    "cat": "travel",
+    "a": "조용한 템플스테이",
+    "b": "파티 숙소",
+    "emojiA": "🧘",
+    "emojiB": "🎉",
+    "spicy": false
+  },
+  {
+    "id": "travel-026",
+    "cat": "travel",
+    "a": "알뜰하게 다니기",
+    "b": "여행엔 아낌없이",
+    "emojiA": "💰",
+    "emojiB": "💸",
+    "spicy": false
+  },
+  {
+    "id": "travel-027",
+    "cat": "travel",
+    "a": "밤 비행기",
+    "b": "낮 비행기",
+    "emojiA": "🌙",
+    "emojiB": "☀️",
+    "spicy": false
+  },
+  {
+    "id": "travel-028",
+    "cat": "travel",
+    "a": "자전거 여행",
+    "b": "도보 여행",
+    "emojiA": "🚲",
+    "emojiB": "🥾",
+    "spicy": false
+  },
+  {
+    "id": "travel-029",
+    "cat": "travel",
+    "a": "해변에서 낮잠",
+    "b": "스노클링",
+    "emojiA": "🏖️",
+    "emojiB": "🤿",
+    "spicy": false
+  },
+  {
+    "id": "travel-030",
+    "cat": "travel",
+    "a": "고궁 산책",
+    "b": "테마파크",
+    "emojiA": "🏯",
+    "emojiB": "🎡",
+    "spicy": false
+  },
+  {
+    "id": "travel-031",
+    "cat": "travel",
+    "a": "여행 일기 쓰기",
+    "b": "여행 영상 찍기",
+    "emojiA": "📔",
+    "emojiB": "🎥",
+    "spicy": false
+  },
+  {
+    "id": "travel-032",
+    "cat": "travel",
+    "a": "케이블카",
+    "b": "열기구",
+    "emojiA": "🚡",
+    "emojiB": "🎈",
+    "spicy": false
+  },
+  {
+    "id": "travel-033",
+    "cat": "travel",
+    "a": "빈티지 가게 구경",
+    "b": "미술관 순례",
+    "emojiA": "👗",
+    "emojiB": "🖼️",
+    "spicy": false
+  },
+  {
+    "id": "travel-034",
+    "cat": "travel",
+    "a": "국경 넘는 기차",
+    "b": "섬 사이 여객선",
+    "emojiA": "🚂",
+    "emojiB": "⛴️",
+    "spicy": false
+  },
+  {
+    "id": "travel-035",
+    "cat": "travel",
+    "a": "트레킹",
+    "b": "서핑",
+    "emojiA": "🥾",
+    "emojiB": "🏄",
+    "spicy": false
+  },
+  {
+    "id": "travel-036",
+    "cat": "travel",
+    "a": "여행 중 연락 끊기",
+    "b": "실시간 사진 공유",
+    "emojiA": "📵",
+    "emojiB": "📲",
+    "spicy": false
+  },
+  {
+    "id": "travel-037",
+    "cat": "travel",
+    "a": "한 도시에 오래",
+    "b": "여러 도시 조금씩",
+    "emojiA": "🏙️",
+    "emojiB": "🗺️",
+    "spicy": false
+  },
+  {
+    "id": "travel-038",
+    "cat": "travel",
+    "a": "둘이서만 여행",
+    "b": "친구들과 단체 여행",
+    "emojiA": "👫",
+    "emojiB": "🧑‍🤝‍🧑",
+    "spicy": false
+  },
+  {
+    "id": "travel-039",
+    "cat": "travel",
+    "a": "오로라 보기",
+    "b": "사파리 투어",
+    "emojiA": "🌌",
+    "emojiB": "🦒",
+    "spicy": false
+  },
+  {
+    "id": "travel-040",
+    "cat": "travel",
+    "a": "다락방 숙소",
+    "b": "한옥 숙소",
+    "emojiA": "🛖",
+    "emojiB": "🏯",
+    "spicy": false
+  },
+  {
+    "id": "daily-001",
+    "cat": "daily",
+    "a": "알람 한 번에 기상",
+    "b": "알람 다섯 번",
+    "emojiA": "⏰",
+    "emojiB": "😴",
+    "spicy": false
+  },
+  {
+    "id": "daily-002",
+    "cat": "daily",
+    "a": "아침 샤워",
+    "b": "저녁 샤워",
+    "emojiA": "🌅",
+    "emojiB": "🌙",
+    "spicy": false
+  },
+  {
+    "id": "daily-003",
+    "cat": "daily",
+    "a": "치약 아무 데나",
+    "b": "치약 끝부터 꾹",
+    "emojiA": "🪥",
+    "emojiB": "🧴",
+    "spicy": false
+  },
+  {
+    "id": "daily-004",
+    "cat": "daily",
+    "a": "청소 몰아서",
+    "b": "청소 매일 조금씩",
+    "emojiA": "🧹",
+    "emojiB": "🧽",
+    "spicy": false
+  },
+  {
+    "id": "daily-005",
+    "cat": "daily",
+    "a": "설거지 바로",
+    "b": "설거지 나중에",
+    "emojiA": "🍽️",
+    "emojiB": "🫧",
+    "spicy": false
+  },
+  {
+    "id": "daily-006",
+    "cat": "daily",
+    "a": "20%면 충전",
+    "b": "5%까지 버티기",
+    "emojiA": "🔋",
+    "emojiB": "🪫",
+    "spicy": false
+  },
+  {
+    "id": "daily-007",
+    "cat": "daily",
+    "a": "아침마다 이불 정리",
+    "b": "이불은 그대로",
+    "emojiA": "🛏️",
+    "emojiB": "🌀",
+    "spicy": false
+  },
+  {
+    "id": "daily-008",
+    "cat": "daily",
+    "a": "주말엔 집콕",
+    "b": "주말엔 외출",
+    "emojiA": "🏠",
+    "emojiB": "🚶",
+    "spicy": false
+  },
+  {
+    "id": "daily-009",
+    "cat": "daily",
+    "a": "피곤하면 낮잠",
+    "b": "피곤하면 커피",
+    "emojiA": "😴",
+    "emojiB": "☕",
+    "spicy": false
+  },
+  {
+    "id": "daily-010",
+    "cat": "daily",
+    "a": "할 일 목록 작성",
+    "b": "생각나는 대로",
+    "emojiA": "📝",
+    "emojiB": "💭",
+    "spicy": false
+  },
+  {
+    "id": "daily-011",
+    "cat": "daily",
+    "a": "택배 바로 뜯기",
+    "b": "택배 나중에 뜯기",
+    "emojiA": "📦",
+    "emojiB": "🗃️",
+    "spicy": false
+  },
+  {
+    "id": "daily-012",
+    "cat": "daily",
+    "a": "양말 짝 맞추기",
+    "b": "양말 아무거나",
+    "emojiA": "🧦",
+    "emojiB": "🎲",
+    "spicy": false
+  },
+  {
+    "id": "daily-013",
+    "cat": "daily",
+    "a": "화장실엔 휴대폰",
+    "b": "화장실엔 빈손",
+    "emojiA": "📱",
+    "emojiB": "🙌",
+    "spicy": false
+  },
+  {
+    "id": "daily-014",
+    "cat": "daily",
+    "a": "에어컨 빵빵하게",
+    "b": "선풍기 바람",
+    "emojiA": "❄️",
+    "emojiB": "🌀",
+    "spicy": false
+  },
+  {
+    "id": "daily-015",
+    "cat": "daily",
+    "a": "잠옷 챙겨 입기",
+    "b": "아무 옷이나",
+    "emojiA": "🩳",
+    "emojiB": "👕",
+    "spicy": false
+  },
+  {
+    "id": "daily-016",
+    "cat": "daily",
+    "a": "지갑 들고 다니기",
+    "b": "휴대폰 하나로",
+    "emojiA": "👛",
+    "emojiB": "📱",
+    "spicy": false
+  },
+  {
+    "id": "daily-017",
+    "cat": "daily",
+    "a": "한 번에 왕창 장보기",
+    "b": "필요할 때 조금씩",
+    "emojiA": "🛒",
+    "emojiB": "🧺",
+    "spicy": false
+  },
+  {
+    "id": "daily-018",
+    "cat": "daily",
+    "a": "불 끄고 깜깜하게",
+    "b": "무드등 켜고",
+    "emojiA": "🌑",
+    "emojiB": "🕯️",
+    "spicy": false
+  },
+  {
+    "id": "daily-019",
+    "cat": "daily",
+    "a": "자기 전 휴대폰",
+    "b": "자기 전 책",
+    "emojiA": "📱",
+    "emojiB": "📖",
+    "spicy": false
+  },
+  {
+    "id": "daily-020",
+    "cat": "daily",
+    "a": "30분 일찍 도착",
+    "b": "딱 맞춰 도착",
+    "emojiA": "⏱️",
+    "emojiB": "🏃",
+    "spicy": false
+  },
+  {
+    "id": "daily-021",
+    "cat": "daily",
+    "a": "빨래 개기 담당",
+    "b": "설거지 담당",
+    "emojiA": "👕",
+    "emojiB": "🍽️",
+    "spicy": false
+  },
+  {
+    "id": "daily-022",
+    "cat": "daily",
+    "a": "걸어서 출근",
+    "b": "버스 타고 출근",
+    "emojiA": "🚶",
+    "emojiB": "🚌",
+    "spicy": false
+  },
+  {
+    "id": "daily-023",
+    "cat": "daily",
+    "a": "엘리베이터",
+    "b": "계단",
+    "emojiA": "🛗",
+    "emojiB": "🪜",
+    "spicy": false
+  },
+  {
+    "id": "daily-024",
+    "cat": "daily",
+    "a": "우산 늘 챙기기",
+    "b": "비 오면 사기",
+    "emojiA": "☂️",
+    "emojiB": "🏪",
+    "spicy": false
+  },
+  {
+    "id": "daily-025",
+    "cat": "daily",
+    "a": "드라이기로 말리기",
+    "b": "자연 건조",
+    "emojiA": "💨",
+    "emojiB": "🍃",
+    "spicy": false
+  },
+  {
+    "id": "daily-026",
+    "cat": "daily",
+    "a": "휴일엔 늦잠",
+    "b": "휴일에도 일찍 기상",
+    "emojiA": "🛌",
+    "emojiB": "🌅",
+    "spicy": false
+  },
+  {
+    "id": "daily-027",
+    "cat": "daily",
+    "a": "물건은 제자리",
+    "b": "어디 있는지 다 알아",
+    "emojiA": "✨",
+    "emojiB": "🌀",
+    "spicy": false
+  },
+  {
+    "id": "daily-028",
+    "cat": "daily",
+    "a": "현금",
+    "b": "카드",
+    "emojiA": "💵",
+    "emojiB": "💳",
+    "spicy": false
+  },
+  {
+    "id": "daily-029",
+    "cat": "daily",
+    "a": "알림 다 켜기",
+    "b": "알림 다 끄기",
+    "emojiA": "🔔",
+    "emojiB": "🔕",
+    "spicy": false
+  },
+  {
+    "id": "daily-030",
+    "cat": "daily",
+    "a": "혼밥이 편해",
+    "b": "밥은 같이 먹어야",
+    "emojiA": "🍚",
+    "emojiB": "🍱",
+    "spicy": false
+  },
+  {
+    "id": "daily-031",
+    "cat": "daily",
+    "a": "사진 바로 정리",
+    "b": "사진 무한 저장",
+    "emojiA": "🗂️",
+    "emojiB": "♾️",
+    "spicy": false
+  },
+  {
+    "id": "daily-032",
+    "cat": "daily",
+    "a": "영수증 챙기기",
+    "b": "영수증 바로 버리기",
+    "emojiA": "🧾",
+    "emojiB": "🗑️",
+    "spicy": false
+  },
+  {
+    "id": "daily-033",
+    "cat": "daily",
+    "a": "집에 오면 바로 씻기",
+    "b": "소파에서 일단 쉬기",
+    "emojiA": "🚿",
+    "emojiB": "🛋️",
+    "spicy": false
+  },
+  {
+    "id": "daily-034",
+    "cat": "daily",
+    "a": "아침밥은 꼭",
+    "b": "아침은 커피로",
+    "emojiA": "🍳",
+    "emojiB": "☕",
+    "spicy": false
+  },
+  {
+    "id": "daily-035",
+    "cat": "daily",
+    "a": "새 물건 바로 쓰기",
+    "b": "새 물건 아껴 두기",
+    "emojiA": "🎁",
+    "emojiB": "🗄️",
+    "spicy": false
+  },
+  {
+    "id": "daily-036",
+    "cat": "daily",
+    "a": "뜨거운 물 샤워",
+    "b": "시원한 물 샤워",
+    "emojiA": "🔥",
+    "emojiB": "🧊",
+    "spicy": false
+  },
+  {
+    "id": "daily-037",
+    "cat": "daily",
+    "a": "창문 열고 자기",
+    "b": "꼭 닫고 자기",
+    "emojiA": "🪟",
+    "emojiB": "🔒",
+    "spicy": false
+  },
+  {
+    "id": "daily-038",
+    "cat": "daily",
+    "a": "가계부 꼼꼼히",
+    "b": "감으로 대충",
+    "emojiA": "📒",
+    "emojiB": "💸",
+    "spicy": false
+  },
+  {
+    "id": "daily-039",
+    "cat": "daily",
+    "a": "음악 틀고 일하기",
+    "b": "조용히 집중",
+    "emojiA": "🎧",
+    "emojiB": "🤫",
+    "spicy": false
+  },
+  {
+    "id": "daily-040",
+    "cat": "daily",
+    "a": "마감 전날 몰아치기",
+    "b": "미리미리 끝내기",
+    "emojiA": "🔥",
+    "emojiB": "✅",
+    "spicy": false
+  },
+  {
+    "id": "romance-001",
+    "cat": "romance",
+    "a": "먼저 고백하기",
+    "b": "고백 받기",
+    "emojiA": "💌",
+    "emojiB": "💝",
+    "spicy": false
+  },
+  {
+    "id": "romance-002",
+    "cat": "romance",
+    "a": "하루 종일 연락",
+    "b": "자기 전 긴 통화",
+    "emojiA": "📱",
+    "emojiB": "📞",
+    "spicy": false
+  },
+  {
+    "id": "romance-003",
+    "cat": "romance",
+    "a": "손편지",
+    "b": "깜짝 선물",
+    "emojiA": "✉️",
+    "emojiB": "🎁",
+    "spicy": false
+  },
+  {
+    "id": "romance-004",
+    "cat": "romance",
+    "a": "애칭 부르기",
+    "b": "이름 부르기",
+    "emojiA": "🐣",
+    "emojiB": "📛",
+    "spicy": false
+  },
+  {
+    "id": "romance-005",
+    "cat": "romance",
+    "a": "100일마다 축하",
+    "b": "1년에 한 번 크게",
+    "emojiA": "🎂",
+    "emojiB": "🎉",
+    "spicy": false
+  },
+  {
+    "id": "romance-006",
+    "cat": "romance",
+    "a": "다툰 날 바로 화해",
+    "b": "하루 생각하고 화해",
+    "emojiA": "🤝",
+    "emojiB": "🌙",
+    "spicy": false
+  },
+  {
+    "id": "romance-007",
+    "cat": "romance",
+    "a": "질투 조금은 좋아",
+    "b": "질투는 없는 게 좋아",
+    "emojiA": "😤",
+    "emojiB": "😌",
+    "spicy": false
+  },
+  {
+    "id": "romance-008",
+    "cat": "romance",
+    "a": "공개 연애",
+    "b": "비밀 연애",
+    "emojiA": "📣",
+    "emojiB": "🤫",
+    "spicy": false
+  },
+  {
+    "id": "romance-009",
+    "cat": "romance",
+    "a": "첫눈에 반하기",
+    "b": "천천히 스며들기",
+    "emojiA": "⚡",
+    "emojiB": "🌱",
+    "spicy": false
+  },
+  {
+    "id": "romance-010",
+    "cat": "romance",
+    "a": "프로필은 커플 사진",
+    "b": "프로필은 각자 사진",
+    "emojiA": "🖼️",
+    "emojiB": "🙂",
+    "spicy": false
+  },
+  {
+    "id": "romance-011",
+    "cat": "romance",
+    "a": "깜짝 파티",
+    "b": "둘만의 조용한 저녁",
+    "emojiA": "🎉",
+    "emojiB": "🕯️",
+    "spicy": false
+  },
+  {
+    "id": "romance-012",
+    "cat": "romance",
+    "a": "갖고 싶은 거 말하기",
+    "b": "알아서 골라 주기",
+    "emojiA": "🗒️",
+    "emojiB": "🎁",
+    "spicy": false
+  },
+  {
+    "id": "romance-013",
+    "cat": "romance",
+    "a": "스킨십 많은 연애",
+    "b": "담백한 연애",
+    "emojiA": "🤗",
+    "emojiB": "🍵",
+    "spicy": false
+  },
+  {
+    "id": "romance-014",
+    "cat": "romance",
+    "a": "칼같이 답장",
+    "b": "여유 있게 답장",
+    "emojiA": "⚡",
+    "emojiB": "🐢",
+    "spicy": false
+  },
+  {
+    "id": "romance-015",
+    "cat": "romance",
+    "a": "사랑해 매일 말하기",
+    "b": "행동으로 보여 주기",
+    "emojiA": "💗",
+    "emojiB": "🫶",
+    "spicy": false
+  },
+  {
+    "id": "romance-016",
+    "cat": "romance",
+    "a": "커플 반지",
+    "b": "커플 시계",
+    "emojiA": "💍",
+    "emojiB": "⌚",
+    "spicy": false
+  },
+  {
+    "id": "romance-017",
+    "cat": "romance",
+    "a": "연애 초반 설렘",
+    "b": "오래된 편안함",
+    "emojiA": "💓",
+    "emojiB": "🛋️",
+    "spicy": false
+  },
+  {
+    "id": "romance-018",
+    "cat": "romance",
+    "a": "헤어질 때 포옹",
+    "b": "헤어질 때 손 인사",
+    "emojiA": "🤗",
+    "emojiB": "👋",
+    "spicy": false
+  },
+  {
+    "id": "romance-019",
+    "cat": "romance",
+    "a": "실용적인 선물",
+    "b": "감성적인 선물",
+    "emojiA": "🧰",
+    "emojiB": "💐",
+    "spicy": false
+  },
+  {
+    "id": "romance-020",
+    "cat": "romance",
+    "a": "싸우면 말로 풀기",
+    "b": "싸우면 편지로 풀기",
+    "emojiA": "🗣️",
+    "emojiB": "✉️",
+    "spicy": false
+  },
+  {
+    "id": "romance-021",
+    "cat": "romance",
+    "a": "비밀번호 공유",
+    "b": "비밀번호는 각자",
+    "emojiA": "🔓",
+    "emojiB": "🔐",
+    "spicy": false
+  },
+  {
+    "id": "romance-022",
+    "cat": "romance",
+    "a": "친구들과 다 같이",
+    "b": "둘이서만 오붓하게",
+    "emojiA": "👯",
+    "emojiB": "👫",
+    "spicy": false
+  },
+  {
+    "id": "romance-023",
+    "cat": "romance",
+    "a": "아침 인사 문자",
+    "b": "잘 자 문자",
+    "emojiA": "🌞",
+    "emojiB": "🌙",
+    "spicy": false
+  },
+  {
+    "id": "romance-024",
+    "cat": "romance",
+    "a": "노래 불러 주기",
+    "b": "편지 읽어 주기",
+    "emojiA": "🎤",
+    "emojiB": "📜",
+    "spicy": false
+  },
+  {
+    "id": "romance-025",
+    "cat": "romance",
+    "a": "연애 기록 앨범",
+    "b": "그냥 마음속에",
+    "emojiA": "📒",
+    "emojiB": "💭",
+    "spicy": false
+  },
+  {
+    "id": "romance-026",
+    "cat": "romance",
+    "a": "서로 닮은 커플",
+    "b": "정반대 커플",
+    "emojiA": "👯",
+    "emojiB": "🧲",
+    "spicy": false
+  },
+  {
+    "id": "romance-027",
+    "cat": "romance",
+    "a": "깜짝 방문",
+    "b": "미리 약속",
+    "emojiA": "🚪",
+    "emojiB": "📅",
+    "spicy": false
+  },
+  {
+    "id": "romance-028",
+    "cat": "romance",
+    "a": "주 1회 하루 종일",
+    "b": "매일 30분씩",
+    "emojiA": "📆",
+    "emojiB": "⏱️",
+    "spicy": false
+  },
+  {
+    "id": "romance-029",
+    "cat": "romance",
+    "a": "모두 앞에서 청혼",
+    "b": "둘만의 장소에서 청혼",
+    "emojiA": "🎆",
+    "emojiB": "🌙",
+    "spicy": false
+  },
+  {
+    "id": "romance-030",
+    "cat": "romance",
+    "a": "요리 잘하는 연인",
+    "b": "운전 잘하는 연인",
+    "emojiA": "🍳",
+    "emojiB": "🚗",
+    "spicy": false
+  },
+  {
+    "id": "romance-031",
+    "cat": "romance",
+    "a": "옥상에서 고백",
+    "b": "바닷가에서 고백",
+    "emojiA": "🌃",
+    "emojiB": "🏖️",
+    "spicy": false
+  },
+  {
+    "id": "romance-032",
+    "cat": "romance",
+    "a": "손수 만든 케이크",
+    "b": "맛집 케이크 예약",
+    "emojiA": "🎂",
+    "emojiB": "🍰",
+    "spicy": false
+  },
+  {
+    "id": "romance-033",
+    "cat": "romance",
+    "a": "같이 늦잠",
+    "b": "같이 아침 산책",
+    "emojiA": "😴",
+    "emojiB": "🌅",
+    "spicy": false
+  },
+  {
+    "id": "romance-034",
+    "cat": "romance",
+    "a": "인생 사진 찍어 주기",
+    "b": "엽기 사진 찍어 주기",
+    "emojiA": "📸",
+    "emojiB": "🤪",
+    "spicy": false
+  },
+  {
+    "id": "romance-035",
+    "cat": "romance",
+    "a": "화나면 혼자 두기",
+    "b": "화나도 옆에 있기",
+    "emojiA": "🚪",
+    "emojiB": "🫂",
+    "spicy": false
+  },
+  {
+    "id": "romance-036",
+    "cat": "romance",
+    "a": "잘 들어주는 연인",
+    "b": "잘 웃겨 주는 연인",
+    "emojiA": "👂",
+    "emojiB": "😂",
+    "spicy": false
+  },
+  {
+    "id": "romance-037",
+    "cat": "romance",
+    "a": "첫 데이트는 영화",
+    "b": "첫 데이트는 산책",
+    "emojiA": "🎬",
+    "emojiB": "🚶",
+    "spicy": false
+  },
+  {
+    "id": "romance-038",
+    "cat": "romance",
+    "a": "운명 같은 만남",
+    "b": "친구에서 연인",
+    "emojiA": "✨",
+    "emojiB": "🤝",
+    "spicy": false
+  },
+  {
+    "id": "romance-039",
+    "cat": "romance",
+    "a": "애교 많은 연인",
+    "b": "듬직한 연인",
+    "emojiA": "🥰",
+    "emojiB": "🐻",
+    "spicy": false
+  },
+  {
+    "id": "romance-040",
+    "cat": "romance",
+    "a": "전화 먼저 끊기",
+    "b": "절대 먼저 안 끊기",
+    "emojiA": "📴",
+    "emojiB": "☎️",
+    "spicy": false
+  },
+  {
+    "id": "whatif-001",
+    "cat": "whatif",
+    "a": "과거로 가기",
+    "b": "미래로 가기",
+    "emojiA": "⏪",
+    "emojiB": "⏩",
+    "spicy": false
+  },
+  {
+    "id": "whatif-002",
+    "cat": "whatif",
+    "a": "투명 인간",
+    "b": "하늘을 나는 능력",
+    "emojiA": "👻",
+    "emojiB": "🕊️",
+    "spicy": false
+  },
+  {
+    "id": "whatif-003",
+    "cat": "whatif",
+    "a": "10년 일찍 만나기",
+    "b": "지금처럼 만나기",
+    "emojiA": "🕰️",
+    "emojiB": "💞",
+    "spicy": false
+  },
+  {
+    "id": "whatif-004",
+    "cat": "whatif",
+    "a": "동물과 대화하기",
+    "b": "모든 언어 하기",
+    "emojiA": "🐾",
+    "emojiB": "🌐",
+    "spicy": false
+  },
+  {
+    "id": "whatif-005",
+    "cat": "whatif",
+    "a": "지금 1억 받기",
+    "b": "1년 유급 휴가",
+    "emojiA": "💰",
+    "emojiB": "🏖️",
+    "spicy": false
+  },
+  {
+    "id": "whatif-006",
+    "cat": "whatif",
+    "a": "순간 이동",
+    "b": "시간 멈추기",
+    "emojiA": "✨",
+    "emojiB": "⏸️",
+    "spicy": false
+  },
+  {
+    "id": "whatif-007",
+    "cat": "whatif",
+    "a": "둘이 무인도",
+    "b": "혼자 대도시",
+    "emojiA": "🏝️",
+    "emojiB": "🏙️",
+    "spicy": false
+  },
+  {
+    "id": "whatif-008",
+    "cat": "whatif",
+    "a": "평생 라면 금지",
+    "b": "평생 치킨 금지",
+    "emojiA": "🍜",
+    "emojiB": "🍗",
+    "spicy": false
+  },
+  {
+    "id": "whatif-009",
+    "cat": "whatif",
+    "a": "마음 읽기",
+    "b": "미래 보기",
+    "emojiA": "🧠",
+    "emojiB": "🔮",
+    "spicy": false
+  },
+  {
+    "id": "whatif-010",
+    "cat": "whatif",
+    "a": "하루 몸 바뀌기",
+    "b": "연인 꿈에 들어가기",
+    "emojiA": "🔄",
+    "emojiB": "💭",
+    "spicy": false
+  },
+  {
+    "id": "whatif-011",
+    "cat": "whatif",
+    "a": "복권 1등 비밀로",
+    "b": "복권 1등 자랑하기",
+    "emojiA": "🤫",
+    "emojiB": "📣",
+    "spicy": false
+  },
+  {
+    "id": "whatif-012",
+    "cat": "whatif",
+    "a": "처음부터 다시 연애",
+    "b": "지금 이대로 계속",
+    "emojiA": "🔁",
+    "emojiB": "💑",
+    "spicy": false
+  },
+  {
+    "id": "whatif-013",
+    "cat": "whatif",
+    "a": "우주여행",
+    "b": "심해 탐험",
+    "emojiA": "🚀",
+    "emojiB": "🐙",
+    "spicy": false
+  },
+  {
+    "id": "whatif-014",
+    "cat": "whatif",
+    "a": "좀비 세상에서 생존",
+    "b": "공룡 시대에서 생존",
+    "emojiA": "🧟",
+    "emojiB": "🦖",
+    "spicy": false
+  },
+  {
+    "id": "whatif-015",
+    "cat": "whatif",
+    "a": "하루가 48시간",
+    "b": "잠이 필요 없는 몸",
+    "emojiA": "⏳",
+    "emojiB": "⚡",
+    "spicy": false
+  },
+  {
+    "id": "whatif-016",
+    "cat": "whatif",
+    "a": "로맨스 영화 속으로",
+    "b": "판타지 소설 속으로",
+    "emojiA": "💘",
+    "emojiB": "🐉",
+    "spicy": false
+  },
+  {
+    "id": "whatif-017",
+    "cat": "whatif",
+    "a": "새로 하루 살기",
+    "b": "물고기로 하루 살기",
+    "emojiA": "🐦",
+    "emojiB": "🐠",
+    "spicy": false
+  },
+  {
+    "id": "whatif-018",
+    "cat": "whatif",
+    "a": "슈퍼 히어로",
+    "b": "천재 과학자",
+    "emojiA": "🦸",
+    "emojiB": "🧪",
+    "spicy": false
+  },
+  {
+    "id": "whatif-019",
+    "cat": "whatif",
+    "a": "1년 연락 금지",
+    "b": "1년 24시간 붙어 있기",
+    "emojiA": "📵",
+    "emojiB": "🔗",
+    "spicy": false
+  },
+  {
+    "id": "whatif-020",
+    "cat": "whatif",
+    "a": "돈 걱정 없는 삶",
+    "b": "시간 걱정 없는 삶",
+    "emojiA": "💸",
+    "emojiB": "⏰",
+    "spicy": false
+  },
+  {
+    "id": "whatif-021",
+    "cat": "whatif",
+    "a": "유명인 되기",
+    "b": "숨은 부자 되기",
+    "emojiA": "🌟",
+    "emojiB": "💎",
+    "spicy": false
+  },
+  {
+    "id": "whatif-022",
+    "cat": "whatif",
+    "a": "기억력 천재",
+    "b": "운동 천재",
+    "emojiA": "🧠",
+    "emojiB": "🏅",
+    "spicy": false
+  },
+  {
+    "id": "whatif-023",
+    "cat": "whatif",
+    "a": "과거의 나에게 편지",
+    "b": "미래의 나에게 질문",
+    "emojiA": "✉️",
+    "emojiB": "❓",
+    "spicy": false
+  },
+  {
+    "id": "whatif-024",
+    "cat": "whatif",
+    "a": "날씨 마음대로",
+    "b": "음식 무한 복제",
+    "emojiA": "🌦️",
+    "emojiB": "🍱",
+    "spicy": false
+  },
+  {
+    "id": "whatif-025",
+    "cat": "whatif",
+    "a": "평생 바다 앞 집",
+    "b": "평생 숲속 집",
+    "emojiA": "🌊",
+    "emojiB": "🌲",
+    "spicy": false
+  },
+  {
+    "id": "whatif-026",
+    "cat": "whatif",
+    "a": "마법사 되기",
+    "b": "기사 되기",
+    "emojiA": "🪄",
+    "emojiB": "🛡️",
+    "spicy": false
+  },
+  {
+    "id": "whatif-027",
+    "cat": "whatif",
+    "a": "말할 때마다 노래",
+    "b": "말할 때마다 춤",
+    "emojiA": "🎵",
+    "emojiB": "💃",
+    "spicy": false
+  },
+  {
+    "id": "whatif-028",
+    "cat": "whatif",
+    "a": "열 살로 돌아가기",
+    "b": "칠십 살 미리 보기",
+    "emojiA": "🧒",
+    "emojiB": "👴",
+    "spicy": false
+  },
+  {
+    "id": "whatif-029",
+    "cat": "whatif",
+    "a": "우주에서 결혼식",
+    "b": "바닷속 결혼식",
+    "emojiA": "🪐",
+    "emojiB": "🐚",
+    "spicy": false
+  },
+  {
+    "id": "whatif-030",
+    "cat": "whatif",
+    "a": "1년 해외 살기",
+    "b": "1년 시골 살기",
+    "emojiA": "🌍",
+    "emojiB": "🌾",
+    "spicy": false
+  },
+  {
+    "id": "whatif-031",
+    "cat": "whatif",
+    "a": "거짓말 못 하기",
+    "b": "거짓말 다 알아채기",
+    "emojiA": "😇",
+    "emojiB": "👁️",
+    "spicy": false
+  },
+  {
+    "id": "whatif-032",
+    "cat": "whatif",
+    "a": "모든 게임 1등",
+    "b": "모든 시험 1등",
+    "emojiA": "🎮",
+    "emojiB": "📝",
+    "spicy": false
+  },
+  {
+    "id": "whatif-033",
+    "cat": "whatif",
+    "a": "연인이 가수 데뷔",
+    "b": "연인이 배우 데뷔",
+    "emojiA": "🎤",
+    "emojiB": "🎬",
+    "spicy": false
+  },
+  {
+    "id": "whatif-034",
+    "cat": "whatif",
+    "a": "집에 수영장",
+    "b": "집에 영화관",
+    "emojiA": "🏊",
+    "emojiB": "🎞️",
+    "spicy": false
+  },
+  {
+    "id": "whatif-035",
+    "cat": "whatif",
+    "a": "하루 종일 웃음 참기",
+    "b": "하루 종일 하품 참기",
+    "emojiA": "😐",
+    "emojiB": "🥱",
+    "spicy": false
+  },
+  {
+    "id": "whatif-036",
+    "cat": "whatif",
+    "a": "꿈을 영상으로 저장",
+    "b": "꿈 마음대로 조종",
+    "emojiA": "📼",
+    "emojiB": "🌙",
+    "spicy": false
+  },
+  {
+    "id": "whatif-037",
+    "cat": "whatif",
+    "a": "같은 날 태어나기",
+    "b": "어릴 적 같은 동네",
+    "emojiA": "🎂",
+    "emojiB": "🏘️",
+    "spicy": false
+  },
+  {
+    "id": "whatif-038",
+    "cat": "whatif",
+    "a": "모든 음식 0칼로리",
+    "b": "모든 교통 무료",
+    "emojiA": "🍰",
+    "emojiB": "🚇",
+    "spicy": false
+  },
+  {
+    "id": "whatif-039",
+    "cat": "whatif",
+    "a": "평생 무료 여행",
+    "b": "평생 무료 맛집",
+    "emojiA": "✈️",
+    "emojiB": "🍽️",
+    "spicy": false
+  },
+  {
+    "id": "whatif-040",
+    "cat": "whatif",
+    "a": "로봇 집사",
+    "b": "요정 친구",
+    "emojiA": "🤖",
+    "emojiB": "🧚",
+    "spicy": false
+  },
+  {
+    "id": "spicy-001",
+    "cat": "spicy",
+    "a": "무릎베개 해 주기",
+    "b": "어깨에 기대기",
+    "emojiA": "😴",
+    "emojiB": "🫂",
+    "spicy": true
+  },
+  {
+    "id": "spicy-002",
+    "cat": "spicy",
+    "a": "볼에 뽀뽀",
+    "b": "이마에 뽀뽀",
+    "emojiA": "😚",
+    "emojiB": "😘",
+    "spicy": true
+  },
+  {
+    "id": "spicy-003",
+    "cat": "spicy",
+    "a": "갑자기 백허그",
+    "b": "갑자기 손깍지",
+    "emojiA": "🤗",
+    "emojiB": "🤞",
+    "spicy": true
+  },
+  {
+    "id": "spicy-004",
+    "cat": "spicy",
+    "a": "전 연인 얘기 듣기",
+    "b": "전 연인 얘기 금지",
+    "emojiA": "👂",
+    "emojiB": "🙉",
+    "spicy": true
+  },
+  {
+    "id": "spicy-005",
+    "cat": "spicy",
+    "a": "애교 폭발",
+    "b": "무뚝뚝한 매력",
+    "emojiA": "🥰",
+    "emojiB": "😎",
+    "spicy": true
+  },
+  {
+    "id": "spicy-006",
+    "cat": "spicy",
+    "a": "이성 친구와 밥 괜찮아",
+    "b": "이성 친구와 밥 안 돼",
+    "emojiA": "🍽️",
+    "emojiB": "🙅",
+    "spicy": true
+  },
+  {
+    "id": "spicy-007",
+    "cat": "spicy",
+    "a": "술 마시면 애교쟁이",
+    "b": "술 마시면 잠꾸러기",
+    "emojiA": "🍷",
+    "emojiB": "😪",
+    "spicy": true
+  },
+  {
+    "id": "spicy-008",
+    "cat": "spicy",
+    "a": "방귀 트기",
+    "b": "방귀는 평생 비밀",
+    "emojiA": "💨",
+    "emojiB": "🤐",
+    "spicy": true
+  },
+  {
+    "id": "spicy-009",
+    "cat": "spicy",
+    "a": "민낯도 자주 보여 주기",
+    "b": "늘 꾸민 모습만",
+    "emojiA": "🙈",
+    "emojiB": "💄",
+    "spicy": true
+  },
+  {
+    "id": "spicy-010",
+    "cat": "spicy",
+    "a": "첫인상 솔직 고백",
+    "b": "첫인상은 무덤까지",
+    "emojiA": "😳",
+    "emojiB": "🤫",
+    "spicy": true
+  },
+  {
+    "id": "spicy-011",
+    "cat": "spicy",
+    "a": "스킨십은 빠르게",
+    "b": "스킨십은 천천히",
+    "emojiA": "⚡",
+    "emojiB": "🐢",
+    "spicy": true
+  },
+  {
+    "id": "spicy-012",
+    "cat": "spicy",
+    "a": "길에서 손잡기만",
+    "b": "길에서 뽀뽀도 괜찮아",
+    "emojiA": "🤝",
+    "emojiB": "💋",
+    "spicy": true
+  },
+  {
+    "id": "spicy-013",
+    "cat": "spicy",
+    "a": "새벽에 보고 싶다 전화",
+    "b": "아침에 보고 싶다 문자",
+    "emojiA": "📞",
+    "emojiB": "💌",
+    "spicy": true
+  },
+  {
+    "id": "spicy-014",
+    "cat": "spicy",
+    "a": "질투 나면 바로 말하기",
+    "b": "질투는 혼자 삭이기",
+    "emojiA": "😤",
+    "emojiB": "😶",
+    "spicy": true
+  },
+  {
+    "id": "spicy-015",
+    "cat": "spicy",
+    "a": "잠꼬대 몰래 녹화",
+    "b": "잠꼬대는 못 들은 척",
+    "emojiA": "📹",
+    "emojiB": "🙊",
+    "spicy": true
+  },
+  {
+    "id": "spicy-016",
+    "cat": "spicy",
+    "a": "내 일기장 공개",
+    "b": "내 검색 기록 공개",
+    "emojiA": "📔",
+    "emojiB": "🔍",
+    "spicy": true
+  },
+  {
+    "id": "spicy-017",
+    "cat": "spicy",
+    "a": "키스 잘하는 연인",
+    "b": "포옹 잘하는 연인",
+    "emojiA": "💋",
+    "emojiB": "🤗",
+    "spicy": true
+  },
+  {
+    "id": "spicy-018",
+    "cat": "spicy",
+    "a": "이성 연락처 정리",
+    "b": "연락처는 그대로",
+    "emojiA": "📵",
+    "emojiB": "📱",
+    "spicy": true
+  },
+  {
+    "id": "spicy-019",
+    "cat": "spicy",
+    "a": "처음 손잡은 순간",
+    "b": "처음 뽀뽀한 순간",
+    "emojiA": "🤝",
+    "emojiB": "😚",
+    "spicy": true
+  },
+  {
+    "id": "spicy-020",
+    "cat": "spicy",
+    "a": "흑역사 사진 공개",
+    "b": "흑역사 영상 공개",
+    "emojiA": "📸",
+    "emojiB": "🎥",
+    "spicy": true
+  },
+  {
+    "id": "spicy-021",
+    "cat": "spicy",
+    "a": "친구 앞 애정 표현",
+    "b": "둘만 있을 때만",
+    "emojiA": "🥰",
+    "emojiB": "🤫",
+    "spicy": true
+  },
+  {
+    "id": "spicy-022",
+    "cat": "spicy",
+    "a": "뽀뽀로 화해하기",
+    "b": "사과 편지로 화해",
+    "emojiA": "💋",
+    "emojiB": "📝",
+    "spicy": true
+  },
+  {
+    "id": "spicy-023",
+    "cat": "spicy",
+    "a": "이상형 연예인 질투",
+    "b": "연예인은 쿨하게 인정",
+    "emojiA": "😒",
+    "emojiB": "😎",
+    "spicy": true
+  },
+  {
+    "id": "spicy-024",
+    "cat": "spicy",
+    "a": "팔베개하고 자기",
+    "b": "각자 베개 베고 자기",
+    "emojiA": "💤",
+    "emojiB": "🛏️",
+    "spicy": true
+  },
+  {
+    "id": "spicy-025",
+    "cat": "spicy",
+    "a": "밀당은 필수",
+    "b": "밀당 없이 직진",
+    "emojiA": "🎣",
+    "emojiB": "🚀",
+    "spicy": true
+  },
+  {
+    "id": "spicy-026",
+    "cat": "spicy",
+    "a": "전 연인 만나면 인사",
+    "b": "전 연인 만나면 모른 척",
+    "emojiA": "👋",
+    "emojiB": "🙈",
+    "spicy": true
+  },
+  {
+    "id": "spicy-027",
+    "cat": "spicy",
+    "a": "하얀 거짓말 괜찮아",
+    "b": "작은 거짓말도 안 돼",
+    "emojiA": "😇",
+    "emojiB": "🙅",
+    "spicy": true
+  },
+  {
+    "id": "spicy-028",
+    "cat": "spicy",
+    "a": "잠옷 입은 모습",
+    "b": "정장 입은 모습",
+    "emojiA": "🧸",
+    "emojiB": "🤵",
+    "spicy": true
+  },
+  {
+    "id": "spicy-029",
+    "cat": "spicy",
+    "a": "데이트 중 휴대폰 금지",
+    "b": "휴대폰은 자유롭게",
+    "emojiA": "📵",
+    "emojiB": "📱",
+    "spicy": true
+  },
+  {
+    "id": "spicy-030",
+    "cat": "spicy",
+    "a": "머리 쓰다듬기",
+    "b": "볼 콕 찌르기",
+    "emojiA": "🫳",
+    "emojiB": "👉",
+    "spicy": true
+  },
+  {
+    "id": "spicy-031",
+    "cat": "spicy",
+    "a": "부모님께 바로 소개",
+    "b": "확신 들 때 소개",
+    "emojiA": "👪",
+    "emojiB": "💍",
+    "spicy": true
+  },
+  {
+    "id": "spicy-032",
+    "cat": "spicy",
+    "a": "밖에서도 애칭 부르기",
+    "b": "애칭은 둘만 있을 때",
+    "emojiA": "📣",
+    "emojiB": "🤫",
+    "spicy": true
+  },
+  {
+    "id": "spicy-033",
+    "cat": "spicy",
+    "a": "연인 앞에서 펑펑 울기",
+    "b": "눈물은 혼자 몰래",
+    "emojiA": "😭",
+    "emojiB": "😤",
+    "spicy": true
+  },
+  {
+    "id": "spicy-034",
+    "cat": "spicy",
+    "a": "기념일 잊으면 서운해",
+    "b": "기념일 잊어도 괜찮아",
+    "emojiA": "😢",
+    "emojiB": "😎",
+    "spicy": true
+  },
+  {
+    "id": "spicy-035",
+    "cat": "spicy",
+    "a": "잠든 얼굴 몰래 보기",
+    "b": "먼저 꿀잠 자기",
+    "emojiA": "😴",
+    "emojiB": "💤",
+    "spicy": true
+  },
+  {
+    "id": "spicy-036",
+    "cat": "spicy",
+    "a": "내가 먼저 좋아했다",
+    "b": "네가 먼저 좋아했다",
+    "emojiA": "😳",
+    "emojiB": "😏",
+    "spicy": true
+  },
+  {
+    "id": "spicy-037",
+    "cat": "spicy",
+    "a": "연인 옷 골라 주기",
+    "b": "연인이 골라 준 옷",
+    "emojiA": "👗",
+    "emojiB": "👔",
+    "spicy": true
+  },
+  {
+    "id": "spicy-038",
+    "cat": "spicy",
+    "a": "건너 들은 칭찬",
+    "b": "직접 들은 칭찬",
+    "emojiA": "👂",
+    "emojiB": "🥰",
+    "spicy": true
+  },
+  {
+    "id": "spicy-039",
+    "cat": "spicy",
+    "a": "빗속에서 키스",
+    "b": "눈 오는 날 키스",
+    "emojiA": "☔",
+    "emojiB": "❄️",
+    "spicy": true
+  },
+  {
+    "id": "spicy-040",
+    "cat": "spicy",
+    "a": "잔소리하는 연인",
+    "b": "무심한 연인",
+    "emojiA": "🗣️",
+    "emojiB": "😶",
+    "spicy": true
+  }
+]
