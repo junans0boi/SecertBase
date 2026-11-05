@@ -113,7 +113,11 @@ class _ZeroRevealStageState extends State<ZeroRevealStage> {
       ZeroRevealTimeline.countStart,
       ZeroRevealTimeline.countEnd,
     );
-    final count = (c * kZeroMaxFingers).floor();
+    final most = math.max(
+      r.fingers[widget.me] ?? 0,
+      r.fingers[widget.opponent] ?? 0,
+    );
+    final count = math.min((c * kZeroMaxFingers).floor(), most);
     if (c > 0 && count != _lastCount) {
       _lastCount = count;
       GameSfx.instance.play(GameSound.tap, volume: 0.6);
@@ -129,6 +133,29 @@ class _ZeroRevealStageState extends State<ZeroRevealStage> {
           : GameSound.confirm,
     );
   }
+
+  /// 두 손이 같은 박자로 손가락을 하나씩 편다(틱 소리 한 번 = 손가락 하나).
+  static double _extended(int fingers, double count) =>
+      math.min(fingers.toDouble(), count * kZeroMaxFingers);
+
+  /// 마지막 손가락이 펴지는 순간 손이 한 번 통 튄다(0~1).
+  static double _bounce(double v, int fingers) {
+    final at =
+        ZeroRevealTimeline.countStart +
+        (ZeroRevealTimeline.countEnd - ZeroRevealTimeline.countStart) *
+            fingers /
+            kZeroMaxFingers;
+    return ZeroRevealTimeline.span(v, at, at + 0.07);
+  }
+
+  /// 점수를 얻은 손에만 반짝임이 지나간다.
+  static double _sparkle(double v, int points) => points <= 0
+      ? 0
+      : ZeroRevealTimeline.span(
+          v,
+          ZeroRevealTimeline.points,
+          ZeroRevealTimeline.points + 0.16,
+        );
 
   @override
   Widget build(BuildContext context) {
@@ -198,8 +225,10 @@ class _ZeroRevealStageState extends State<ZeroRevealStage> {
                               theme: t,
                               name: widget.nameOf(me),
                               color: t.me,
-                              fingers: myF * count,
-                              shownCount: (myF * count).floor(),
+                              fingers: _extended(myF, count),
+                              shownCount: _extended(myF, count).floor(),
+                              bounce: _bounce(v, myF),
+                              sparkle: _sparkle(v, r.points[me] ?? 0),
                               guess: r.guesses[me] ?? 0,
                               exact: r.exact[me] == true,
                               distance: r.distance[me] ?? 0,
@@ -215,8 +244,10 @@ class _ZeroRevealStageState extends State<ZeroRevealStage> {
                               theme: t,
                               name: widget.nameOf(opp),
                               color: t.opponent,
-                              fingers: opF * count,
-                              shownCount: (opF * count).floor(),
+                              fingers: _extended(opF, count),
+                              shownCount: _extended(opF, count).floor(),
+                              bounce: _bounce(v, opF),
+                              sparkle: _sparkle(v, r.points[opp] ?? 0),
                               guess: r.guesses[opp] ?? 0,
                               exact: r.exact[opp] == true,
                               distance: r.distance[opp] ?? 0,
@@ -349,6 +380,8 @@ class _RevealHand extends StatelessWidget {
   final double pointsAnim;
   final bool showGuess;
   final bool mirrored;
+  final double bounce;
+  final double sparkle;
 
   const _RevealHand({
     required this.theme,
@@ -364,11 +397,16 @@ class _RevealHand extends StatelessWidget {
     required this.pointsAnim,
     required this.showGuess,
     required this.mirrored,
+    required this.bounce,
+    required this.sparkle,
   });
 
   @override
   Widget build(BuildContext context) {
     final t = theme;
+    // 살짝 눌렸다가(가로로 퍼짐) 튀어 오르는 작은 바운스.
+    final b = math.sin(math.pi * bounce);
+    final squash = bounce < 0.35 ? b * 0.06 : -b * 0.04;
     return Column(
       children: [
         Text(
@@ -388,11 +426,23 @@ class _RevealHand extends StatelessWidget {
                   Positioned(
                     left: 15,
                     top: 22,
-                    child: ZeroHand(
-                      fingers: fingers,
-                      sleeve: color,
-                      mirrored: mirrored,
-                      size: 140,
+                    child: Transform.translate(
+                      offset: Offset(0, -10 * b),
+                      child: Transform(
+                        alignment: Alignment.bottomCenter,
+                        transform: Matrix4.diagonal3Values(
+                          1 + squash,
+                          1 - squash,
+                          1,
+                        ),
+                        child: ZeroHand(
+                          fingers: fingers,
+                          trim: color,
+                          mirrored: mirrored,
+                          size: 140,
+                          sparkle: sparkle,
+                        ),
+                      ),
                     ),
                   ),
                   Positioned(

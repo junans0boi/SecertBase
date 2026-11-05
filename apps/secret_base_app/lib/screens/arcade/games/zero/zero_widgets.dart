@@ -144,7 +144,7 @@ class _FingerCard extends StatelessWidget {
                   child: FittedBox(
                     child: ZeroHand(
                       fingers: n.toDouble(),
-                      sleeve: t.me,
+                      trim: t.me,
                       size: 44,
                     ),
                   ),

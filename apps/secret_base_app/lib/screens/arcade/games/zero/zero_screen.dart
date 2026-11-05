@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -455,12 +457,18 @@ class _ZeroScreenState extends State<ZeroScreen> with TickerProviderStateMixin {
         Expanded(
           child: AnimatedBuilder(
             animation: _sway,
-            builder: (context, child) => Transform.rotate(
-              angle: oppDone
-                  ? 0
-                  : (Curves.easeInOut.transform(_sway.value) * 2 - 1) * 0.05,
-              child: child,
-            ),
+            builder: (context, child) {
+              // 고르는 중: 주먹이 고민하듯 살짝 까딱이며 위아래로 들썩인다.
+              final k = Curves.easeInOut.transform(_sway.value) * 2 - 1;
+              final bob = math.sin(_sway.value * math.pi * 4);
+              return Transform.translate(
+                offset: Offset(0, oppDone ? 0 : bob * 3),
+                child: Transform.rotate(
+                  angle: oppDone ? 0 : k * 0.06,
+                  child: child,
+                ),
+              );
+            },
             child: _StageHand(
               theme: theme,
               label: oppDone ? '준비 완료!' : '고르는 중…',
@@ -488,7 +496,7 @@ class _ZeroScreenState extends State<ZeroScreen> with TickerProviderStateMixin {
             children: [
               ZeroHand(
                 fingers: (p?.fingers ?? 0).toDouble(),
-                sleeve: theme.me,
+                trim: theme.me,
                 size: 48,
               ),
               const SizedBox(width: 12),
@@ -648,7 +656,7 @@ class _StageHand extends StatelessWidget {
                   padding: const EdgeInsets.all(6),
                   child: ZeroHand(
                     fingers: fingers,
-                    sleeve: color,
+                    trim: color,
                     mirrored: mirrored,
                     size: 130,
                     dim: dim,
@@ -697,7 +705,7 @@ class _Preparing extends StatelessWidget {
               children: [
                 Transform.rotate(
                   angle: (sway.value - 0.5) * 0.2,
-                  child: ZeroHand(fingers: 5, sleeve: theme.accent, size: 110),
+                  child: ZeroHand(fingers: 5, trim: theme.accent, size: 110),
                 ),
                 const SizedBox(height: 14),
                 Text('판을 준비하는 중', style: theme.display(size: 24)),
