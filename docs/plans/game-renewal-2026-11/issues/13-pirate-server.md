@@ -2,13 +2,13 @@
 
 **Type:** server
 
-**Blocked by:** 04
+**Blocked by:** 04, 18
 
 **Status:** ready-for-agent
 
 ## What to build
 
-선공을 무작위로 하고 구멍을 짝수 프리셋으로 제한하며, 폭발 뒤 **벌칙 단계**를 서버가 중계하고 결과를 안정적으로 저장한다.
+선공을 무작위로 하고 구멍 수를 로비 옵션 `holes`(6/8/12, 기본 8)에서 서버가 가져오며, 폭발 뒤 **벌칙 단계**를 서버가 중계하고 결과를 안정적으로 저장한다.
 
 ## Acceptance criteria
 
