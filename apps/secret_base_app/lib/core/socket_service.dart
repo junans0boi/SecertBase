@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
+
 import 'auth_service.dart';
 import 'marble_characters.dart';
 
@@ -62,6 +64,9 @@ class SocketService extends ChangeNotifier {
   String? lobbyResumedGameType;
   // 판돈이 걸린 판에서 비방장이 누른 준비 완료 여부(서버 기준)
   Map<String, bool> lobbyReady = {};
+  // 방장이 고른 게임별 설정(로비 옵션). 서버가 보내 준 값만 믿는다.
+  Map<String, Object> lobbyOptions = {};
+  Map<String, Object> lobbyStartedOptions = {};
 
   // 서버가 게임 동작을 거부했을 때 사용자에게 보여줄 안내 (GameMenuListener가 표시)
   String? gameNotice;
@@ -524,6 +529,7 @@ class SocketService extends ChangeNotifier {
       lobbyPlayers = players is List ? players.map((e) => '$e').toList() : [];
       lobbyCharacterSelections = _stringMap(map['characterSelections']);
       lobbyStake = (map['stake'] as num?)?.toInt() ?? 0;
+      lobbyOptions = _optionMap(map['options']);
       final readyRaw = map['ready'];
       lobbyReady = readyRaw is Map
           ? readyRaw.map((k, v) => MapEntry('$k', v == true))
@@ -548,6 +554,11 @@ class SocketService extends ChangeNotifier {
       lobbyStartedYutBgm = metadata['yutBgm'] as String?;
       lobbyStartedYutCharacters = _stringMap(metadata['yutCharacters']);
       lobbyStartedStake = (metadata['stake'] as num?)?.toInt() ?? 0;
+      lobbyStartedOptions = _optionMap(metadata['options']);
+      final startedMode = lobbyStartedOptions['mode'];
+      if (lobbyStartedGameType == 'uno' && startedMode is String) {
+        selectedUnoMode = startedMode;
+      }
       final emojis = _stringMap(map['profileEmojis']);
       if (emojis.isNotEmpty) profileEmojis = emojis;
       final nicks = _stringMap(map['nicknames']);
@@ -1514,6 +1525,8 @@ class SocketService extends ChangeNotifier {
     lobbyPlayers = [];
     lobbyStartedGameType = null;
     lobbyCharacterSelections = {};
+    lobbyOptions = {};
+    lobbyStartedOptions = {};
     lobbyStartedYutCharacters = {};
     lobbyStartedYutBgm = null;
     lobbyStake = 0;
@@ -1593,6 +1606,8 @@ class SocketService extends ChangeNotifier {
     lobbyStartedGameType = null;
     lobbyResumedGameType = null;
     lobbyCharacterSelections = {};
+    lobbyOptions = {};
+    lobbyStartedOptions = {};
     lobbyStartedYutCharacters = {};
     lobbyStartedYutBgm = null;
     if (me != null) {
@@ -1650,6 +1665,7 @@ class SocketService extends ChangeNotifier {
               ? players.map((e) => '$e').toList()
               : [];
           lobbyCharacterSelections = _stringMap(lobby['characterSelections']);
+          lobbyOptions = _optionMap(lobby['options']);
           final emojis = _stringMap(lobby['profileEmojis']);
           if (emojis.isNotEmpty) profileEmojis = emojis;
           notifyListeners();
@@ -1668,6 +1684,7 @@ class SocketService extends ChangeNotifier {
       lobbyPlayers = [];
       lobbyStartedGameType = null;
       lobbyCharacterSelections = {};
+      lobbyOptions = {};
       lobbyStartedYutCharacters = {};
       lobbyStartedYutBgm = null;
       notifyListeners();
@@ -1782,6 +1799,18 @@ class SocketService extends ChangeNotifier {
 
   void startGameLobby(String gameType) {
     _emitGame('game:lobby:start', {'gameType': gameType});
+  }
+
+  /// 방장이 로비 옵션을 바꾼다. 화면은 바로 반영하고 서버 갱신으로 확정한다.
+  void setLobbyOption(String gameType, String key, Object value) {
+    lobbyOptions = {...lobbyOptions, key: value};
+    lobbyReady = {};
+    notifyListeners();
+    _emitGame('game:lobby:set_option', {
+      'gameType': gameType,
+      'key': key,
+      'value': value,
+    });
   }
 
   void setLobbyStake(String gameType, int stake) {
@@ -2654,6 +2683,19 @@ class SocketService extends ChangeNotifier {
   static Map<String, String> _stringMap(dynamic v) {
     final map = _m(v);
     return map.map((key, value) => MapEntry(key, '$value'));
+  }
+
+  /// 로비 옵션: 숫자는 int로, 문자열은 그대로. 그 외 값은 버린다.
+  static Map<String, Object> _optionMap(dynamic v) {
+    final out = <String, Object>{};
+    _m(v).forEach((key, value) {
+      if (value is num) {
+        out[key] = value.toInt();
+      } else if (value is String) {
+        out[key] = value;
+      }
+    });
+    return out;
   }
 
   static Map<String, int> _intMap(dynamic v) {

@@ -61,9 +61,10 @@ game:lobby:leave
 game:lobby:select_character
 game:lobby:set_stake  { gameType, stake }        (host only, stake games only)
 game:lobby:ready      { gameType, ready: bool }  (non-host consent for staked games)
+game:lobby:set_option { gameType, key, value }    (host only, allowed values only)
 game:lobby:start
-game:lobby:updated    (includes `stake`, `ready: { [userCode]: true }`)
-game:lobby:started    (metadata: { stake, gameId, yutBgm? })
+game:lobby:updated    (includes `stake`, `options`, `ready: { [userCode]: true }`)
+game:lobby:started    (metadata: { stake, gameId, options, yutBgm? })
 ```
 
 **Stakes are server-authoritative (2026-11, #183).** Only `yut`, `uno*`, `tank`
@@ -75,6 +76,16 @@ agreed stake and a `gameId`. The creation events (`game:yut:new`, `game:uno:new`
 `game:tank:new`, `game:gostop:new`) ignore any stake in their payload and consume
 the pending game; without one the game is free. Settlement uses `<type>:<gameId>`
 as the idempotency reference and runs before the Redis state is deleted.
+
+**Lobby options (2026-11, games 2.0).** Per-game settings the host picks in the
+lobby and the partner sees live. Allowed values live in `src/lobby-options.js`
+(client mirror: `lib/screens/arcade/lobby_options.dart`): `penalty.cells` 3|6
+(default 3), `pirate.holes` 6|8|12 (default 8), `uno.mode` go_wild|classic
+(default go_wild). `game:lobby:set_option` answers `not_host`, `invalid_option`
+or `lobby_not_found`, and a changed value resets readiness like a stake change.
+The options are saved with the pending game; creation handlers read them from
+`consumePendingGame(...).options` and ignore payload values (`game:uno:new` uses
+the payload mode only for games started outside the lobby).
 
 **Restart (rematch) protocol.** `game:restart:request { gameType }` records the
 request for 30 s (`yut`, `uno`, `bomb`, `marble`, `tank`; others →

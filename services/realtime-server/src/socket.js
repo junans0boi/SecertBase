@@ -13,6 +13,7 @@ import { query } from "./db.js";
 import { redis } from "./redis.js";
 import { notifier } from "./modules/notifications/index.js";
 import { transferGameReward, getBalance, getEquippedStats, getEquippedItemsInfo } from "./wallet-engine.js";
+import { isValidLobbyOption, normalizeLobbyOptions } from "./lobby-options.js";
 import { grantXp, updateMissionProgress } from "./level-engine.js";
 import {
   throwYut,
@@ -284,6 +285,12 @@ const lobbyStakeSchema = z.object({
   stake: z.number().int().min(0).max(10000),
 });
 const GOSTOP_STAKES = new Set([0, 100, 500, 1000]);
+
+const lobbyOptionSchema = z.object({
+  gameType: z.enum(gameTypes),
+  key: z.string().min(1).max(32),
+  value: z.union([z.string().max(32), z.number().int()]),
+});
 
 const lobbyReadySchema = z.object({
   gameType: z.enum(gameTypes),
@@ -592,13 +599,18 @@ const RESTART_REQUEST_TTL_SEC = 30;
 async function consumePendingGame(roomCode, gameType) {
   const key = pendingGameKey(roomCode, stakeFamily(gameType));
   const raw = await redis.get(key);
-  if (!raw) return { stake: 0, gameId: randomUUID(), fromLobby: false };
+  if (!raw) return { stake: 0, gameId: randomUUID(), fromLobby: false, options: normalizeLobbyOptions(gameType) };
   await redis.del(key);
   try {
     const pending = JSON.parse(raw);
-    return { stake: Number(pending.stake) || 0, gameId: pending.gameId ?? randomUUID(), fromLobby: true };
+    return {
+      stake: Number(pending.stake) || 0,
+      gameId: pending.gameId ?? randomUUID(),
+      fromLobby: true,
+      options: normalizeLobbyOptions(gameType, pending.options),
+    };
   } catch {
-    return { stake: 0, gameId: randomUUID(), fromLobby: false };
+    return { stake: 0, gameId: randomUUID(), fromLobby: false, options: normalizeLobbyOptions(gameType) };
   }
 }
 
@@ -683,6 +695,7 @@ const normalizeLobby = (lobby, presence) => {
     players,
     characterSelections,
     stake: lobby?.stake ?? 0,
+    options: normalizeLobbyOptions(lobby?.gameType, lobby?.options),
     ready,
     updatedAt: Date.now(),
   };
@@ -1341,6 +1354,31 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       });
     });
 
+    // 방장이 게임별 설정(로비 옵션)을 바꾼다. 상대에게도 바로 보이고, 바뀌면 다시 동의를 받는다.
+    socket.on("game:lobby:set_option", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) { ack({ ok: false, reason: "not_joined" }); return; }
+      const parsed = lobbyOptionSchema.safeParse(payload);
+      if (!parsed.success) { ack({ ok: false, reason: "invalid_payload" }); return; }
+      const { gameType, key: optionKey, value } = parsed.data;
+      const key = gameLobbyKey(roomCode, gameType);
+      await withLobbyLock(key, async () => {
+        const lobbyText = await redis.get(key);
+        if (!lobbyText) { ack({ ok: false, reason: "lobby_not_found" }); return; }
+        const lobby = normalizeLobby(JSON.parse(lobbyText), getPresence(io, roomCode));
+        if (lobby.host !== userId) { ack({ ok: false, reason: "not_host" }); return; }
+        if (!isValidLobbyOption(gameType, optionKey, value)) { ack({ ok: false, reason: "invalid_option" }); return; }
+        if (lobby.options[optionKey] !== value) lobby.ready = {};
+        lobby.options = { ...lobby.options, [optionKey]: value };
+        lobby.updatedAt = Date.now();
+        await redis.set(key, JSON.stringify(lobby), "EX", 1800);
+        emitLobby(io, roomCode, lobby);
+        ack({ ok: true, options: lobby.options });
+      });
+    });
+
     socket.on("game:lobby:ready", async (payload, ackRaw) => {
       const ack = normalizeAck(ackRaw);
       const roomCode = socket.data.roomCode;
@@ -1477,7 +1515,7 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       // 생성 이벤트는 이 서버 기록에서만 판돈을 가져온다(클라이언트 payload 무시).
       await redis.set(
         pendingGameKey(roomCode, stakeFamily(gameType)),
-        JSON.stringify({ gameId, gameType, stake: stakeForGame, host: lobby.host, players: lobby.players, createdAt: Date.now() }),
+        JSON.stringify({ gameId, gameType, stake: stakeForGame, options: lobby.options, host: lobby.host, players: lobby.players, createdAt: Date.now() }),
         "EX",
         PENDING_GAME_TTL_SEC,
       );
@@ -1486,8 +1524,9 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
             yutBgm: randomYutBgm(),
             stake: stakeForGame,
             gameId,
+            options: lobby.options,
           }
-        : { stake: stakeForGame, gameId };
+        : { stake: stakeForGame, gameId, options: lobby.options };
       await redis.del(key);
       io.to(roomCode).emit("game:lobby:started", {
         gameType,
@@ -3564,8 +3603,9 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         return;
       }
 
-      const gameState = createUnoGameState(orderedPlayers, 7, { mode });
       const pendingUno = await consumePendingGame(roomCode, "uno");
+      // 로비에서 시작한 판은 로비 옵션의 모드만 쓴다. 로비 밖(결과 화면의 새 판)은 요청 모드.
+      const gameState = createUnoGameState(orderedPlayers, 7, { mode: pendingUno.fromLobby ? pendingUno.options.mode : mode });
       gameState.stake = pendingUno.stake; // payload의 stake는 무시한다.
       gameState.gameId = pendingUno.gameId;
 

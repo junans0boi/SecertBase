@@ -596,3 +596,35 @@ test('AFK: acting resets the clock and a finished game is never forfeited', asyn
   assert.equal(ended.length, 1);
   assert.equal(ended[0].result.reason, 'forfeit');
 });
+
+test('lobby options: only the host sets an allowed value and the partner sees it', async t => {
+  const f = await fixture(t);
+  const updates = [];
+  f.clients[1].on('game:lobby:updated', e => updates.push(e));
+  const joined = await f.call(0, 'game:lobby:join', { gameType: 'penalty' });
+  assert.deepEqual(joined.lobby.options, { cells: 3 }, 'a new lobby starts with the defaults');
+  await f.call(1, 'game:lobby:join', { gameType: 'penalty' });
+  assert.equal((await f.call(1, 'game:lobby:set_option', { gameType: 'penalty', key: 'cells', value: 6 })).reason, 'not_host');
+  assert.equal((await f.call(0, 'game:lobby:set_option', { gameType: 'penalty', key: 'cells', value: 9 })).reason, 'invalid_option');
+  assert.equal((await f.call(0, 'game:lobby:set_option', { gameType: 'blackjack', key: 'cells', value: 3 })).reason, 'lobby_not_found');
+  assert.equal((await f.call(0, 'game:lobby:set_option', { gameType: 'penalty', key: 'cells', value: 6 })).ok, true);
+  await flush();
+  assert.deepEqual(updates.at(-1).options, { cells: 6 });
+});
+
+test('lobby options: a change resets partner ready and the started game carries the options', async t => {
+  const f = await fixture(t);
+  await f.call(0, 'game:lobby:join', { gameType: 'uno' });
+  await f.call(1, 'game:lobby:join', { gameType: 'uno' });
+  assert.equal((await f.call(0, 'game:lobby:set_stake', { gameType: 'uno', stake: 500 })).ok, true);
+  assert.equal((await f.call(1, 'game:lobby:ready', { gameType: 'uno', ready: true })).ok, true);
+  assert.equal((await f.call(0, 'game:lobby:set_option', { gameType: 'uno', key: 'mode', value: 'classic' })).ok, true);
+  assert.equal((await f.call(0, 'game:lobby:start', { gameType: 'uno' })).reason, 'partner_not_ready', 'changing an option asks the partner again');
+  assert.equal((await f.call(1, 'game:lobby:ready', { gameType: 'uno', ready: true })).ok, true);
+  const started = new Promise(resolve => f.clients[1].once('game:lobby:started', resolve));
+  assert.equal((await f.call(0, 'game:lobby:start', { gameType: 'uno' })).ok, true);
+  assert.deepEqual((await started).metadata.options, { mode: 'classic' });
+  // The host's creation payload asks for go_wild; the lobby's choice wins.
+  assert.equal((await f.call(0, 'game:uno:new', { mode: 'go_wild' })).ok, true);
+  assert.equal(JSON.parse(await f.redis.get(`uno:${f.roomCode}:game`)).mode, 'classic');
+});
