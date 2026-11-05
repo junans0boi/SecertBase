@@ -1282,7 +1282,9 @@ class _RelationshipUnderstandingScreenState
         SnackBar(
           content: Text(
             _hasActiveCouple == null
-                ? '커플 연결 상태를 확인하고 있어요.'
+                ? (_coupleLoadFailed
+                      ? '커플 연결 상태를 확인하지 못했어요. 아래에서 다시 확인해주세요.'
+                      : '커플 연결 상태를 확인하고 있어요.')
                 : '파트너를 연결하면 커플 영역을 이용할 수 있어요.',
           ),
         ),

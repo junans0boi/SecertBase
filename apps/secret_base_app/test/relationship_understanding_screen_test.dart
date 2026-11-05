@@ -434,6 +434,12 @@ void main() {
     await tester.pump(const Duration(seconds: 21));
     await tester.pumpAndSettle();
     expect(find.text('커플 연결 상태를 확인하지 못했어요'), findsOneWidget);
+
+    // After a failed check the couple tab must not claim it is still checking.
+    await tester.tap(find.text('커플').first);
+    await tester.pump();
+    expect(find.text('커플 연결 상태를 확인하지 못했어요. 아래에서 다시 확인해주세요.'), findsOneWidget);
+    expect(find.text('커플 연결 상태를 확인하고 있어요.'), findsNothing);
   });
 
   testWidgets('separates personal and couple areas with top tabs', (

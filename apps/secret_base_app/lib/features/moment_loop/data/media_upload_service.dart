@@ -45,7 +45,9 @@ class HttpMediaUploadService implements MediaUploadService {
       'caption': draft.caption,
       'tags': jsonEncode(draft.tags),
       'taken_at': _dateOnly(draft.takenAt),
-      'captured_at': _mysqlDateTime(draft.capturedAt),
+      // The server reads DATETIME as UTC and the app displays it with toLocal(),
+      // so send UTC; a local wall-clock value would be shown 9 hours late in Korea.
+      'captured_at': _mysqlDateTime(draft.capturedAt.toUtc()),
       if (draft.sessionId.isNotEmpty) 'session_id': draft.sessionId,
       'position': '$position',
       'client_request_id': ?clientRequestId,

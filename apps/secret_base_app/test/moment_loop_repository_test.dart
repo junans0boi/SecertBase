@@ -102,6 +102,16 @@ void main() {
       expect(created.single.id, 8);
       expect(captured.fields['caption'], '사진');
       expect(captured.fields['taken_at'], '2026-10-08');
+      // captured_at goes to the server in UTC: the server stores DATETIME as UTC
+      // and the app shows it with toLocal(), so a local wall-clock value would be
+      // shifted again (+9h in Korea).
+      final utc = DateTime(2026, 10, 8, 12, 30).toUtc();
+      String two(int v) => v.toString().padLeft(2, '0');
+      expect(
+        captured.fields['captured_at'],
+        '${utc.year}-${two(utc.month)}-${two(utc.day)} '
+        '${two(utc.hour)}:${two(utc.minute)}:${two(utc.second)}',
+      );
       expect(captured.fields['today_moment'], 'true');
       expect(captured.fields['map_pin_id'], '22');
       expect(captured.fields['position'], '0');
