@@ -405,21 +405,7 @@ test('rps: any participant can reset and a finished match is recorded', async t 
   assert.equal((await f.call(1, 'game:rps:reset', {})).ok, true, 'BETA (not User1) may reset');
 });
 
-test('oldmaid hides real card ids behind position aliases and accepts alias draws', async t => {
-  const f = await fixture(t);
-  const views = [];
-  f.clients[1].on('game:oldmaid:updated', v => views.push(v));
-  assert.equal((await f.call(0, 'game:oldmaid:start', {})).ok, true);
-  await flush();
-  const view = views.at(-1);
-  const opponent = view.players['ALPHA-code'];
-  assert.ok(opponent.hand.every((c, i) => c.id === `slot-${i}` && c.rank === undefined));
-  if (view.turn === 'BETA-code') {
-    assert.equal((await f.call(1, 'game:oldmaid:draw', { cardId: 'slot-0' })).ok, true);
-  }
-});
-
-// The blackjack restore test lives in blackjack-socket.test.js (games 2.0 module).
+// The oldmaid and blackjack tests live in their own socket test files (games 2.0 modules).
 
 test('AFK: an idle one card player is warned at 60s and forfeits at 90s with one recorded result', async t => {
   const f = await fixture(t);
