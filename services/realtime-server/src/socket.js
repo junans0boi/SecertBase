@@ -96,10 +96,6 @@ import {
   nextRollContext,
 } from "./bowling-engine.js";
 import { simulateRoll as simulateBowlingRoll, standingDeck, jitterThrow } from "./bowling-sim.js";
-import {
-  initPenaltyGame,
-  resolvePenaltyRound,
-} from "./penalty-engine.js";
 
 import {
   createFortressState,
@@ -178,16 +174,6 @@ async function emitCatchStateTo(targetSocket, roomCode, state) {
   if (targetSocket.data.userId === state.drawer) targetSocket.emit("game:catch:word", { word: state.word });
   if (state.phase === "timeout") targetSocket.emit("game:catch:timeout_result", { word: state.word });
   if (state.phase === "guessed") targetSocket.emit("game:catch:correct", { word: state.word, scores: state.scores });
-}
-
-// 판정 전 제출값은 "제출함(true)"으로만 공개한다.
-function maskPenaltyState(gameState) {
-  return {
-    ...gameState,
-    submissions: Object.fromEntries(
-      Object.keys(gameState.submissions ?? {}).map((uid) => [uid, true]),
-    ),
-  };
 }
 
 function withBowlingFrames(gameState) {
@@ -1084,23 +1070,6 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         await recordGameOutcome(roomCode, { winner, players: Object.keys(s.scores), gameType: "bowling" });
       },
     },
-    penalty: {
-      key: (rc) => `game:${rc}:penalty`,
-      playersOf: (s) => Object.keys(s.scores ?? {}),
-      // 한 사람만 제출했을 때 나머지 한 사람을 기다린다(둘 다 안 냈으면 감시하지 않음).
-      waitingOn: (s) => {
-        if (s.status !== "playing") return null;
-        const pair = [String(s.kicker), String(s.keeper)];
-        const missing = pair.filter((p) => s.submissions?.[p] === undefined);
-        return missing.length === 1 ? missing[0] : null;
-      },
-      forfeit: async (roomCode, s, loser, winner) => {
-        const finished = { ...s, status: "finished", submissions: {}, result: { winner, scores: s.scores, reason: "forfeit" } };
-        await redis.set(`game:${roomCode}:penalty`, JSON.stringify(finished), "EX", 3600);
-        io.to(roomCode).emit("game:penalty:updated", maskPenaltyState(finished));
-        await recordGameOutcome(roomCode, { winner, players: Object.keys(s.scores), gameType: "penalty" });
-      },
-    },
     pirate: {
       key: pirateKey,
       playersOf: (s) => s.players ?? [],
@@ -1698,10 +1667,9 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         // 비재개형 게임: 각 게임의 기존 업데이트 이벤트로 현재 상태를 이 소켓에만 다시 보낸다.
         // (클라이언트의 기존 리스너가 그대로 처리하므로 재접속 교착이 사라진다.)
         const userId = socket.data.userId;
-        const [bjRaw, omRaw, pkRaw, bwRaw, tkRaw, ctRaw] = await Promise.all([
+        const [bjRaw, omRaw, bwRaw, tkRaw, ctRaw] = await Promise.all([
           redis.get(`game:${roomCode}:blackjack`),
           redis.get(`game:${roomCode}:oldmaid`),
-          redis.get(`game:${roomCode}:penalty`),
           redis.get(`game:${roomCode}:bowling`),
           redis.get(`game:${roomCode}:tank`),
           redis.get(`game:${roomCode}:catch`),
@@ -1722,13 +1690,6 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
           if (g.status !== "finished" && g.players?.[userId]) {
             socket.emit("game:oldmaid:updated", serializeOldMaidGame(g, userId));
             restored.push("oldmaid");
-          }
-        }
-        if (pkRaw) {
-          const g = JSON.parse(pkRaw);
-          if (g.status === "playing" && Object.prototype.hasOwnProperty.call(g.scores ?? {}, userId)) {
-            socket.emit("game:penalty:updated", maskPenaltyState(g));
-            restored.push("penalty");
           }
         }
         if (bwRaw) {
@@ -3483,83 +3444,6 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
           });
         }
         ack({ ok: true });
-      });
-    });
-
-    // ── Penalty Shootout ──────────────────────────────────────────────────
-    socket.on("game:penalty:start", async (payload, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const roomCode = socket.data.roomCode;
-      const userId = socket.data.userId;
-      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
-      await withRoomLock(roomCode, async () => {
-      const presence = getPresence(io, roomCode);
-      if (presence.length !== 2) return ack({ ok: false, reason: "need_two_players" });
-      const orderedPlayers = await getOrderedPlayers(roomCode, presence);
-      if (orderedPlayers.length !== 2) return ack({ ok: false, reason: "need_two_players" });
-      const existing = await redis.get(`game:${roomCode}:penalty`);
-      if (existing && JSON.parse(existing).status === 'playing') {
-        socket.emit("game:penalty:updated", maskPenaltyState(JSON.parse(existing)));
-        return ack({ ok: true, resumed: true });
-      }
-
-      const gameState = initPenaltyGame(orderedPlayers[0], orderedPlayers[1]);
-      await redis.set(`game:${roomCode}:penalty`, JSON.stringify(gameState), "EX", 3600);
-      io.to(roomCode).emit("game:penalty:updated", gameState);
-      ack({ ok: true });
-      });
-    });
-
-    socket.on("game:penalty:submit", async (payload, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const roomCode = socket.data.roomCode;
-      const userId = socket.data.userId;
-      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
-      await withRoomLock(roomCode, async () => {
-      const raw = await redis.get(`game:${roomCode}:penalty`);
-      if (!raw) return ack({ ok: false, reason: "no_game" });
-
-      const gameState = JSON.parse(raw);
-      if (gameState.status !== "playing") return ack({ ok: false, reason: "finished" });
-      if (!Object.prototype.hasOwnProperty.call(gameState.scores ?? {}, String(userId))) {
-        return ack({ ok: false, reason: "not_a_player" });
-      }
-
-      const choice = Number(payload?.choice);
-      if (!Number.isInteger(choice) || choice < 0 || choice > 8) {
-        return ack({ ok: false, reason: "invalid_choice" });
-      }
-
-      if (gameState.submissions[String(userId)] !== undefined) {
-        return ack({ ok: false, reason: "already_submitted" });
-      }
-      gameState.submissions[String(userId)] = choice;
-
-      const kickerId = String(gameState.kicker);
-      const keeperId = String(gameState.keeper);
-      let nextGameState = gameState;
-
-      if (
-        gameState.submissions[kickerId] !== undefined &&
-        gameState.submissions[keeperId] !== undefined
-      ) {
-        const kickerDir = gameState.submissions[kickerId]; // 0~8 (3x3)
-        const keeperDir = gameState.submissions[keeperId]; // 0~8 (3x3 exact match)
-
-        nextGameState = resolvePenaltyRound(gameState, kickerDir, keeperDir);
-      }
-
-      await redis.set(`game:${roomCode}:penalty`, JSON.stringify(nextGameState), "EX", 3600);
-      io.to(roomCode).emit("game:penalty:updated", maskPenaltyState(nextGameState));
-      if (gameState.status === 'playing' && nextGameState.status === 'finished') {
-        const winner = nextGameState.result?.winner;
-        await recordGameOutcome(roomCode, {
-          winner: winner && winner !== 'draw' ? winner : null,
-          players: Object.keys(nextGameState.scores),
-          gameType: 'penalty',
-        });
-      }
-      ack({ ok: true });
       });
     });
 

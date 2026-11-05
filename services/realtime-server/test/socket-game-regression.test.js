@@ -259,22 +259,7 @@ test('bowling completion grants winner/loser XP once through its socket handler'
   assert.equal((await getUserLevel(11)).xp, 50);
 });
 
-test('penalty completion grants winner/loser XP once through its socket handler', async t => {
-  const f = await fixture(t);
-  await f.redis.set(`game:${f.roomCode}:penalty`, JSON.stringify({
-    status: 'playing', round: 10, kicker: 'BETA-code', keeper: 'ALPHA-code',
-    submissions: {}, scores: { 'ALPHA-code': 1, 'BETA-code': 0 }, result: null,
-    rounds: Array.from({ length: 9 }, (_, i) => ({ kicker: i % 2 === 0 ? 'ALPHA-code' : 'BETA-code' })),
-  }));
-  await f.call(0, 'game:penalty:submit', { choice: 4 });
-  assert.equal((await f.call(1, 'game:penalty:submit', { choice: 4 })).ok, true);
-  await flush();
-  assert.equal((await getUserLevel(11)).xp, 50);
-  assert.equal((await getUserLevel(22)).xp, 20);
-  assert.deepEqual(f.results, [[1, 'penalty', 'ALPHA-code', 'BETA-code', 0, 'ALPHA-code', 'BETA-code', null]]);
-  assert.equal((await f.call(1, 'game:penalty:submit', { choice: 4 })).ok, false);
-  assert.equal((await getUserLevel(11)).xp, 50);
-});
+// 패널티킥 XP·소켓 회귀는 test/penalty-socket.test.js로 옮겼다(게임 2.0).
 
 // ── 게임 정비(#177): 재시작·판돈·준비·탱크 2.0·원카드·가위바위보 ─────────────
 
