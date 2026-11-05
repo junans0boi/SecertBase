@@ -117,12 +117,6 @@ class GameTheme {
     FontWeight weight = FontWeight.w400,
   }) => GoogleFonts.doHyeon(fontSize: size, color: color, height: 1.1);
 
-  static TextStyle _jua({
-    double size = 24,
-    Color? color,
-    FontWeight weight = FontWeight.w400,
-  }) => GoogleFonts.jua(fontSize: size, color: color, height: 1.15);
-
   /// 블랙잭: 벨벳 라운지.
   static const lounge = GameTheme(
     id: 'lounge',
@@ -195,22 +189,22 @@ class GameTheme {
     displayFont: _doHyeon,
   );
 
-  /// 패널티킥: 선셋 스타디움(밝은 노을 톤).
+  /// 패널티킥: 나이트 스타디움(조명탑 아래 TV 중계 톤). id·이름은 예전 그대로 둔다.
   static const sunsetStadium = GameTheme(
     id: 'sunset_stadium',
     texture: GameTexture.stadium,
-    dark: false,
-    backdrop: [Color(0xFFFFB38A), Color(0xFFFFD3A5), Color(0xFF8FD18B)],
-    surface: Color(0xF2FFFFFF),
-    surfaceBorder: Color(0x66FF8A65),
-    accent: Color(0xFFFF7A59),
-    accentSoft: Color(0x26FF7A59),
-    gold: Color(0xFFF2B33D),
-    ink: Color(0xFF3A2A33),
-    subInk: Color(0xFF6E5A63),
-    me: Color(0xFF2EC4A6),
-    opponent: Color(0xFFFF6F91),
-    displayFont: _jua,
+    dark: true,
+    backdrop: [Color(0xFF040917), Color(0xFF0A1630), Color(0xFF061A12)],
+    surface: Color(0xFF0F1A31),
+    surfaceBorder: Color(0x33B8C8E6),
+    accent: Color(0xFFC8F53A),
+    accentSoft: Color(0x29C8F53A),
+    gold: Color(0xFFDCE4F2),
+    ink: Color(0xFFF3F6FC),
+    subInk: Color(0xB3C3CDE0),
+    me: Color(0xFF3D9BFF),
+    opponent: Color(0xFFFF4D5E),
+    displayFont: _blackHan,
   );
 
   /// 원카드: 자정의 카드 살롱.
@@ -539,56 +533,114 @@ class _BackdropPainter extends CustomPainter {
   }
 
   void _stadium(Canvas canvas, Size size) {
-    // 관중석 보케.
-    final rnd = math.Random(23);
-    const bokeh = [
-      Color(0x55FFFFFF),
-      Color(0x44FFE08A),
-      Color(0x40FF9FB3),
-      Color(0x3398E1FF),
-    ];
-    for (int i = 0; i < 40; i++) {
-      final c = Offset(
-        rnd.nextDouble() * size.width,
-        size.height * (0.18 + rnd.nextDouble() * 0.2),
-      );
-      canvas.drawCircle(
-        c,
-        3 + rnd.nextDouble() * 7,
-        Paint()..color = bokeh[i % bokeh.length],
-      );
-    }
-    // 노을 해.
-    _spotlight(
-      canvas,
-      size,
-      Offset(size.width * 0.78, size.height * 0.12),
-      size.width * 0.35,
-      const Color(0x88FFF1C1),
-    );
-    // 잔디 줄무늬.
-    final grassTop = size.height * 0.46;
-    final stripes = 9;
-    for (int i = 0; i < stripes; i++) {
-      final y0 = grassTop + (size.height - grassTop) * i / stripes;
-      final y1 = grassTop + (size.height - grassTop) * (i + 1) / stripes;
+    final w = size.width;
+    final h = size.height;
+    // 관중석: 어두운 계단식 층 + 작은 관중 불빛(휴대폰·플래시).
+    final standTop = h * 0.07;
+    final standBottom = h * 0.42;
+    const tiers = 7;
+    for (int i = 0; i < tiers; i++) {
+      final y0 = standTop + (standBottom - standTop) * i / tiers;
+      final y1 = standTop + (standBottom - standTop) * (i + 1) / tiers;
       canvas.drawRect(
-        Rect.fromLTRB(0, y0, size.width, y1),
+        Rect.fromLTRB(0, y0, w, y1),
         Paint()
-          ..color = i.isEven
-              ? const Color(0xFF7CCB7A)
-              : const Color(0xFF6FBF6E),
+          ..color =
+              (i.isEven ? const Color(0xFF0C1630) : const Color(0xFF0A1329))
+                  .withValues(alpha: 0.85),
+      );
+      canvas.drawLine(
+        Offset(0, y1),
+        Offset(w, y1),
+        Paint()
+          ..strokeWidth = 0.6
+          ..color = const Color(0x1AFFFFFF),
       );
     }
+    final rnd = math.Random(23);
+    final crowd = (w * (standBottom - standTop) / 160).round();
+    for (int i = 0; i < crowd; i++) {
+      final x = rnd.nextDouble() * w;
+      final y = standTop + rnd.nextDouble() * (standBottom - standTop);
+      final k = rnd.nextDouble();
+      final Color c;
+      if (k > 0.94) {
+        c = const Color(0xCCFFFFFF);
+      } else if (k > 0.8) {
+        c = (x < w / 2 ? theme.me : theme.opponent).withValues(alpha: 0.45);
+      } else {
+        c = const Color(0x22C8D6F0);
+      }
+      canvas.drawCircle(
+        Offset(x, y),
+        0.6 + rnd.nextDouble() * 0.9,
+        Paint()..color = c,
+      );
+    }
+    // 지붕 그늘.
     canvas.drawRect(
-      Rect.fromLTRB(0, grassTop, size.width, size.height),
+      Rect.fromLTRB(0, 0, w, standTop + 6),
       Paint()
-        ..shader = LinearGradient(
+        ..shader = const LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: const [Color(0x55FFD3A5), Color(0x00FFD3A5)],
-        ).createShader(Rect.fromLTRB(0, grassTop, size.width, size.height)),
+          colors: [Color(0xFF02050D), Color(0x0002050D)],
+        ).createShader(Rect.fromLTRB(0, 0, w, standTop + 6)),
     );
+    // 잔디: 어둡게 깎인 줄무늬(원근으로 아래로 갈수록 넓게).
+    final grassTop = h * 0.5;
+    const stripes = 10;
+    for (int i = 0; i < stripes; i++) {
+      double f(int k) => math.pow(k / stripes, 1.5).toDouble();
+      final y0 = grassTop + (h - grassTop) * f(i);
+      final y1 = grassTop + (h - grassTop) * f(i + 1);
+      canvas.drawRect(
+        Rect.fromLTRB(0, y0, w, y1 + 0.5),
+        Paint()
+          ..color = i.isEven
+              ? const Color(0xFF0D3321)
+              : const Color(0xFF0B2B1C),
+      );
+    }
+    final grass = Rect.fromLTRB(0, grassTop, w, h);
+    canvas.drawRect(
+      grass,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF0A1630), Color(0x000A1630), Color(0x66030A08)],
+          stops: [0, 0.35, 1],
+        ).createShader(grass),
+    );
+    // 조명탑 빛 번짐 + 가로 렌즈 플레어 + 아래로 떨어지는 빛줄기.
+    for (final left in [true, false]) {
+      final c = Offset(left ? w * 0.06 : w * 0.94, h * 0.035);
+      final beam = Path()
+        ..moveTo(c.dx - 10, c.dy)
+        ..lineTo(c.dx + 10, c.dy)
+        ..lineTo(left ? w * 0.78 : w * 0.22, h * 0.95)
+        ..lineTo(left ? w * 0.38 : w * 0.62, h * 0.95)
+        ..close();
+      canvas.drawPath(
+        beam,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: const [Color(0x1FCFE2FF), Color(0x00CFE2FF)],
+          ).createShader(Offset.zero & size),
+      );
+      _spotlight(canvas, size, c, w * 0.55, const Color(0x40BFD6FF));
+      _spotlight(canvas, size, c, w * 0.16, const Color(0x99E8F1FF));
+      canvas.save();
+      canvas.translate(c.dx, c.dy);
+      canvas.scale(1, 0.035);
+      _spotlight(canvas, size, Offset.zero, w * 0.7, const Color(0x55D8E6FF));
+      canvas.restore();
+      canvas.drawCircle(c, 3.2, Paint()..color = Colors.white);
+    }
+    _grain(canvas, size, const Color(0x0CFFFFFF), (w * h / 1600).round(), 29);
   }
 
   void _velvet(Canvas canvas, Size size) {

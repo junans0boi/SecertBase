@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secret_base_app/core/socket_service.dart';
 import 'package:secret_base_app/screens/arcade/games/penalty/penalty_controller.dart';
+import 'package:secret_base_app/screens/arcade/games/penalty/penalty_controls.dart';
 import 'package:secret_base_app/screens/arcade/games/penalty_screen.dart';
 import 'package:secret_base_app/widgets/play_kit/play_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -92,8 +93,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
   }
 
-  GamePrimaryButton confirm(WidgetTester tester) => tester
-      .widget<GamePrimaryButton>(find.byKey(const Key('penalty_confirm')));
+  PenaltyShootButton confirm(WidgetTester tester) => tester
+      .widget<PenaltyShootButton>(find.byKey(const Key('penalty_confirm')));
 
   testWidgets(
     'without a state it shows the preparing message, no start button',
@@ -120,6 +121,7 @@ void main() {
       expect(find.text('가운데'), findsOneWidget);
       expect(find.text('오른쪽'), findsOneWidget);
       expect(find.text('내가 찰 차례! 어디로 찰까요?'), findsOneWidget);
+      expect(find.text('승부차기 1번째 · 내가 찰 차례'), findsOneWidget);
       expect(confirm(tester).onPressed, isNull, reason: 'nothing selected yet');
       expect(confirm(tester).label, '찰 곳을 골라요');
 
@@ -163,6 +165,7 @@ void main() {
     );
     expect(find.text('가운데 아래'), findsOneWidget);
     expect(find.text('내가 막을 차례! 어디를 막을까요?'), findsOneWidget);
+    expect(find.text('승부차기 1번째 · 토끼가 찰 차례'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('penalty_zone_4')));
     await tester.pump(const Duration(milliseconds: 250));
@@ -261,6 +264,11 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.byKey(const Key('penalty_skip')), findsOneWidget);
     expect(find.byKey(const Key('penalty_zone_0')), findsNothing);
+    // 공이 골대에 닿으면 중계 자막이 뜬다.
+    for (int i = 0; i < 80; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    expect(find.text('골!'), findsOneWidget);
     await tester.tap(find.byKey(const Key('penalty_skip')));
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.byKey(const Key('penalty_skip')), findsNothing);
