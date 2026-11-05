@@ -6,6 +6,10 @@
 
 **Status:** ready-for-agent
 
+## What to build
+
+다섯 작업 브랜치를 합치고, 독립 리뷰와 두 계정 실플레이로 확인한 뒤 빌드·PR까지 마친다.
+
 ## Acceptance criteria
 - [ ] 다섯 브랜치 병합, 충돌 정리, 25 화투를 24 화면에 연결
 - [ ] `node --test`·`flutter analyze`·`flutter test` 통과(알려진 환경 실패 제외)
