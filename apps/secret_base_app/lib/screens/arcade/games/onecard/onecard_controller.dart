@@ -36,6 +36,16 @@ class OneCardController extends GameController {
     'internal_error': '잠시 문제가 생겼어요. 다시 시도해 주세요.',
   };
 
+  static const _sharedNoticeReasons = {
+    'not_your_turn',
+    'must_choose_drawn_card',
+    'must_draw_or_defend',
+    'no_game',
+    'internal_error',
+    'invalid_payload',
+    'not_joined',
+  };
+
   OneCardView? view;
   OneCardResult? result;
 
@@ -100,7 +110,10 @@ class OneCardController extends GameController {
     if (ack['ok'] != false) return;
     final reason = '${ack['reason'] ?? ''}';
     if (reason.isEmpty) return;
-    _say(reasonMessages[reason] ?? '요청을 처리하지 못했어요.');
+    // 공용 안내(SocketService)가 이미 한국어로 띄우는 사유는 겹쳐 띄우지 않는다.
+    if (!_sharedNoticeReasons.contains(reason)) {
+      _say(reasonMessages[reason] ?? '요청을 처리하지 못했어요.');
+    }
     if (reason == 'card_not_found' || reason == 'not_your_turn') sync();
   }
 
