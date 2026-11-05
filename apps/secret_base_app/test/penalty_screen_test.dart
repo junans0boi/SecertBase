@@ -16,6 +16,7 @@ Map<String, dynamic> stateMap({
   String status = 'playing',
   Map<String, dynamic>? result,
   String gameId = 'g1',
+  int? round,
 }) {
   final now = DateTime.now().millisecondsSinceEpoch;
   return {
@@ -24,7 +25,7 @@ Map<String, dynamic> stateMap({
     'cells': cells,
     'players': ['me', 'op'],
     'firstKicker': 'me',
-    'round': rounds.length + 1,
+    'round': round ?? rounds.length + 1,
     'kicker': kicker,
     'keeper': keeper,
     'submissions': submissions,
@@ -216,6 +217,35 @@ void main() {
       expect(find.text('토끼'), findsOneWidget);
       expect(find.textContaining('op'), findsNothing);
       expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'the chosen cell is cleared after each kick, even within the same round',
+    (tester) async {
+      // The server counts a kick pair as one round, so the second kick keeps the round number.
+      c.applyState(stateMap(round: 1));
+      await pumpScreen(tester);
+      await tester.tap(find.byKey(const Key('penalty_zone_2')));
+      await tester.pump();
+      expect(confirm(tester).onPressed, isNotNull);
+      c.applyState(
+        stateMap(
+          round: 1,
+          rounds: [kick('me', 2, 0)],
+          kicker: 'op',
+          keeper: 'me',
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.byKey(const Key('penalty_skip')));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(
+        confirm(tester).onPressed,
+        isNull,
+        reason: 'the keeper must choose again',
+      );
+      await tester.pump(const Duration(seconds: 3));
     },
   );
 

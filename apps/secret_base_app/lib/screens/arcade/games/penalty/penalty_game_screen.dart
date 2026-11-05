@@ -44,6 +44,7 @@ class _PenaltyGameScreenState extends State<PenaltyGameScreen>
   int _shownRounds = 0;
   int? _lastRound;
   int? _selected;
+  int _lastKicks = 0;
   PenaltyRound? _playback;
   bool _kickFired = false;
   bool _impactFired = false;
@@ -118,6 +119,7 @@ class _PenaltyGameScreenState extends State<PenaltyGameScreen>
       _shot.reset();
       _selected = null;
       _lastRound = s.round;
+      _lastKicks = s.rounds.length;
       if (s.rounds.isEmpty && s.playing) {
         final first = s.firstKicker ?? s.kicker;
         GameSfx.instance.play(GameSound.whistle);
@@ -128,8 +130,11 @@ class _PenaltyGameScreenState extends State<PenaltyGameScreen>
         );
       }
     }
-    if (_lastRound != s.round) {
+    // 킥 하나가 끝날 때마다(역할이 바뀌므로) 고른 칸을 비운다. round는 두 킥을 묶어 센다.
+    final kicks = s.rounds.length;
+    if (_lastRound != s.round || _lastKicks != kicks) {
       _lastRound = s.round;
+      _lastKicks = kicks;
       _selected = null;
     }
     if (!initial) _maybeStartPlayback(s);
