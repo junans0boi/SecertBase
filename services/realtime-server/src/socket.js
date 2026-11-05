@@ -25,6 +25,7 @@ import {
   recordYutThrow,
   resetYutTurnThrows,
   serializeYutGame,
+  pruneUnusableBackdo,
 } from "./yut-engine.js";
 import {
   createMarbleGameState,
@@ -41,6 +42,9 @@ import {
   getLandValue,
   getMarbleSpecialType,
   getNextPlayer as getNextMarblePlayer,
+  advanceMarbleRound,
+  pickGateDestination,
+  sumEquippedStat,
   MARBLE_SALARY,
   MARBLE_MAX_ROUNDS,
   MARBLE_START_POSITIONS,
@@ -90,6 +94,7 @@ import {
   buildFrameDisplayData,
   nextRollContext,
 } from "./bowling-engine.js";
+import { simulateRoll as simulateBowlingRoll, standingDeck, jitterThrow } from "./bowling-sim.js";
 import {
   initPenaltyGame,
   resolvePenaltyRound,
@@ -101,6 +106,13 @@ import {
   aimTank,
   selectWeapon,
   fireTank,
+  selectTankClass,
+  timeoutTurn as timeoutTankTurn,
+  viewFor as tankViewFor,
+  battleSummary as tankBattleSummary,
+  TANK_CLASS_IDS,
+  WEAPON_IDS as TANK_WEAPON_IDS,
+  TURN_TIME_MS as TANK_TURN_TIME_MS,
 } from "./fortress-engine.js";
 
 import {
@@ -112,7 +124,9 @@ import {
   declareGoStop,
   resolveGostopTerminalState,
   serializeFor as serializeGostopFor,
+  forfeitGostop,
 } from "./gostop-engine.js";
+import { createAfkWatcher, afkGameTypeForEvent } from "./game-afk.js";
 
 // ── 방(room) 단위 직렬 뮤텍스 ─────────────────────────────────────────────────
 // Node.js는 단일 스레드지만 await 사이에 이벤트 루프가 다른 요청을 처리할 수 있어
@@ -133,6 +147,45 @@ async function withRoomLock(roomCode, fn) {
   }
 }
 
+// 그림 맞히기 라운드 길이(클라이언트 타이머와 같음).
+const CATCH_ROUND_MS = 60_000;
+const catchDrawSchema = z.object({
+  x: z.number().min(-0.1).max(1.1),
+  y: z.number().min(-0.1).max(1.1),
+  s: z.boolean().optional().default(false),
+  c: z.number().int().min(0).max(7).optional().default(0),
+  sz: z.number().int().min(0).max(2).optional().default(1),
+});
+
+// 진행 중인 그림 맞히기 판을 한 소켓에 다시 보여준다(복원·이어하기 공용).
+async function emitCatchStateTo(targetSocket, roomCode, state) {
+  const io = targetSocket.nsp?.server ?? null;
+  const nicknames = io ? getPresenceNicknames(io, roomCode) : {};
+  targetSocket.emit("game:catch:started", {
+    drawer: state.drawer,
+    round: state.round,
+    maxRounds: state.maxRounds,
+    scores: state.scores,
+    wordLen: [...state.word].length,
+    nicknames,
+    resumed: true,
+    remainingMs: Math.max(0, (state.roundEndsAt ?? 0) - Date.now()),
+  });
+  if (targetSocket.data.userId === state.drawer) targetSocket.emit("game:catch:word", { word: state.word });
+  if (state.phase === "timeout") targetSocket.emit("game:catch:timeout_result", { word: state.word });
+  if (state.phase === "guessed") targetSocket.emit("game:catch:correct", { word: state.word, scores: state.scores });
+}
+
+// 판정 전 제출값은 "제출함(true)"으로만 공개한다.
+function maskPenaltyState(gameState) {
+  return {
+    ...gameState,
+    submissions: Object.fromEntries(
+      Object.keys(gameState.submissions ?? {}).map((uid) => [uid, true]),
+    ),
+  };
+}
+
 function withBowlingFrames(gameState) {
   const frames = {};
   for (const [pid, rolls] of Object.entries(gameState.rolls || {})) {
@@ -150,8 +203,10 @@ function serializeOldMaidGame(gameState, viewerId) {
       playerId,
       {
         ...player,
-        hand: (player.hand ?? []).map((card) =>
-          playerId === viewerId ? card : { id: card.id },
+        // 상대 카드의 실제 id(card_0…, card_joker)는 랭크와 조커 위치를 드러낸다.
+        // 위치 별칭만 보내고, 뽑기 요청의 별칭은 서버가 실제 카드로 바꾼다.
+        hand: (player.hand ?? []).map((card, index) =>
+          playerId === viewerId ? card : { id: `slot-${index}` },
         ),
       },
     ]),
@@ -229,6 +284,11 @@ const lobbyStakeSchema = z.object({
   stake: z.number().int().min(0).max(10000),
 });
 const GOSTOP_STAKES = new Set([0, 100, 500, 1000]);
+
+const lobbyReadySchema = z.object({
+  gameType: z.enum(gameTypes),
+  ready: z.boolean(),
+});
 
 const yutCharacters = ["honggilldong", "nolbu", "miho"];
 const marbleCharacterIds = MARBLE_CHARACTER_IDS;
@@ -325,24 +385,77 @@ const unoReactionSchema = z.object({
 });
 
 const bombAnswerSchema = z.object({
-  answer: z.string().min(1),
+  answer: z.string().trim().min(1).max(50),
 });
 
 const bombNewSchema = z.object({
   duration: z.number().int().min(10).max(120).optional().default(30),
 });
 
-async function saveGameResult(roomCode, winnerCode, loserCode, gameType, stake) {
+// gameId가 있으면 같은 판이 두 번 기록되지 않는다(uq_game_results_game_id).
+async function saveGameResult(roomCode, winnerCode, loserCode, gameType, stake, { gameId = null } = {}) {
   try {
     const { rows } = await query('SELECT CoupleId FROM Couples WHERE RoomCode = ? LIMIT 1', [roomCode]);
     if (!rows[0]) return;
     await query(
-      'INSERT INTO game_results (couple_id, game_type, winner_user_code, loser_user_code, stake) VALUES (?,?,?,?,?)',
-      [rows[0].CoupleId, gameType, winnerCode, loserCode, stake ?? 0],
+      `INSERT INTO game_results (couple_id, game_type, winner_user_code, loser_user_code, stake, player_a_code, player_b_code, game_id)
+       VALUES (?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE id = id`,
+      [rows[0].CoupleId, gameType, winnerCode, loserCode, stake ?? 0, winnerCode, loserCode, gameId],
     );
   } catch (err) {
     console.error('[game_results] insert error:', err.message);
   }
+}
+
+// 무승부: 승자/패자 없이 두 참가자를 기록한다.
+async function saveDrawResult(roomCode, playerCodes, gameType, { gameId = null, stake = 0 } = {}) {
+  try {
+    const { rows } = await query('SELECT CoupleId FROM Couples WHERE RoomCode = ? LIMIT 1', [roomCode]);
+    if (!rows[0]) return;
+    const [a = null, b = null] = playerCodes;
+    await query(
+      `INSERT INTO game_results (couple_id, game_type, winner_user_code, loser_user_code, stake, is_draw, player_a_code, player_b_code, game_id)
+       VALUES (?,?,NULL,NULL,?,1,?,?,?) ON DUPLICATE KEY UPDATE id = id`,
+      [rows[0].CoupleId, gameType, stake ?? 0, a, b, gameId],
+    );
+  } catch (err) {
+    console.error('[game_results] draw insert error:', err.message);
+  }
+}
+
+// 무승부 참여 보상: 두 사람 모두 XP 30 + game_play 미션 진행.
+async function grantDrawXpAndMissions(playerCodes, game) {
+  try {
+    const codes = playerCodes.filter(Boolean);
+    if (codes.length === 0) return;
+    const { rows } = await query(
+      'SELECT UserId, UserCode FROM Users WHERE UserCode IN (?,?)',
+      [codes[0], codes[1] ?? codes[0]],
+    );
+    for (const row of rows) {
+      await grantXp(row.UserId, 30);
+      await updateMissionProgress(row.UserId, 'game_play', game);
+    }
+  } catch (err) {
+    console.error('[xp] grantDrawXpAndMissions error:', err.message);
+  }
+}
+
+// 승패 또는 무승부를 한 번에 기록하고 보상한다. winner가 null/'draw'면 무승부.
+async function recordGameOutcome(roomCode, { winner, players, gameType, missionKey = gameType, stake = 0, gameId = null }) {
+  if (!winner || winner === "draw") {
+    await Promise.all([
+      saveDrawResult(roomCode, players, gameType, { gameId, stake: 0 }),
+      grantDrawXpAndMissions(players, missionKey),
+    ]);
+    return;
+  }
+  const loser = players.find((p) => p !== winner);
+  if (!loser) return;
+  await Promise.all([
+    saveGameResult(roomCode, winner, loser, gameType, stake, { gameId }),
+    grantGameXpAndMissions(winner, loser, missionKey),
+  ]);
 }
 
 // 게임 종료 후 XP + 미션 진행 부여 (fire-and-forget)
@@ -417,6 +530,34 @@ async function settleAndEmitWallet(io, roomCode, winnerId, loserId, stake, gameR
   }
 }
 
+// 모든 소켓 핸들러의 동기/비동기 예외를 포착한다. 핸들러 하나의 DB 오류가
+// unhandledRejection으로 프로세스를 종료시키지 않고, 요청자는 실패 ack를 받는다.
+// afterHandler(event, args): 핸들러가 끝난 뒤 호출(잠수 감시 갱신 등). 실패는 로그만 남긴다.
+export function installHandlerSafetyNet(socket, logger = console, afterHandler = null) {
+  const rawOn = socket.on.bind(socket);
+  socket.on = (event, handler) => rawOn(event, (...args) => {
+    const ack = typeof args.at(-1) === "function" ? args.at(-1) : null;
+    const report = (err) => {
+      logger.error(`[socket] ${event} handler failed: ${err?.stack ?? err}`);
+      try { ack?.({ ok: false, reason: "internal_error" }); } catch { /* ack already closed */ }
+    };
+    const after = () => {
+      if (!afterHandler) return;
+      Promise.resolve()
+        .then(() => afterHandler(event, args))
+        .catch((err) => logger.error(`[socket] ${event} after-hook failed: ${err?.message ?? err}`));
+    };
+    try {
+      const result = handler(...args);
+      if (result && typeof result.then === "function") result.then(after, report);
+      else after();
+    } catch (err) {
+      report(err);
+    }
+  });
+  return socket;
+}
+
 // In-memory mutex for lobby write operations (single-server race prevention)
 const _lobbyLocks = new Map();
 const withLobbyLock = (key, fn) => {
@@ -436,6 +577,31 @@ const gameLobbyKey = (roomCode, gameType) => `lobby:${roomCode}:${gameType}`;
 const rpsGameKey = (roomCode) => `rps:${roomCode}:game`;
 const pirateKey = (roomCode) => `pirate:${roomCode}:game`;
 const marbleGameKey = (roomCode) => `marble:${roomCode}:game`;
+const pendingGameKey = (roomCode, gameType) => `pending:${roomCode}:${gameType}`;
+const restartKey = (roomCode) => `restart:${roomCode}`;
+// 판돈을 실제로 정산하는 게임. 클라이언트(game_lobby_screen.dart)의 목록과 같아야 한다.
+export const STAKE_GAME_TYPES = new Set(["yut", "uno", "uno_classic", "uno_go_wild", "tank", "gostop"]);
+const stakeFamily = (gameType) => (String(gameType).startsWith("uno") ? "uno" : gameType);
+// 재시작(재대결)을 지원하는 게임.
+export const RESTARTABLE_GAME_TYPES = new Set(["yut", "uno", "bomb", "marble", "tank"]);
+const PENDING_GAME_TTL_SEC = 120;
+const RESTART_REQUEST_TTL_SEC = 30;
+
+// 로비 시작 시 서버가 저장한 판돈/게임ID를 소비한다. 없으면 무료 판(stake 0).
+// 클라이언트가 생성 이벤트에 실어 보낸 판돈은 절대 신뢰하지 않는다.
+async function consumePendingGame(roomCode, gameType) {
+  const key = pendingGameKey(roomCode, stakeFamily(gameType));
+  const raw = await redis.get(key);
+  if (!raw) return { stake: 0, gameId: randomUUID(), fromLobby: false };
+  await redis.del(key);
+  try {
+    const pending = JSON.parse(raw);
+    return { stake: Number(pending.stake) || 0, gameId: pending.gameId ?? randomUUID(), fromLobby: true };
+  } catch {
+    return { stake: 0, gameId: randomUUID(), fromLobby: false };
+  }
+}
+
 const randomYutBgm = () => `yut${Math.floor(Math.random() * 3) + 1}.mp3`;
 
 const defaultState = {
@@ -507,15 +673,25 @@ const normalizeLobby = (lobby, presence) => {
       players.includes(player) && yutCharacters.includes(character),
     ),
   );
+  const rawReady = lobby?.ready ?? {};
+  const ready = Object.fromEntries(
+    Object.entries(rawReady).filter(([player, value]) => players.includes(player) && player !== host && value === true),
+  );
   return {
     gameType: lobby?.gameType,
     host,
     players,
     characterSelections,
     stake: lobby?.stake ?? 0,
+    ready,
     updatedAt: Date.now(),
   };
 };
+
+// 판돈이 걸린 판은 방장이 아닌 모든 참가자가 준비 완료해야 시작할 수 있다.
+const lobbyNeedsReady = (lobby) => STAKE_GAME_TYPES.has(lobby.gameType) && (lobby.stake ?? 0) > 0;
+const lobbyAllReady = (lobby) =>
+  lobby.players.filter((p) => p !== lobby.host).every((p) => lobby.ready?.[p] === true);
 
 const emitLobby = (io, roomCode, lobby) => {
   io.to(roomCode).emit("game:lobby:updated", {
@@ -607,8 +783,334 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
     if (entry) timerApi.clearTimeout(entry.timer);
     telepathyTimers.delete(roomCode);
   };
+  // 폭탄 돌리기: 서버가 제한 시간에 직접 폭발을 처리한다(답을 안 내고 버티는 치트 방지).
+  const bombTimers = new Map();
+  const clearBombTimer = (roomCode) => {
+    const handle = bombTimers.get(roomCode);
+    if (handle) timerApi.clearTimeout(handle);
+    bombTimers.delete(roomCode);
+  };
+  const explodeBomb = async (roomCode, gameState) => {
+    const loser = gameState.currentPlayer;
+    const winner = gameState.players.find((p) => p !== loser);
+    clearBombTimer(roomCode);
+    await redis.del(bombGameKey(roomCode));
+    io.to(roomCode).emit("game:bomb:exploded", {
+      loser,
+      correctAnswer: gameState.currentQuiz?.answer,
+    });
+    if (winner) await recordGameOutcome(roomCode, { winner, players: gameState.players, gameType: "bomb" });
+  };
+  const scheduleBombExplosion = (roomCode, gameState) => {
+    clearBombTimer(roomCode);
+    const handle = timerApi.setTimeout(() => {
+      bombTimers.delete(roomCode);
+      void withRoomLock(roomCode, async () => {
+        const raw = await redis.get(bombGameKey(roomCode));
+        if (!raw) return;
+        const current = JSON.parse(raw);
+        if (current.startTime !== gameState.startTime) return; // 새 판이 시작됨
+        await explodeBomb(roomCode, current);
+      }).catch((err) => console.error("[bomb] timer failed:", err.message));
+    }, Math.max(0, gameState.startTime + gameState.duration - Date.now()));
+    handle.unref?.();
+    bombTimers.set(roomCode, handle);
+  };
+
+  // 이어하기 게임: 마지막 뷰어가 나가도 유예 시간 동안은 상태를 지우지 않는다.
+  const sessionCleanupTimers = new Map();
+  const scheduleSessionCleanup = (key, run, delayMs) => {
+    const existing = sessionCleanupTimers.get(key);
+    if (existing) timerApi.clearTimeout(existing);
+    const handle = timerApi.setTimeout(() => {
+      sessionCleanupTimers.delete(key);
+      void Promise.resolve().then(run).catch((err) => console.error("[session] cleanup failed:", err.message));
+    }, delayMs);
+    handle.unref?.();
+    sessionCleanupTimers.set(key, handle);
+  };
+  const cancelSessionCleanup = (key) => {
+    const existing = sessionCleanupTimers.get(key);
+    if (existing) timerApi.clearTimeout(existing);
+    sessionCleanupTimers.delete(key);
+  };
+  const sessionScheduler = {
+    schedule: scheduleSessionCleanup,
+    cancel: cancelSessionCleanup,
+    isPending: (key) => sessionCleanupTimers.has(key),
+  };
+
+  // ── 탱크 대작전 공용(서버 전체 범위): 저장·마스킹 브로드캐스트·턴 타이머·종료 처리 ──
+  const tankGameKey = (rc) => `game:${rc}:tank`;
+  const tankMetaKey = (rc) => `game:${rc}:tank:meta`;
+  const saveTank = (roomCode, state) =>
+    redis.set(tankGameKey(roomCode), JSON.stringify(state), "EX", 7200);
+  const emitTankState = async (roomCode, eventName, state) => {
+    const sockets = await io.in(roomCode).fetchSockets();
+    for (const sock of sockets) {
+      if (!sock.data.userId) continue;
+      sock.emit(eventName, tankViewFor(state, sock.data.userId));
+    }
+  };
+  const tankTimers = new Map();
+  const clearTankTimer = (roomCode) => {
+    const handle = tankTimers.get(roomCode);
+    if (handle) timerApi.clearTimeout(handle);
+    tankTimers.delete(roomCode);
+  };
+  // 정산 → 결과 기록 → 상태 삭제. 판마다 고정된 gameId로 정산해 재처리돼도 한 번만 지급된다.
+  const finishTankGame = async (roomCode, state) => {
+    clearTankTimer(roomCode);
+    const winner = state.winner;
+    const players = state.players.map((p) => p.id);
+    const stake = state.stake ?? 0;
+    if (winner && winner !== "draw" && stake > 0) {
+      const loser = players.find((p) => p !== winner);
+      const wallet = await settleAndEmitWallet(io, roomCode, winner, loser, stake, `tank:${state.gameId ?? roomCode}`);
+      if (!wallet.ok) io.to(roomCode).emit("wallet:settle_failed", { gameType: "tank", reason: wallet.reason });
+    }
+    await recordGameOutcome(roomCode, {
+      winner: winner === "draw" ? null : winner,
+      players,
+      gameType: "tank",
+      stake,
+      gameId: state.gameId ?? null,
+    });
+    await redis.set(tankMetaKey(roomCode), JSON.stringify({ series: state.series, stake }), "EX", 7200);
+    await redis.del(tankGameKey(roomCode));
+    io.to(roomCode).emit("game:tank:ended", {
+      winner,
+      reason: state.endReason,
+      summary: tankBattleSummary(state),
+      series: state.series,
+      state: tankViewFor(state, null),
+    });
+  };
+  const scheduleTankTimer = (roomCode, state) => {
+    clearTankTimer(roomCode);
+    if (state.phase !== "aiming" || !state.turnDeadline) return;
+    const marker = { gameId: state.gameId, turnNumber: state.turnNumber, turn: state.turn };
+    const handle = timerApi.setTimeout(() => {
+      tankTimers.delete(roomCode);
+      void withRoomLock(roomCode, async () => {
+        const raw = await redis.get(tankGameKey(roomCode));
+        if (!raw) return;
+        const current = JSON.parse(raw);
+        if (current.gameId !== marker.gameId || current.turnNumber !== marker.turnNumber ||
+            current.turn !== marker.turn || current.phase !== "aiming") return;
+        const result = timeoutTankTurn(current);
+        if (!result.ok) return;
+        io.to(roomCode).emit("game:tank:timeout", {
+          player: current.players[current.turn].id,
+          count: result.state.timeouts[current.turn],
+          forfeited: result.forfeited,
+          events: result.events,
+        });
+        if (result.state.phase === "result") {
+          await finishTankGame(roomCode, result.state);
+          return;
+        }
+        result.state.turnDeadline = Date.now() + TANK_TURN_TIME_MS;
+        await saveTank(roomCode, result.state);
+        await emitTankState(roomCode, "game:tank:updated", result.state);
+        scheduleTankTimer(roomCode, result.state);
+      }).catch((err) => console.error("[tank] timer failed:", err.message));
+    }, Math.max(0, state.turnDeadline - Date.now()));
+    handle.unref?.();
+    tankTimers.set(roomCode, handle);
+  };
+  // 재대결: 이전 판의 시리즈 점수와 판돈을 이어받아 새 판을 연다(두 사람이 동의한 재시작).
+  const restartTankGame = async (roomCode, p1, p2) => {
+    const current = await redis.get(tankGameKey(roomCode));
+    const metaRaw = await redis.get(tankMetaKey(roomCode));
+    const previous = current ? JSON.parse(current) : (metaRaw ? JSON.parse(metaRaw) : {});
+    const state = createFortressState(p1, p2, {
+      stake: previous.stake ?? 0,
+      gameId: randomUUID(),
+      series: previous.series ?? { [p1]: 0, [p2]: 0 },
+    });
+    clearTankTimer(roomCode);
+    await saveTank(roomCode, state);
+    await emitTankState(roomCode, "game:tank:started", state);
+  };
+  // 재접속 시 진행 중인 탱크전의 턴 타이머가 없으면(서버 재시작 등) 다시 예약한다.
+  const ensureTankTimer = (roomCode, state) => {
+    if (state?.phase === "aiming" && !tankTimers.has(roomCode)) scheduleTankTimer(roomCode, state);
+  };
+
+  // ── 턴제 게임 공통 잠수(AFK) 기권패 ──────────────────────────────────────────
+  // 차례인 사람이 90초 동안 아무것도 하지 않으면(60초에 경고) 상대의 기권승이다.
+  // 지는 쪽이 앱을 꺼 버려도 판이 무한 대기하거나 정산 없이 사라지지 않는다.
+  const notPicked = (startRolls, players) => players.find((p) => startRolls?.[p] == null) ?? null;
+  const emitGostopRoom = async (roomCode, eventName, state) => {
+    const sockets = await io.in(roomCode).fetchSockets();
+    for (const sock of sockets) {
+      if (sock.data.userId) sock.emit(eventName, serializeGostopFor(state, sock.data.userId));
+    }
+  };
+  // 판돈 게임의 기권 정산: 정산 → 결과 기록 → 상태 삭제.
+  const settleForfeit = async (roomCode, { gameType, missionKey, key, winner, loser, stake, gameId }) => {
+    if (winner && loser && stake > 0) {
+      const wallet = await settleAndEmitWallet(io, roomCode, winner, loser, stake, `${gameType}:${gameId}`);
+      if (!wallet.ok) io.to(roomCode).emit("wallet:settle_failed", { gameType, reason: wallet.reason });
+    }
+    await recordGameOutcome(roomCode, { winner, players: [winner, loser], gameType, missionKey, stake, gameId });
+    await redis.del(key);
+  };
+  const afkAdapters = {
+    yut: {
+      key: yutGameKey,
+      playersOf: (s) => s.playersOrder ?? [],
+      waitingOn: (s) => {
+        if (s.winner) return null;
+        if (s.phase === "roll_order") return notPicked(s.startRolls, s.playersOrder ?? []);
+        if (s.phase === "order_countdown") return null;
+        return s.currentTurn ?? null;
+      },
+      forfeit: async (roomCode, s, loser, winner) => {
+        io.to(roomCode).emit("game:yut:ended", { winner, reason: "forfeit" });
+        await settleForfeit(roomCode, {
+          gameType: "yut", missionKey: "yut", key: yutGameKey(roomCode), winner, loser,
+          stake: s.stake ?? 0, gameId: s.gameId ?? s.id,
+        });
+      },
+    },
+    uno: {
+      key: unoGameKey,
+      playersOf: (s) => s.players ?? [],
+      waitingOn: (s) => (s.winner ? null : s.currentPlayer ?? null),
+      forfeit: async (roomCode, s, loser, winner) => {
+        io.to(roomCode).emit("game:uno:ended", { winner, reason: "forfeit" });
+        await settleForfeit(roomCode, {
+          gameType: "uno", missionKey: "onecard", key: unoGameKey(roomCode), winner, loser,
+          stake: s.stake ?? 0, gameId: s.gameId ?? `legacy-${roomCode}`,
+        });
+      },
+    },
+    marble: {
+      key: marbleGameKey,
+      playersOf: (s) => s.playersOrder ?? [],
+      waitingOn: (s) => {
+        if (s.winner || s.winReason === "timeout_draw") return null;
+        if (s.phase === "roll_order") return notPicked(s.startRolls, s.playersOrder ?? []);
+        if (s.phase === "order_countdown") return null;
+        if (s.pendingLandAction?.userId) return s.pendingLandAction.userId;
+        return s.currentTurn ?? null;
+      },
+      forfeit: async (roomCode, s, loser, winner) => {
+        io.to(roomCode).emit("game:marble:ended", { winner, winReason: "forfeit", finalScores: null });
+        await redis.del(marbleGameKey(roomCode));
+        await recordGameOutcome(roomCode, { winner, players: s.playersOrder, gameType: "marble" });
+      },
+    },
+    gostop: {
+      key: gostopGameKey,
+      playersOf: (s) => s.players ?? [],
+      waitingOn: (s) => {
+        if (["finished", "nageori", "chongtong"].includes(s.phase)) return null;
+        if (s.settlementStatus === "pending") return null;
+        if (s.phase === "shake_choice") return s.shakePlayerId ?? null;
+        return s.players?.[s.currentPlayerIdx] ?? null;
+      },
+      forfeit: async (roomCode, s, loser, winner) => {
+        const finished = forfeitGostop(s, winner);
+        const st = finished.settlement;
+        if (st && st.amount > 0) {
+          const wallet = await settleAndEmitWallet(io, roomCode, st.winnerId, st.loserId, st.amount, finished.gameId ?? `gostop:${roomCode}:forfeit`);
+          if (!wallet.ok) {
+            const pending = { ...finished, settlementStatus: "pending", settlementError: wallet.reason ?? "wallet_settlement_failed" };
+            await redis.set(gostopGameKey(roomCode), JSON.stringify(pending), "EX", 7200);
+            await emitGostopRoom(roomCode, "game:gostop:settlement_pending", pending);
+            return;
+          }
+        }
+        await recordGameOutcome(roomCode, { winner, players: s.players, gameType: "gostop", stake: st?.amount ?? 0, gameId: finished.gameId ?? null });
+        await redis.del(gostopGameKey(roomCode));
+        await emitGostopRoom(roomCode, "game:gostop:ended", { ...finished, settlementStatus: "settled" });
+      },
+    },
+    blackjack: {
+      key: (rc) => `game:${rc}:blackjack`,
+      playersOf: (s) => s.players ?? [],
+      waitingOn: (s) => (s.status === "playing" && s.phase !== "round_result" ? s.currentTurn ?? null : null),
+      forfeit: async (roomCode, s, loser, winner) => {
+        const finished = { ...s, status: "finished", currentTurn: null, result: { ...(s.result ?? {}), winner, loser, reason: "forfeit" } };
+        await redis.set(`game:${roomCode}:blackjack`, JSON.stringify(finished), "EX", 3600);
+        await emitBlackjackState(io, roomCode, finished);
+        await recordGameOutcome(roomCode, { winner, players: s.players, gameType: "blackjack" });
+      },
+    },
+    oldmaid: {
+      key: (rc) => `game:${rc}:oldmaid`,
+      playersOf: (s) => Object.keys(s.players ?? {}),
+      waitingOn: (s) => (s.status === "playing" ? s.turn ?? null : null),
+      forfeit: async (roomCode, s, loser, winner) => {
+        const finished = { ...s, status: "finished", result: { winner, loser, reason: "forfeit" } };
+        await redis.set(`game:${roomCode}:oldmaid`, JSON.stringify(finished), "EX", 3600);
+        await emitOldMaidState(io, roomCode, finished);
+        await recordGameOutcome(roomCode, { winner, players: [winner, loser], gameType: "oldmaid" });
+      },
+    },
+    bowling: {
+      key: (rc) => `game:${rc}:bowling`,
+      playersOf: (s) => Object.keys(s.scores ?? {}),
+      waitingOn: (s) => (s.status === "playing" ? s.turn ?? null : null),
+      forfeit: async (roomCode, s, loser, winner) => {
+        const finished = { ...s, status: "finished", result: { winner, scores: s.scores, reason: "forfeit" } };
+        await redis.set(`game:${roomCode}:bowling`, JSON.stringify(finished), "EX", 3600);
+        io.to(roomCode).emit("game:bowling:updated", withBowlingFrames(finished));
+        await recordGameOutcome(roomCode, { winner, players: Object.keys(s.scores), gameType: "bowling" });
+      },
+    },
+    penalty: {
+      key: (rc) => `game:${rc}:penalty`,
+      playersOf: (s) => Object.keys(s.scores ?? {}),
+      // 한 사람만 제출했을 때 나머지 한 사람을 기다린다(둘 다 안 냈으면 감시하지 않음).
+      waitingOn: (s) => {
+        if (s.status !== "playing") return null;
+        const pair = [String(s.kicker), String(s.keeper)];
+        const missing = pair.filter((p) => s.submissions?.[p] === undefined);
+        return missing.length === 1 ? missing[0] : null;
+      },
+      forfeit: async (roomCode, s, loser, winner) => {
+        const finished = { ...s, status: "finished", submissions: {}, result: { winner, scores: s.scores, reason: "forfeit" } };
+        await redis.set(`game:${roomCode}:penalty`, JSON.stringify(finished), "EX", 3600);
+        io.to(roomCode).emit("game:penalty:updated", maskPenaltyState(finished));
+        await recordGameOutcome(roomCode, { winner, players: Object.keys(s.scores), gameType: "penalty" });
+      },
+    },
+    pirate: {
+      key: pirateKey,
+      playersOf: (s) => s.players ?? [],
+      waitingOn: (s) => s.currentTurn ?? null,
+      forfeit: async (roomCode, s, loser, winner) => {
+        await redis.del(pirateKey(roomCode));
+        io.to(roomCode).emit("game:pirate:exploded", { loser, bombSlot: s.bombSlot, forfeit: true, at: Date.now() });
+        await recordGameOutcome(roomCode, { winner, players: s.players, gameType: "pirate" });
+      },
+    },
+    rps: {
+      key: rpsGameKey,
+      playersOf: (s) => s.players ?? [],
+      waitingOn: (s) => {
+        if (s.gameWinner) return null;
+        const missing = (s.players ?? []).filter((p) => s.picks?.[p] === undefined);
+        return missing.length === 1 ? missing[0] : null;
+      },
+      forfeit: async (roomCode, s, loser) => {
+        await redis.del(rpsGameKey(roomCode));
+        io.to(roomCode).emit("game:rps:cancelled", { reason: "afk", by: loser });
+      },
+    },
+  };
+  const afkWatcher = createAfkWatcher({ io, redis, timerApi, withRoomLock, adapters: afkAdapters });
+
   io.httpServer?.once("close", () => {
     for (const roomCode of telepathyTimers.keys()) clearTelepathyTimer(roomCode);
+    for (const roomCode of [...bombTimers.keys()]) clearBombTimer(roomCode);
+    for (const key of [...sessionCleanupTimers.keys()]) cancelSessionCleanup(key);
+    for (const roomCode of [...tankTimers.keys()]) clearTankTimer(roomCode);
+    afkWatcher.clearAll();
   });
   const publishTelepathyResult = async (roomCode, session, extra = {}) => {
     const event = { ...telepathyResult(session), ...extra };
@@ -642,8 +1144,13 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
   };
   installSocketAuthentication(io, config.JWT_SECRET, resolveSocketSession);
   io.on("connection", (socket) => {
+    installHandlerSafetyNet(socket, console, (event, args) => {
+      const gameType = afkGameTypeForEvent(event, args[0]);
+      if (gameType) return afkWatcher.refresh(socket.data.roomCode, gameType);
+      return undefined;
+    });
     installSocketFeatureGate(socket, config.PUBLIC_FEATURE_SET);
-    registerGameSessionHandlers(socket, { io, redis });
+    registerGameSessionHandlers(socket, { io, redis, scheduler: sessionScheduler });
     socket.on("session:join", async (payload, ackRaw) => {
       const ack = normalizeAck(ackRaw);
       const parsed = joinSchema.safeParse(payload);
@@ -742,7 +1249,7 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       const { gameType, stake } = parsed.data;
 
       // Check for an active game that the partner is viewing — resume it instead of creating a lobby.
-      const resume = await resolveLobbyJoinForResume(socket, io, redis, { roomCode, gameType, userId });
+      const resume = await resolveLobbyJoinForResume(socket, io, redis, { roomCode, gameType, userId }, sessionScheduler);
       if (resume) {
         ack({ ok: true, ...resume });
         return;
@@ -757,13 +1264,17 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
 
         if (!lobby.players.includes(userId)) {
           lobby.players.push(userId);
+          lobby.ready = {};
         }
         if (!lobby.host) {
           lobby.host = userId;
         }
-        // 방장만 stake 변경 가능
-        if (userId === lobby.host && stake > 0) {
+        // 방장만 stake 변경 가능, 판돈 대상 게임만 판돈을 가진다.
+        if (!STAKE_GAME_TYPES.has(gameType)) {
+          lobby.stake = 0;
+        } else if (userId === lobby.host && stake > 0 && (gameType !== 'gostop' || GOSTOP_STAKES.has(stake))) {
           lobby.stake = stake;
+          lobby.ready = {};
         } else if (!lobby.stake) {
           lobby.stake = 0;
         }
@@ -807,20 +1318,51 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       const parsed = lobbyStakeSchema.safeParse(payload);
       if (!parsed.success) { ack({ ok: false, reason: "invalid_payload" }); return; }
       const { gameType, stake } = parsed.data;
+      if (!STAKE_GAME_TYPES.has(gameType) && stake > 0) {
+        ack({ ok: false, reason: "stake_not_supported" });
+        return;
+      }
       if (gameType === 'gostop' && !GOSTOP_STAKES.has(stake)) {
         ack({ ok: false, reason: "invalid_stake" });
         return;
       }
       const key = gameLobbyKey(roomCode, gameType);
-      const lobbyText = await redis.get(key);
-      if (!lobbyText) { ack({ ok: false, reason: "lobby_not_found" }); return; }
-      const lobby = normalizeLobby(JSON.parse(lobbyText), getPresence(io, roomCode));
-      if (lobby.host !== userId) { ack({ ok: false, reason: "not_host" }); return; }
-      lobby.stake = stake;
-      lobby.updatedAt = Date.now();
-      await redis.set(key, JSON.stringify(lobby), "EX", 1800);
-      emitLobby(io, roomCode, lobby);
-      ack({ ok: true });
+      await withLobbyLock(key, async () => {
+        const lobbyText = await redis.get(key);
+        if (!lobbyText) { ack({ ok: false, reason: "lobby_not_found" }); return; }
+        const lobby = normalizeLobby(JSON.parse(lobbyText), getPresence(io, roomCode));
+        if (lobby.host !== userId) { ack({ ok: false, reason: "not_host" }); return; }
+        if (lobby.stake !== stake) lobby.ready = {}; // 금액이 바뀌면 다시 동의를 받는다.
+        lobby.stake = stake;
+        lobby.updatedAt = Date.now();
+        await redis.set(key, JSON.stringify(lobby), "EX", 1800);
+        emitLobby(io, roomCode, lobby);
+        ack({ ok: true });
+      });
+    });
+
+    socket.on("game:lobby:ready", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const roomCode = socket.data.roomCode;
+      const userId = socket.data.userId;
+      if (!roomCode || !userId) { ack({ ok: false, reason: "not_joined" }); return; }
+      const parsed = lobbyReadySchema.safeParse(payload);
+      if (!parsed.success) { ack({ ok: false, reason: "invalid_payload" }); return; }
+      const { gameType, ready } = parsed.data;
+      const key = gameLobbyKey(roomCode, gameType);
+      await withLobbyLock(key, async () => {
+        const lobbyText = await redis.get(key);
+        if (!lobbyText) { ack({ ok: false, reason: "lobby_not_found" }); return; }
+        const lobby = normalizeLobby(JSON.parse(lobbyText), getPresence(io, roomCode));
+        if (!lobby.players.includes(userId)) { ack({ ok: false, reason: "not_in_lobby" }); return; }
+        if (lobby.host === userId) { ack({ ok: false, reason: "host_cannot_ready" }); return; }
+        lobby.ready = { ...lobby.ready, [userId]: ready };
+        if (!ready) delete lobby.ready[userId];
+        lobby.updatedAt = Date.now();
+        await redis.set(key, JSON.stringify(lobby), "EX", 1800);
+        emitLobby(io, roomCode, lobby);
+        ack({ ok: true });
+      });
     });
 
     socket.on("game:lobby:leave", async (payload, ackRaw) => {
@@ -926,12 +1468,26 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         ack({ ok: false, reason: "invalid_stake" });
         return;
       }
+      if (lobbyNeedsReady(lobby) && !lobbyAllReady(lobby)) {
+        ack({ ok: false, reason: "partner_not_ready" });
+        return;
+      }
+      const stakeForGame = STAKE_GAME_TYPES.has(gameType) ? (lobby.stake ?? 0) : 0;
+      const gameId = randomUUID();
+      // 생성 이벤트는 이 서버 기록에서만 판돈을 가져온다(클라이언트 payload 무시).
+      await redis.set(
+        pendingGameKey(roomCode, stakeFamily(gameType)),
+        JSON.stringify({ gameId, gameType, stake: stakeForGame, host: lobby.host, players: lobby.players, createdAt: Date.now() }),
+        "EX",
+        PENDING_GAME_TTL_SEC,
+      );
       const metadata = gameType === "yut"
         ? {
             yutBgm: randomYutBgm(),
-            stake: lobby.stake ?? 0,
+            stake: stakeForGame,
+            gameId,
           }
-        : { stake: lobby.stake ?? 0 };
+        : { stake: stakeForGame, gameId };
       await redis.del(key);
       io.to(roomCode).emit("game:lobby:started", {
         gameType,
@@ -982,7 +1538,7 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         if (unoGame) {
           const game = JSON.parse(unoGame);
           const userId = socket.data.userId;
-          if (game.hands && game.discardPile) {
+          if (game.hands && game.discardPile && game.players?.includes(userId)) {
             activeGames.uno = {
               gameId: "active",
               turn: game.currentPlayer,
@@ -994,7 +1550,8 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
               handCount: getUnoHandCount(game),
               hand: game.hands?.[userId] ?? [],
               unoCallNeeded: game.unoCallNeeded ?? null,
-              drawnCardId: game.drawnCardId ?? null,
+              // 상대가 뽑은 카드 id는 카드 정체를 드러내므로 본인 차례일 때만 보낸다.
+              drawnCardId: game.currentPlayer === userId ? (game.drawnCardId ?? null) : null,
               canPlayDrawn: !!(game.drawnCardId && game.currentPlayer === userId),
             };
           }
@@ -1015,7 +1572,10 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
           activeGames.bomb = {
             currentPlayer: game.currentPlayer,
             timer: remaining,
+            startTime: game.startTime,
+            duration: Math.round(game.duration / 1000),
             category: game.currentQuiz?.category,
+            question: game.currentQuiz?.question,
           };
         }
 
@@ -1033,11 +1593,68 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         const restoredGameType = ['yut', 'marble', 'uno', 'gostop']
           .find((type) => activeGames[type]);
         if (restoredGameType) {
+          sessionScheduler.cancel(`${roomCode}:${restoredGameType}`);
           await socket.join(`game-view:${roomCode}:${restoredGameType}`);
           socket.data.viewingGame = restoredGameType;
         }
 
-        ack({ ok: true, activeGames });
+        // 비재개형 게임: 각 게임의 기존 업데이트 이벤트로 현재 상태를 이 소켓에만 다시 보낸다.
+        // (클라이언트의 기존 리스너가 그대로 처리하므로 재접속 교착이 사라진다.)
+        const userId = socket.data.userId;
+        const [bjRaw, omRaw, pkRaw, bwRaw, tkRaw, ctRaw] = await Promise.all([
+          redis.get(`game:${roomCode}:blackjack`),
+          redis.get(`game:${roomCode}:oldmaid`),
+          redis.get(`game:${roomCode}:penalty`),
+          redis.get(`game:${roomCode}:bowling`),
+          redis.get(`game:${roomCode}:tank`),
+          redis.get(`game:${roomCode}:catch`),
+        ]);
+        const restored = [];
+        if (bjRaw) {
+          const g = JSON.parse(bjRaw);
+          if (g.status !== "finished" && g.players?.includes(userId)) {
+            socket.emit("game:blackjack:updated", serializeBlackjackFor(g, userId));
+            restored.push("blackjack");
+          }
+        }
+        if (omRaw) {
+          const g = JSON.parse(omRaw);
+          if (g.status !== "finished" && g.players?.[userId]) {
+            socket.emit("game:oldmaid:updated", serializeOldMaidGame(g, userId));
+            restored.push("oldmaid");
+          }
+        }
+        if (pkRaw) {
+          const g = JSON.parse(pkRaw);
+          if (g.status === "playing" && Object.prototype.hasOwnProperty.call(g.scores ?? {}, userId)) {
+            socket.emit("game:penalty:updated", maskPenaltyState(g));
+            restored.push("penalty");
+          }
+        }
+        if (bwRaw) {
+          const g = JSON.parse(bwRaw);
+          if (g.status === "playing" && Object.prototype.hasOwnProperty.call(g.scores ?? {}, userId)) {
+            socket.emit("game:bowling:updated", withBowlingFrames(g));
+            restored.push("bowling");
+          }
+        }
+        if (tkRaw) {
+          const g = JSON.parse(tkRaw);
+          if (!g.winner && g.players?.some((p) => p.id === userId)) {
+            socket.emit("game:tank:started", tankViewFor(g, userId));
+            ensureTankTimer(roomCode, g);
+            restored.push("tank");
+          }
+        }
+        if (ctRaw) {
+          const g = JSON.parse(ctRaw);
+          if (g.phase !== "gameover" && Object.prototype.hasOwnProperty.call(g.scores ?? {}, userId)) {
+            await emitCatchStateTo(socket, roomCode, g);
+            restored.push("catch");
+          }
+        }
+
+        ack({ ok: true, activeGames, restored });
       } catch (err) {
         console.error(`session:restore error: ${err.message}`);
         ack({ ok: false, reason: "internal_error" });
@@ -1191,7 +1808,13 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         if (players.length !== 2) { ack({ ok: false, reason: "need_two_players" }); return; }
         const existing = await redis.get(rpsGameKey(roomCode));
         if (existing && !JSON.parse(existing).gameWinner) {
-          ack({ ok: false, reason: "game_in_progress" });
+          const current = JSON.parse(existing);
+          // 진행 중인 판: 요청자에게 현재 판을 다시 알려 화면이 이어지게 한다.
+          socket.emit("game:rps:started", {
+            mode: current.mode, players: current.players, scores: current.scores,
+            phase: current.phase, attacker: current.attacker ?? null, resumed: true,
+          });
+          ack({ ok: true, resumed: true, mode: current.mode });
           return;
         }
         const game = {
@@ -1376,6 +1999,15 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         io.to(roomCode).emit("game:rps:round_result", event);
       }
 
+      // 승부가 났으면 결과·XP를 기록한다(이후 pick은 game_over로 거부되므로 한 번만).
+      if (game.gameWinner) {
+        await recordGameOutcome(roomCode, {
+          winner: game.gameWinner,
+          players: game.players,
+          gameType: game.mode === "hanabagi" ? "zero" : "rps",
+        });
+      }
+
       ack({ ok: true });
       });
     });
@@ -1388,9 +2020,11 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       await withRoomLock(roomCode, async () => {
         const rpsRaw = await redis.get(rpsGameKey(roomCode));
         if (rpsRaw) {
+          // 방장 정의가 서버(User1)와 클라이언트(로비 방장)에서 달라 막히던 문제:
+          // 참가자라면 누구나 리셋할 수 있다.
           const rpsGame = JSON.parse(rpsRaw);
-          if (rpsGame.players?.[0] && userId !== rpsGame.players[0]) {
-            ack({ ok: false, reason: 'not_host' });
+          if (rpsGame.players && !rpsGame.players.includes(userId)) {
+            ack({ ok: false, reason: 'not_a_player' });
             return;
           }
         }
@@ -1430,6 +2064,13 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         const sameOptions = session?.options?.length === options.length &&
           session.options.every((option, index) => option === options[index]);
         if (sessionId && !sameOptions) return ack({ ok: false, reason: "invalid_options" });
+        // 상대가 이미 답한 진행 중 문제가 있는데 다른 문제로 답하면, 상대의 답을 버리지 않고
+        // 거절한다(클라이언트는 상대가 풀고 있는 문제로 맞춰 다시 고른다).
+        const partnerAnswered = session && !session.revealed && !session.expired &&
+          Object.keys(session.choices ?? {}).some((uid) => uid !== userId);
+        if (!sameOptions && partnerAnswered) {
+          return ack({ ok: false, reason: "options_mismatch", options: session.options, sessionId: session.id });
+        }
         if (!sameOptions) session = null;
         // Legacy clients do not carry a round id; their next selection starts
         // another question even if its options happen to be identical.
@@ -1648,9 +2289,11 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
           return;
         }
         const gameState = createYutGameState(player1, player2);
+        const pendingYut = await consumePendingGame(roomCode, "yut");
         gameState.characters = parsed.data.characters ?? {};
         gameState.bgm = parsed.data.bgm ?? null;
-        gameState.stake = parsed.data.stake ?? 0;
+        gameState.stake = pendingYut.stake; // payload의 stake는 무시한다.
+        gameState.gameId = pendingYut.gameId;
 
         // 양 플레이어의 장착 아이템 정보 포함 (상대방 표시용)
         const { rows: p1Rows } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [player1]);
@@ -1809,7 +2452,11 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         }
       }
 
+      // 아직 둘 이동(윷/모 등)이 남아 있으면, 그 이동으로 말이 판에 올라온 뒤
+      // 빽도를 쓸 수 있으므로 지금 낙 처리하지 않는다.
       const isNak = throwResult.result === -1 &&
+        gameState.pendingMoves.length === 0 &&
+        !gameState.hasBonusThrow &&
         !hasBackdoMove(gameState.players[userId].pieces);
       throwResult.nak = isNak;
       recordYutThrow(gameState, throwResult);
@@ -1826,6 +2473,7 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       if (isNak && gameState.pendingMoves.length === 0) {
         gameState.hasBonusThrow = false;
         gameState.caughtOpponentThisTurn = false;
+        gameState.captureBonusThrows = 0;
         gameState.currentTurn = getNextYutPlayer(gameState, userId);
         gameState.phase = "throwing";
         resetYutTurnThrows(gameState);
@@ -1930,6 +2578,8 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       }
 
       const won = checkWin(gameState.players[userId]);
+      // 남은 결과가 빽도뿐인데 판 위에 말이 없으면 쓸 수 없으므로 버린다(소프트락 방지).
+      const discardedBackdo = won ? 0 : pruneUnusableBackdo(gameState, userId);
       if (won) {
         gameState.winner = userId;
       } else {
@@ -1946,6 +2596,7 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         pieceId,
         newPosition: piece.position,
         finished: piece.finished,
+        discardedBackdo,
         movedPieceIds: carriedPieces.map((carriedPiece) => carriedPiece.id),
         capturedPieceIds: capturedPieces.map((capturedPiece) => capturedPiece.id),
         capturedCount: capturedPieces.length,
@@ -1973,7 +2624,6 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       if (gameState.winner) {
         const yutLoserId = gameState.playersOrder.find(p => p !== gameState.winner);
         io.to(roomCode).emit("game:yut:ended", { winner: gameState.winner });
-        await redis.del(yutGameKey(roomCode));
         const [{ rows: winnerRows }, { rows: loserRows }] = await Promise.all([
           query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [gameState.winner]),
           query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [yutLoserId]),
@@ -1981,16 +2631,39 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         const winnerExtraBonus = (gameState.catchCoinBonus?.[gameState.winner] ?? 0)
           + (gameState.winCoinBonus?.[gameState.winner] ?? 0);
         const yutPreStreak = await _getWinStreak(roomCode, gameState.winner);
+        // 정산 → 결과 기록 → 상태 삭제. ref가 판마다 고정이라 재처리돼도 한 번만 정산된다.
+        const yutGameId = gameState.gameId ?? gameState.id;
+        const yutWallet = await settleAndEmitWallet(io, roomCode, gameState.winner, yutLoserId, gameState.stake ?? 0, `yut:${yutGameId}`, winnerRows[0]?.UserId, winnerExtraBonus, loserRows[0]?.UserId, yutPreStreak);
+        if (!yutWallet.ok) io.to(roomCode).emit("wallet:settle_failed", { gameType: "yut", reason: yutWallet.reason });
         await Promise.all([
-          settleAndEmitWallet(io, roomCode, gameState.winner, yutLoserId, gameState.stake ?? 0, `yut:${roomCode}:${Date.now()}`, winnerRows[0]?.UserId, winnerExtraBonus, loserRows[0]?.UserId, yutPreStreak),
-          saveGameResult(roomCode, gameState.winner, yutLoserId, 'yut', gameState.stake ?? 0),
+          saveGameResult(roomCode, gameState.winner, yutLoserId, 'yut', gameState.stake ?? 0, { gameId: yutGameId }),
           grantGameXpAndMissions(gameState.winner, yutLoserId, 'yut'),
         ]);
+        await redis.del(yutGameKey(roomCode));
       }
       }); // withRoomLock
     });
 
     // ─── 마블 게임 핸들러 ────────────────────────────────────────────────────────
+
+    // 마블 판 생성(신규·재시작 공용). 캐릭터는 참가자·허용 목록으로 걸러 신뢰하지 않는다.
+    const startMarbleGame = async (roomCode, player1, player2, rawCharacters) => {
+      const characters = Object.fromEntries(
+        Object.entries(rawCharacters && typeof rawCharacters === "object" ? rawCharacters : {})
+          .filter(([player, character]) => [player1, player2].includes(player) && marbleCharacterIds.includes(character)),
+      );
+      const gameState = createMarbleGameState(player1, player2, { characters });
+      const { rows: p1Rows } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [player1]);
+      const { rows: p2Rows } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [player2]);
+      const [p1Info, p2Info] = await Promise.all([
+        p1Rows[0]?.UserId ? getEquippedItemsInfo(p1Rows[0].UserId) : Promise.resolve({}),
+        p2Rows[0]?.UserId ? getEquippedItemsInfo(p2Rows[0].UserId) : Promise.resolve({}),
+      ]);
+      gameState.equippedItems = { [player1]: p1Info, [player2]: p2Info };
+      await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
+      emitMarbleState(io, roomCode, "game:marble:state", gameState);
+      return gameState;
+    };
 
     socket.on("game:marble:new", async (payload, ackRaw) => {
       const ack = normalizeAck(ackRaw);
@@ -2020,21 +2693,7 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
           return;
         }
 
-        const gameState = createMarbleGameState(player1, player2, {
-          characters: payload?.characters ?? {},
-        });
-
-        // 장착 아이템 정보 포함
-        const { rows: p1Rows } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [player1]);
-        const { rows: p2Rows } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [player2]);
-        const [p1Info, p2Info] = await Promise.all([
-          p1Rows[0]?.UserId ? getEquippedItemsInfo(p1Rows[0].UserId) : Promise.resolve({}),
-          p2Rows[0]?.UserId ? getEquippedItemsInfo(p2Rows[0].UserId) : Promise.resolve({}),
-        ]);
-        gameState.equippedItems = { [player1]: p1Info, [player2]: p2Info };
-
-        await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
-        emitMarbleState(io, roomCode, "game:marble:state", gameState);
+        const gameState = await startMarbleGame(roomCode, player1, player2, payload?.characters);
         ack({ ok: true, gameState: serializeMarbleGame(gameState) });
       });
     });
@@ -2113,6 +2772,36 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       const rollResult = rollMarbleDice();
       gameState.lastRoll = rollResult;
 
+      // 블랙사이트 감금: 더블이면 탈출해 그대로 이동, 아니면 이번 턴은 쉬고 넘긴다.
+      if ((gameState.jailTurns?.[userId] ?? 0) > 0) {
+        gameState.jailTurns[userId] -= 1;
+        if (!rollResult.isDouble) {
+          gameState.consecutiveDoubles = 0;
+          gameState.hasDoubleRoll = false;
+          gameState.pendingMoves = [];
+          advanceMarbleRound(gameState);
+          gameState.currentTurn = getNextMarblePlayer(gameState, userId);
+          gameState.phase = "throwing";
+          await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
+          emitMarbleState(io, roomCode, "game:marble:roll_result", gameState, {
+            by: userId, rollResult, jailed: true, at: Date.now(),
+          });
+          ack({ ok: true, rollResult, jailed: true, gameState: serializeMarbleGame(gameState) });
+          return;
+        }
+        gameState.jailTurns[userId] = 0; // 더블 탈출 — 탈출 굴림은 추가 굴림을 주지 않는다.
+        gameState.consecutiveDoubles = 0;
+        gameState.hasDoubleRoll = false;
+        gameState.pendingMoves.push(rollResult.total);
+        gameState.phase = "moving";
+        await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
+        emitMarbleState(io, roomCode, "game:marble:roll_result", gameState, {
+          by: userId, rollResult, jailEscape: true, at: Date.now(),
+        });
+        ack({ ok: true, rollResult, jailEscape: true, gameState: serializeMarbleGame(gameState) });
+        return;
+      }
+
       // 더블: 한 번 더 굴릴 수 있음 (연속 3번 더블이면 턴 넘김)
       if (rollResult.isDouble) {
         gameState.consecutiveDoubles = (gameState.consecutiveDoubles ?? 0) + 1;
@@ -2121,6 +2810,7 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
           gameState.consecutiveDoubles = 0;
           gameState.hasDoubleRoll = false;
           gameState.pendingMoves = [];
+          advanceMarbleRound(gameState); // 3연속 더블로 턴을 넘겨도 라운드는 진행된다.
           gameState.currentTurn = getNextMarblePlayer(gameState, userId);
           gameState.phase = "throwing";
           await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
@@ -2189,7 +2879,8 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       gameState.pendingMoves.splice(moveIndex, 1);
 
       const opponentId = getNextMarblePlayer(gameState, userId);
-      const defenderStats = gameState.equippedItems?.[opponentId]?.stats ?? {};
+      // equippedItems는 슬롯별 { stats } 맵이다. 슬롯 합계로 스탯을 구한다.
+      const defenderTollReducePct = sumEquippedStat(gameState.equippedItems?.[opponentId], "land_toll_reduce_pct");
 
       // 출발지를 통과하면 급여를 지급한다.
       const passedStart = moveResult.passedStart === true;
@@ -2199,11 +2890,7 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
 
       const hadExtraRoll = gameState.hasDoubleRoll === true;
       if (gameState.pendingMoves.length === 0 && !hadExtraRoll) {
-        gameState.roundTurns = (gameState.roundTurns ?? 0) + 1;
-        if (gameState.roundTurns >= 2) {
-          gameState.roundTurns = 0;
-          gameState.round = (gameState.round ?? 1) + 1;
-        }
+        advanceMarbleRound(gameState);
       }
 
       // 승리 체크
@@ -2239,14 +2926,29 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
 
       let specialEvent = null;
       const specialType = getMarbleSpecialType(targetPos);
+      // timeout_draw는 winner가 null이므로 winner만 보면 종료 후에도 칸 효과가 처리된다.
+      const marbleOver = () => gameState.winner != null || gameState.winReason === 'timeout_draw';
 
-      if (!gameState.winner && specialType === 'tax') {
+      if (!marbleOver() && specialType === 'jail') {
+        // 블랙사이트: 다음 자기 턴 1회를 쉰다(더블이 나오면 탈출).
+        gameState.jailTurns = { ...(gameState.jailTurns ?? {}), [userId]: 1 };
+        specialEvent = { type: 'jail', turns: 1 };
+        io.to(roomCode).emit("game:marble:special_tile", specialEvent);
+      } else if (!marbleOver() && specialType === 'gate') {
+        // 비밀게이트: 무작위 도시로 순간이동(도착 칸 효과 없음).
+        const destination = pickGateDestination();
+        piece.lastPos = piece.position;
+        piece.position = destination;
+        specialEvent = { type: 'gate', to: destination };
+        io.to(roomCode).emit("game:marble:special_tile", specialEvent);
+      } else if (!marbleOver() && specialType === 'tax') {
+        // 세금을 못 내면 잔액이 음수가 되어 파산한다(정확히 0이면 생존).
         const taxAmount = SPECIAL_FEE;
-        gameState.players[userId].coins = Math.max(0, gameState.players[userId].coins - taxAmount);
+        gameState.players[userId].coins = gameState.players[userId].coins - taxAmount;
         await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
         specialEvent = { type: 'tax', amount: taxAmount, coins: { [userId]: gameState.players[userId].coins } };
         io.to(roomCode).emit("game:marble:special_tile", specialEvent);
-      } else if (!gameState.winner && specialType === 'card') {
+      } else if (!marbleOver() && specialType === 'card') {
         // 황금열쇠 카드: 랜덤 효과
         const cards = [
           { id: 'bonus_coin',  text: '행운의 여신이 미소 지었다! +30만 MM',  amount:  300_000 },
@@ -2256,7 +2958,7 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
           { id: 'salary',      text: '특별 보너스! 급여 두 배 +40만 MM',       amount:  400_000 },
         ];
         const card = cards[Math.floor(Math.random() * cards.length)];
-        gameState.players[userId].coins = Math.max(0, gameState.players[userId].coins + card.amount);
+        gameState.players[userId].coins = gameState.players[userId].coins + card.amount;
         if (card.move !== undefined) {
           gameState.players[userId].pieces.forEach((p) => {
             if (p.id === pieceId) { p.lastPos = p.position; p.position = card.move; }
@@ -2267,17 +2969,18 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         io.to(roomCode).emit("game:marble:special_tile", specialEvent);
       }
 
-      const specialWin = !gameState.winner && checkMarbleWin(gameState);
+      const specialWin = !marbleOver() && checkMarbleWin(gameState);
       if (specialWin) {
         gameState.winner = specialWin.winner;
         gameState.winReason = specialWin.reason;
       }
 
-      if (!gameState.winner && !MARBLE_START_POSITIONS.has(targetPos) && getLandValue(targetPos) > 0) {
+      // 게이트로 이동했으면 도착 칸 효과는 없다.
+      if (!marbleOver() && specialType !== 'gate' && !MARBLE_START_POSITIONS.has(targetPos) && getLandValue(targetPos) > 0) {
         if (!landData) {
           // 빈 칸: 점령 프롬프트
           landPrompt = { type: 'claim', pos: targetPos, cost: calcPurchaseCost(targetPos) };
-        } else if (landData.owner === userId && landData.level < 4) {
+        } else if (landData.owner === userId && landData.level < 4 && calcUpgradeCost(targetPos, landData.level) > 0) {
           // 내 영지 재방문: 강화 프롬프트
           const upgradeCost = calcUpgradeCost(targetPos, landData.level);
           landPrompt = { type: 'upgrade', pos: targetPos, cost: upgradeCost, level: landData.level };
@@ -2286,12 +2989,13 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
           // M4: 방어자의 통행료 감소 스탯 적용
           const rawToll = calcToll(targetPos, landData.level) *
             (hasColorMonopoly(gameState, opponentId, targetPos) ? 2 : 1);
-          const tollReducePct = Math.min(defenderStats.land_toll_reduce_pct ?? 0, 30);
+          const tollReducePct = Math.min(defenderTollReducePct, 30);
           const toll = tollReducePct > 0
             ? Math.max(1, Math.floor(rawToll * (1 - tollReducePct / 100)))
             : rawToll;
-          const paidToll = Math.min(gameState.players[userId].coins, toll);
-          gameState.players[userId].coins -= paidToll;
+          // 받는 쪽은 실제로 낼 수 있는 만큼만 받고, 다 못 내면 잔액이 음수가 되어 파산한다.
+          const paidToll = Math.min(Math.max(0, gameState.players[userId].coins), toll);
+          gameState.players[userId].coins -= toll;
           gameState.players[opponentId].coins += paidToll;
           await redis.set(marbleGameKey(roomCode), JSON.stringify(gameState), "EX", 7200);
           io.to(roomCode).emit("game:marble:toll_paid", {
@@ -2360,10 +3064,11 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         };
         io.to(roomCode).emit("game:marble:ended", endedPayload);
         await redis.del(marbleGameKey(roomCode));
-        if (gameState.winner) {
-          await saveGameResult(roomCode, gameState.winner, opponentId, 'marble', 0).catch(() => {});
-          await grantGameXpAndMissions(gameState.winner, opponentId, 'marble').catch(() => {});
-        }
+        await recordGameOutcome(roomCode, {
+          winner: gameState.winner,
+          players: gameState.playersOrder,
+          gameType: 'marble',
+        });
       }
       }); // withRoomLock
     });
@@ -2536,8 +3241,10 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
           return;
         }
         const existing = await redis.get(`game:${roomCode}:blackjack`);
-        if (existing && JSON.parse(existing).status === 'playing') {
-          ack({ ok: false, reason: "game_in_progress" });
+        if (existing && JSON.parse(existing).status !== 'finished') {
+          // 이탈 후 다시 들어온 경우: 거절하지 않고 진행 중인 판을 이어서 보여준다.
+          socket.emit("game:blackjack:updated", serializeBlackjackFor(JSON.parse(existing), userId));
+          ack({ ok: true, resumed: true });
           return;
         }
         const gameState = initBlackjackGame(orderedPlayers[0], orderedPlayers[1]);
@@ -2562,15 +3269,13 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         }
         await redis.set(`game:${roomCode}:blackjack`, JSON.stringify(gameState), "EX", 3600);
         await emitBlackjackState(io, roomCode, gameState);
-        if (
-          previousState.status !== 'finished' &&
-          gameState.status === 'finished' &&
-          gameState.result?.winner &&
-          gameState.result.winner !== 'tie'
-        ) {
-          const loser = gameState.players.find((player) => player !== gameState.result.winner);
-          await saveGameResult(roomCode, gameState.result.winner, loser, 'blackjack', 0).catch(() => {});
-          grantGameXpAndMissions(gameState.result.winner, loser, 'blackjack').catch(() => {});
+        if (previousState.status !== 'finished' && gameState.status === 'finished') {
+          const winner = gameState.result?.winner;
+          await recordGameOutcome(roomCode, {
+            winner: winner && winner !== 'tie' ? winner : null,
+            players: gameState.players,
+            gameType: 'blackjack',
+          });
         }
         ack({ ok: true });
       });
@@ -2656,7 +3361,14 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
           ack({ ok: false, reason: "not_a_player" });
           return;
         }
-        const gameState = drawOldMaidCard(previousState, String(userId), String(cardId));
+        // 위치 별칭(slot-N)을 상대 손패의 실제 카드 id로 바꾼다.
+        let targetCardId = String(cardId);
+        const slotMatch = /^slot-(\d+)$/.exec(targetCardId);
+        if (slotMatch) {
+          const opponentId = Object.keys(previousState.players).find((id) => id !== String(userId));
+          targetCardId = previousState.players[opponentId]?.hand?.[Number(slotMatch[1])]?.id ?? "";
+        }
+        const gameState = drawOldMaidCard(previousState, String(userId), targetCardId);
         if (gameState === previousState) {
           ack({ ok: false, reason: "invalid_action" });
           return;
@@ -2664,8 +3376,11 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         await redis.set(`game:${roomCode}:oldmaid`, JSON.stringify(gameState), "EX", 3600);
         await emitOldMaidState(io, roomCode, gameState);
         if (previousState.status !== 'finished' && gameState.status === 'finished' && gameState.result?.winner) {
-          await saveGameResult(roomCode, gameState.result.winner, gameState.result.loser, 'oldmaid', 0).catch(() => {});
-          grantGameXpAndMissions(gameState.result.winner, gameState.result.loser, 'oldmaid').catch(() => {});
+          await recordGameOutcome(roomCode, {
+            winner: gameState.result.winner,
+            players: [gameState.result.winner, gameState.result.loser],
+            gameType: 'oldmaid',
+          });
         }
         ack({ ok: true });
       });
@@ -2684,7 +3399,8 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       if (orderedPlayers.length !== 2) return ack({ ok: false, reason: "need_two_players" });
       const existing = await redis.get(`game:${roomCode}:penalty`);
       if (existing && JSON.parse(existing).status === 'playing') {
-        return ack({ ok: false, reason: "game_in_progress" });
+        socket.emit("game:penalty:updated", maskPenaltyState(JSON.parse(existing)));
+        return ack({ ok: true, resumed: true });
       }
 
       const gameState = initPenaltyGame(orderedPlayers[0], orderedPlayers[1]);
@@ -2714,6 +3430,9 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         return ack({ ok: false, reason: "invalid_choice" });
       }
 
+      if (gameState.submissions[String(userId)] !== undefined) {
+        return ack({ ok: false, reason: "already_submitted" });
+      }
       gameState.submissions[String(userId)] = choice;
 
       const kickerId = String(gameState.kicker);
@@ -2731,18 +3450,14 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       }
 
       await redis.set(`game:${roomCode}:penalty`, JSON.stringify(nextGameState), "EX", 3600);
-      const allSubmitted = Object.keys(nextGameState.submissions).length >= 2;
-      const emitState = allSubmitted ? nextGameState : {
-        ...nextGameState,
-        submissions: Object.fromEntries(
-          Object.entries(nextGameState.submissions).map(([uid, _]) => [uid, true])
-        )
-      };
-      io.to(roomCode).emit("game:penalty:updated", emitState);
-      if (nextGameState.status === 'finished' && nextGameState.result?.winner && nextGameState.result.winner !== 'draw') {
-        const loser = Object.keys(nextGameState.scores).find(p => p !== nextGameState.result.winner);
-        await saveGameResult(roomCode, nextGameState.result.winner, loser, 'penalty', 0).catch(() => {});
-        grantGameXpAndMissions(nextGameState.result.winner, loser, 'penalty').catch(() => {});
+      io.to(roomCode).emit("game:penalty:updated", maskPenaltyState(nextGameState));
+      if (gameState.status === 'playing' && nextGameState.status === 'finished') {
+        const winner = nextGameState.result?.winner;
+        await recordGameOutcome(roomCode, {
+          winner: winner && winner !== 'draw' ? winner : null,
+          players: Object.keys(nextGameState.scores),
+          gameType: 'penalty',
+        });
       }
       ack({ ok: true });
       });
@@ -2761,7 +3476,8 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       if (orderedPlayers.length !== 2) return ack({ ok: false, reason: "need_two_players" });
       const existing = await redis.get(`game:${roomCode}:bowling`);
       if (existing && JSON.parse(existing).status === 'playing') {
-        return ack({ ok: false, reason: "game_in_progress" });
+        socket.emit("game:bowling:updated", withBowlingFrames(JSON.parse(existing)));
+        return ack({ ok: true, resumed: true });
       }
 
       const gameState = initBowlingGame(orderedPlayers[0], orderedPlayers[1]);
@@ -2784,26 +3500,32 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       if (!Object.prototype.hasOwnProperty.call(previousState.scores ?? {}, String(userId))) {
         return ack({ ok: false, reason: "not_a_player" });
       }
+      if (previousState.status !== 'playing' || previousState.turn !== String(userId)) {
+        return ack({ ok: false, reason: "not_your_turn" });
+      }
       const clampUnit = (v) => Math.min(1, Math.max(-1, Number(v) || 0));
-      const aim = clampUnit(payload?.aim);
-      const curve = clampUnit(payload?.curve);
-      // Pins generated server-side; aim/curve bias the distribution.
-      const ctx = nextRollContext(previousState.rolls[String(userId)] || []);
-      const standing = ctx?.standing ?? 10;
-      const skillFactor = 1 - Math.abs(aim) * 0.4 - Math.abs(curve) * 0.2;
-      const maxExpected = Math.round(standing * Math.max(0.3, skillFactor));
-      const pins = Math.floor(Math.random() * (maxExpected + 1));
-      const gameState = rollBowlingFrame(previousState, String(userId), pins, { aim, curve });
+      // 클라이언트와 같은 결정론적 시뮬레이션으로 핀 수를 정한다. 손 떨림(jitter)을
+      // 더한 실제 조준값을 ack로 돌려주면 클라이언트가 그 값으로 연출해 결과가 일치한다.
+      const effective = jitterThrow(clampUnit(payload?.aim), clampUnit(payload?.curve));
+      const playerRolls = previousState.rolls[String(userId)] || [];
+      const ctx = nextRollContext(playerRolls);
+      const deck = standingDeck(playerRolls, ctx, previousState.history, String(userId));
+      const pins = simulateBowlingRoll(deck, effective.aim, effective.curve).pinsDown;
+      const gameState = rollBowlingFrame(previousState, String(userId), pins, effective);
       if (gameState === previousState) return ack({ ok: false, reason: "invalid_action" });
 
       await redis.set(`game:${roomCode}:bowling`, JSON.stringify(gameState), "EX", 3600);
+      // ack를 먼저 보내 투구자가 바로 연출을 시작하게 하고, 그다음 방 전체에 상태를 알린다.
+      ack({ ok: true, pins: gameState.lastRoll?.pinsKnocked ?? pins, aim: effective.aim, curve: effective.curve });
       io.to(roomCode).emit("game:bowling:updated", withBowlingFrames(gameState));
-      if (gameState.status === 'finished' && gameState.result?.winner && gameState.result.winner !== 'draw') {
-        const loser = Object.keys(gameState.scores).find(p => p !== gameState.result.winner);
-        await saveGameResult(roomCode, gameState.result.winner, loser, 'bowling', 0).catch(() => {});
-        grantGameXpAndMissions(gameState.result.winner, loser, 'bowling').catch(() => {});
+      if (gameState.status === 'finished') {
+        const winner = gameState.result?.winner;
+        await recordGameOutcome(roomCode, {
+          winner: winner && winner !== 'draw' ? winner : null,
+          players: Object.keys(gameState.scores),
+          gameType: 'bowling',
+        });
       }
-      ack({ ok: true });
       });
     });
 
@@ -2843,7 +3565,9 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       }
 
       const gameState = createUnoGameState(orderedPlayers, 7, { mode });
-      gameState.stake = parsed.data.stake ?? 0;
+      const pendingUno = await consumePendingGame(roomCode, "uno");
+      gameState.stake = pendingUno.stake; // payload의 stake는 무시한다.
+      gameState.gameId = pendingUno.gameId;
 
       // 양 플레이어 스탯 + 장착 아이템 미리 로드
       const unoPlayerStats = {};
@@ -3057,17 +3781,20 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       if (gameState.winner) {
         const unoLoserId = gameState.players.find(p => p !== gameState.winner);
         io.to(roomCode).emit("game:uno:ended", { winner: gameState.winner });
-        await redis.del(unoGameKey(roomCode));
         const [{ rows: unoWinnerRows }, { rows: unoLoserRows }] = await Promise.all([
           query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [gameState.winner]),
           query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [unoLoserId]),
         ]);
         const unoPreStreak = await _getWinStreak(roomCode, gameState.winner);
+        // 정산 → 결과 기록 → 상태 삭제 (ref 고정으로 멱등).
+        const unoGameId = gameState.gameId ?? `legacy-${roomCode}-${gameState.discardPile?.length ?? 0}`;
+        const unoWallet = await settleAndEmitWallet(io, roomCode, gameState.winner, unoLoserId, gameState.stake ?? 0, `uno:${unoGameId}`, unoWinnerRows[0]?.UserId, 0, unoLoserRows[0]?.UserId, unoPreStreak);
+        if (!unoWallet.ok) io.to(roomCode).emit("wallet:settle_failed", { gameType: "uno", reason: unoWallet.reason });
         await Promise.all([
-          settleAndEmitWallet(io, roomCode, gameState.winner, unoLoserId, gameState.stake ?? 0, `uno:${roomCode}:${Date.now()}`, unoWinnerRows[0]?.UserId, 0, unoLoserRows[0]?.UserId, unoPreStreak),
-          saveGameResult(roomCode, gameState.winner, unoLoserId, 'uno', gameState.stake ?? 0),
+          saveGameResult(roomCode, gameState.winner, unoLoserId, 'uno', gameState.stake ?? 0, { gameId: unoGameId }),
           grantGameXpAndMissions(gameState.winner, unoLoserId, 'onecard'),
         ]);
+        await redis.del(unoGameKey(roomCode));
       }
       }); // withRoomLock
     });
@@ -3206,6 +3933,9 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       gameState.hands[drawnPlayer].push(...drawnCards);
       clearDrawStack(gameState);
       gameState.currentPlayer = nextPlayer;
+      // 도전 처리 후 남은 "뽑은 카드 선택" 상태와, 카드를 받은 쪽의 UNO 선언 의무를 정리한다.
+      gameState.drawnCardId = null;
+      if (gameState.unoCallNeeded === drawnPlayer) gameState.unoCallNeeded = null;
       // 선언 색상: 성공/실패 모두 A가 선언한 색상 유지 (공식 룰)
       // gameState.declaredColor는 이미 +4 플레이 시 설정된 상태로 유지
 
@@ -3296,6 +4026,12 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         return;
       }
 
+      if (gameState.drawnCardId) {
+        // 뽑은 카드를 낼지 넘길지 아직 고르지 않았다. 다시 뽑으면 스택을 이중으로 받는다.
+        ack({ ok: false, reason: "must_choose_drawn_card" });
+        return;
+      }
+
       const myUnoStats = gameState.playerStats?.[userId] ?? {};
       let drawCount = (gameState.drawStack || 0) > 0 ? gameState.drawStack : 1;
 
@@ -3339,12 +4075,14 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         { mode: gameState.mode },
       );
 
+      // 벌칙(공격 스택)은 이번 드로우로 이미 받았다. 뽑은 카드를 낼 수 있든 없든
+      // 스택은 비워야 한다. 남겨 두면 "내기"가 must_draw_or_defend로 거부되거나,
+      // 뽑은 카드가 +2일 때 이미 받은 스택에 더해져 상대가 이중 벌칙을 받는다.
+      clearDrawStack(gameState);
       if (drawnCardIsPlayable) {
-        // Keep the turn and pending draw stack until the player chooses.
         gameState.drawnCardId = drawnCard.id;
       } else {
         gameState.drawnCardId = null;
-        clearDrawStack(gameState);
         gameState.currentPlayer = getNextPlayer(gameState);
       }
 
@@ -3367,8 +4105,8 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         canPlayDrawn: drawnCardIsPlayable,
         mode: gameState.mode,
         declaredColor: gameState.declaredColor,
-        drawStack: drawnCardIsPlayable ? (gameState.drawStack || 0) : 0,
-        drawStackType: drawnCardIsPlayable ? (gameState.drawStackType ?? null) : null,
+        drawStack: 0,
+        drawStackType: null,
         handCount: getUnoHandCount(gameState),
         unoCallNeeded: gameState.unoCallNeeded ?? null,
       };
@@ -3379,8 +4117,8 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       if (drawnCardIsPlayable) {
         socket.emit("game:uno:draw_choice", {
           card: drawnCard,
-          drawStack: gameState.drawStack || 0,
-          drawStackType: gameState.drawStackType ?? null,
+          drawStack: 0,
+          drawStackType: null,
         });
       }
       ack({ ok: true, event });
@@ -3467,12 +4205,17 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
 
       const existing = await redis.get(bombGameKey(roomCode));
       if (existing) {
-        ack({ ok: false, reason: "game_in_progress" });
-        return;
+        const existingState = JSON.parse(existing);
+        if (!isTimeUp(existingState)) {
+          ack({ ok: false, reason: "game_in_progress" });
+          return;
+        }
+        await explodeBomb(roomCode, existingState); // 놓친 폭발을 지금 처리한다.
       }
 
       const gameState = createBombGameState(orderedPlayers, parsed.data.duration);
       await redis.set(bombGameKey(roomCode), JSON.stringify(gameState), "EX", 300);
+      scheduleBombExplosion(roomCode, gameState);
 
       const bombStarted = {
         currentPlayer: gameState.currentPlayer,
@@ -3517,18 +4260,7 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       }
 
       if (isTimeUp(gameState)) {
-        gameState.loser = userId;
-        const bombWinner = gameState.players.find(p => p !== userId);
-        await redis.del(bombGameKey(roomCode));
-
-        io.to(roomCode).emit("game:bomb:exploded", {
-          loser: userId,
-          correctAnswer: gameState.currentQuiz.answer,
-        });
-        if (bombWinner) {
-          await saveGameResult(roomCode, bombWinner, userId, 'bomb', 0).catch(() => {});
-          grantGameXpAndMissions(bombWinner, userId, 'bomb').catch(() => {});
-        }
+        await explodeBomb(roomCode, gameState);
         ack({ ok: false, reason: "time_up", loser: userId });
         return;
       }
@@ -3561,13 +4293,25 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       }); // withRoomLock
     });
 
-    socket.on("game:restart:request", async (_, ackRaw) => {
+    // 재시작(재대결): 요청을 Redis에 기록하고, 응답은 그 기록과 대조해 검증한다.
+    // 위조된 respond(요청 없음/본인 요청/다른 게임)로 진행 중인 판을 덮어쓸 수 없다.
+    socket.on("game:restart:request", async (payload, ackRaw) => {
       const ack = normalizeAck(ackRaw);
       const roomCode = socket.data.roomCode;
       const userId = socket.data.userId;
-      if (!roomCode || !userId) { ack({ ok: false }); return; }
-
-      socket.to(roomCode).emit("game:restart:requested", { by: userId });
+      if (!roomCode || !userId) { ack({ ok: false, reason: "not_joined" }); return; }
+      const gameType = payload?.gameType;
+      if (!RESTARTABLE_GAME_TYPES.has(gameType)) {
+        ack({ ok: false, reason: "unsupported_game" });
+        return;
+      }
+      await redis.set(
+        restartKey(roomCode),
+        JSON.stringify({ by: userId, gameType, at: Date.now() }),
+        "EX",
+        RESTART_REQUEST_TTL_SEC,
+      );
+      socket.to(roomCode).emit("game:restart:requested", { by: userId, gameType });
       ack({ ok: true });
     });
 
@@ -3575,9 +4319,18 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       const ack = normalizeAck(ackRaw);
       const roomCode = socket.data.roomCode;
       const userId = socket.data.userId;
-      if (!roomCode || !userId) { ack({ ok: false }); return; }
+      if (!roomCode || !userId) { ack({ ok: false, reason: "not_joined" }); return; }
 
       const { accept, gameType } = payload || {};
+
+      await withRoomLock(roomCode, async () => {
+      const rawRequest = await redis.get(restartKey(roomCode));
+      const request = rawRequest ? JSON.parse(rawRequest) : null;
+      if (!request || request.by === userId || request.gameType !== gameType) {
+        ack({ ok: false, reason: "no_restart_request" });
+        return;
+      }
+      await redis.del(restartKey(roomCode));
 
       if (!accept) {
         socket.to(roomCode).emit("game:restart:declined", { by: userId });
@@ -3606,6 +4359,7 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
           bgm: previous.bgm ?? null,
         });
         gameState.stake = previous.stake ?? 0;
+        gameState.gameId = randomUUID();
         gameState.catchCoinBonus = {};
         gameState.winCoinBonus = {};
 
@@ -3630,6 +4384,7 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
           mode: previous.mode ?? DEFAULT_UNO_MODE,
         });
         gameState.stake = previous.stake ?? 0;
+        gameState.gameId = randomUUID();
 
         // 아이템 스탯 + 장착 아이템 재적재
         const unoRestartStats = {};
@@ -3659,9 +4414,18 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
           const pid = sock.data.userId;
           if (gameState.hands[pid]) sock.emit("game:uno:hand_update", { hand: gameState.hands[pid] });
         }
+      } else if (gameType === "marble") {
+        const previousText = await redis.get(marbleGameKey(roomCode));
+        const previous = previousText ? JSON.parse(previousText) : {};
+        await startMarbleGame(roomCode, p1, p2, previous.characters ?? {});
+      } else if (gameType === "tank") {
+        await restartTankGame(roomCode, p1, p2);
       } else if (gameType === "bomb") {
-        const gameState = createBombGameState(orderedPlayers, 30);
+        const previousBombText = await redis.get(bombGameKey(roomCode));
+        const previousBombDuration = previousBombText ? Math.round((JSON.parse(previousBombText).duration ?? 30000) / 1000) : 30;
+        const gameState = createBombGameState(orderedPlayers, previousBombDuration);
         await redis.set(bombGameKey(roomCode), JSON.stringify(gameState), "EX", 300);
+        scheduleBombExplosion(roomCode, gameState);
         io.to(roomCode).emit("game:bomb:started", {
           currentPlayer: gameState.currentPlayer,
           duration: Math.round(gameState.duration / 1000),
@@ -3671,6 +4435,7 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       }
 
       ack({ ok: true, accepted: true });
+      }); // withRoomLock
     });
 
     socket.on("heart:send", (_, ackRaw) => {
@@ -3694,7 +4459,14 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         const players = await getOrderedPlayers(roomCode, getPresence(io, roomCode));
         if (players.length < 2) return ack({ error: "need_two_players" });
         const existing = await redis.get(`game:${roomCode}:catch`);
-        if (existing) return ack({ error: "game_in_progress" });
+        if (existing) {
+          const existingState = JSON.parse(existing);
+          if (existingState.phase !== "gameover") {
+            // 진행 중인 판: 거절하지 않고 요청자에게 현재 라운드를 다시 보여준다.
+            await emitCatchStateTo(socket, roomCode, existingState);
+            return ack({ ok: true, resumed: true });
+          }
+        }
 
         const maxRounds = Number.isInteger(payload?.maxRounds) && payload.maxRounds >= 2 && payload.maxRounds <= 20
           ? payload.maxRounds : 6;
@@ -3717,6 +4489,8 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
           scores,
           phase: "drawing",
           hintRevealed: [],
+          hintUsedBy: [],
+          roundEndsAt: Date.now() + CATCH_ROUND_MS,
           usedWords: [word],
         };
         await redis.set(`game:${roomCode}:catch`, JSON.stringify(state), "EX", 86400);
@@ -3754,8 +4528,17 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       const catchDrawRaw = await redis.get(`game:${roomCode}:catch`);
       if (!catchDrawRaw) return;
       const catchDrawState = JSON.parse(catchDrawRaw);
-      if (catchDrawState.drawer !== userId) return;
-      socket.to(roomCode).emit("game:catch:draw", payload);
+      if (catchDrawState.drawer !== userId || catchDrawState.phase !== "drawing") return;
+      const parsedDraw = catchDrawSchema.safeParse(payload);
+      if (!parsedDraw.success) return;
+      // 과도한 전송(초당 120점 초과)은 버린다.
+      const now = Date.now();
+      const bucket = socket.data.catchDrawBucket ?? { windowStart: now, count: 0 };
+      if (now - bucket.windowStart >= 1000) { bucket.windowStart = now; bucket.count = 0; }
+      bucket.count += 1;
+      socket.data.catchDrawBucket = bucket;
+      if (bucket.count > 120) return;
+      socket.to(roomCode).emit("game:catch:draw", parsedDraw.data);
     });
 
     // clear relay
@@ -3777,8 +4560,8 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
 
         await withRoomLock(roomCode, async () => {
 
-        const text = String(payload?.text || "").trim();
-        if (!text) return ack({ ok: false });
+        const text = String(payload?.text || "").trim().slice(0, 50);
+        if (!text) return ack({ ok: false, reason: "invalid_payload" });
 
         const raw = await redis.get(`game:${roomCode}:catch`);
         if (!raw) return ack({ ok: false });
@@ -3826,6 +4609,9 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         const state = JSON.parse(raw);
 
         if (state.phase !== "drawing" || userId === state.drawer) return ack({ ok: false });
+        if (!Object.prototype.hasOwnProperty.call(state.scores, userId)) return ack({ ok: false, reason: "not_a_player" });
+        state.hintUsedBy ??= [];
+        if (state.hintUsedBy.includes(userId)) return ack({ ok: false, reason: "hint_used" });
 
         const chars = [...state.word];
         const hidden = chars.map((_, i) => i).filter((i) => !state.hintRevealed.includes(i));
@@ -3833,6 +4619,7 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
 
         const revealIdx = hidden[Math.floor(Math.random() * hidden.length)];
         state.hintRevealed.push(revealIdx);
+        state.hintUsedBy.push(userId);
         await redis.set(`game:${roomCode}:catch`, JSON.stringify(state), "EX", 86400);
 
         const hint = chars.map((c, i) => (state.hintRevealed.includes(i) ? c : "_")).join("");
@@ -3859,10 +4646,14 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         if (!raw) return ack({ ok: false });
         const state = JSON.parse(raw);
 
-        const catchHost = Object.keys(state.scores)[0];
-        if (catchHost && userId !== catchHost) return ack({ ok: false, reason: 'not_host' });
-
+        // 방장 권한 대신 서버 시각으로 검증한다: 출제자는 언제든 포기할 수 있고,
+        // 다른 참가자는 서버에 기록된 마감 시각(시계 오차 2초 허용)이 지난 뒤에만 가능하다.
+        if (!Object.prototype.hasOwnProperty.call(state.scores, userId)) return ack({ ok: false, reason: 'not_a_player' });
         if (state.phase !== "drawing") return ack({ ok: false });
+        const deadline = state.roundEndsAt ?? 0;
+        if (userId !== state.drawer && Date.now() < deadline - 2000) {
+          return ack({ ok: false, reason: "round_not_over" });
+        }
         state.phase = "timeout";
         await redis.set(`game:${roomCode}:catch`, JSON.stringify(state), "EX", 86400);
 
@@ -3887,8 +4678,7 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         if (!raw) return ack({ ok: false });
         const state = JSON.parse(raw);
 
-        const catchNextHost = Object.keys(state.scores)[0];
-        if (catchNextHost && userId !== catchNextHost) return ack({ ok: false, reason: 'not_host' });
+        if (!Object.prototype.hasOwnProperty.call(state.scores, userId)) return ack({ ok: false, reason: 'not_a_player' });
 
         if (state.phase !== "guessed" && state.phase !== "timeout") {
           return ack({ ok: false, reason: "round_not_finished" });
@@ -3897,9 +4687,8 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         const nextRound = state.round + 1;
 
         if (nextRound > state.maxRounds) {
-          // 게임 종료
-          state.phase = "gameover";
-          await redis.set(`game:${roomCode}:catch`, JSON.stringify(state), "EX", 86400);
+          // 게임 종료: 상태를 지워 다음 게임이 막히지 않게 한다.
+          await redis.del(`game:${roomCode}:catch`);
 
           const entries = Object.entries(state.scores);
           const maxScore = Math.max(...entries.map(([, s]) => s));
@@ -3907,13 +4696,11 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
           const winner = winners.length === 1 ? winners[0] : "draw";
 
           io.to(roomCode).emit("game:catch:gameover", { winner, scores: state.scores });
-          if (winner !== 'draw') {
-            const catchLoser = Object.keys(state.scores).find(p => p !== winner);
-            if (catchLoser) {
-              await saveGameResult(roomCode, winner, catchLoser, 'catch', 0).catch(() => {});
-              grantGameXpAndMissions(winner, catchLoser, 'catch').catch(() => {});
-            }
-          }
+          await recordGameOutcome(roomCode, {
+            winner: winner === 'draw' ? null : winner,
+            players: Object.keys(state.scores),
+            gameType: 'catch',
+          });
           return ack({ ok: true });
         }
 
@@ -3932,6 +4719,8 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         state.round = nextRound;
         state.phase = "drawing";
         state.hintRevealed = [];
+        state.hintUsedBy = [];
+        state.roundEndsAt = Date.now() + CATCH_ROUND_MS;
         state.usedWords.push(word);
         await redis.set(`game:${roomCode}:catch`, JSON.stringify(state), "EX", 86400);
 
@@ -3970,9 +4759,8 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         const catchResetRaw = await redis.get(`game:${roomCode}:catch`);
         if (catchResetRaw) {
           const catchResetState = JSON.parse(catchResetRaw);
-          const catchResetHost = Object.keys(catchResetState.scores)[0];
-          if (catchResetHost && userId !== catchResetHost) {
-            return ack({ ok: false, reason: 'not_host' });
+          if (!Object.prototype.hasOwnProperty.call(catchResetState.scores ?? {}, userId)) {
+            return ack({ ok: false, reason: 'not_a_player' });
           }
         } else {
           const presence = getPresence(io, roomCode);
@@ -3990,12 +4778,20 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       }
     });
 
-    // ── Tank 대작전 ─────────────────────────────────────────────────────────────
-    const tankGameKey = (rc) => `game:${rc}:tank`;
+    // ── Tank 대작전 2.0 ─────────────────────────────────────────────────────────
+    // 모든 판정은 fortress-engine이 하고, 여기서는 저장·마스킹 브로드캐스트·턴 타이머·
+    // 정산(멱등)·재대결을 담당한다. 조준값은 발사 이벤트에만 실려 오므로 상대에게 새지 않는다.
+    const tankSelectSchema = z.object({ tankClass: z.enum(TANK_CLASS_IDS) });
+    const tankFireSchema = z.object({
+      angle: z.number().min(0).max(180).optional(),
+      power: z.number().min(1).max(100).optional(),
+      weapon: z.enum(TANK_WEAPON_IDS).optional(),
+    }).optional().default({});
 
-    const tankNewSchema = z.object({
-      stake: z.number().int().min(0).max(10000).optional().default(0),
-    }).optional().default({ stake: 0 });
+    const loadTank = async (roomCode) => {
+      const raw = await redis.get(tankGameKey(roomCode));
+      return raw ? JSON.parse(raw) : null;
+    };
 
     socket.on("game:tank:new", async (payload, ackRaw) => {
       const ack = normalizeAck(ackRaw);
@@ -4006,20 +4802,45 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       const presence = getPresence(io, roomCode);
       if (presence.length !== 2) return ack({ ok: false, reason: "need_two_players" });
 
-      const parsed = tankNewSchema.safeParse(payload);
-      if (!parsed.success) return ack({ ok: false, reason: "invalid_payload" });
-
       const orderedPlayers = await getOrderedPlayers(roomCode, presence);
       if (orderedPlayers.length !== 2) return ack({ ok: false, reason: "need_two_players" });
 
+      const existing = await loadTank(roomCode);
+      if (existing && existing.phase !== "result") {
+        // 진행 중인 판: 거절하지 않고 요청자에게 이어서 보여준다.
+        socket.emit("game:tank:started", tankViewFor(existing, userId));
+        return ack({ ok: true, resumed: true });
+      }
+
       const [p1, p2] = orderedPlayers;
-      const stake = parsed.data?.stake ?? 0;
-      const existing = await redis.get(tankGameKey(roomCode));
-      if (existing) return ack({ ok: false, reason: "game_in_progress" });
-      const state = createFortressState(p1, p2, { stake });
-      await redis.set(tankGameKey(roomCode), JSON.stringify(state), "EX", 7200);
-      io.to(roomCode).emit("game:tank:started", state);
+      // 판돈은 로비에서 합의된 서버 기록만 사용한다(payload의 stake 무시).
+      const pending = await consumePendingGame(roomCode, "tank");
+      const state = createFortressState(p1, p2, { stake: pending.stake, gameId: pending.gameId });
+      await saveTank(roomCode, state);
+      await emitTankState(roomCode, "game:tank:started", state);
       ack({ ok: true });
+      });
+    });
+
+    socket.on("game:tank:select", async (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const { roomCode, userId } = socket.data;
+      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+      const parsed = tankSelectSchema.safeParse(payload);
+      if (!parsed.success) return ack({ ok: false, reason: "invalid_payload" });
+
+      await withRoomLock(roomCode, async () => {
+      const state = await loadTank(roomCode);
+      if (!state) return ack({ ok: false, reason: "no_game" });
+      const result = selectTankClass(state, userId, parsed.data.tankClass);
+      if (!result.ok) return ack({ ok: false, reason: result.error });
+      if (result.state.phase === "aiming") {
+        result.state.turnDeadline = Date.now() + TANK_TURN_TIME_MS;
+      }
+      await saveTank(roomCode, result.state);
+      await emitTankState(roomCode, "game:tank:updated", result.state);
+      if (result.state.phase === "aiming") scheduleTankTimer(roomCode, result.state);
+      ack({ ok: true, battleStarted: result.state.phase === "aiming" });
       });
     });
 
@@ -4033,19 +4854,20 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       if (!parsed.success) return ack({ ok: false, reason: "invalid_payload" });
 
       await withRoomLock(roomCode, async () => {
-      const raw = await redis.get(tankGameKey(roomCode));
-      if (!raw) return ack({ ok: false, reason: "no_game" });
-      const state = JSON.parse(raw);
+      const state = await loadTank(roomCode);
+      if (!state) return ack({ ok: false, reason: "no_game" });
 
       const result = moveTank(state, userId, parsed.data.delta);
       if (!result.ok) return ack({ ok: false, reason: result.error });
 
-      await redis.set(tankGameKey(roomCode), JSON.stringify(result.state), "EX", 7200);
-      io.to(roomCode).emit("game:tank:updated", result.state);
+      await saveTank(roomCode, result.state);
+      await emitTankState(roomCode, "game:tank:updated", result.state);
+      if (result.events?.length) io.to(roomCode).emit("game:tank:moved", { by: userId, events: result.events });
       ack({ ok: true });
       });
     });
 
+    // 하위호환: 조준값을 서버에 미리 저장(본인에게만 응답). 상대에게는 브로드캐스트하지 않는다.
     socket.on("game:tank:aim", async (payload, ackRaw) => {
       const ack = normalizeAck(ackRaw);
       const { roomCode, userId } = socket.data;
@@ -4059,16 +4881,11 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       if (!parsed.success) return ack({ ok: false, reason: "invalid_payload" });
 
       await withRoomLock(roomCode, async () => {
-      const raw = await redis.get(tankGameKey(roomCode));
-      if (!raw) return ack({ ok: false, reason: "no_game" });
-      const state = JSON.parse(raw);
-
+      const state = await loadTank(roomCode);
+      if (!state) return ack({ ok: false, reason: "no_game" });
       const result = aimTank(state, userId, parsed.data.angle, parsed.data.power);
       if (!result.ok) return ack({ ok: false, reason: result.error });
-
-      await redis.set(tankGameKey(roomCode), JSON.stringify(result.state), "EX", 7200);
-      // Aim updates go only to the shooter (others see on fire)
-      socket.emit("game:tank:updated", result.state);
+      await saveTank(roomCode, result.state);
       ack({ ok: true });
       });
     });
@@ -4078,32 +4895,17 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       const { roomCode, userId } = socket.data;
       if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
 
-      const schema = z.object({ weapon: z.enum(["basic", "heavy", "triple", "mole"]) });
+      const schema = z.object({ weapon: z.enum(TANK_WEAPON_IDS) });
       const parsed = schema.safeParse(payload);
       if (!parsed.success) return ack({ ok: false, reason: "invalid_payload" });
 
       await withRoomLock(roomCode, async () => {
-      const raw = await redis.get(tankGameKey(roomCode));
-      if (!raw) return ack({ ok: false, reason: "no_game" });
-      const state = JSON.parse(raw);
-
+      const state = await loadTank(roomCode);
+      if (!state) return ack({ ok: false, reason: "no_game" });
       const result = selectWeapon(state, userId, parsed.data.weapon);
       if (!result.ok) return ack({ ok: false, reason: result.error });
-
-      await redis.set(tankGameKey(roomCode), JSON.stringify(result.state), "EX", 7200);
-      // Send each player a view that hides the opponent's aim (angle/power).
-      const sockets = await io.in(roomCode).fetchSockets();
-      for (const sock of sockets) {
-        const pid = sock.data.userId;
-        if (!pid) continue;
-        const view = {
-          ...result.state,
-          players: result.state.players.map(p =>
-            p.id === pid ? p : { ...p, angle: undefined, power: undefined }
-          ),
-        };
-        sock.emit("game:tank:updated", view);
-      }
+      await saveTank(roomCode, result.state);
+      await emitTankState(roomCode, "game:tank:updated", result.state);
       ack({ ok: true });
       });
     });
@@ -4112,35 +4914,24 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       const ack = normalizeAck(ackRaw);
       const { roomCode, userId } = socket.data;
       if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+      const parsed = tankFireSchema.safeParse(payload ?? {});
+      if (!parsed.success) return ack({ ok: false, reason: "invalid_payload" });
 
       await withRoomLock(roomCode, async () => {
-      const raw = await redis.get(tankGameKey(roomCode));
-      if (!raw) return ack({ ok: false, reason: "no_game" });
-      const state = JSON.parse(raw);
+      const state = await loadTank(roomCode);
+      if (!state) return ack({ ok: false, reason: "no_game" });
 
-      const result = fireTank(state, userId);
+      const result = fireTank(state, userId, parsed.data);
       if (!result.ok) return ack({ ok: false, reason: result.error });
 
-      if (result.state.winner) {
-        const winnerId = result.state.winner;
-        await redis.del(tankGameKey(roomCode));
-        io.to(roomCode).emit("game:tank:shot", result.shotResult);
-        io.to(roomCode).emit("game:tank:ended", { winner: winnerId });
-        if (winnerId !== 'draw') {
-          const loserId = result.state.players.find(p => p.id !== winnerId)?.id;
-          const stake = result.state.stake ?? 0;
-          if (loserId) {
-            await Promise.all([
-              settleAndEmitWallet(io, roomCode, winnerId, loserId, stake, `tank:${roomCode}:${Date.now()}`),
-              saveGameResult(roomCode, winnerId, loserId, 'tank', stake),
-              grantGameXpAndMissions(winnerId, loserId, 'tank'),
-            ]);
-          }
-        }
+      io.to(roomCode).emit("game:tank:shot", result.shotResult);
+      if (result.state.phase === "result") {
+        await finishTankGame(roomCode, result.state);
       } else {
-        await redis.set(tankGameKey(roomCode), JSON.stringify(result.state), "EX", 7200);
-        io.to(roomCode).emit("game:tank:shot", result.shotResult);
-        io.to(roomCode).emit("game:tank:updated", result.state);
+        result.state.turnDeadline = Date.now() + TANK_TURN_TIME_MS;
+        await saveTank(roomCode, result.state);
+        await emitTankState(roomCode, "game:tank:updated", result.state);
+        scheduleTankTimer(roomCode, result.state);
       }
       ack({ ok: true });
       });
@@ -4244,9 +5035,11 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         if (orderedPlayers.length !== 2) return ack({ ok: false, reason: "need_two_players" });
 
         const [p1, p2] = orderedPlayers;
+        // 점당 금액은 로비에서 합의된 서버 기록만 사용한다(payload의 perPointBet 무시).
+        const pendingGostop = await consumePendingGame(roomCode, "gostop");
         const state = createGostopGameState(p1, p2, {
-          perPointBet: parsed.data.perPointBet,
-          gameId: `gostop:${roomCode}:${Date.now()}:${Math.random().toString(36).slice(2)}`,
+          perPointBet: GOSTOP_STAKES.has(pendingGostop.stake) ? pendingGostop.stake : 0,
+          gameId: `gostop:${pendingGostop.gameId}`,
         });
 
         if (state.phase === 'finished') {
@@ -4427,17 +5220,22 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       }
 
       // 게임 화면을 보던 소켓이 끊기면 마지막 뷰어일 때 활성 상태 삭제
-      cleanupGameSessionOnDisconnect(socket, io, redis).catch((err) =>
+      cleanupGameSessionOnDisconnect(socket, io, redis, sessionScheduler).catch((err) =>
         console.error(`game session cleanup error: ${err.message}`),
       );
 
-      // 가위바위보 진행 중 연결 끊기면 미완료 판 취소
-      redis.del(rpsGameKey(roomCode)).then(() => {
-        io.to(roomCode).emit("game:rps:cancelled", {
-          reason: "player_disconnected",
-          by: socket.data.userId,
-        });
-      }).catch((err) => console.error(`rps cancel error: ${err.message}`));
+      // 가위바위보: 끊긴 사용자의 다른 소켓이 없고, 그 사용자가 참가 중인 미완료 판이 있을 때만 취소한다.
+      const leftUserId = socket.data.userId;
+      if (!getPresence(io, roomCode).includes(leftUserId)) {
+        void withRoomLock(roomCode, async () => {
+          const rpsRaw = await redis.get(rpsGameKey(roomCode));
+          if (!rpsRaw) return;
+          const rpsGame = JSON.parse(rpsRaw);
+          if (rpsGame.gameWinner || !rpsGame.players?.includes(leftUserId)) return;
+          await redis.del(rpsGameKey(roomCode));
+          io.to(roomCode).emit("game:rps:cancelled", { reason: "player_disconnected", by: leftUserId });
+        }).catch((err) => console.error(`rps cancel error: ${err.message}`));
+      }
     });
   });
 };

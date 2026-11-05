@@ -45,6 +45,11 @@ class _PirateScreenState extends State<PirateScreen>
   void _rebuild() {
     if (!mounted) return;
     final hasBomb = _socket.pirateBombSlot != null;
+    // 상대가 새 판을 시작하면(폭탄 정보가 지워짐) 다음 폭발 연출을 다시 보여준다.
+    if (!hasBomb && _explodeShown) {
+      _explodeShown = false;
+      _explodeCtrl.reset();
+    }
     if (hasBomb && !_explodeShown) {
       _explodeShown = true;
       _explodeCtrl.forward(from: 0);

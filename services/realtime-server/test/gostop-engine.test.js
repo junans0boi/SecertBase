@@ -117,7 +117,7 @@ test('광 3장 = 3점, 비광 포함 시 2점', () => {
   assert.equal(calculateScore(withRain).gwangScore, 2);
 });
 
-test('광 5장 = 15점, 비광 포함 시 14점', () => {
+test('광 5장 = 15점 (비광 포함해도 15점)', () => {
   const all5 = [
     { id: 'm1_bright', month: 1,  type: 'bright', subtype: null },
     { id: 'm3_bright', month: 3,  type: 'bright', subtype: null },
@@ -125,7 +125,7 @@ test('광 5장 = 15점, 비광 포함 시 14점', () => {
     { id: 'm11_bright',month: 11, type: 'bright', subtype: null },
     { id: 'm12_bright',month: 12, type: 'bright', subtype: 'rain' },
   ];
-  assert.equal(calculateScore(all5).gwangScore, 14);
+  assert.equal(calculateScore(all5).gwangScore, 15);
 
   const noRain = all5.map(c => c.month === 12 ? { ...c, subtype: null } : c);
   assert.equal(calculateScore(noRain).gwangScore, 15);
@@ -243,7 +243,7 @@ function makeState(overrides = {}) {
         { id: 'm2_ribbon', month: 2, type: 'ribbon', subtype: 'red' },
         { id: 'm7_junk_1', month: 7, type: 'junk', subtype: null },
       ],
-      [P2]: [],
+      [P2]: [{ id: 'm10_junk_1', month: 10, type: 'junk', subtype: null }],
     },
     captures: { [P1]: [], [P2]: [] },
     goCount: { [P1]: 0, [P2]: 0 },
@@ -572,8 +572,9 @@ test('serializeFor hides the opponent hand and private shake queue', () => {
     phase: 'shake_choice',
   });
   const serialized = serializeFor(s, P2);
-  assert.ok(serialized.hands[P2]);
-  assert.ok(serialized.hands[P2].every((card) => card.id === 'back'));
+  assert.ok(serialized.hands[P1].length > 0);
+  assert.ok(serialized.hands[P1].every((card) => card.id === 'back'), '상대(P1) 손패는 뒷면');
+  assert.ok(serialized.hands[P2].every((card) => card.id !== 'back'), '내 손패는 공개');
   assert.equal(serialized.shakeQueue, undefined);
   assert.equal(serialized.shakePlayerId, null);
 });
@@ -675,4 +676,90 @@ test('양쪽 손패가 모두 소진되면 덱이 남아 있어도 높은 점수
   assert.equal(result.phase, 'finished');
   assert.equal(result.winner, P1);
   assert.ok(result.settlement.reasonEvents.includes('hand_exhausted'));
+});
+
+// ── 게임 정비(#187): 진행 정지·고 반복·피 뺏기·초단·4광 ─────────────────
+test('손패가 빈 플레이어에게는 턴을 넘기지 않는다 (폭탄 후 진행 정지 방지)', () => {
+  const s = makeState({
+    hands: {
+      [P1]: [
+        { id: 'm7_junk_1', month: 7, type: 'junk', subtype: null },
+        { id: 'm8_junk_1', month: 8, type: 'junk', subtype: null },
+      ],
+      [P2]: [],
+    },
+  });
+  const s2 = playHandCard(s, P1, 'm7_junk_1');
+  assert.equal(s2.phase, 'playing');
+  assert.equal(s2.currentPlayerIdx, 0, '손패가 남은 P1이 계속 낸다');
+  assert.doesNotThrow(() => playHandCard(s2, P1, 'm8_junk_1'));
+});
+
+test('고 이후 점수가 오르지 않으면 다시 고/스톱을 묻지 않는다', () => {
+  const sevenAnimals = Array.from({ length: 7 }, (_, i) =>
+    ({ id: `a${i}`, month: [1, 3, 5, 6, 9, 10, 12][i], type: 'animal', subtype: null }));
+  const scored = calculateScore(sevenAnimals);
+  const s = makeState({
+    phase: 'go_stop_choice',
+    captures: { [P1]: sevenAnimals, [P2]: [] },
+    scores: { [P1]: scored, [P2]: calculateScore([]) },
+  });
+  const afterGo = declareGoStop(s, P1, 'go');
+  assert.equal(afterGo.lastGoScore[P1], scored.total);
+  // P2가 아무것도 못 먹고, 다시 P1 차례에 점수 변화 없이 한 턴 진행
+  const p2Turn = playHandCard(afterGo, P2, 'm10_junk_1');
+  const p1Turn = playHandCard({ ...p2Turn, currentPlayerIdx: 0, phase: 'playing' }, P1, 'm7_junk_1');
+  assert.notEqual(p1Turn.phase, 'go_stop_choice');
+});
+
+test('쪽이 나면 상대 피를 1장(일반피 우선) 뺏는다', () => {
+  const s = makeState({
+    field: [{ id: 'm3_junk_1', month: 3, type: 'junk', subtype: null }],
+    deck: [{ id: 'm7_junk_2', month: 7, type: 'junk', subtype: null }],
+    hands: {
+      [P1]: [{ id: 'm7_junk_1', month: 7, type: 'junk', subtype: null }],
+      [P2]: [{ id: 'm10_junk_1', month: 10, type: 'junk', subtype: null }],
+    },
+    captures: {
+      [P1]: [],
+      [P2]: [
+        { id: 'm11_junk_d', month: 11, type: 'junk', subtype: 'double' },
+        { id: 'm9_junk_1', month: 9, type: 'junk', subtype: null },
+      ],
+    },
+  });
+  const s2 = playHandCard(s, P1, 'm7_junk_1');
+  assert.ok(s2.lastEvents.includes('ssok'));
+  assert.ok(s2.captures[P1].some(c => c.id === 'm9_junk_1'), '일반피를 먼저 가져온다');
+  assert.ok(s2.captures[P2].some(c => c.id === 'm11_junk_d'));
+});
+
+test('초단(4·5·7월 띠)은 3점', () => {
+  const cho = [4, 5, 7].map(m => ({ id: `m${m}_ribbon`, month: m, type: 'ribbon', subtype: null }));
+  assert.equal(calculateScore(cho).chodanBonus, 3);
+  assert.equal(calculateScore(cho).total, 3);
+});
+
+test('4광은 비광이 있어도 4점', () => {
+  const four = [
+    { id: 'm1_bright', month: 1, type: 'bright', subtype: null },
+    { id: 'm3_bright', month: 3, type: 'bright', subtype: null },
+    { id: 'm8_bright', month: 8, type: 'bright', subtype: null },
+    { id: 'm12_bright', month: 12, type: 'bright', subtype: 'rain' },
+  ];
+  assert.equal(calculateScore(four).gwangScore, 4);
+});
+
+test('바닥 두 장과 맞으면 한 장만 먹고, 덱에서 같은 월이 나오면 따닥', () => {
+  const s = makeState({
+    field: [
+      { id: 'm2_junk_1', month: 2, type: 'junk', subtype: null },
+      { id: 'm2_animal', month: 2, type: 'animal', subtype: null },
+    ],
+    deck: [{ id: 'm2_junk_2', month: 2, type: 'junk', subtype: null }],
+    captures: { [P1]: [], [P2]: [] },
+  });
+  const s2 = playHandCard(s, P1, 'm2_ribbon');
+  assert.ok(s2.lastEvents.includes('ddadak'));
+  assert.equal(s2.captures[P1].filter(c => c.month === 2).length, 4);
 });

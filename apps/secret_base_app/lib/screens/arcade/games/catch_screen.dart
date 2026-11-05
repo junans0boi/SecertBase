@@ -126,7 +126,10 @@ class _CatchScreenState extends State<CatchScreen> {
   int _lastEmitMs = 0;
 
   bool get _isDrawer => _socket.catchDrawer == _socket.userId;
-  bool get _isHost => _socket.lobbyHost == _socket.userId;
+  // 서버가 시간·단계 조건으로 진행 권한을 검증하므로(방장 개념 없음) 참가자 누구나
+  // 시작·다음 라운드·리셋을 할 수 있다. 예전에는 로비 방장만 가능해서, 서버의 방장
+  // 정의(User1)와 달라지면 1라운드 이후 진행이 막혔다.
+  bool get _isHost => _socket.userId != null;
 
   @override
   void initState() {
@@ -160,7 +163,11 @@ class _CatchScreenState extends State<CatchScreen> {
   }
 
   void _startTimer() {
-    _timeLeft = 60;
+    // 이어하기·재접속이면 서버가 알려준 남은 시간부터 센다.
+    final remainingMs = _socket.catchRemainingMs;
+    _timeLeft = remainingMs == null
+        ? 60
+        : (remainingMs / 1000).ceil().clamp(1, 60).toInt();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       setState(() {
@@ -168,7 +175,8 @@ class _CatchScreenState extends State<CatchScreen> {
         if (_timeLeft <= 0) {
           _timer?.cancel();
           _timer = null;
-          if (_isHost) _socket.timeoutCatch();
+          // 양쪽이 보내도 서버가 마감 시각을 검증해 한 번만 처리한다.
+          _socket.timeoutCatch();
         }
       });
     });

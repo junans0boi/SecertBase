@@ -162,3 +162,37 @@ test('Bowling Engine: full game simulation and winner determination', () => {
   assert.equal(game.status, 'finished');
   assert.ok(game.result.winner);
 });
+
+// ── 패널티킥 서든데스 (#193) ───────────────────────────────────────────────
+import { initPenaltyGame as _initPk, resolvePenaltyRound as _resolvePk, SUDDEN_DEATH_PAIRS as _PK_SD } from '../src/penalty-engine.js';
+import { test as _pkTest } from 'node:test';
+import _pkAssert from 'node:assert/strict';
+
+const _kickPair = (g, aGoal, bGoal) => {
+  g = _resolvePk(g, 0, aGoal ? 1 : 0);
+  return _resolvePk(g, 0, bGoal ? 1 : 0);
+};
+
+_pkTest('penalty: 5:5 tie continues into sudden death instead of ending as a draw', () => {
+  let g = _initPk('A', 'B');
+  for (let i = 0; i < 5; i++) g = _kickPair(g, true, true);
+  _pkAssert.equal(g.status, 'playing');
+  _pkAssert.equal(g.suddenDeath, true);
+  g = _kickPair(g, true, false);
+  _pkAssert.equal(g.status, 'finished');
+  _pkAssert.equal(g.result.winner, 'A');
+});
+
+_pkTest('penalty: sudden death is judged only after both players kick', () => {
+  let g = _initPk('A', 'B');
+  for (let i = 0; i < 5; i++) g = _kickPair(g, true, true);
+  g = _resolvePk(g, 0, 1); // A scores first in the pair
+  _pkAssert.equal(g.status, 'playing', 'B must still get the reply kick');
+});
+
+_pkTest('penalty: after the sudden death cap the shootout ends as a draw', () => {
+  let g = _initPk('A', 'B');
+  for (let i = 0; i < 5 + _PK_SD; i++) g = _kickPair(g, true, true);
+  _pkAssert.equal(g.status, 'finished');
+  _pkAssert.equal(g.result.winner, 'draw');
+});

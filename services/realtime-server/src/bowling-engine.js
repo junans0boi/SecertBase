@@ -66,7 +66,9 @@ export function buildFrameDisplayData(rolls) {
       let r3Str = '';
       if (r3Num !== undefined) {
         if (r3Num === 10) r3Str = 'X';
-        else if (r2Num !== 10 && (r2Num || 0) + r3Num === 10) r3Str = '/';
+        // 3구가 스페어가 되는 경우는 1구 스트라이크 후 2구가 스트라이크가 아닐 때뿐이다.
+        // (1·2구 스페어 뒤 3구는 새 랙이라 숫자/X로 표기)
+        else if (r1Num === 10 && r2Num !== 10 && (r2Num || 0) + r3Num === 10) r3Str = '/';
         else r3Str = r3Num === 0 ? '-' : `${r3Num}`;
       }
 
@@ -80,23 +82,24 @@ export function buildFrameDisplayData(rolls) {
     }
 
     if (isStrike(rolls, rollIndex)) {
+      // 보너스 2구가 확정되기 전에는 누적 점수를 비워 둔다.
+      const bonusKnown = rolls[rollIndex + 2] !== undefined;
+      runningScore += 10 + strikeBonus(rolls, rollIndex);
       rollIndex += 1;
-      const subRolls = rolls.slice(0, rollIndex);
-      const currentCum = calculateBowlingScore(subRolls);
-      frames.push({ frameIndex: frame + 1, r1: '', r2: 'X', r3: '', cumScore: `${currentCum}` });
+      frames.push({ frameIndex: frame + 1, r1: '', r2: 'X', r3: '', cumScore: bonusKnown ? `${runningScore}` : '' });
     } else if (isSpare(rolls, rollIndex)) {
       const r1Val = rolls[rollIndex] === 0 ? '-' : `${rolls[rollIndex]}`;
+      const bonusKnown = rolls[rollIndex + 2] !== undefined;
+      runningScore += 10 + spareBonus(rolls, rollIndex);
       rollIndex += 2;
-      const subRolls = rolls.slice(0, rollIndex);
-      const currentCum = calculateBowlingScore(subRolls);
-      frames.push({ frameIndex: frame + 1, r1: r1Val, r2: '/', r3: '', cumScore: `${currentCum}` });
+      frames.push({ frameIndex: frame + 1, r1: r1Val, r2: '/', r3: '', cumScore: bonusKnown ? `${runningScore}` : '' });
     } else {
       const r1Val = rolls[rollIndex] === 0 ? '-' : `${rolls[rollIndex]}`;
-      const r2Val = rolls[rollIndex + 1] === undefined ? '' : (rolls[rollIndex + 1] === 0 ? '-' : `${rolls[rollIndex + 1]}`);
+      const r2Raw = rolls[rollIndex + 1];
+      const r2Val = r2Raw === undefined ? '' : (r2Raw === 0 ? '-' : `${r2Raw}`);
+      runningScore += (rolls[rollIndex] || 0) + (r2Raw || 0);
       rollIndex += 2;
-      const subRolls = rolls.slice(0, rollIndex);
-      const currentCum = calculateBowlingScore(subRolls);
-      frames.push({ frameIndex: frame + 1, r1: r1Val, r2: r2Val, r3: '', cumScore: `${currentCum}` });
+      frames.push({ frameIndex: frame + 1, r1: r1Val, r2: r2Val, r3: '', cumScore: r2Raw === undefined ? '' : `${runningScore}` });
     }
   }
 

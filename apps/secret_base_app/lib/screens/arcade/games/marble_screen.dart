@@ -90,6 +90,13 @@ class _MarbleScreenState extends State<MarbleScreen> {
       text = '🗝️ 황금열쇠: ${card?['text'] ?? ''}';
       final amount = card?['amount'] as int? ?? 0;
       bgColor = amount >= 0 ? const Color(0xFF388E3C) : const Color(0xFFB71C1C);
+    } else if (type == 'jail') {
+      text = '🚨 블랙사이트에 갇혔어요! 다음 턴은 쉬어요 (더블이 나오면 탈출)';
+      bgColor = const Color(0xFF37474F);
+    } else if (type == 'gate') {
+      final to = (data['to'] as num?)?.toInt();
+      text = '🌀 비밀게이트! ${to == null ? '어딘가로' : '$to번 칸으로'} 순간이동했어요';
+      bgColor = const Color(0xFF5E35B1);
     } else if (type == 'event') {
       final ev = data['event'] as Map<String, dynamic>?;
       text = '⚡ ${ev?['text'] ?? '이벤트!'}';
@@ -1394,6 +1401,7 @@ class _MarbleResultDialogState extends State<_MarbleResultDialog>
       'double_monopoly' => ('독점 승리!', const Color(0xFFFFD700), '🏆'),
       'line_monopoly' => ('라인 독점 승리!', const Color(0xFFFFD700), '🏆'),
       'timeout' => ('자산 승리!', Colors.white, '⏱️'),
+      'forfeit' => ('기권승!', Colors.white, '🏳️'),
       _ => ('승리!', const Color(0xFFFFD700), '🏆'),
     };
   }
@@ -1403,8 +1411,10 @@ class _MarbleResultDialogState extends State<_MarbleResultDialog>
       'bankrupt' => isMe ? '상대방이 파산했습니다' : '파산했습니다',
       'tourist_monopoly' || 'double_monopoly' => '독점을 달성했습니다',
       'line_monopoly' => '한 라인을 완전히 점령했습니다',
-      'timeout' => '20라운드 후 자산으로 결정됐습니다',
-      'timeout_draw' => '20라운드 후 동점으로 무승부',
+      'timeout' => '30라운드 후 자산으로 결정됐습니다',
+      'timeout_draw' => '30라운드 후 동점으로 무승부',
+      'forfeit' =>
+        isMe ? '상대가 제한 시간 안에 진행하지 않아 기권했어요' : '제한 시간 안에 진행하지 않아 기권패했어요',
       _ => '게임이 종료됐습니다',
     };
   }
@@ -1704,6 +1714,21 @@ class _TileEventOverlayState extends State<_TileEventOverlay>
           '황금열쇠',
           card?['text'] as String? ?? '카드를 뽑습니다',
           const Color(0xFFFFD700),
+        );
+      case 'jail':
+        return (
+          Icons.lock_rounded,
+          '블랙사이트',
+          '다음 턴을 쉬어요 · 더블이면 탈출',
+          const Color(0xFF90A4AE),
+        );
+      case 'gate':
+        final to = (data['to'] as num?)?.toInt();
+        return (
+          Icons.autorenew_rounded,
+          '비밀게이트',
+          to == null ? '어딘가로 순간이동!' : '$to번 칸으로 순간이동!',
+          const Color(0xFFB388FF),
         );
       case 'event':
         final ev = data['event'] as Map<String, dynamic>?;

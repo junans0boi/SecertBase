@@ -86,7 +86,32 @@ export function getTileType(pos) {
 // Keep server special-tile dispatch tied to the canonical 24-tile board.
 export function getMarbleSpecialType(pos) {
   const type = TILE_TYPES[pos];
-  return type === 'card' || type === 'tax' ? type : null;
+  return type === 'card' || type === 'tax' || type === 'jail' || type === 'gate' ? type : null;
+}
+
+// 비밀게이트 목적지: 일반 도시 칸 중 무작위(관광지·특수칸 제외).
+export const GATE_DESTINATIONS = Object.entries(CITY_DATA)
+  .filter(([, data]) => data.color !== 'tourist')
+  .map(([pos]) => Number(pos));
+export function pickGateDestination(random = Math.random) {
+  return GATE_DESTINATIONS[Math.floor(random() * GATE_DESTINATIONS.length)];
+}
+
+// 한 플레이어의 턴이 끝날 때 라운드 진행(두 사람이 한 번씩 = 1라운드).
+export function advanceMarbleRound(gameState) {
+  gameState.roundTurns = (gameState.roundTurns ?? 0) + 1;
+  if (gameState.roundTurns >= 2) {
+    gameState.roundTurns = 0;
+    gameState.round = (gameState.round ?? 1) + 1;
+  }
+}
+
+// 장착 아이템(슬롯별 { stats })에서 특정 스탯 합계.
+export function sumEquippedStat(equippedItems, statKey) {
+  return Object.values(equippedItems ?? {}).reduce(
+    (sum, item) => sum + (Number(item?.stats?.[statKey]) || 0),
+    0,
+  );
 }
 
 export function rollDice() {
@@ -125,33 +150,37 @@ export function settleTurnAfterMove(gameState, userId) {
   gameState.phase = 'throwing';
 }
 
-// Toll for landing on pos at level (0=land only, 1=house, 2=building, 3=landmark)
+// 저장되는 땅 레벨은 1부터: 1=땅, 2=집, 3=빌딩, 4=랜드마크 (클라이언트 표시와 동일).
+const levelIndex = (level) => Math.max(0, (Number(level) || 1) - 1);
+
+// Toll for landing on pos at stored level (1=land only … 4=landmark)
 export function calcToll(pos, level) {
   const data = CITY_DATA[pos];
   if (!data) return 0;
-  return data.tolls[Math.min(level, data.tolls.length - 1)] ?? 0;
+  return data.tolls[Math.min(levelIndex(level), data.tolls.length - 1)] ?? 0;
 }
 
 export function calcPurchaseCost(pos) {
   return CITY_DATA[pos]?.price ?? 0;
 }
 
-// Acquisition cost = (price + sum of all buildCosts up to current level) × 2
-export function calcAcquireCost(pos, currentLevel = 0) {
+// Acquisition cost = (price + buildCosts already built at the stored level) × 2
+export function calcAcquireCost(pos, currentLevel = 1) {
   const data = CITY_DATA[pos];
   if (!data || data.color === 'tourist') return 0;
   let invested = data.price;
-  for (let i = 0; i < currentLevel && i < data.buildCosts.length; i++) {
+  for (let i = 0; i < levelIndex(currentLevel) && i < data.buildCosts.length; i++) {
     invested += data.buildCosts[i];
   }
   return invested * 2;
 }
 
-// Cost to build at targetLevel (1=house, 2=building, 3=landmark)
-export function calcUpgradeCost(pos, targetLevel) {
+// Cost to upgrade from the stored level (1=땅→집, 2=집→빌딩, 3=빌딩→랜드마크).
+// 관광지처럼 건설비가 없는 칸은 0(업그레이드 불가).
+export function calcUpgradeCost(pos, currentLevel) {
   const data = CITY_DATA[pos];
-  if (!data || targetLevel < 1 || targetLevel > 3) return 0;
-  return data.buildCosts[targetLevel - 1] ?? 0;
+  if (!data || currentLevel < 1 || currentLevel > 3) return 0;
+  return data.buildCosts[currentLevel - 1] ?? 0;
 }
 
 export function hasColorMonopoly(gameState, uid, pos) {
@@ -171,7 +200,7 @@ export function calcScore(gameState, uid) {
       const data = CITY_DATA[pos];
       if (!data) continue;
       landValue += data.price;
-      for (let i = 0; i < (land.level ?? 0) && i < data.buildCosts.length; i++) {
+      for (let i = 0; i < levelIndex(land.level) && i < data.buildCosts.length; i++) {
         landValue += data.buildCosts[i];
       }
     }
@@ -183,9 +212,9 @@ export function calcScore(gameState, uid) {
 export function checkMarbleWin(gameState) {
   const [p1, p2] = gameState.playersOrder;
 
-  // 파산
-  if ((gameState.players[p1]?.coins ?? 0) <= 0) return { winner: p2, reason: 'bankrupt' };
-  if ((gameState.players[p2]?.coins ?? 0) <= 0) return { winner: p1, reason: 'bankrupt' };
+  // 파산: 잔액이 음수일 때만(보유금 전부로 구매해 0이 된 경우는 파산이 아니다).
+  if ((gameState.players[p1]?.coins ?? 0) < 0) return { winner: p2, reason: 'bankrupt' };
+  if ((gameState.players[p2]?.coins ?? 0) < 0) return { winner: p1, reason: 'bankrupt' };
 
   for (const uid of [p1, p2]) {
     // 관광지 독점 (비밀의섬 pos8 + 비밀의해변 pos17)

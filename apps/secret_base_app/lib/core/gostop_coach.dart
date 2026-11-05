@@ -224,19 +224,22 @@ int _asInt(dynamic value) =>
 
 (String, String)? _eventDetail(List<String> events) {
   if (events.contains('ssok')) {
-    return ('쪽!', '낸 카드와 덱에서 나온 같은 월 카드를 함께 가져왔어요.');
+    return ('쪽!', '낸 카드와 덱에서 나온 같은 월 카드를 함께 가져오고, 상대 피 1장을 뺏었어요.');
+  }
+  if (events.contains('ppeok_recover')) {
+    return ('뻑 회수!', '바닥에 쌓인 뻑을 가져오고, 상대 피 1장을 뺏었어요.');
   }
   if (events.contains('ppeok')) {
     return ('뻑!', '같은 월 카드가 세 장 바닥에 남았어요. 다음에 가져갈 기회를 노려보세요.');
   }
   if (events.contains('ddadak')) {
-    return ('따닥!', '같은 월 카드 중 하나를 골라 덱 카드와 함께 가져왔어요.');
+    return ('따닥!', '같은 월 네 장을 모두 가져오고, 상대 피 1장을 뺏었어요.');
   }
   if (events.contains('pansseuri')) {
-    return ('판쓸이!', '바닥의 카드를 모두 가져와 보너스를 얻었어요.');
+    return ('판쓸이!', '바닥의 카드를 모두 가져오고, 상대 피 1장을 뺏었어요.');
   }
   if (events.contains('bomb')) {
-    return ('폭탄!', '같은 월 손패 세 장으로 바닥 카드까지 한 번에 가져왔어요.');
+    return ('폭탄!', '같은 월 손패 세 장으로 바닥 카드까지 가져오고, 상대 피 1장을 뺏었어요.');
   }
   if (events.contains('chongtong')) {
     return ('총통!', '같은 월 네 장을 처음부터 모아 즉시 승리했어요.');

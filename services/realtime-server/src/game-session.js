@@ -21,13 +21,20 @@ export const activeGameKey = (roomCode, gameType) => {
   return null;
 };
 
+// 마지막 뷰어가 나간 뒤 상태를 지우기까지의 유예 시간. 두 사람이 동시에 잠깐
+// 앱을 내려도(백그라운드 전환, 네트워크 순단) 진행 중인 판이 사라지지 않게 한다.
+// 잠수 기권 시간(90초)보다 길게 잡아, 차례인 사람이 나가 버린 판은 삭제되기 전에
+// 기권패로 정산된다(지는 쪽이 나가서 정산을 피하는 구멍 차단).
+export const SESSION_CLEANUP_GRACE_MS = 150_000;
+const cleanupKey = (roomCode, gameType) => `${roomCode}:${gameType}`;
+
 export const getViewerCount = (io, roomCode, gameType) => {
   const room = io.sockets.adapter.rooms.get(viewerRoomKey(roomCode, gameType));
   return room ? room.size : 0;
 };
 
-// Per-user UNO serialization — never exposes the opponent's hand.
-// Mirrors the session:restore logic in socket.js.
+// Per-user UNO serialization — never exposes the opponent's hand or the card
+// the opponent just drew (drawnCardId reveals card identity, e.g. wild_draw4-1).
 export const serializeUnoGameFor = (game, userId) => {
   if (!game.hands || !game.discardPile) return null;
   const handCount = Object.fromEntries(
@@ -43,7 +50,7 @@ export const serializeUnoGameFor = (game, userId) => {
     drawStackType: game.drawStackType ?? null,
     handCount,
     hand: game.hands[userId] ?? [],
-    drawnCardId: game.drawnCardId ?? null,
+    drawnCardId: game.currentPlayer === userId ? (game.drawnCardId ?? null) : null,
     unoCallNeeded: game.unoCallNeeded ?? null,
   };
 };
@@ -52,7 +59,7 @@ export const serializeUnoGameFor = (game, userId) => {
 // Side effect: joins the socket to the viewer subroom BEFORE returning to prevent
 // the race where the last current viewer leaves before this socket finishes mounting.
 // Returns { status: 'resumed', gameType, state } or null (caller creates a normal lobby).
-export const resolveLobbyJoinForResume = async (socket, io, redis, { roomCode, gameType, userId }) => {
+export const resolveLobbyJoinForResume = async (socket, io, redis, { roomCode, gameType, userId }, scheduler = null) => {
   // Primary guard: only resumable types. activeGameKey is a secondary lookup.
   if (!RESUMABLE_GAME_TYPES.has(gameType)) return null;
   const key = activeGameKey(roomCode, gameType);
@@ -66,13 +73,16 @@ export const resolveLobbyJoinForResume = async (socket, io, redis, { roomCode, g
   const keepPendingSettlement = gameType === 'gostop' &&
     game.settlementStatus === 'pending';
 
-  if (viewerCount === 0 && !keepPendingSettlement) {
+  // 유예 중(정리 예약됨)인 판은 이어하기 대상이다. 예약이 없고 뷰어도 없으면 오래된 상태다.
+  const graceActive = scheduler?.isPending?.(cleanupKey(roomCode, gameType)) ?? false;
+  if (viewerCount === 0 && !keepPendingSettlement && !graceActive) {
     // Active state exists but nobody is viewing — stale. Delete it so normal lobby proceeds.
     await redis.del(key).catch(() => {});
     return null;
   }
 
   // Reserve this socket in the subroom before acking to close the last-viewer race window.
+  scheduler?.cancel(cleanupKey(roomCode, gameType));
   await socket.join(viewerRoomKey(roomCode, gameType));
   socket.data.viewingGame = gameType;
 
@@ -91,13 +101,14 @@ export const resolveLobbyJoinForResume = async (socket, io, redis, { roomCode, g
 };
 
 // Register game:session:enter and game:session:leave for a socket.
-export const registerGameSessionHandlers = (socket, { io, redis }) => {
+export const registerGameSessionHandlers = (socket, { io, redis, scheduler = null }) => {
   socket.on('game:session:enter', async (payload, ackRaw) => {
     const ack = typeof ackRaw === 'function' ? ackRaw : () => {};
     const roomCode = socket.data.roomCode;
     if (!roomCode || !socket.data.userId) return ack({ ok: false, reason: 'not_joined' });
     const gameType = payload?.gameType;
     if (!RESUMABLE_GAME_TYPES.has(gameType)) return ack({ ok: false, reason: 'invalid_game_type' });
+    scheduler?.cancel(cleanupKey(roomCode, gameType));
     await socket.join(viewerRoomKey(roomCode, gameType));
     socket.data.viewingGame = gameType;
     ack({ ok: true });
@@ -111,7 +122,7 @@ export const registerGameSessionHandlers = (socket, { io, redis }) => {
     if (!gameType) return ack({ ok: true });
     await socket.leave(viewerRoomKey(roomCode, gameType));
     if (socket.data.viewingGame === gameType) socket.data.viewingGame = undefined;
-    await _maybeCleanupGame(io, redis, roomCode, gameType);
+    await _maybeCleanupGame(io, redis, roomCode, gameType, scheduler);
     ack({ ok: true });
   });
 };
@@ -119,15 +130,24 @@ export const registerGameSessionHandlers = (socket, { io, redis }) => {
 // Call from the disconnect handler.
 // By the time disconnect fires, the socket has already left all rooms,
 // so getViewerCount correctly reflects the remaining count.
-export const cleanupGameSessionOnDisconnect = async (socket, io, redis) => {
+export const cleanupGameSessionOnDisconnect = async (socket, io, redis, scheduler = null) => {
   const roomCode = socket.data.roomCode;
   const gameType = socket.data.viewingGame;
   if (!roomCode || !gameType) return;
-  await _maybeCleanupGame(io, redis, roomCode, gameType);
+  await _maybeCleanupGame(io, redis, roomCode, gameType, scheduler);
 };
 
-const _maybeCleanupGame = async (io, redis, roomCode, gameType) => {
+// scheduler가 있으면 유예 후 다시 확인하고 지운다. 없으면(단위 테스트) 즉시 지운다.
+const _maybeCleanupGame = async (io, redis, roomCode, gameType, scheduler = null) => {
   if (getViewerCount(io, roomCode, gameType) > 0) return;
+  if (scheduler) {
+    scheduler.schedule(
+      cleanupKey(roomCode, gameType),
+      () => _maybeCleanupGame(io, redis, roomCode, gameType, null),
+      SESSION_CLEANUP_GRACE_MS,
+    );
+    return;
+  }
   const key = activeGameKey(roomCode, gameType);
   if (!key) return;
   if (gameType === 'gostop') {

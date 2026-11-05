@@ -28,6 +28,7 @@ class _GostopScreenState extends State<GostopScreen> {
     'chongtong': '총통!',
     'shake': '흔들기!',
     'bomb': '폭탄!',
+    'ppeok_recover': '뻑 회수!',
   };
 
   @override
@@ -65,7 +66,9 @@ class _GostopScreenState extends State<GostopScreen> {
     final events = (_socket.gostopState?['lastEvents'] as List?) ?? const [];
     final turn = _socket.gostopState?['turn'];
     if (turn is num && turn.toInt() > 1) _showBeginnerGuide = false;
-    final eventKey = '$turn:${events.join(',')}';
+    // 서버는 다음 턴 상태에도 lastEvents를 남긴다. 발생 턴(eventsTurn)으로 구분해 한 번만 띄운다.
+    final eventsTurn = _socket.gostopState?['eventsTurn'] ?? turn;
+    final eventKey = '$eventsTurn:${events.join(',')}';
     if (events.isNotEmpty && eventKey != _lastEventKey) {
       _lastEventKey = eventKey;
       for (final e in events) {
@@ -767,6 +770,7 @@ class _GostopScreenState extends State<GostopScreen> {
         '단 ${ws['ribCount']}장 → ${ws['ribScore']}점',
       if ((ws['hongdanBonus'] as num? ?? 0) > 0) '홍단 세트 +3점',
       if ((ws['cheongdanBonus'] as num? ?? 0) > 0) '청단 세트 +3점',
+      if ((ws['chodanBonus'] as num? ?? 0) > 0) '초단 세트 +3점',
       if ((ws['piScore'] as num? ?? 0) > 0)
         '피 ${ws['piTotal']}장 → ${ws['piScore']}점',
       if (goWin > 0) '고 $goWin회 → ×${1 << goWin}',

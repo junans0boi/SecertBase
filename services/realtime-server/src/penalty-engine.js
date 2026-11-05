@@ -1,4 +1,6 @@
-const MAX_KICKS_PER_PLAYER = 5;
+export const MAX_KICKS_PER_PLAYER = 5;
+// 정규 5킥 후 동점이면 최대 5쌍까지 서든데스, 그래도 같으면 무승부.
+export const SUDDEN_DEATH_PAIRS = 5;
 
 export function initPenaltyGame(player1Id, player2Id) {
   return {
@@ -27,10 +29,13 @@ function findWinner(scores, rounds) {
   const score1 = scores[player1] || 0;
   const score2 = scores[player2] || 0;
 
-  if (rounds.length >= MAX_KICKS_PER_PLAYER * 2) {
+  const regulation = MAX_KICKS_PER_PLAYER * 2;
+  if (rounds.length >= regulation) {
+    // 서든데스: 두 사람이 한 번씩 찬 뒤(짝수 킥)에만 판정한다.
+    if (rounds.length % 2 !== 0) return null;
     if (score1 > score2) return player1;
     if (score2 > score1) return player2;
-    return "draw";
+    return rounds.length >= regulation + SUDDEN_DEATH_PAIRS * 2 ? "draw" : null;
   }
 
   const remaining1 = MAX_KICKS_PER_PLAYER - countKicks(rounds, player1);
@@ -80,6 +85,7 @@ export function resolvePenaltyRound(game, kickerDir, keeperDir) {
   return {
     ...game,
     round: game.round + 1,
+    suddenDeath: rounds.length >= MAX_KICKS_PER_PLAYER * 2,
     kicker: keeperId,
     keeper: kickerId,
     submissions: {},
