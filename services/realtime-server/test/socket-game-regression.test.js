@@ -628,3 +628,17 @@ test('lobby options: a change resets partner ready and the started game carries 
   assert.equal((await f.call(0, 'game:uno:new', { mode: 'go_wild' })).ok, true);
   assert.equal(JSON.parse(await f.redis.get(`uno:${f.roomCode}:game`)).mode, 'classic');
 });
+
+test('reaction: only listed emojis reach both players, rate limited per user', async t => {
+  const f = await fixture(t);
+  const seen = [];
+  f.clients[1].on('game:reaction', e => seen.push(e));
+  assert.equal((await f.call(0, 'game:reaction', { emoji: '💩' })).reason, 'invalid_reaction');
+  assert.equal((await f.call(0, 'game:reaction', { emoji: '😎', gameType: 'blackjack' })).ok, true);
+  assert.equal((await f.call(0, 'game:reaction', { emoji: '😅' })).reason, 'too_fast');
+  await flush();
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].emoji, '😎');
+  assert.equal(seen[0].by, 'ALPHA-code');
+  assert.equal(seen[0].gameType, 'blackjack');
+});

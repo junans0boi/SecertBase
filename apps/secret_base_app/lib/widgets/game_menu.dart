@@ -318,5 +318,6 @@ class _GameMenuListenerState extends State<GameMenuListener> {
   }
 
   @override
-  Widget build(BuildContext context) => GameNoticeListener(child: widget.child);
+  Widget build(BuildContext context) =>
+      GameNoticeListener(gameType: widget.gameType, child: widget.child);
 }

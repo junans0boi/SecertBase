@@ -128,6 +128,9 @@ import {
   forfeitGostop,
 } from "./gostop-engine.js";
 import { createAfkWatcher, afkGameTypeForEvent } from "./game-afk.js";
+import { GAME_MODULES } from "./games/index.js";
+import { createSeriesStore } from "./games/series.js";
+import { REACTION_EMOJIS, createReactionLimiter } from "./games/reaction.js";
 
 // ── 방(room) 단위 직렬 뮤텍스 ─────────────────────────────────────────────────
 // Node.js는 단일 스레드지만 await 사이에 이벤트 루프가 다른 요청을 처리할 수 있어
@@ -591,6 +594,12 @@ export const STAKE_GAME_TYPES = new Set(["yut", "uno", "uno_classic", "uno_go_wi
 const stakeFamily = (gameType) => (String(gameType).startsWith("uno") ? "uno" : gameType);
 // 재시작(재대결)을 지원하는 게임.
 export const RESTARTABLE_GAME_TYPES = new Set(["yut", "uno", "bomb", "marble", "tank"]);
+for (const mod of GAME_MODULES) if (mod.restart) RESTARTABLE_GAME_TYPES.add(mod.gameType);
+const GAME_MODULE_BY_TYPE = new Map(GAME_MODULES.map((mod) => [mod.gameType, mod]));
+// 로비 종류(예: 제로의 로비는 'zero') → 모듈.
+const GAME_MODULE_BY_LOBBY_TYPE = new Map(GAME_MODULES.map((mod) => [mod.lobbyType ?? mod.gameType, mod]));
+// 로비 카운트다운(클라이언트 game_lobby_screen.dart 5초) + 화면 전환 여유.
+export const LOBBY_COUNTDOWN_MS = 5300;
 const PENDING_GAME_TTL_SEC = 120;
 const RESTART_REQUEST_TTL_SEC = 30;
 
@@ -1116,7 +1125,25 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       },
     },
   };
+  // 게임 2.0 모듈이 쓰는 공용 도구. 모듈의 잠수 어댑터가 같은 게임의 옛 어댑터를 대신한다.
+  const kit = {
+    io,
+    redis,
+    timerApi,
+    withRoomLock,
+    normalizeAck,
+    getPresence: (roomCode) => getPresence(io, roomCode),
+    getOrderedPlayers,
+    consumePendingGame,
+    recordGameOutcome,
+    presenceProfiles: (roomCode) => getPresenceProfiles(io, roomCode),
+    presenceNicknames: (roomCode) => getPresenceNicknames(io, roomCode),
+    series: createSeriesStore(redis),
+    randomUUID,
+  };
+  for (const mod of GAME_MODULES) if (mod.afk) afkAdapters[mod.gameType] = mod.afk(kit);
   const afkWatcher = createAfkWatcher({ io, redis, timerApi, withRoomLock, adapters: afkAdapters });
+  const allowReaction = createReactionLimiter();
 
   io.httpServer?.once("close", () => {
     for (const roomCode of telepathyTimers.keys()) clearTelepathyTimer(roomCode);
@@ -1124,6 +1151,7 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
     for (const key of [...sessionCleanupTimers.keys()]) cancelSessionCleanup(key);
     for (const roomCode of [...tankTimers.keys()]) clearTankTimer(roomCode);
     afkWatcher.clearAll();
+    for (const mod of GAME_MODULES) mod.dispose?.();
   });
   const publishTelepathyResult = async (roomCode, session, extra = {}) => {
     const event = { ...telepathyResult(session), ...extra };
@@ -1164,6 +1192,20 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
     });
     installSocketFeatureGate(socket, config.PUBLIC_FEATURE_SET);
     registerGameSessionHandlers(socket, { io, redis, scheduler: sessionScheduler });
+    for (const mod of GAME_MODULES) mod.register?.(socket, kit);
+
+    // 공용 리액션(게임 2.0): 허용된 이모지 6개, 사용자별 1.5초 간격.
+    socket.on("game:reaction", (payload, ackRaw) => {
+      const ack = normalizeAck(ackRaw);
+      const { roomCode, userId } = socket.data;
+      if (!roomCode || !userId) { ack({ ok: false, reason: "not_joined" }); return; }
+      const emoji = payload?.emoji;
+      if (!REACTION_EMOJIS.includes(emoji)) { ack({ ok: false, reason: "invalid_reaction" }); return; }
+      if (!allowReaction(userId)) { ack({ ok: false, reason: "too_fast" }); return; }
+      const gameType = typeof payload?.gameType === "string" ? payload.gameType.slice(0, 16) : null;
+      io.to(roomCode).emit("game:reaction", { by: userId, emoji, gameType, at: Date.now() });
+      ack({ ok: true });
+    });
     socket.on("session:join", async (payload, ackRaw) => {
       const ack = normalizeAck(ackRaw);
       const parsed = joinSchema.safeParse(payload);
@@ -1527,6 +1569,9 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
             options: lobby.options,
           }
         : { stake: stakeForGame, gameId, options: lobby.options };
+      // 게임 2.0 모듈은 서버가 로비 시작과 함께 판을 만든다(게임 화면에는 시작 버튼이 없다).
+      const lobbyModule = GAME_MODULE_BY_LOBBY_TYPE.get(gameType);
+      if (lobbyModule?.startFromLobby) metadata.serverStart = true;
       await redis.del(key);
       io.to(roomCode).emit("game:lobby:started", {
         gameType,
@@ -1537,6 +1582,19 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         metadata,
         at: Date.now(),
       });
+      if (lobbyModule?.startFromLobby) {
+        await redis.del(pendingGameKey(roomCode, stakeFamily(gameType)));
+        const ordered = await getOrderedPlayers(roomCode, lobby.players);
+        await lobbyModule.startFromLobby(roomCode, kit, {
+          players: ordered.length === lobby.players.length ? ordered : lobby.players,
+          options: lobby.options,
+          gameId,
+          stake: stakeForGame,
+          host: lobby.host,
+          lobbyType: gameType,
+          startsAt: Date.now() + LOBBY_COUNTDOWN_MS,
+        });
+      }
       ack({ ok: true });
     });
 
@@ -1649,6 +1707,9 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
           redis.get(`game:${roomCode}:catch`),
         ]);
         const restored = [];
+        for (const mod of GAME_MODULES) {
+          if (mod.restore && await mod.restore(roomCode, socket, kit)) restored.push(mod.gameType);
+        }
         if (bjRaw) {
           const g = JSON.parse(bjRaw);
           if (g.status !== "finished" && g.players?.includes(userId)) {
@@ -4391,7 +4452,10 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         return;
       }
 
-      if (gameType === "yut") {
+      const restartModule = GAME_MODULE_BY_TYPE.get(gameType);
+      if (restartModule?.restart) {
+        await restartModule.restart(roomCode, kit, { p1, p2, orderedPlayers, requestedBy: request.by });
+      } else if (gameType === "yut") {
         const previousText = await redis.get(yutGameKey(roomCode));
         const previous = previousText ? JSON.parse(previousText) : {};
         const gameState = createYutGameState(p1, p2, {

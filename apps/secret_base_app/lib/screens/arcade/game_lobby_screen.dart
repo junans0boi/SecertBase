@@ -113,7 +113,8 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
       context,
     ).pushReplacement(MaterialPageRoute(builder: (_) => widget.gameScreen));
     // On resume the game is already running on the server — do not create a new game.
-    if (!resumed && isHost) {
+    // 게임 2.0 모듈은 서버가 이미 판을 만들었다(serverStart).
+    if (!resumed && isHost && !_socket.lobbyStartedServerStart) {
       Future.delayed(const Duration(milliseconds: 300), () {
         switch (widget.gameType) {
           case 'yut':

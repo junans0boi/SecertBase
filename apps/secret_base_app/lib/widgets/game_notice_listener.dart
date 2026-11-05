@@ -6,7 +6,10 @@ import '../core/socket_service.dart';
 class GameNoticeListener extends StatefulWidget {
   final Widget child;
 
-  const GameNoticeListener({super.key, required this.child});
+  /// 이 화면의 게임 종류. 다른 게임에 대한 안내(예: 나온 판의 잠수 기권)는 띄우지 않는다.
+  final String? gameType;
+
+  const GameNoticeListener({super.key, required this.child, this.gameType});
 
   @override
   State<GameNoticeListener> createState() => _GameNoticeListenerState();
@@ -38,6 +41,8 @@ class _GameNoticeListenerState extends State<GameNoticeListener> {
     final message = _socket.gameNotice;
     if (seq <= _lastShownSeq || message == null) return;
     _lastShownSeq = seq;
+    final noticeGame = _socket.gameNoticeGameType;
+    if (!gameNoticeMatches(noticeGame, widget.gameType)) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final messenger = ScaffoldMessenger.maybeOf(context);
@@ -56,4 +61,11 @@ class _GameNoticeListenerState extends State<GameNoticeListener> {
 
   @override
   Widget build(BuildContext context) => widget.child;
+}
+
+/// 게임별 안내가 지금 화면에 해당하는지. 제로는 서버에서 `rps`로 다룬다.
+bool gameNoticeMatches(String? noticeGameType, String? screenGameType) {
+  if (noticeGameType == null || screenGameType == null) return true;
+  String norm(String t) => t == 'zero' ? 'rps' : t;
+  return norm(noticeGameType) == norm(screenGameType);
 }
