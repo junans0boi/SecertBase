@@ -62,6 +62,7 @@ void main() {
   final c = PenaltyController.instance;
 
   setUp(() {
+    resetHowToRequests();
     SharedPreferences.setMockInitialValues({'penalty_tutorial_seen': true});
     final socket = SocketService();
     socket.userId = 'me';

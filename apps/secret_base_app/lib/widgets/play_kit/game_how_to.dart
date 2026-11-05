@@ -69,6 +69,12 @@ Future<void> showGameHowTo(
   );
 }
 
+final Set<String> _howToRequested = {};
+
+/// 테스트용: 이번 실행에서 띄운 기록을 지운다.
+@visibleForTesting
+void resetHowToRequests() => _howToRequested.clear();
+
 Future<void> showHowToOnce(
   BuildContext context, {
   required String prefKey,
@@ -77,6 +83,8 @@ Future<void> showHowToOnce(
   required List<String> lines,
   String emoji = '💡',
 }) async {
+  // 같은 화면에서 거의 동시에 두 번 불려도 한 번만 띄운다(저장 확인은 비동기라 경합이 생긴다).
+  if (!_howToRequested.add(prefKey)) return;
   try {
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool(prefKey) == true) return;
