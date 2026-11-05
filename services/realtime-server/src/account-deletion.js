@@ -37,7 +37,8 @@ export function buildTombstoneFields(userId) {
     BirthPlace: null,
     BirthCalendarType: 'solar',
     IsDeleted: 1,
-    DeletedAt: new Date().toISOString(),
+    // DATETIME columns reject ISO strings with 'T'/'Z' in strict mode; use 'YYYY-MM-DD HH:MM:SS' (UTC).
+    DeletedAt: new Date().toISOString().slice(0, 19).replace('T', ' '),
   };
 }
 

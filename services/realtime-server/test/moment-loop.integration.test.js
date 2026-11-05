@@ -94,9 +94,10 @@ test(
       const partnerEdit = await server.request(`/setlog/${created.post.id}`, {
         token: bob.token,
         method: 'PATCH',
-        body: { caption: 'tampered' },
+        body: { caption: 'edited together' },
       });
-      assert.equal(partnerEdit.status, 403);
+      // Policy (#210): an active-couple partner may edit; only the author may delete.
+      assert.equal(partnerEdit.status, 200, await partnerEdit.text());
 
       const edited = await server.request(`/setlog/${created.post.id}`, {
         token: alice.token,

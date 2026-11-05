@@ -55,6 +55,9 @@ const canonicalMigrations = [
   '0043_push_notifications.sql',
   '0044_moment_loop_order_and_requests.sql',
   '0045_notification_delivery_settings.sql',
+  '0046_moment_comments.sql',
+  '0047_anniversaries.sql',
+  '0048_game_results_draws.sql',
 ];
 
 const runMigrationCli = (environment, command, extraArgs = [], extraEnv = {}) =>

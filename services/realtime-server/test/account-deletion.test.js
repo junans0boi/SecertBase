@@ -31,7 +31,7 @@ test('buildTombstoneFields replaces email and credentials with tombstone values'
   assert.equal(fields.IsDeleted, 1);
   assert.equal(fields.PasswordHash, null);
   assert.equal(fields.GoogleId, null);
-  assert.ok(fields.DeletedAt, 'DeletedAt should be set');
+  assert.match(fields.DeletedAt, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/, 'DeletedAt must be a SQL DATETIME string');
 });
 
 test('buildTombstoneFields userId is embedded in unique identifiers', () => {
