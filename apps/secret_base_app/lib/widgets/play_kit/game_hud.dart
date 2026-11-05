@@ -65,37 +65,52 @@ class GameTopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = theme;
+    const compact = VisualDensity(horizontal: -2, vertical: -2);
+    final actions = <Widget>[
+      ?trailing,
+      if (onHelp != null)
+        IconButton(
+          tooltip: '규칙 보기',
+          visualDensity: compact,
+          icon: Icon(Icons.help_outline_rounded, size: 21, color: t.ink),
+          onPressed: onHelp,
+        ),
+      _MuteButton(color: t.ink),
+      GameMenuButton(
+        hasRestart: canRestart,
+        restartWaiting: restartWaiting,
+        onRequestRestart: onRequestRestart,
+        iconColor: t.ink,
+      ),
+    ];
+    // 제목은 양옆 버튼 수와 상관없이 화면 정가운데에 둔다.
     return SizedBox(
       height: 52,
-      child: Row(
+      child: Stack(
+        alignment: Alignment.center,
         children: [
-          IconButton(
-            tooltip: '게임 나가기',
-            icon: Icon(Icons.arrow_back_ios_new, size: 18, color: t.ink),
-            onPressed: () => Navigator.of(context).maybePop(),
-          ),
-          Expanded(
-            child: Text(
-              title,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: t.display(size: 22),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 128),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                title,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                style: t.display(size: 22),
+              ),
             ),
           ),
-          ?trailing,
-          if (onHelp != null)
-            IconButton(
-              tooltip: '규칙 보기',
-              icon: Icon(Icons.help_outline_rounded, size: 21, color: t.ink),
-              onPressed: onHelp,
-            ),
-          _MuteButton(color: t.ink),
-          GameMenuButton(
-            hasRestart: canRestart,
-            restartWaiting: restartWaiting,
-            onRequestRestart: onRequestRestart,
-            iconColor: t.ink,
+          Row(
+            children: [
+              IconButton(
+                tooltip: '게임 나가기',
+                icon: Icon(Icons.arrow_back_ios_new, size: 18, color: t.ink),
+                onPressed: () => Navigator.of(context).maybePop(),
+              ),
+              const Spacer(),
+              ...actions,
+            ],
           ),
         ],
       ),
@@ -118,6 +133,7 @@ class _MuteButtonState extends State<_MuteButton> {
     final sfx = GameSfx.instance;
     return IconButton(
       tooltip: sfx.muted ? '소리 켜기' : '소리 끄기',
+      visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
       icon: Icon(
         sfx.muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
         size: 21,

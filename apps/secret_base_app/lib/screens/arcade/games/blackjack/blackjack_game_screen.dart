@@ -235,6 +235,7 @@ class _BlackjackGameScreenState extends State<BlackjackGameScreen> {
         gameType: _gameType,
         child: GameBackdrop(
           theme: t,
+          frame: false,
           child: SafeArea(
             child: ListenableBuilder(
               listenable: _c,
@@ -280,10 +281,9 @@ class _BlackjackGameScreenState extends State<BlackjackGameScreen> {
                       text: '내 차례!',
                       sub: '히트 또는 스탠드를 골라요',
                     ),
-                    Positioned(
-                      top: 56,
-                      left: 0,
-                      right: 0,
+                    // 안내는 테이블 가운데(남은 시간 위)에 잠깐 띄워 머리글을 가리지 않는다.
+                    Align(
+                      alignment: const Alignment(0, -0.12),
                       child: GameToast(theme: t, id: _toastId, message: _toast),
                     ),
                     if (v != null && v.finished && _overlayFor == v.gameId)
@@ -324,25 +324,33 @@ class _BlackjackGameScreenState extends State<BlackjackGameScreen> {
     final t = _theme;
     final me = v.me;
     final opp = v.opponent;
+    Widget pips(String? id, String label, Color color) => Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        RoundPips(
+          theme: t,
+          wins: v.winsOf(id),
+          needed: v.winsNeeded,
+          color: color,
+          label: label,
+        ),
+        const SizedBox(height: 3),
+        Text(label, style: t.body(size: 11, color: t.subInk)),
+      ],
+    );
+    // 좌우 대칭: [내 승수] [라운드] [상대 승수]. 남은 시간은 테이블 가운데에 둔다.
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
       child: Row(
         children: [
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              RoundPips(
-                theme: t,
-                wins: v.winsOf(me),
-                needed: v.winsNeeded,
-                color: t.me,
-                label: '나',
-              ),
-              const SizedBox(height: 2),
-              Text('나', style: t.body(size: 11, color: t.subInk)),
-            ],
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: pips(me, '나', t.me),
+            ),
           ),
           Expanded(
+            flex: 2,
             child: Semantics(
               label: '${v.round}라운드, 최대 ${v.maxRounds}라운드',
               child: Column(
@@ -362,26 +370,11 @@ class _BlackjackGameScreenState extends State<BlackjackGameScreen> {
               ),
             ),
           ),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              RoundPips(
-                theme: t,
-                wins: v.winsOf(opp),
-                needed: v.winsNeeded,
-                color: t.opponent,
-                label: '상대',
-              ),
-              const SizedBox(height: 2),
-              Text('상대', style: t.body(size: 11, color: t.subInk)),
-            ],
-          ),
-          const SizedBox(width: 10),
-          TurnTimerRing(
-            theme: t,
-            size: 42,
-            deadline: v.playing ? v.deadline : null,
-            tickSound: v.isMyTurn,
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: pips(opp, '상대', t.opponent),
+            ),
           ),
         ],
       ),
@@ -402,22 +395,23 @@ class _BlackjackGameScreenState extends State<BlackjackGameScreen> {
     final myScore = v.myScore();
     final oppFirst = v.firstPlayer == opp;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       child: BlackjackFelt(
         theme: t,
         child: LayoutBuilder(
           builder: (context, box) {
             const seatH = 50.0;
-            const pad = 10.0;
+            // 레일(금박 테두리) 안쪽 여백: 좌석·점수판이 레일에 걸치지 않게 한다.
+            const pad = 16.0;
             final w = box.maxWidth;
             final h = box.maxHeight;
-            final centerH = math.max(58.0, h * 0.13);
+            final centerH = math.max(64.0, h * 0.13);
             final handH = math.max(
               40.0,
               (h - pad * 2 - seatH * 2 - centerH) / 2,
             );
             const shoeW = 44.0;
-            final shoe = Offset(w - pad - 8 - shoeW / 2, h / 2);
+            final shoe = Offset(w - pad - shoeW / 2, h / 2);
             final oppCenter = Offset(w / 2, pad + seatH + handH / 2);
             final myCenter = Offset(w / 2, h - pad - seatH - handH / 2);
             return Stack(
@@ -449,12 +443,17 @@ class _BlackjackGameScreenState extends State<BlackjackGameScreen> {
                       SizedBox(
                         height: centerH,
                         child: Center(
-                          child: Padding(
-                            padding: const EdgeInsets.only(right: shoeW),
-                            child: BlackjackEmblem(
-                              theme: t,
-                              caption: _centerCaption(v),
-                            ),
+                          child: BlackjackEmblem(
+                            theme: t,
+                            caption: _centerCaption(v),
+                            timer: v.playing && v.deadline != null
+                                ? TurnTimerRing(
+                                    theme: t,
+                                    size: 44,
+                                    deadline: v.deadline,
+                                    tickSound: v.isMyTurn,
+                                  )
+                                : null,
                           ),
                         ),
                       ),
@@ -486,7 +485,7 @@ class _BlackjackGameScreenState extends State<BlackjackGameScreen> {
                 ),
                 Positioned(
                   top: pad + seatH - 6,
-                  left: 54,
+                  left: pad + 44,
                   child: ReactionBubble(
                     theme: t,
                     forPlayer: opp,
@@ -495,7 +494,7 @@ class _BlackjackGameScreenState extends State<BlackjackGameScreen> {
                 ),
                 Positioned(
                   bottom: pad + seatH - 6,
-                  left: 54,
+                  left: pad + 44,
                   child: ReactionBubble(
                     theme: t,
                     forPlayer: me,

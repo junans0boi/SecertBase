@@ -246,14 +246,24 @@ class GameBackdrop extends StatelessWidget {
   final GameTheme theme;
   final Widget child;
 
-  const GameBackdrop({super.key, required this.theme, required this.child});
+  /// 화면 가장자리 금박 테두리. 화면 안에 자체 테두리(테이블 레일 등)가 있으면 끈다.
+  final bool frame;
+
+  const GameBackdrop({
+    super.key,
+    required this.theme,
+    required this.child,
+    this.frame = true,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       fit: StackFit.expand,
       children: [
-        RepaintBoundary(child: CustomPaint(painter: _BackdropPainter(theme))),
+        RepaintBoundary(
+          child: CustomPaint(painter: _BackdropPainter(theme, frame: frame)),
+        ),
         child,
       ],
     );
@@ -262,8 +272,9 @@ class GameBackdrop extends StatelessWidget {
 
 class _BackdropPainter extends CustomPainter {
   final GameTheme theme;
+  final bool frame;
 
-  _BackdropPainter(this.theme);
+  _BackdropPainter(this.theme, {this.frame = true});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -331,6 +342,7 @@ class _BackdropPainter extends CustomPainter {
   }
 
   void _goldFrame(Canvas canvas, Size size, double inset, double alpha) {
+    if (!frame) return;
     final r = RRect.fromRectAndRadius(
       Rect.fromLTWH(
         inset,
@@ -632,5 +644,5 @@ class _BackdropPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _BackdropPainter oldDelegate) =>
-      oldDelegate.theme.id != theme.id;
+      oldDelegate.theme.id != theme.id || oldDelegate.frame != frame;
 }

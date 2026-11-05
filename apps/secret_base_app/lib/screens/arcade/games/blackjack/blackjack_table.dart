@@ -26,7 +26,10 @@ class _FeltPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final rect = (Offset.zero & size).deflate(4);
-    final radius = Radius.circular(math.min(size.width, size.height) * 0.22);
+    // 모서리를 너무 둥글게 하면 위아래 좌석이 레일에 걸친다.
+    final radius = Radius.circular(
+      math.min(30, math.min(size.width, size.height) * 0.12),
+    );
     final rrect = RRect.fromRectAndRadius(rect, radius);
 
     // 레일 그림자.
@@ -79,10 +82,11 @@ class _FeltPainter extends CustomPainter {
         ).createShader(Rect.fromCircle(center: spot, radius: r)),
     );
     // 가운데 금선 아치(배팅 라인 대신 장식).
+    // 위아래 카드 줄 사이(가운데 문장 둘레)에만 그려 카드 밑을 가로지르지 않게 한다.
     final arc = Rect.fromCenter(
       center: Offset(size.width / 2, size.height / 2),
-      width: size.width * 0.78,
-      height: size.height * 0.36,
+      width: size.width * 0.6,
+      height: size.height * 0.15,
     );
     final line = Paint()
       ..style = PaintingStyle.stroke
@@ -118,10 +122,14 @@ class BlackjackEmblem extends StatelessWidget {
   final GameTheme theme;
   final String caption;
 
+  /// 차례가 진행 중이면 "21" 대신 남은 시간 링을 보여 준다.
+  final Widget? timer;
+
   const BlackjackEmblem({
     super.key,
     required this.theme,
     required this.caption,
+    this.timer,
   });
 
   @override
@@ -131,11 +139,21 @@ class BlackjackEmblem extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            '21',
-            style: t
-                .display(size: 30, color: t.gold.withValues(alpha: 0.55))
-                .copyWith(letterSpacing: 2),
+          SizedBox(
+            height: 44,
+            child: Center(
+              child:
+                  timer ??
+                  Text(
+                    '21',
+                    style: t
+                        .display(
+                          size: 30,
+                          color: t.gold.withValues(alpha: 0.55),
+                        )
+                        .copyWith(letterSpacing: 2),
+                  ),
+            ),
           ),
           Text(
             caption,
@@ -320,7 +338,9 @@ class ScorePlaque extends StatelessWidget {
       label: '$caption $value',
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 260),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+        // 두 점수판의 폭을 맞춰 왼쪽 끝이 어긋나지 않게 한다.
+        width: 88,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.28),
           borderRadius: BorderRadius.circular(14),
