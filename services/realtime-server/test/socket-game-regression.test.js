@@ -641,6 +641,8 @@ test('reaction: only listed emojis reach both players, rate limited per user', a
   assert.equal(seen[0].emoji, '😎');
   assert.equal(seen[0].by, 'ALPHA-code');
   assert.equal(seen[0].gameType, 'blackjack');
+});
+
 test('equipped item stats already parsed by the driver do not break game creation', async t => {
   const f = await fixture(t);
   const base = boundary.query;
