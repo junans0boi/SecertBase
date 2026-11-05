@@ -641,4 +641,30 @@ test('reaction: only listed emojis reach both players, rate limited per user', a
   assert.equal(seen[0].emoji, '😎');
   assert.equal(seen[0].by, 'ALPHA-code');
   assert.equal(seen[0].gameType, 'blackjack');
+test('equipped item stats already parsed by the driver do not break game creation', async t => {
+  const f = await fixture(t);
+  const base = boundary.query;
+  // mysql2 returns JSON_OBJECTAGG as an object when the server types it as JSON
+  // (the test DB does), and as a string otherwise. Both must start the games.
+  boundary.query = async (sql, params) => {
+    if (sql.includes('SELECT UserId FROM Users WHERE UserCode')) {
+      return { rows: [{ UserId: params[0] === 'ALPHA-code' ? 11 : 22 }] };
+    }
+    if (sql.includes('JOIN shop_items si ON si.id = ei.item_id')) {
+      return { rows: [{
+        slot: 'onecard_cardback', name: '벚꽃 카드뒷면', icon: '🌸', grade: 'B',
+        stats: params[0] === 11 ? { coin_bonus_pct: 3 } : '{"coin_bonus_pct":5}',
+      }] };
+    }
+    if (sql.includes('FROM equipped_items ei')) return { rows: [{ stat_key: 'coin_bonus_pct', total: '3' }] };
+    return base(sql, params);
+  };
+  const started = new Promise(resolve => f.clients[1].once('game:uno:started', resolve));
+  assert.deepEqual(await f.call(0, 'game:uno:new', {}), { ok: true });
+  const event = await started;
+  assert.deepEqual(event.equippedItems['ALPHA-code'].onecard_cardback.stats, { coin_bonus_pct: 3 });
+  assert.deepEqual(event.equippedItems['BETA-code'].onecard_cardback.stats, { coin_bonus_pct: 5 });
+  const yut = await f.call(0, 'game:yut:new', {});
+  assert.equal(yut.ok, true);
+  assert.deepEqual(yut.gameState.equippedItems['ALPHA-code'].onecard_cardback.stats, { coin_bonus_pct: 3 });
 });

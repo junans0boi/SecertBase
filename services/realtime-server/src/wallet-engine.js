@@ -1,4 +1,5 @@
 import { query, transaction } from './db.js';
+import { parseJsonObject } from './shared/json-column.js';
 
 const DAILY_BONUS = 500;
 const STARTING_BALANCE = 10000;
@@ -168,7 +169,7 @@ export async function getEquippedItemsInfo(userId) {
       name: row.name,
       icon: row.icon,
       grade: row.grade,
-      stats: row.stats ? JSON.parse(row.stats) : {},
+      stats: parseJsonObject(row.stats),
     };
   }
   return info;
