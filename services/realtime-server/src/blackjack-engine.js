@@ -184,11 +184,19 @@ function finishRound(game, { winner, reason }) {
     };
   }
   if (game.round >= game.maxRounds) {
+    // 5라운드가 끝나면 라운드 승수가 많은 쪽이 이긴다(1 : 0도 승리). 같을 때만 무승부.
+    const [p1, p2] = game.players;
+    const leader = wins[p1] === wins[p2] ? 'tie' : (wins[p1] > wins[p2] ? p1 : p2);
     return {
       ...next,
       status: 'finished',
       phase: 'finished',
-      result: { winner: 'tie', loser: null, reason: 'max_rounds', wins },
+      result: {
+        winner: leader,
+        loser: leader === 'tie' ? null : otherPlayer(game, leader),
+        reason: 'max_rounds',
+        wins,
+      },
     };
   }
   return { ...next, phase: 'round_result' };

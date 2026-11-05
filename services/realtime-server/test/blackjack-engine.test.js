@@ -229,7 +229,7 @@ test('first to two wins finishes the match without a ready step', () => {
   assert.equal(nextRound(g, 'A').reason, 'no_game');
 });
 
-test('after five rounds without two wins the match is a draw', () => {
+test('after five rounds the player with more round wins takes the match; equal wins draw', () => {
   let g = round({ a: ['10', '8'], b: ['9', '9'], wins: { A: 1, B: 1 }, round: 5 });
   g = ok(stand(g, 'A', { now: NOW }));
   g = ok(stand(g, 'B', { now: NOW }));
@@ -239,7 +239,9 @@ test('after five rounds without two wins the match is a draw', () => {
   let one = round({ a: ['10', '8'], b: ['9', '9'], wins: { A: 1, B: 0 }, round: 5 });
   one = ok(stand(one, 'A', { now: NOW }));
   one = ok(stand(one, 'B', { now: NOW }));
-  assert.equal(one.result.winner, 'tie', '1 : 0 after five rounds is still a draw');
+  assert.equal(one.result.winner, 'A', '1 : 0 after five rounds wins the match');
+  assert.equal(one.result.loser, 'B');
+  assert.equal(one.result.reason, 'max_rounds');
 });
 
 test('timeout auto-stands; three consecutive timeouts forfeit; acting resets the count', () => {

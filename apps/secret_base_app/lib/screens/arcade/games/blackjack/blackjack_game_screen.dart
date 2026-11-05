@@ -680,7 +680,9 @@ class _BlackjackGameScreenState extends State<BlackjackGameScreen> {
       outcome: draw
           ? GameOutcome.draw
           : (iWon ? GameOutcome.win : GameOutcome.lose),
-      reason: matchReasonText(v.result?['reason'] as String?, iWon: iWon),
+      reason: draw
+          ? '5라운드를 마쳤는데 승수가 같아요'
+          : matchReasonText(v.result?['reason'] as String?, iWon: iWon),
       series: v.series,
       me: v.me,
       details: BlackjackRoundHistory(theme: t, view: v),
