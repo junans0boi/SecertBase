@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secret_base_app/core/socket_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:secret_base_app/screens/arcade/games/tank_screen.dart';
 
 import 'tank_test_support.dart';
@@ -23,6 +24,7 @@ void _notify() {
 }
 
 void main() {
+  setUpAll(() => SharedPreferences.setMockInitialValues({}));
   setUp(() {
     resetTankSocket();
     SocketService().userId = 'me';

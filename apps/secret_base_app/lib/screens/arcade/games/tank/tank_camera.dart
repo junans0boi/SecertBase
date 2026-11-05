@@ -56,8 +56,12 @@ class TankCamera {
     if (overview) {
       scale = math.min(fitWidth, band / 18);
     } else {
-      // 폰에서는 약 55칸, 넓은 화면에서는 약 80칸을 보여 전차가 충분히 크게 보이게 한다.
-      final desiredCols = w < 600 ? 55.0 : 80.0;
+      // 폰에서는 약 55칸만 보여 전차를 크게, PC처럼 넓은 화면은 전장 전체를 보여준다.
+      final desiredCols = w < 600
+          ? 55.0
+          : w < 900
+          ? 75.0
+          : 100.0;
       scale = math.max(fitWidth, math.min(band / 22, w / desiredCols));
     }
 

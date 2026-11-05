@@ -63,7 +63,10 @@ class TankHud extends StatelessWidget {
         ),
       ),
       padding: const EdgeInsets.fromLTRB(8, 4, 8, 14),
-      child: Column(
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 860),
+          child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Row(
@@ -158,6 +161,8 @@ class TankHud extends StatelessWidget {
             ],
           ),
         ],
+          ),
+        ),
       ),
     );
   }
