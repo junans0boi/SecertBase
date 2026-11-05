@@ -206,7 +206,8 @@ class ZeroHandPainter extends CustomPainter {
     if (dim) {
       canvas.saveLayer(
         Offset.zero & size,
-        Paint()..color = const Color(0x8CFFFFFF),
+        // 아직 안 고른 손도 흰 장갑으로 보이게 아주 살짝만 흐린다(반투명하면 회보라로 탁해진다).
+        Paint()..color = const Color(0xE6FFFFFF),
       );
     }
     canvas.scale(s);
