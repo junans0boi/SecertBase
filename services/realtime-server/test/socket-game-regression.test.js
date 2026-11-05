@@ -434,16 +434,7 @@ test('oldmaid hides real card ids behind position aliases and accepts alias draw
   }
 });
 
-test('session restore re-sends a running blackjack round to the reconnecting player', async t => {
-  const f = await fixture(t);
-  await f.call(0, 'game:blackjack:start', {});
-  const views = [];
-  f.clients[1].on('game:blackjack:updated', v => views.push(v));
-  const restored = await f.call(1, 'session:restore', {});
-  await flush();
-  assert.ok(restored.restored.includes('blackjack'));
-  assert.ok(views.length >= 1);
-});
+// The blackjack restore test lives in blackjack-socket.test.js (games 2.0 module).
 
 test('AFK: an idle one card player is warned at 60s and forfeits at 90s with one recorded result', async t => {
   const f = await fixture(t);
