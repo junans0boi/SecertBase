@@ -316,19 +316,19 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
   void _logout() {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         backgroundColor: kMainPaper,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
         title: Text('로그아웃', style: mainTitle(size: 24)),
         content: Text('비밀기지에서 로그아웃할까요?', style: mainBody(size: 14)),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: Text('취소', style: mainBody(size: 14, color: kMainMuted)),
           ),
           TextButton(
             onPressed: () {
-              Navigator.pop(context);
+              Navigator.pop(dialogContext);
               _socket.disconnect();
               _auth.logout();
             },
@@ -345,7 +345,7 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
   Future<void> _confirmDisconnectPartner() async {
     final continueDisconnect = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         backgroundColor: kMainPaper,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
         title: Text('애인 연결 해제', style: mainTitle(size: 24)),
@@ -356,11 +356,11 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(dialogContext, false),
             child: Text('취소', style: mainBody(size: 14, color: kMainMuted)),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(dialogContext, true),
             child: Text(
               '계속',
               style: mainBody(size: 14, color: kError, weight: FontWeight.w800),
@@ -373,7 +373,7 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         backgroundColor: kMainPaper,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
         title: Text('정말 연결을 해제할까요?', style: mainTitle(size: 24)),
@@ -383,11 +383,11 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(dialogContext, false),
             child: Text('돌아가기', style: mainBody(size: 14, color: kMainMuted)),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(dialogContext, true),
             child: Text(
               '연결 해제',
               style: mainBody(size: 14, color: kError, weight: FontWeight.w800),
@@ -403,7 +403,7 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
     // 1단계: 탈퇴 결과 안내
     final continueDelete = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         backgroundColor: kMainPaper,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
         title: Text('회원 탈퇴', style: mainTitle(size: 24)),
@@ -414,11 +414,11 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(dialogContext, false),
             child: Text('취소', style: mainBody(size: 14, color: kMainMuted)),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(dialogContext, true),
             child: Text(
               '계속',
               style: mainBody(size: 14, color: kError, weight: FontWeight.w800),
@@ -437,7 +437,7 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
     _deletePasswordCtrl.clear();
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         backgroundColor: kMainPaper,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
         title: Text('정말 탈퇴할까요?', style: mainTitle(size: 22)),
@@ -479,11 +479,11 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(dialogContext, false),
             child: Text('돌아가기', style: mainBody(size: 14, color: kMainMuted)),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(dialogContext, true),
             child: Text(
               '탈퇴',
               style: mainBody(size: 14, color: kError, weight: FontWeight.w800),

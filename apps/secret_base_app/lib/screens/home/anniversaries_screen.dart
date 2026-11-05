@@ -209,15 +209,16 @@ class _AnniversariesScreenState extends State<AnniversariesScreen> {
                   onLongPress: () async {
                     final confirmed = await showDialog<bool>(
                       context: context,
-                      builder: (_) => AlertDialog(
+                      builder: (dialogContext) => AlertDialog(
                         title: const Text('삭제할까요?'),
                         actions: [
                           TextButton(
-                            onPressed: () => Navigator.pop(context, false),
+                            onPressed: () =>
+                                Navigator.pop(dialogContext, false),
                             child: const Text('취소'),
                           ),
                           TextButton(
-                            onPressed: () => Navigator.pop(context, true),
+                            onPressed: () => Navigator.pop(dialogContext, true),
                             child: const Text(
                               '삭제',
                               style: TextStyle(color: Colors.red),
