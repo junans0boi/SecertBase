@@ -1,69 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import {
-  initPenaltyGame,
-  resolvePenaltyRound,
-} from '../src/penalty-engine.js';
-
-test('Penalty Shootout: saved when kicker and keeper exact 3x3 target match', () => {
-  let game = initPenaltyGame('p1', 'p2');
-  game = resolvePenaltyRound(game, 0, 0);
-  assert.equal(game.rounds[0].isGoal, false); // top-left vs top-left => saved
-
-  game = resolvePenaltyRound(game, 4, 4);
-  assert.equal(game.rounds[1].isGoal, false); // center vs center => saved
-
-  game = resolvePenaltyRound(game, 0, 1);
-  assert.equal(game.rounds[2].isGoal, true); // top-left vs top-center => goal!
-
-  game = resolvePenaltyRound(game, 5, 0);
-  assert.equal(game.rounds[3].isGoal, true); // right-mid vs top-left => goal!
-});
-
-test('Penalty Shootout: ends after the fourth kick pair when a 2-goal lead cannot be caught', () => {
-  let game = initPenaltyGame('p1', 'p2');
-  const shots = [
-    [0, 1], // p1 goal
-    [0, 0], // p2 save
-    [0, 0], // p1 save
-    [0, 0], // p2 save
-    [0, 0], // p1 save
-    [0, 0], // p2 save
-    [0, 1], // p1 goal: p1 leads 2-0
-    [0, 0], // p2 save: p2 has only one kick left
-  ];
-
-  for (const [kickerDir, keeperDir] of shots) {
-    game = resolvePenaltyRound(game, kickerDir, keeperDir);
-  }
-
-  assert.equal(game.status, 'finished');
-  assert.deepEqual(game.scores, { p1: 2, p2: 0 });
-  assert.equal(game.result.winner, 'p1');
-  assert.equal(game.rounds.length, 8);
-});
-
-test('Penalty Shootout: keeps playing when the trailing player can still tie', () => {
-  let game = initPenaltyGame('p1', 'p2');
-  const shots = [
-    [0, 1], // p1 goal
-    [0, 0], // p2 save
-    [0, 0], // p1 save
-    [0, 0], // p2 save
-    [0, 0], // p1 save
-    [0, 0], // p2 save
-    [0, 1], // p1 goal: p1 leads 2-0 with two kicks each left
-  ];
-
-  for (const [kickerDir, keeperDir] of shots) {
-    game = resolvePenaltyRound(game, kickerDir, keeperDir);
-  }
-
-  assert.equal(game.status, 'playing');
-  assert.equal(game.result, null);
-  assert.deepEqual(game.scores, { p1: 2, p2: 0 });
-});
+// 패널티킥 엔진 테스트는 test/penalty-engine.test.js로 옮겼다(게임 2.0).
 
 // Bowling Engine tests
 import {
@@ -163,36 +101,3 @@ test('Bowling Engine: full game simulation and winner determination', () => {
   assert.ok(game.result.winner);
 });
 
-// ── 패널티킥 서든데스 (#193) ───────────────────────────────────────────────
-import { initPenaltyGame as _initPk, resolvePenaltyRound as _resolvePk, SUDDEN_DEATH_PAIRS as _PK_SD } from '../src/penalty-engine.js';
-import { test as _pkTest } from 'node:test';
-import _pkAssert from 'node:assert/strict';
-
-const _kickPair = (g, aGoal, bGoal) => {
-  g = _resolvePk(g, 0, aGoal ? 1 : 0);
-  return _resolvePk(g, 0, bGoal ? 1 : 0);
-};
-
-_pkTest('penalty: 5:5 tie continues into sudden death instead of ending as a draw', () => {
-  let g = _initPk('A', 'B');
-  for (let i = 0; i < 5; i++) g = _kickPair(g, true, true);
-  _pkAssert.equal(g.status, 'playing');
-  _pkAssert.equal(g.suddenDeath, true);
-  g = _kickPair(g, true, false);
-  _pkAssert.equal(g.status, 'finished');
-  _pkAssert.equal(g.result.winner, 'A');
-});
-
-_pkTest('penalty: sudden death is judged only after both players kick', () => {
-  let g = _initPk('A', 'B');
-  for (let i = 0; i < 5; i++) g = _kickPair(g, true, true);
-  g = _resolvePk(g, 0, 1); // A scores first in the pair
-  _pkAssert.equal(g.status, 'playing', 'B must still get the reply kick');
-});
-
-_pkTest('penalty: after the sudden death cap the shootout ends as a draw', () => {
-  let g = _initPk('A', 'B');
-  for (let i = 0; i < 5 + _PK_SD; i++) g = _kickPair(g, true, true);
-  _pkAssert.equal(g.status, 'finished');
-  _pkAssert.equal(g.result.winner, 'draw');
-});

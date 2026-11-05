@@ -1,8 +1,11 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+
 import '../../core/main_design.dart';
 import '../../core/socket_service.dart';
 import '../../core/yut_audio.dart';
+import 'lobby_options.dart';
 
 const _kStakeOptions = [0, 500, 1000, 3000];
 const _kGostopStakeOptions = [0, 100, 500, 1000];
@@ -110,7 +113,8 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
       context,
     ).pushReplacement(MaterialPageRoute(builder: (_) => widget.gameScreen));
     // On resume the game is already running on the server — do not create a new game.
-    if (!resumed && isHost) {
+    // 게임 2.0 모듈은 서버가 이미 판을 만들었다(serverStart).
+    if (!resumed && isHost && !_socket.lobbyStartedServerStart) {
       Future.delayed(const Duration(milliseconds: 300), () {
         switch (widget.gameType) {
           case 'yut':
@@ -284,6 +288,22 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
                             ],
                           ),
                           const SizedBox(height: 18),
+                          for (final def in lobbyOptionsFor(
+                            widget.gameType,
+                          )) ...[
+                            LobbyOptionPicker(
+                              def: def,
+                              isHost: isHost,
+                              value: _socket.lobbyOptions[def.key],
+                              color: widget.color,
+                              onSelect: (value) => _socket.setLobbyOption(
+                                widget.gameType,
+                                def.key,
+                                value,
+                              ),
+                            ),
+                            const SizedBox(height: 18),
+                          ],
                           if (kStakeGameTypes.contains(widget.gameType)) ...[
                             _StakeSelector(
                               gameType: widget.gameType,
@@ -642,6 +662,144 @@ class _StakeSelector extends StatelessWidget {
           }).toList(),
         ),
       ],
+    );
+  }
+}
+
+/// 로비 옵션 선택. 방장은 고르고, 상대는 방장이 고른 값을 읽기 전용으로 본다.
+class LobbyOptionPicker extends StatelessWidget {
+  final LobbyOptionDef def;
+  final bool isHost;
+  final Object? value;
+  final Color color;
+  final ValueChanged<Object> onSelect;
+
+  const LobbyOptionPicker({
+    super.key,
+    required this.def,
+    required this.isHost,
+    required this.value,
+    required this.color,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final current = def.choiceFor(value).value;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(def.icon, style: const TextStyle(fontSize: 13)),
+            const SizedBox(width: 5),
+            Text(
+              def.title,
+              style: mainBody(
+                size: 13,
+                color: kMainInk,
+                weight: FontWeight.w900,
+                height: 1,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              isHost ? '방장이 선택' : '방장이 고른 설정',
+              style: mainBody(size: 11, color: kMainMuted, height: 1),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            for (final choice in def.choices)
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    right: choice == def.choices.last ? 0 : 8,
+                  ),
+                  child: _LobbyChoiceTile(
+                    choice: choice,
+                    selected: choice.value == current,
+                    enabled: isHost,
+                    color: color,
+                    onTap: () => onSelect(choice.value),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _LobbyChoiceTile extends StatelessWidget {
+  final LobbyChoice choice;
+  final bool selected;
+  final bool enabled;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _LobbyChoiceTile({
+    required this.choice,
+    required this.selected,
+    required this.enabled,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // 비방장에게는 고르지 않은 선택지를 흐리게 보여 "방장이 이걸 골랐다"가 바로 보이게 한다.
+    final dimmed = !enabled && !selected;
+    return Semantics(
+      button: enabled,
+      selected: selected,
+      label: '${choice.label}, ${choice.description}',
+      child: GestureDetector(
+        onTap: enabled && !selected ? onTap : null,
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 140),
+          opacity: dimmed ? 0.45 : 1,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            constraints: const BoxConstraints(minHeight: 64),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+            decoration: BoxDecoration(
+              color: selected ? color.withValues(alpha: 0.12) : kMainPaperSoft,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: selected ? color : kMainLine,
+                width: selected ? 1.8 : 1,
+              ),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  choice.label,
+                  textAlign: TextAlign.center,
+                  style: mainBody(
+                    size: 14,
+                    color: selected ? color : kMainInk,
+                    weight: FontWeight.w900,
+                    height: 1.1,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  choice.description,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: mainBody(size: 10.5, color: kMainSub, height: 1.25),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

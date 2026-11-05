@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secret_base_app/core/socket_service.dart';
 import 'package:secret_base_app/screens/arcade/games/bowling_screen.dart';
-import 'package:secret_base_app/screens/arcade/games/penalty_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -13,7 +12,6 @@ void main() {
   tearDown(() {
     final socket = SocketService();
     socket.bowlingState = null;
-    socket.penaltyState = null;
     socket.userId = null;
   });
 
@@ -55,36 +53,5 @@ void main() {
     expect(find.text('공 굴리기 🎳'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
-
-  testWidgets('penalty screen lets the kicker pick a goal cell by tapping', (
-    tester,
-  ) async {
-    final socket = SocketService();
-    socket.userId = 'p1';
-    socket.penaltyState = {
-      'status': 'playing',
-      'round': 1,
-      'kicker': 'p1',
-      'keeper': 'p2',
-      'submissions': <String, dynamic>{},
-      'scores': {'p1': 0, 'p2': 0},
-      'rounds': <dynamic>[],
-      'result': null,
-    };
-
-    await tester.pumpWidget(const MaterialApp(home: PenaltyScreen()));
-    await tester.pump();
-
-    expect(find.text('⚽ 골대에서 노릴 코스를 탭하세요'), findsOneWidget);
-    expect(find.text('코스를 먼저 선택하세요'), findsOneWidget);
-
-    // Tap inside the goal (upper area of the pitch) to pick a cell.
-    final pitch = find.byKey(const Key('penalty_pitch'));
-    final rect = tester.getRect(pitch);
-    await tester.tapAt(Offset(rect.center.dx, rect.top + rect.height * 0.25));
-    await tester.pump();
-
-    expect(find.text('이 코스로 슛! ⚽'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
+  // 패널티킥 화면 테스트는 test/penalty_screen_test.dart(게임 2.0).
 }

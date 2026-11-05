@@ -61,9 +61,10 @@ game:lobby:leave
 game:lobby:select_character
 game:lobby:set_stake  { gameType, stake }        (host only, stake games only)
 game:lobby:ready      { gameType, ready: bool }  (non-host consent for staked games)
+game:lobby:set_option { gameType, key, value }    (host only, allowed values only)
 game:lobby:start
-game:lobby:updated    (includes `stake`, `ready: { [userCode]: true }`)
-game:lobby:started    (metadata: { stake, gameId, yutBgm? })
+game:lobby:updated    (includes `stake`, `options`, `ready: { [userCode]: true }`)
+game:lobby:started    (metadata: { stake, gameId, options, yutBgm? })
 ```
 
 **Stakes are server-authoritative (2026-11, #183).** Only `yut`, `uno*`, `tank`
@@ -75,6 +76,16 @@ agreed stake and a `gameId`. The creation events (`game:yut:new`, `game:uno:new`
 `game:tank:new`, `game:gostop:new`) ignore any stake in their payload and consume
 the pending game; without one the game is free. Settlement uses `<type>:<gameId>`
 as the idempotency reference and runs before the Redis state is deleted.
+
+**Lobby options (2026-11, games 2.0).** Per-game settings the host picks in the
+lobby and the partner sees live. Allowed values live in `src/lobby-options.js`
+(client mirror: `lib/screens/arcade/lobby_options.dart`): `penalty.cells` 3|6
+(default 3), `pirate.holes` 6|8|12 (default 8), `uno.mode` go_wild|classic
+(default go_wild). `game:lobby:set_option` answers `not_host`, `invalid_option`
+or `lobby_not_found`, and a changed value resets readiness like a stake change.
+The options are saved with the pending game; creation handlers read them from
+`consumePendingGame(...).options` and ignore payload values (`game:uno:new` uses
+the payload mode only for games started outside the lobby).
 
 **Restart (rematch) protocol.** `game:restart:request { gameType }` records the
 request for 30 s (`yut`, `uno`, `bomb`, `marble`, `tank`; others →
@@ -138,6 +149,29 @@ time out when exactly one player has answered. The resumable-game cleanup grace
 (150 s) is longer than the AFK limit so an abandoned game is forfeited, not
 silently deleted.
 
+### Games 2.0 modules (2026-11)
+
+Blackjack, Old Maid, One Card (`uno`), Penalty Kick, Pirate Roulette and Zero
+each live in one server module (`services/realtime-server/src/games/<game>.js`,
+registry in `src/games/index.js`). The server creates the game itself when the
+lobby starts (`game:lobby:started` metadata carries `serverStart: true`, so the
+host sends no creation event), screens fetch state with `game:<type>:sync`,
+rematches go through `game:restart:*`, and results carry a per-room `series`
+(`{ wins: { [userCode]: n }, draws, games }`). Turn deadlines are sent as
+`turnDeadline` together with `serverNow`.
+
+Shared: `game:reaction { emoji, gameType? }` → broadcast
+`game:reaction { by, emoji, gameType, at }`; allowed emojis 😏 😅 😱 🤞 😭 😎,
+1.5 s per user (`invalid_reaction`, `too_fast`).
+
+Per-game contracts:
+[blackjack](socket-events/blackjack.md) ·
+[oldmaid](socket-events/oldmaid.md) ·
+[one card](socket-events/onecard.md) ·
+[penalty](socket-events/penalty.md) ·
+[pirate](socket-events/pirate.md) ·
+[zero](socket-events/zero.md).
+
 ### Tank Battle 2.0 (`game:tank:*`)
 
 ```text
@@ -161,7 +195,9 @@ Phases: `select` → `aiming` → `result`. Turns last 30 s (server timer,
 20 (damage ×1.5), turn 30 decides by HP ratio. `events[]` entries carry `stage`
 (cluster bomblets use stage 1) and types `shell`, `blast`, `mound`, `damage`,
 `shield`, `crate`, `crate_drop`, `fall`, `teleport`, `split`, `heal`,
-`buff_used`, `sudden_death`. Rematches go through the restart protocol and keep
+`buff_used`, `sudden_death`. A drill shell's `blast` carries `drill: true` and
+carves one cell deeper; `mound` carries the new surface `row`; `heal` with
+`cause: 'regen'` is the turtle's per-turn regeneration. Rematches go through the restart protocol and keep
 the series score and stake.
 
 If a partner deletes their account (via `DELETE /user`), the remaining partner's socket receives `partner:disconnected` (reason: `partner_deleted_account`) and is disconnected from the room.

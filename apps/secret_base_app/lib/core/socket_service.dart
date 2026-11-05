@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
+
 import 'auth_service.dart';
 import 'marble_characters.dart';
 
@@ -62,9 +64,18 @@ class SocketService extends ChangeNotifier {
   String? lobbyResumedGameType;
   // 판돈이 걸린 판에서 비방장이 누른 준비 완료 여부(서버 기준)
   Map<String, bool> lobbyReady = {};
+  // 방장이 고른 게임별 설정(로비 옵션). 서버가 보내 준 값만 믿는다.
+  Map<String, Object> lobbyOptions = {};
+  Map<String, Object> lobbyStartedOptions = {};
+  // 서버가 로비 시작과 함께 판을 만든 게임(게임 2.0)이면 true. 방장은 시작 이벤트를 보내지 않는다.
+  bool lobbyStartedServerStart = false;
 
   // 서버가 게임 동작을 거부했을 때 사용자에게 보여줄 안내 (GameMenuListener가 표시)
   String? gameNotice;
+  // 안내가 특정 게임에 대한 것이면 그 게임 종류(잠수 안내 등). 다른 게임 화면에서는 띄우지 않는다.
+  String? gameNoticeGameType;
+  // 공용 리액션(게임 2.0): 마지막으로 받은 이모지
+  GameReaction? lastReaction;
   int gameNoticeSeq = 0;
 
   // wallet
@@ -277,7 +288,80 @@ class SocketService extends ChangeNotifier {
   final List<String> _logs = [];
   List<String> get logs => List.unmodifiable(_logs);
 
+  // ── 게임 2.0: 게임별 컨트롤러가 쓰는 통로 ────────────────────────────────
+  // 게임 화면은 각자의 컨트롤러(ChangeNotifier)에서 이벤트를 받고 보낸다.
+  // SocketService에는 연결·방·공용 상태만 두어 게임끼리 서로 건드리지 않게 한다.
+  final Map<String, List<void Function(Map<String, dynamic>)>> _gameHandlers =
+      {};
+  final Set<String> _attachedGameEvents = {};
+  final List<VoidCallback> _resetHooks = [];
+
+  /// [event]를 받으면 [handler]를 부른다. 연결 전에 등록해도 연결되면 붙는다.
+  void addGameHandler(
+    String event,
+    void Function(Map<String, dynamic> data) handler,
+  ) {
+    _gameHandlers.putIfAbsent(event, () => []).add(handler);
+    _attachGameEvent(event);
+  }
+
+  void removeGameHandler(
+    String event,
+    void Function(Map<String, dynamic> data) handler,
+  ) {
+    _gameHandlers[event]?.remove(handler);
+  }
+
+  void _attachGameEvent(String event) {
+    final socket = _socket;
+    if (socket == null || _attachedGameEvents.contains(event)) return;
+    _attachedGameEvents.add(event);
+    socket.on(event, (data) {
+      final map = _m(data);
+      for (final handler in List.of(_gameHandlers[event] ?? const [])) {
+        handler(map);
+      }
+    });
+  }
+
+  /// 방을 나가거나 로그아웃할 때 게임 컨트롤러가 자기 상태를 지우도록 알린다.
+  void addResetHook(VoidCallback hook) => _resetHooks.add(hook);
+
+  void removeResetHook(VoidCallback hook) => _resetHooks.remove(hook);
+
+  /// 거부 사유를 안내하는 게임 이벤트 전송(컨트롤러용).
+  void emitGameEvent(
+    String event, [
+    Map<String, dynamic>? payload,
+    void Function(Map<String, dynamic> ack)? onAck,
+  ]) => _emitGame(event, payload, onAck);
+
+  /// 공용 리액션 보내기. 서버가 허용 목록·간격을 검사한다.
+  void sendReaction(String emoji, {String? gameType}) {
+    _socket?.emitWithAck('game:reaction', {
+      'emoji': emoji,
+      'gameType': ?gameType,
+    }, ack: (_) {});
+  }
+
+  /// 내가 아닌 참가자(2인 게임의 상대).
+  String? get partnerId {
+    final me = userId;
+    for (final p in presenceUsers) {
+      if (p != me) return p;
+    }
+    for (final p in presenceNicknames.keys) {
+      if (p != me) return p;
+    }
+    return null;
+  }
+
   void _resetGameState() {
+    lastReaction = null;
+    gameNoticeGameType = null;
+    for (final hook in List.of(_resetHooks)) {
+      hook();
+    }
     lastDice = null;
     lastRoulette = null;
     lastRouletteOptions = null;
@@ -524,6 +608,7 @@ class SocketService extends ChangeNotifier {
       lobbyPlayers = players is List ? players.map((e) => '$e').toList() : [];
       lobbyCharacterSelections = _stringMap(map['characterSelections']);
       lobbyStake = (map['stake'] as num?)?.toInt() ?? 0;
+      lobbyOptions = _optionMap(map['options']);
       final readyRaw = map['ready'];
       lobbyReady = readyRaw is Map
           ? readyRaw.map((k, v) => MapEntry('$k', v == true))
@@ -548,6 +633,12 @@ class SocketService extends ChangeNotifier {
       lobbyStartedYutBgm = metadata['yutBgm'] as String?;
       lobbyStartedYutCharacters = _stringMap(metadata['yutCharacters']);
       lobbyStartedStake = (metadata['stake'] as num?)?.toInt() ?? 0;
+      lobbyStartedOptions = _optionMap(metadata['options']);
+      lobbyStartedServerStart = metadata['serverStart'] == true;
+      final startedMode = lobbyStartedOptions['mode'];
+      if (lobbyStartedGameType == 'uno' && startedMode is String) {
+        selectedUnoMode = startedMode;
+      }
       final emojis = _stringMap(map['profileEmojis']);
       if (emojis.isNotEmpty) profileEmojis = emojis;
       final nicks = _stringMap(map['nicknames']);
@@ -1269,6 +1360,7 @@ class SocketService extends ChangeNotifier {
         map['player'] == userId
             ? '$secondsLeft초 안에 진행하지 않으면 기권패로 처리돼요!'
             : '상대가 $secondsLeft초 안에 진행하지 않으면 기권승이에요.',
+        gameType: map['gameType'] as String?,
       );
     });
 
@@ -1278,6 +1370,7 @@ class SocketService extends ChangeNotifier {
         map['loser'] == userId
             ? '제한 시간 동안 진행하지 않아 기권패 처리됐어요.'
             : '상대가 제한 시간 동안 진행하지 않아 기권승했어요!',
+        gameType: map['gameType'] as String?,
       );
     });
 
@@ -1343,10 +1436,15 @@ class SocketService extends ChangeNotifier {
       notifyListeners();
     });
 
-    socket.on('game:restart:declined', (_) {
+    socket.on('game:restart:declined', (data) {
       restartWaiting = false;
+      restartPending = false;
       _log('다시 시작 거절됨');
-      notifyListeners();
+      if (_m(data)['reason'] == 'game_in_progress') {
+        _setGameNotice('판돈이 걸린 판은 끝까지 마친 뒤에 다시 할 수 있어요.');
+      } else {
+        notifyListeners();
+      }
     });
 
     // ── catch mind listeners ──────────────────────────────────────────────
@@ -1465,8 +1563,28 @@ class SocketService extends ChangeNotifier {
       notifyListeners();
     });
 
+    socket.on('game:reaction', (data) {
+      final map = _m(data);
+      final emoji = map['emoji'];
+      final by = map['by'];
+      if (emoji is! String || by is! String) return;
+      lastReaction = GameReaction(
+        by: by,
+        emoji: emoji,
+        gameType: map['gameType'] as String?,
+        at:
+            (map['at'] as num?)?.toInt() ??
+            DateTime.now().millisecondsSinceEpoch,
+      );
+      notifyListeners();
+    });
+
     socket.connect();
     _socket = socket;
+    _attachedGameEvents.clear();
+    for (final event in _gameHandlers.keys) {
+      _attachGameEvent(event);
+    }
   }
 
   void sendHeart() {
@@ -1514,6 +1632,8 @@ class SocketService extends ChangeNotifier {
     lobbyPlayers = [];
     lobbyStartedGameType = null;
     lobbyCharacterSelections = {};
+    lobbyOptions = {};
+    lobbyStartedOptions = {};
     lobbyStartedYutCharacters = {};
     lobbyStartedYutBgm = null;
     lobbyStake = 0;
@@ -1593,6 +1713,8 @@ class SocketService extends ChangeNotifier {
     lobbyStartedGameType = null;
     lobbyResumedGameType = null;
     lobbyCharacterSelections = {};
+    lobbyOptions = {};
+    lobbyStartedOptions = {};
     lobbyStartedYutCharacters = {};
     lobbyStartedYutBgm = null;
     if (me != null) {
@@ -1650,6 +1772,7 @@ class SocketService extends ChangeNotifier {
               ? players.map((e) => '$e').toList()
               : [];
           lobbyCharacterSelections = _stringMap(lobby['characterSelections']);
+          lobbyOptions = _optionMap(lobby['options']);
           final emojis = _stringMap(lobby['profileEmojis']);
           if (emojis.isNotEmpty) profileEmojis = emojis;
           notifyListeners();
@@ -1668,6 +1791,7 @@ class SocketService extends ChangeNotifier {
       lobbyPlayers = [];
       lobbyStartedGameType = null;
       lobbyCharacterSelections = {};
+      lobbyOptions = {};
       lobbyStartedYutCharacters = {};
       lobbyStartedYutBgm = null;
       notifyListeners();
@@ -1784,6 +1908,18 @@ class SocketService extends ChangeNotifier {
     _emitGame('game:lobby:start', {'gameType': gameType});
   }
 
+  /// 방장이 로비 옵션을 바꾼다. 화면은 바로 반영하고 서버 갱신으로 확정한다.
+  void setLobbyOption(String gameType, String key, Object value) {
+    lobbyOptions = {...lobbyOptions, key: value};
+    lobbyReady = {};
+    notifyListeners();
+    _emitGame('game:lobby:set_option', {
+      'gameType': gameType,
+      'key': key,
+      'value': value,
+    });
+  }
+
   void setLobbyStake(String gameType, int stake) {
     lobbyStake = stake;
     lobbyReady = {};
@@ -1804,6 +1940,9 @@ class SocketService extends ChangeNotifier {
   // ── 서버 거부 사유 안내 ────────────────────────────────────────────────────
 
   static const Set<String> _silentGameReasons = {
+    // 게임 2.0: 두 기기가 동시에 보낸 중복 요청이나 지난 판 요청은 조용히 넘긴다.
+    'stale_game',
+    'stale_round',
     'wrong_answer',
     'time_up',
     'already_selected',
@@ -1841,10 +1980,37 @@ class SocketService extends ChangeNotifier {
     'land_action_pending': '영지 선택을 먼저 마쳐 주세요.',
     'must_move_first': '먼저 말을 움직여 주세요.',
     'not_a_player': '이 게임의 참가자가 아니에요.',
+    // 게임 2.0
+    'finished': '이미 끝난 판이에요.',
+    'game_over': '이미 끝난 판이에요.',
+    'not_playing': '지금은 진행 중인 판이 없어요.',
+    'invalid_choice': '고를 수 없는 칸이에요.',
+    'invalid_slot': '고를 수 없는 구멍이에요.',
+    'slot_taken': '이미 칼이 꽂힌 구멍이에요.',
+    'not_exploded': '아직 통이 터지지 않았어요.',
+    'not_winner': '벌칙은 이긴 사람이 정해요.',
+    'not_loser': '벌칙을 받은 사람만 완료할 수 있어요.',
+    'no_penalty': '아직 벌칙이 정해지지 않았어요.',
+    'penalty_already_set': '벌칙은 이미 정해졌어요.',
+    'penalty_already_done': '벌칙은 이미 완료했어요.',
+    'penalty_empty': '벌칙 내용을 적어 주세요.',
+    'penalty_too_long': '벌칙은 30자 이내로 적어 주세요.',
+    'invalid_guess': '고를 수 없는 숫자예요.',
+    'invalid_fingers': '손가락 수를 다시 골라 주세요.',
+    'already_picked': '이번 라운드는 이미 골랐어요.',
+    'cannot_play_card': '지금은 그 카드를 낼 수 없어요.',
+    'card_not_found': '손에 없는 카드예요.',
+    'must_declare_color': '바꿀 색을 골라 주세요.',
+    'no_target': '잡을 상대가 없어요.',
+    'not_needed': '지금은 원카드를 외칠 때가 아니에요.',
+    'cannot_challenge_during_stack': '공격이 쌓여 있을 때는 도전할 수 없어요.',
+    'no_draw_choice': '낼 수 있는 뽑은 카드가 없어요.',
+    'no_challenge': '도전할 +4가 없어요.',
   };
 
-  void _setGameNotice(String message) {
+  void _setGameNotice(String message, {String? gameType}) {
     gameNotice = message;
+    gameNoticeGameType = gameType;
     gameNoticeSeq++;
     notifyListeners();
   }
@@ -2656,6 +2822,19 @@ class SocketService extends ChangeNotifier {
     return map.map((key, value) => MapEntry(key, '$value'));
   }
 
+  /// 로비 옵션: 숫자는 int로, 문자열은 그대로. 그 외 값은 버린다.
+  static Map<String, Object> _optionMap(dynamic v) {
+    final out = <String, Object>{};
+    _m(v).forEach((key, value) {
+      if (value is num) {
+        out[key] = value.toInt();
+      } else if (value is String) {
+        out[key] = value;
+      }
+    });
+    return out;
+  }
+
   static Map<String, int> _intMap(dynamic v) {
     final map = _m(v);
     return map.map(
@@ -2676,4 +2855,19 @@ class SocketService extends ChangeNotifier {
     }
     return presenceNicknames[uid] ?? uid;
   }
+}
+
+/// 공용 리액션 한 건(게임 2.0).
+class GameReaction {
+  final String by;
+  final String emoji;
+  final String? gameType;
+  final int at;
+
+  const GameReaction({
+    required this.by,
+    required this.emoji,
+    required this.gameType,
+    required this.at,
+  });
 }

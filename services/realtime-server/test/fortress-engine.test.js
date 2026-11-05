@@ -331,6 +331,18 @@ describe('fireTank (2.0)', () => {
     const mound = shotResult.events.find((e) => e.type === 'mound');
     assert.ok(mound);
     assert.ok(state.terrain[mound.col] > 15);
+    // 연출 위치: 언덕 꼭대기(새 지표면) 바로 위
+    assert.equal(mound.row, surfaceY(state.terrain, mound.col) - 1);
+  });
+
+  it('drill shell burrows in and leaves a deeper crater than a normal blast', () => {
+    const s = battle({ p1: 'mole', p2: 'turtle' });
+    const { shotResult, state } = fireTank(s, 'p1', { angle: 60, power: 45, weapon: 'drill' });
+    const blast = shotResult.events.find((e) => e.type === 'blast');
+    assert.ok(blast?.drill, 'drill blast is marked for the client');
+    assert.equal(blast.r, WEAPONS.drill.blastR + 1);
+    assert.ok(blast.changed.length > 0, 'drill carves terrain');
+    assert.ok(state.terrain.some((h, i) => h < s.terrain[i]), 'terrain got lower somewhere');
   });
 
   it('a tank whose ground is blasted away falls and takes fall damage (mole is immune)', () => {

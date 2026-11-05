@@ -1,120 +1,13 @@
 import assert from 'node:assert/strict';
-import { createServer } from 'node:http';
-import { registerHooks } from 'node:module';
 import test from 'node:test';
-import jwt from 'jsonwebtoken';
-import { Server } from 'socket.io';
-import { io as createClient } from 'socket.io-client';
-
-// Only external boundaries are replaced. Authentication, handlers and game
-// engines below are the production modules; no DB, Redis or FCM is contacted.
-const secret = 'socket-game-regression-secret-32-characters';
-const boundary = {};
-globalThis.__socketGameRegression = boundary;
-const replacements = new Map([
-  ['../src/config.js', `export const config = { JWT_SECRET: ${JSON.stringify(secret)}, PUBLIC_FEATURE_SET: 'legacy' };`],
-  ['../src/db.js', 'export const query = (...args) => globalThis.__socketGameRegression.query(...args); export const transaction = (...args) => globalThis.__socketGameRegression.transaction(...args);'],
-  ['../src/redis.js', 'export const redis = new Proxy({}, { get: (_, key) => (...args) => globalThis.__socketGameRegression.redis[key](...args) });'],
-  ['../src/modules/notifications/index.js', 'export const notifier = { notifyPartner: (...args) => globalThis.__socketGameRegression.notifyPartner(...args) };'],
-].map(([path, source]) => [new URL(path, import.meta.url).href, source]));
-const hooks = registerHooks({
-  load(url, context, nextLoad) {
-    const source = replacements.get(url);
-    return source === undefined ? nextLoad(url, context) : { format: 'module', source, shortCircuit: true };
-  },
-});
-const { registerSocketHandlers } = await import('../src/socket.js');
-const { createMarbleGameState } = await import('../src/marble-engine.js');
-const { createYutGameState } = await import('../src/yut-engine.js');
-const { getUserLevel } = await import('../src/level-engine.js');
-const { createUnoGameState } = await import('../src/uno-engine.js');
-hooks.deregister();
-
-class MemoryRedis {
-  values = new Map();
-  async get(key) {
-    const item = this.values.get(key);
-    if (!item || item.expiresAt <= Date.now()) { this.values.delete(key); return null; }
-    return item.value;
-  }
-  async set(key, value, ...args) {
-    if (args.includes('NX') && await this.get(key) !== null) return null;
-    const seconds = args[args.indexOf('EX') + 1];
-    this.values.set(key, { value, expiresAt: args.includes('EX') ? Date.now() + seconds * 1000 : Infinity });
-    return 'OK';
-  }
-  async del(key) { return Number(this.values.delete(key)); }
-}
-
-const flush = async () => { for (let i = 0; i < 10; i++) await new Promise(setImmediate); };
-let roomSequence = 0;
-async function fixture(t, { players = 2 } = {}) {
-  const roomCode = `socket-regression-${++roomSequence}`;
-  const redis = new MemoryRedis();
-  const invites = [];
-  const levels = new Map();
-  const results = [];
-  boundary.redis = redis;
-  boundary.notifyPartner = async (...args) => { invites.push(args); return { sent: 1 }; };
-  boundary.query = async (sql, params) => {
-    if (sql.includes('JOIN Users u ON u.UserId')) return { rows: [{ CoupleId: 1, RoomCode: roomCode, UserCode: params[0] === 11 ? 'ALPHA-code' : 'BETA-code', Nickname: 'Player' }] };
-    if (sql.includes('User1Code')) return { rows: [{ User1Code: 'ALPHA-code', User2Code: 'BETA-code' }] };
-    if (sql.includes('SELECT CoupleId FROM Couples')) return { rows: [{ CoupleId: 1 }] };
-    if (sql.includes('INSERT INTO game_results')) { results.push(params); return { rows: [] }; }
-    if (sql.includes('UserCode IN')) return { rows: [{ UserId: 11, UserCode: 'ALPHA-code' }, { UserId: 22, UserCode: 'BETA-code' }] };
-    if (sql.includes('SELECT level, xp')) return { rows: [levels.get(params[0]) ?? { level: 1, xp: 0 }] };
-    return { rows: [] };
-  };
-  boundary.transaction = async run => run({ execute: async (sql, params) => {
-    if (sql.includes('SELECT level, xp')) return [[levels.get(params[0]) ?? { level: 1, xp: 0 }]];
-    if (sql.includes('UPDATE user_levels')) levels.set(params[2], { level: params[0], xp: params[1] });
-    return [[]];
-  } });
-  const httpServer = createServer();
-  const io = new Server(httpServer, { transports: ['websocket'], pingInterval: 3_600_000, pingTimeout: 3_600_000 });
-  // Advance only the game's timer boundary. Socket.IO keeps real timers so its
-  // transport close callbacks cannot be cancelled by a global clock reset.
-  const pendingTimers = new Set();
-  registerSocketHandlers(io, { timerApi: {
-    setTimeout(fn, delay) {
-      const handle = { fn, deadline: Date.now() + delay, unref() {} };
-      pendingTimers.add(handle);
-      return handle;
-    },
-    clearTimeout(handle) { pendingTimers.delete(handle); },
-  } });
-  const tick = ms => {
-    t.mock.timers.tick(ms);
-    for (const handle of pendingTimers) {
-      if (handle.deadline <= Date.now()) {
-        pendingTimers.delete(handle);
-        handle.fn();
-      }
-    }
-  };
-  await new Promise(resolve => httpServer.listen(0, '127.0.0.1', resolve));
-  const clients = [];
-  t.after(async () => {
-    t.mock.timers.reset();
-    clients.forEach(client => client.disconnect());
-    await new Promise(resolve => io.close(resolve));
-    await flush();
-    assert.equal(pendingTimers.size, 0, 'server close must clear pending game timers');
-  });
-  for (const userId of [11, 22].slice(0, players)) {
-    const client = createClient(`http://127.0.0.1:${httpServer.address().port}`, {
-      transports: ['websocket'], reconnection: false,
-      auth: { token: jwt.sign({ userId }, secret) },
-    });
-    clients.push(client);
-    await new Promise((resolve, reject) => { client.once('connect', resolve); client.once('connect_error', reject); });
-    assert.equal((await client.timeout(2000).emitWithAck('session:join', {})).ok, true);
-  }
-  const events = [];
-  clients[0].on('game:telepathy:result', event => events.push(event));
-  const call = (index, event, payload) => clients[index].timeout(2000).emitWithAck(event, payload);
-  return { redis, roomCode, clients, events, invites, results, call, tick };
-}
+import {
+  boundary,
+  createMarbleGameState,
+  createYutGameState,
+  fixture,
+  flush,
+  getUserLevel,
+} from './support/socket-harness.js';
 
 const options = ['tea', 'coffee'];
 test('telepathy publishes choices at its 60 second deadline without waiting forever', async t => {
@@ -365,22 +258,7 @@ test('bowling completion grants winner/loser XP once through its socket handler'
   assert.equal((await getUserLevel(11)).xp, 50);
 });
 
-test('penalty completion grants winner/loser XP once through its socket handler', async t => {
-  const f = await fixture(t);
-  await f.redis.set(`game:${f.roomCode}:penalty`, JSON.stringify({
-    status: 'playing', round: 10, kicker: 'BETA-code', keeper: 'ALPHA-code',
-    submissions: {}, scores: { 'ALPHA-code': 1, 'BETA-code': 0 }, result: null,
-    rounds: Array.from({ length: 9 }, (_, i) => ({ kicker: i % 2 === 0 ? 'ALPHA-code' : 'BETA-code' })),
-  }));
-  await f.call(0, 'game:penalty:submit', { choice: 4 });
-  assert.equal((await f.call(1, 'game:penalty:submit', { choice: 4 })).ok, true);
-  await flush();
-  assert.equal((await getUserLevel(11)).xp, 50);
-  assert.equal((await getUserLevel(22)).xp, 20);
-  assert.deepEqual(f.results, [[1, 'penalty', 'ALPHA-code', 'BETA-code', 0, 'ALPHA-code', 'BETA-code', null]]);
-  assert.equal((await f.call(1, 'game:penalty:submit', { choice: 4 })).ok, false);
-  assert.equal((await getUserLevel(11)).xp, 50);
-});
+// 패널티킥 XP·소켓 회귀는 test/penalty-socket.test.js로 옮겼다(게임 2.0).
 
 // ── 게임 정비(#177): 재시작·판돈·준비·탱크 2.0·원카드·가위바위보 ─────────────
 
@@ -493,26 +371,6 @@ test('tank turn timer: three consecutive timeouts forfeit and record the result 
   assert.equal(await f.redis.get(`game:${f.roomCode}:tank`), null);
 });
 
-test('one card: after serving a +2 penalty the playable drawn card can be played', async t => {
-  const f = await fixture(t);
-  const g = createUnoGameState(['ALPHA-code', 'BETA-code'], 7, { mode: 'go_wild' });
-  g.discardPile = [{ color: 'red', value: 'draw2', id: 'red-draw2-a' }];
-  g.drawStack = 2;
-  g.drawStackType = 'draw2';
-  g.currentPlayer = 'BETA-code';
-  g.hands['BETA-code'] = [{ color: 'blue', value: '1', id: 'blue-1-a' }];
-  // 두 번째로 뽑히는(마지막) 카드는 빨강 4 → 낼 수 있다.
-  g.deck = [...g.deck.filter(c => c.id !== 'red-4-a' && c.id !== 'green-7-a'), { color: 'red', value: '4', id: 'red-4-a' }, { color: 'green', value: '7', id: 'green-7-a' }];
-  await f.redis.set(`uno:${f.roomCode}:game`, JSON.stringify(g));
-  const drew = await f.call(1, 'game:uno:draw', {});
-  assert.equal(drew.ok, true);
-  assert.equal(drew.event.count, 2);
-  assert.equal(drew.event.drawStack, 0, 'the served penalty is cleared');
-  assert.equal((await f.call(1, 'game:uno:draw', {})).reason, 'must_choose_drawn_card');
-  const played = await f.call(1, 'game:uno:play', { cardId: 'red-4-a' });
-  assert.equal(played.ok, true, `play rejected: ${played.reason}`);
-});
-
 test('rps: any participant can reset and a finished match is recorded', async t => {
   const f = await fixture(t);
   assert.equal((await f.call(1, 'game:rps:start', { mode: 'single' })).ok, true);
@@ -526,54 +384,7 @@ test('rps: any participant can reset and a finished match is recorded', async t 
   assert.equal((await f.call(1, 'game:rps:reset', {})).ok, true, 'BETA (not User1) may reset');
 });
 
-test('oldmaid hides real card ids behind position aliases and accepts alias draws', async t => {
-  const f = await fixture(t);
-  const views = [];
-  f.clients[1].on('game:oldmaid:updated', v => views.push(v));
-  assert.equal((await f.call(0, 'game:oldmaid:start', {})).ok, true);
-  await flush();
-  const view = views.at(-1);
-  const opponent = view.players['ALPHA-code'];
-  assert.ok(opponent.hand.every((c, i) => c.id === `slot-${i}` && c.rank === undefined));
-  if (view.turn === 'BETA-code') {
-    assert.equal((await f.call(1, 'game:oldmaid:draw', { cardId: 'slot-0' })).ok, true);
-  }
-});
-
-test('session restore re-sends a running blackjack round to the reconnecting player', async t => {
-  const f = await fixture(t);
-  await f.call(0, 'game:blackjack:start', {});
-  const views = [];
-  f.clients[1].on('game:blackjack:updated', v => views.push(v));
-  const restored = await f.call(1, 'session:restore', {});
-  await flush();
-  assert.ok(restored.restored.includes('blackjack'));
-  assert.ok(views.length >= 1);
-});
-
-test('AFK: an idle one card player is warned at 60s and forfeits at 90s with one recorded result', async t => {
-  const f = await fixture(t);
-  t.mock.timers.enable({ apis: ['Date'], now: 5_000_000 });
-  const warnings = [];
-  const ended = [];
-  f.clients[1].on('game:afk:warning', e => warnings.push(e));
-  f.clients[1].on('game:uno:ended', e => ended.push(e));
-  assert.equal((await f.call(0, 'game:uno:new', {})).ok, true);
-  await flush();
-  const state = JSON.parse(await f.redis.get(`uno:${f.roomCode}:game`));
-  const idle = state.currentPlayer;
-  f.tick(60_000);
-  await flush();
-  assert.equal(warnings.length, 1);
-  assert.equal(warnings[0].player, idle);
-  f.tick(30_000);
-  await flush();
-  assert.equal(ended.length, 1);
-  assert.equal(ended[0].reason, 'forfeit');
-  assert.notEqual(ended[0].winner, idle);
-  assert.equal(f.results.length, 1);
-  assert.equal(await f.redis.get(`uno:${f.roomCode}:game`), null);
-});
+// The oldmaid and blackjack tests live in their own socket test files (games 2.0 modules).
 
 test('AFK: acting resets the clock and a finished game is never forfeited', async t => {
   const f = await fixture(t);
@@ -595,4 +406,80 @@ test('AFK: acting resets the clock and a finished game is never forfeited', asyn
   await flush();
   assert.equal(ended.length, 1);
   assert.equal(ended[0].result.reason, 'forfeit');
+});
+
+test('lobby options: only the host sets an allowed value and the partner sees it', async t => {
+  const f = await fixture(t);
+  const updates = [];
+  f.clients[1].on('game:lobby:updated', e => updates.push(e));
+  const joined = await f.call(0, 'game:lobby:join', { gameType: 'penalty' });
+  assert.deepEqual(joined.lobby.options, { cells: 3 }, 'a new lobby starts with the defaults');
+  await f.call(1, 'game:lobby:join', { gameType: 'penalty' });
+  assert.equal((await f.call(1, 'game:lobby:set_option', { gameType: 'penalty', key: 'cells', value: 6 })).reason, 'not_host');
+  assert.equal((await f.call(0, 'game:lobby:set_option', { gameType: 'penalty', key: 'cells', value: 9 })).reason, 'invalid_option');
+  assert.equal((await f.call(0, 'game:lobby:set_option', { gameType: 'blackjack', key: 'cells', value: 3 })).reason, 'lobby_not_found');
+  assert.equal((await f.call(0, 'game:lobby:set_option', { gameType: 'penalty', key: 'cells', value: 6 })).ok, true);
+  await flush();
+  assert.deepEqual(updates.at(-1).options, { cells: 6 });
+});
+
+test('lobby options: a change resets partner ready and the started game carries the options', async t => {
+  const f = await fixture(t);
+  await f.call(0, 'game:lobby:join', { gameType: 'uno' });
+  await f.call(1, 'game:lobby:join', { gameType: 'uno' });
+  assert.equal((await f.call(0, 'game:lobby:set_stake', { gameType: 'uno', stake: 500 })).ok, true);
+  assert.equal((await f.call(1, 'game:lobby:ready', { gameType: 'uno', ready: true })).ok, true);
+  assert.equal((await f.call(0, 'game:lobby:set_option', { gameType: 'uno', key: 'mode', value: 'classic' })).ok, true);
+  assert.equal((await f.call(0, 'game:lobby:start', { gameType: 'uno' })).reason, 'partner_not_ready', 'changing an option asks the partner again');
+  assert.equal((await f.call(1, 'game:lobby:ready', { gameType: 'uno', ready: true })).ok, true);
+  const started = new Promise(resolve => f.clients[1].once('game:lobby:started', resolve));
+  assert.equal((await f.call(0, 'game:lobby:start', { gameType: 'uno' })).ok, true);
+  assert.deepEqual((await started).metadata.options, { mode: 'classic' });
+  assert.equal((await started).metadata.serverStart, true, 'one card is created by the server on lobby start');
+  await flush();
+  assert.equal(JSON.parse(await f.redis.get(`uno:${f.roomCode}:game`)).mode, 'classic');
+});
+
+test('reaction: only listed emojis reach both players, rate limited per user', async t => {
+  const f = await fixture(t);
+  const seen = [];
+  f.clients[1].on('game:reaction', e => seen.push(e));
+  assert.equal((await f.call(0, 'game:reaction', { emoji: '💩' })).reason, 'invalid_reaction');
+  assert.equal((await f.call(0, 'game:reaction', { emoji: '😎', gameType: 'blackjack' })).ok, true);
+  assert.equal((await f.call(0, 'game:reaction', { emoji: '😅' })).reason, 'too_fast');
+  await flush();
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].emoji, '😎');
+  assert.equal(seen[0].by, 'ALPHA-code');
+  assert.equal(seen[0].gameType, 'blackjack');
+});
+
+test('equipped item stats already parsed by the driver do not break game creation', async t => {
+  const f = await fixture(t);
+  const base = boundary.query;
+  // mysql2 returns JSON_OBJECTAGG as an object when the server types it as JSON
+  // (the test DB does), and as a string otherwise. Both must start the games.
+  boundary.query = async (sql, params) => {
+    if (sql.includes('SELECT UserId FROM Users WHERE UserCode')) {
+      return { rows: [{ UserId: params[0] === 'ALPHA-code' ? 11 : 22 }] };
+    }
+    if (sql.includes('JOIN shop_items si ON si.id = ei.item_id')) {
+      return { rows: [{
+        slot: 'onecard_cardback', name: '벚꽃 카드뒷면', icon: '🌸', grade: 'B',
+        stats: params[0] === 11 ? { coin_bonus_pct: 3 } : '{"coin_bonus_pct":5}',
+      }] };
+    }
+    if (sql.includes('FROM equipped_items ei')) return { rows: [{ stat_key: 'coin_bonus_pct', total: '3' }] };
+    return base(sql, params);
+  };
+  const started = new Promise(resolve => f.clients[1].once('game:uno:state', resolve));
+  await f.call(0, 'game:lobby:join', { gameType: 'uno' });
+  await f.call(1, 'game:lobby:join', { gameType: 'uno' });
+  assert.equal((await f.call(0, 'game:lobby:start', { gameType: 'uno' })).ok, true);
+  const event = await started;
+  assert.deepEqual(event.equippedItems['ALPHA-code'].onecard_cardback.stats, { coin_bonus_pct: 3 });
+  assert.deepEqual(event.equippedItems['BETA-code'].onecard_cardback.stats, { coin_bonus_pct: 5 });
+  const yut = await f.call(0, 'game:yut:new', {});
+  assert.equal(yut.ok, true);
+  assert.deepEqual(yut.gameState.equippedItems['ALPHA-code'].onecard_cardback.stats, { coin_bonus_pct: 3 });
 });

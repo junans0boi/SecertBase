@@ -1,0 +1,65 @@
+# 임시 워크플로(fix/tank-weapon-polish 전용): 작성 환경에 Flutter SDK가 없어
+# dart format 적용, analyze/test 결과, 탱크 화면 스크린샷을 CI에서 만든다. 확인 후 삭제한다.
+name: TMP tank UI check
+
+on:
+  push:
+    branches:
+      - fix/tank-weapon-polish
+
+permissions:
+  contents: write
+
+jobs:
+  tank-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/tank-weapon-polish
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+      - name: Install dependencies
+        working-directory: apps/secret_base_app
+        run: flutter pub get
+      - name: Apply dart format
+        working-directory: apps/secret_base_app
+        run: dart format .
+      - name: Commit formatting
+        run: |
+          if [ -n "$(git status --porcelain apps/secret_base_app)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add apps/secret_base_app
+            git commit -m "style(app): dart format"
+            git push origin HEAD:fix/tank-weapon-polish
+          fi
+      - name: Analyze code
+        working-directory: apps/secret_base_app
+        continue-on-error: true
+        run: flutter analyze 2>&1 | tee ../../analyze.txt
+      - name: Run tests
+        working-directory: apps/secret_base_app
+        continue-on-error: true
+        run: flutter test 2>&1 | tee ../../test.txt
+      - name: Tank screenshots
+        working-directory: apps/secret_base_app
+        continue-on-error: true
+        env:
+          TANK_SHOTS: '1'
+        run: flutter test --update-goldens test/tank_shots_test.dart 2>&1 | tee ../../shots.txt
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: tank-ui
+          path: |
+            analyze.txt
+            test.txt
+            shots.txt
+            apps/secret_base_app/test/goldens/tank_shots/
