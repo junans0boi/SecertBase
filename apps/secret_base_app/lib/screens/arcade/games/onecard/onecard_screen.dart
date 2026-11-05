@@ -436,12 +436,14 @@ class _OneCardScreenState extends State<OneCardScreen>
         if (a.auto) {
           _showToast(
             a.penalty
-                ? '시간이 지나 $who이(가) 벌칙 ${a.count}장을 받았어요'
-                : '시간이 지나 $who이(가) 한 장 뽑고 넘겼어요',
+                ? '시간이 지나 $who${josa(who, '이', '가')} 벌칙 ${a.count}장을 받았어요'
+                : '시간이 지나 $who${josa(who, '이', '가')} 한 장 뽑고 넘겼어요',
           );
         } else if (a.penalty) {
           _showToast(
-            mine ? '벌칙 ${a.count}장을 받았어요' : '$who이(가) 벌칙 ${a.count}장을 받았어요',
+            mine
+                ? '벌칙 ${a.count}장을 받았어요'
+                : '$who${josa(who, '이', '가')} 벌칙 ${a.count}장을 받았어요',
           );
         }
       case 'pass':
@@ -472,8 +474,8 @@ class _OneCardScreenState extends State<OneCardScreen>
         sfx.play(a.success ? GameSound.sparkle : GameSound.penaltyDraw);
         _showToast(
           a.success
-              ? '도전 성공! $drawn이(가) ${a.drawnCount}장을 받아요'
-              : '도전 실패! $drawn이(가) ${a.drawnCount}장을 받아요',
+              ? '도전 성공! $drawn${josa(drawn, '이', '가')} ${a.drawnCount}장을 받아요'
+              : '도전 실패! $drawn${josa(drawn, '이', '가')} ${a.drawnCount}장을 받아요',
         );
         for (var i = 0; i < math.min(a.drawnCount, 6); i++) {
           _fly(
@@ -1052,7 +1054,7 @@ class _OneCardScreenState extends State<OneCardScreen>
               : '시간 초과가 이어져 기권패가 되었어요.')
         : (won
               ? '손패를 모두 비웠어요!'
-              : '${c.displayName(r.winner)}이(가) 먼저 손패를 비웠어요.');
+              : '${c.displayName(r.winner)}${josa(c.displayName(r.winner), '이', '가')} 먼저 손패를 비웠어요.');
     final oppHand = r.hands[opp] ?? const <OneCard>[];
     final myHand = r.hands[me] ?? const <OneCard>[];
     return GameResultOverlay(

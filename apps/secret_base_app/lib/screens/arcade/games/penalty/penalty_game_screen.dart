@@ -181,7 +181,9 @@ class _PenaltyGameScreenState extends State<PenaltyGameScreen>
       GameSfx.instance.play(GameSound.aww);
       _banner(
         '나이스 세이브!',
-        pb.keeper == me ? '내가 막았어요!' : '$keeperName이(가) 막았어요',
+        pb.keeper == me
+            ? '내가 막았어요!'
+            : '$keeperName${josa(keeperName, '이', '가')} 막았어요',
         pb.keeper == me ? _theme.me : _theme.opponent,
       );
       if (pb.keeper == me) _confettiId = 'save-$_gameId-${pb.round}';

@@ -9,5 +9,6 @@ export 'game_result_overlay.dart';
 export 'game_theme.dart';
 export 'game_toast.dart';
 export 'game_turn_banner.dart';
+export 'korean.dart';
 export 'playing_card.dart';
 export 'reaction_bar.dart';

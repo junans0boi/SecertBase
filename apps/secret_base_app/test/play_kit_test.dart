@@ -187,4 +187,11 @@ void main() {
       expect(String.fromCharCodes(wav.sublist(0, 4)), 'RIFF');
     }
   });
+
+  test('josa picks the particle by the final consonant', () {
+    expect(josa('민지', '이', '가'), '가');
+    expect(josa('준환', '이', '가'), '이');
+    expect(josa('test2', '이', '가'), '이(가)');
+    expect(josa('', '을', '를'), '을(를)');
+  });
 }
