@@ -17,7 +17,6 @@ export const buildFortuneContext = ({ date, profile, partnerProfile = null }) =>
     birthDate: safeString(profile?.birthDate, 10),
     birthTime: profile?.birthTime ? safeString(profile.birthTime, 8) : null,
     timezone: safeString(profile?.timezone, 64),
-    birthPlace: profile?.birthPlace ? safeString(profile.birthPlace, 255) : null,
   },
   partnerBirthProfile: partnerProfile
     ? {
@@ -25,7 +24,6 @@ export const buildFortuneContext = ({ date, profile, partnerProfile = null }) =>
       birthDate: safeString(partnerProfile.birthDate, 10),
       birthTime: partnerProfile.birthTime ? safeString(partnerProfile.birthTime, 8) : null,
       timezone: safeString(partnerProfile.timezone, 64),
-      birthPlace: partnerProfile.birthPlace ? safeString(partnerProfile.birthPlace, 255) : null,
     }
     : null,
 });
@@ -37,7 +35,8 @@ export const buildPrivateCounselingContext = ({
 }) => ({
   contextVersion: 'counseling-private-v1',
   scope: 'private',
-  birthProfile: profile,
+  // Free-text birth place is not needed to answer and should not leave the server.
+  birthProfile: profile ? { ...profile, birthPlace: undefined } : profile,
   assessmentSummaries: assessmentSummaries.map((summary) => ({
     code: safeString(summary.code, 80),
     version: safeString(summary.version, 32),

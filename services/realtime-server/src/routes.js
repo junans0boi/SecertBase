@@ -5924,6 +5924,17 @@ const getUserPremium = async (userId) => {
 // Our Album API
 // ============================================
 
+// 앨범 폴더가 요청자 커플 소유인지 확인한다 (다른 커플의 폴더 변경/삭제/다운로드 차단).
+const ownsAlbumFolder = async (req, folderId) => {
+  const coupleId = await getCoupleIdForUser(req.auth.userId);
+  if (!coupleId) return false;
+  const rows = await query(
+    'SELECT id FROM album_folders WHERE id = ? AND couple_id = ? LIMIT 1',
+    [Number(folderId), coupleId],
+  );
+  return rows.rows.length > 0;
+};
+
 // 폴더 목록 조회
 router.get('/album/folders', async (req, res) => {
   try {
@@ -5998,6 +6009,7 @@ router.post('/album/folders', async (req, res) => {
 router.patch('/album/folders/:id/cover', upload.single('cover'), async (req, res) => {
   try {
     const { id } = req.params;
+    if (!(await ownsAlbumFolder(req, id))) return res.status(404).json({ ok: false, reason: 'folder_not_found' });
     const mediaUrl = req.file ? `/uploads/${req.file.filename}` : null;
     if (!mediaUrl) return res.status(400).json({ ok: false, reason: 'no_file' });
 
@@ -6013,6 +6025,7 @@ router.patch('/album/folders/:id/cover', upload.single('cover'), async (req, res
 router.patch('/album/folders/:id/set-cover', async (req, res) => {
   try {
     const { id } = req.params;
+    if (!(await ownsAlbumFolder(req, id))) return res.status(404).json({ ok: false, reason: 'folder_not_found' });
     const { photo_url } = req.body;
     if (!photo_url) return res.status(400).json({ ok: false, reason: 'no_photo_url' });
 
@@ -6029,6 +6042,7 @@ router.patch('/album/folders/:id/set-cover', async (req, res) => {
 router.delete('/album/folders/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    if (!(await ownsAlbumFolder(req, id))) return res.status(404).json({ ok: false, reason: 'folder_not_found' });
     await query('DELETE FROM album_photos WHERE folder_id = ?', [Number(id)]);
     await query('DELETE FROM album_folders WHERE id = ?', [Number(id)]);
     res.json({ ok: true });
@@ -6042,7 +6056,8 @@ router.delete('/album/folders/:id', async (req, res) => {
 router.get('/album/folders/:id/download-all', async (req, res) => {
   try {
     const { id } = req.params;
-    
+    if (!(await ownsAlbumFolder(req, id))) return res.status(404).json({ ok: false, reason: 'folder_not_found' });
+
     // 폴더 이름 확인
     const folderRows = await query('SELECT title FROM album_folders WHERE id = ?', [Number(id)]);
     if (folderRows.rows.length === 0) return res.status(404).json({ ok: false, reason: 'folder_not_found' });
@@ -6166,11 +6181,10 @@ router.delete('/album/photos/:id', async (req, res) => {
 // 대피소 고민 목록 조회
 router.get('/reflections', async (req, res) => {
   try {
-    const { user_id, category } = req.query;
-    if (!user_id) return res.status(400).json({ ok: false, reason: 'missing_fields' });
+    const { category } = req.query;
 
     let sql = 'SELECT * FROM private_reflections WHERE user_id = ?';
-    const params = [Number(user_id)];
+    const params = [req.auth.userId];
     if (category && category !== 'all') {
       sql += ' AND category = ?';
       params.push(category);
@@ -6188,12 +6202,12 @@ router.get('/reflections', async (req, res) => {
 // 고민 등록
 router.post('/reflections', async (req, res) => {
   try {
-    const { user_id, content, mood_tag, category } = req.body;
-    if (!user_id || !content) return res.status(400).json({ ok: false, reason: 'missing_fields' });
+    const { content, mood_tag, category } = req.body;
+    if (!content) return res.status(400).json({ ok: false, reason: 'missing_fields' });
 
     const result = await query(
       'INSERT INTO private_reflections (user_id, content, mood_tag, category) VALUES (?, ?, ?, ?)',
-      [Number(user_id), content, mood_tag || null, category || 'general']
+      [req.auth.userId, content, mood_tag || null, category || 'general']
     );
     res.json({ ok: true, id: result.rows.insertId });
   } catch (err) {
@@ -6209,10 +6223,11 @@ router.patch('/reflections/:id', async (req, res) => {
     const { content, mood_tag, category } = req.body;
     if (!content) return res.status(400).json({ ok: false, reason: 'missing_fields' });
 
-    await query(
-      'UPDATE private_reflections SET content = ?, mood_tag = ?, category = ? WHERE id = ?',
-      [content, mood_tag || null, category || 'general', Number(id)]
+    const updated = await query(
+      'UPDATE private_reflections SET content = ?, mood_tag = ?, category = ? WHERE id = ? AND user_id = ?',
+      [content, mood_tag || null, category || 'general', Number(id), req.auth.userId]
     );
+    if (!updated.rows?.affectedRows) return res.status(404).json({ ok: false, reason: 'not_found' });
     res.json({ ok: true });
   } catch (err) {
     console.error('[API] /reflections/:id PATCH error:', err);
@@ -6224,7 +6239,7 @@ router.patch('/reflections/:id', async (req, res) => {
 router.delete('/reflections/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    await query('DELETE FROM private_reflections WHERE id = ?', [Number(id)]);
+    await query('DELETE FROM private_reflections WHERE id = ? AND user_id = ?', [Number(id), req.auth.userId]);
     res.json({ ok: true });
   } catch (err) {
     console.error('[API] /reflections/:id DELETE error:', err);
@@ -6239,10 +6254,7 @@ router.delete('/reflections/:id', async (req, res) => {
 // 현재 프리미엄 상태 조회
 router.get('/premium/status', async (req, res) => {
   try {
-    const { user_id } = req.query;
-    if (!user_id) return res.status(400).json({ ok: false, reason: 'missing_fields' });
-
-    const uid = Number(user_id);
+    const uid = req.auth.userId;
     const userRes = await query(
       'SELECT is_premium, premium_since, premium_expires_at FROM Users WHERE UserId = ?',
       [uid]
@@ -6259,7 +6271,7 @@ router.get('/premium/status', async (req, res) => {
 
     // 최신 구독 정보
     const subRes = await query(
-      'SELECT * FROM premium_subscriptions WHERE user_id = ? ORDER BY created_at DESC LIMIT 1',
+      'SELECT plan, status, started_at, expires_at FROM premium_subscriptions WHERE user_id = ? ORDER BY created_at DESC LIMIT 1',
       [uid]
     );
 
@@ -7523,6 +7535,18 @@ const getLatestMindcareSession = async (userId) => {
   return result.rows[0] ?? null;
 };
 
+// (session_id, sequence_no) 유니크 키 경합: 동시에 두 요청이 같은 번호를 읽으면 한쪽이 ER_DUP_ENTRY로 실패한다.
+// 번호를 다시 읽어 몇 번 재시도한다.
+const withSequenceRetry = async (attempt) => {
+  for (let tries = 1; ; tries += 1) {
+    try {
+      return await attempt();
+    } catch (error) {
+      if (error?.code !== 'ER_DUP_ENTRY' || tries >= 5) throw error;
+    }
+  }
+};
+
 const insertMindcareMessage = async ({
   sessionId,
   role,
@@ -7531,24 +7555,26 @@ const insertMindcareMessage = async ({
   riskCandidate = null,
   content,
 }) => {
-  const next = await query(
-    'SELECT COALESCE(MAX(sequence_no), 0) + 1 AS next_sequence FROM relationship_mindcare_messages WHERE session_id = ?',
-    [sessionId],
-  );
-  await query(
-    `INSERT INTO relationship_mindcare_messages
-       (session_id, sequence_no, role, input_type, choice_key, risk_candidate, content)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [
-      sessionId,
-      Number(next.rows[0]?.next_sequence ?? 1),
-      role,
-      inputType,
-      choiceKey,
-      riskCandidate,
-      content,
-    ],
-  );
+  await withSequenceRetry(async () => {
+    const next = await query(
+      'SELECT COALESCE(MAX(sequence_no), 0) + 1 AS next_sequence FROM relationship_mindcare_messages WHERE session_id = ?',
+      [sessionId],
+    );
+    await query(
+      `INSERT INTO relationship_mindcare_messages
+         (session_id, sequence_no, role, input_type, choice_key, risk_candidate, content)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        sessionId,
+        Number(next.rows[0]?.next_sequence ?? 1),
+        role,
+        inputType,
+        choiceKey,
+        riskCandidate,
+        content,
+      ],
+    );
+  });
 };
 
 const mindcareStateFromRow = (row) => parseRelationshipJson(row.state_json) ?? createMindcareState();
@@ -8002,30 +8028,32 @@ const generateCounselingReply = async ({ scope, userId, session, messages }) => 
 };
 
 const insertCounselingMessage = async ({ sessionId, role, authorUserId = null, content, generation = null }) => {
-  const next = await query(
-    'SELECT COALESCE(MAX(sequence_no), 0) + 1 AS next_sequence FROM relationship_counseling_messages WHERE session_id = ?',
-    [sessionId],
-  );
-  await query(
-    `INSERT INTO relationship_counseling_messages
-       (session_id, sequence_no, role, author_user_id, content,
-        provider, model, prompt_version, context_version,
-        generation_status, error_code)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      sessionId,
-      Number(next.rows[0]?.next_sequence ?? 1),
-      role,
-      authorUserId,
-      content,
-      generation?.provider ?? null,
-      generation?.model ?? null,
-      generation ? config.LLM_PROMPT_VERSION : null,
-      generation ? config.LLM_CONTEXT_VERSION : null,
-      generation?.status ?? null,
-      generation?.errorCode ?? null,
-    ],
-  );
+  await withSequenceRetry(async () => {
+    const next = await query(
+      'SELECT COALESCE(MAX(sequence_no), 0) + 1 AS next_sequence FROM relationship_counseling_messages WHERE session_id = ?',
+      [sessionId],
+    );
+    await query(
+      `INSERT INTO relationship_counseling_messages
+         (session_id, sequence_no, role, author_user_id, content,
+          provider, model, prompt_version, context_version,
+          generation_status, error_code)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        sessionId,
+        Number(next.rows[0]?.next_sequence ?? 1),
+        role,
+        authorUserId,
+        content,
+        generation?.provider ?? null,
+        generation?.model ?? null,
+        generation ? config.LLM_PROMPT_VERSION : null,
+        generation ? config.LLM_CONTEXT_VERSION : null,
+        generation?.status ?? null,
+        generation?.errorCode ?? null,
+      ],
+    );
+  });
 };
 
 const COUNSELING_CRISIS_REPLY =
