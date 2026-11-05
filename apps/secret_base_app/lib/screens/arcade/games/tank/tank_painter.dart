@@ -330,7 +330,7 @@ class TankBattlefieldPainter extends CustomPainter {
       minTop = math.min(minTop, kTerrainH - h[i] - 0.5);
     }
     final topY = v.toScreen(0, minTop).dy;
-    final bottomY = math.max(topY + 1, v.toScreen(0, kTerrainH).dy);
+    final bottomY = math.max(topY + 1, v.toScreen(0, kTerrainH.toDouble()).dy);
     canvas.drawPath(
       fill,
       Paint()
