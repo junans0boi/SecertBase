@@ -1,4 +1,5 @@
 import { query, transaction } from './db.js';
+import { parseJsonObject } from './shared/json-column.js';
 
 // XP needed to reach the next level: level × 100
 export function xpForNextLevel(level) {
@@ -271,7 +272,7 @@ export async function pullGacha(userId) {
       item: {
         ...item,
         grade,
-        stats: item.stats ? JSON.parse(item.stats) : {},
+        stats: parseJsonObject(item.stats),
       },
     };
   });

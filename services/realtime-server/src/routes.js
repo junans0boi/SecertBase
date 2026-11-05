@@ -11,6 +11,7 @@ import { createHash } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import { query, transaction } from './db.js';
+import { parseJsonObject } from './shared/json-column.js';
 import { config } from './config.js';
 import { providerState, searchPlaces } from './place-search.js';
 import { canEditMapPin, normalizeMapEditorUserId } from './map-ownership.js';
@@ -6884,7 +6885,7 @@ router.post('/shop/gacha', async (req, res) => {
       );
 
       return {
-        item: { ...item, stats: item.stats ? JSON.parse(item.stats) : {} },
+        item: { ...item, stats: parseJsonObject(item.stats) },
         is_new: isNew,
         new_balance: newBalance,
         grade: selectedGrade,
@@ -6928,7 +6929,7 @@ router.get('/shop/catalog', async (req, res) => {
       active: !!r.active,
       owned: (r.quantity ?? 0) > 0,
       quantity: r.quantity ?? 0,
-      stats: r.active && r.stats ? JSON.parse(r.stats) : null,
+      stats: r.active ? parseJsonObject(r.stats, null) : null,
     }));
 
     res.json({ ok: true, items });
