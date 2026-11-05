@@ -53,21 +53,6 @@ import {
   calcScore,
 } from "./marble-engine.js";
 import {
-  createUnoGameState,
-  canPlayCard,
-  drawCards,
-  applyCardEffect,
-  applyDiscardAllBatchEffects,
-  clearDrawStack,
-  hadPlayableCardOfColor,
-  canChallengeDraw4,
-  collectDiscardAllBatch,
-  UNO_MODES,
-  DEFAULT_UNO_MODE,
-  getNextPlayer,
-  checkWin as checkUnoWin,
-} from "./uno-engine.js";
-import {
   createBombGameState,
   checkAnswer,
   isTimeUp,
@@ -323,14 +308,6 @@ const yutNewSchema = z
   .optional()
   .default({ characters: {}, bgm: null, stake: 0 });
 
-const unoNewSchema = z
-  .object({
-    mode: z.enum(UNO_MODES).optional().default(DEFAULT_UNO_MODE),
-    stake: z.number().int().min(0).max(10000).optional().default(0),
-  })
-  .optional()
-  .default({ mode: DEFAULT_UNO_MODE, stake: 0 });
-
 const rouletteSchema = z.object({
   options: z.array(z.string().min(1).max(100)).min(2).max(12),
 });
@@ -373,26 +350,6 @@ const chatMessageSchema = z.object({
   message: z.string().trim().min(1).max(200),
 });
 
-const unoPlaySchema = z.object({
-  cardId: z.string().min(1),
-  declaredColor: z.preprocess(
-    (value) => (value === null ? undefined : value),
-    z.enum(["red", "yellow", "green", "blue"]).optional(),
-  ),
-});
-
-const unoReactionSchema = z.object({
-  type: z.enum([
-    "cake",
-    "candy",
-    "coffee",
-    "flyby",
-    "pillow",
-    "pizza",
-    "sportscar",
-    "tomato",
-  ]),
-});
 
 const bombAnswerSchema = z.object({
   answer: z.string().trim().min(1).max(50),
@@ -580,7 +537,6 @@ const withLobbyLock = (key, fn) => {
 
 const roomKey = (roomCode) => `room:${roomCode}:state`;
 const yutGameKey = (roomCode) => `yut:${roomCode}:game`;
-const unoGameKey = (roomCode) => `uno:${roomCode}:game`;
 const gostopGameKey = (roomCode) => `gostop:${roomCode}:game`;
 const bombGameKey = (roomCode) => `bomb:${roomCode}:game`;
 const gameLobbyKey = (roomCode, gameType) => `lobby:${roomCode}:${gameType}`;
@@ -593,7 +549,7 @@ const restartKey = (roomCode) => `restart:${roomCode}`;
 export const STAKE_GAME_TYPES = new Set(["yut", "uno", "uno_classic", "uno_go_wild", "tank", "gostop"]);
 const stakeFamily = (gameType) => (String(gameType).startsWith("uno") ? "uno" : gameType);
 // 재시작(재대결)을 지원하는 게임.
-export const RESTARTABLE_GAME_TYPES = new Set(["yut", "uno", "bomb", "marble", "tank"]);
+export const RESTARTABLE_GAME_TYPES = new Set(["yut", "bomb", "marble", "tank"]);
 for (const mod of GAME_MODULES) if (mod.restart) RESTARTABLE_GAME_TYPES.add(mod.gameType);
 const GAME_MODULE_BY_TYPE = new Map(GAME_MODULES.map((mod) => [mod.gameType, mod]));
 // 로비 종류(예: 제로의 로비는 'zero') → 모듈.
@@ -790,13 +746,6 @@ const emitMarbleState = (io, roomCode, eventName, gameState, extra = {}) => {
   });
 };
 
-const getUnoHandCount = (gameState) =>
-  Object.fromEntries(
-    gameState.players.map((player) => [
-      player,
-      gameState.hands[player]?.length ?? 0,
-    ]),
-  );
 
 export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeout } } = {}) => {
   const telepathyTimers = new Map();
@@ -997,18 +946,6 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         });
       },
     },
-    uno: {
-      key: unoGameKey,
-      playersOf: (s) => s.players ?? [],
-      waitingOn: (s) => (s.winner ? null : s.currentPlayer ?? null),
-      forfeit: async (roomCode, s, loser, winner) => {
-        io.to(roomCode).emit("game:uno:ended", { winner, reason: "forfeit" });
-        await settleForfeit(roomCode, {
-          gameType: "uno", missionKey: "onecard", key: unoGameKey(roomCode), winner, loser,
-          stake: s.stake ?? 0, gameId: s.gameId ?? `legacy-${roomCode}`,
-        });
-      },
-    },
     marble: {
       key: marbleGameKey,
       playersOf: (s) => s.playersOrder ?? [],
@@ -1140,6 +1077,9 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
     presenceNicknames: (roomCode) => getPresenceNicknames(io, roomCode),
     series: createSeriesStore(redis),
     randomUUID,
+    // 판돈 게임 정산(원카드): 기존 정산 경로를 그대로 쓴다.
+    settleWallet: (...args) => settleAndEmitWallet(io, ...args),
+    winStreak: _getWinStreak,
   };
   for (const mod of GAME_MODULES) if (mod.afk) afkAdapters[mod.gameType] = mod.afk(kit);
   const afkWatcher = createAfkWatcher({ io, redis, timerApi, withRoomLock, adapters: afkAdapters });
@@ -1610,14 +1550,12 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       try {
         // 활성 게임 세션 확인
         const yutKey = `yut:${roomCode}:game`;
-        const unoKey = `uno:${roomCode}:game`;
         const gostopKey = gostopGameKey(roomCode);
         const bombKey = `bomb:${roomCode}:game`;
         const marbleKey = marbleGameKey(roomCode);
 
-        const [yutGame, unoGame, gostopGame, bombGame, marbleGame] = await Promise.all([
+        const [yutGame, gostopGame, bombGame, marbleGame] = await Promise.all([
           redis.get(yutKey),
-          redis.get(unoKey),
           redis.get(gostopKey),
           redis.get(bombKey),
           redis.get(marbleKey),
@@ -1629,28 +1567,6 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
           const game = JSON.parse(yutGame);
           if (game.players) {
             activeGames.yut = serializeYutGame(game);
-          }
-        }
-
-        if (unoGame) {
-          const game = JSON.parse(unoGame);
-          const userId = socket.data.userId;
-          if (game.hands && game.discardPile && game.players?.includes(userId)) {
-            activeGames.uno = {
-              gameId: "active",
-              turn: game.currentPlayer,
-              mode: game.mode ?? DEFAULT_UNO_MODE,
-              topCard: game.discardPile[game.discardPile.length - 1],
-              declaredColor: game.declaredColor ?? null,
-              drawStack: game.drawStack ?? 0,
-              drawStackType: game.drawStackType ?? null,
-              handCount: getUnoHandCount(game),
-              hand: game.hands?.[userId] ?? [],
-              unoCallNeeded: game.unoCallNeeded ?? null,
-              // 상대가 뽑은 카드 id는 카드 정체를 드러내므로 본인 차례일 때만 보낸다.
-              drawnCardId: game.currentPlayer === userId ? (game.drawnCardId ?? null) : null,
-              canPlayDrawn: !!(game.drawnCardId && game.currentPlayer === userId),
-            };
           }
         }
 
@@ -1687,7 +1603,7 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         // session:restore itself must reserve the viewer room. Otherwise a
         // reconnecting socket can render the game but the old viewer's
         // disconnect immediately deletes the last active Redis state.
-        const restoredGameType = ['yut', 'marble', 'uno', 'gostop']
+        const restoredGameType = ['yut', 'marble', 'gostop']
           .find((type) => activeGames[type]);
         if (restoredGameType) {
           sessionScheduler.cancel(`${roomCode}:${restoredGameType}`);
@@ -3629,653 +3545,6 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       });
     });
 
-    socket.on("game:uno:new", async (payload, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const roomCode = socket.data.roomCode;
-      const userId = socket.data.userId;
-      if (!roomCode || !userId) {
-        ack({ ok: false, reason: "not_joined" });
-        return;
-      }
-
-      await withRoomLock(roomCode, async () => {
-      const presence = getPresence(io, roomCode);
-      if (presence.length !== 2) {
-        ack({ ok: false, reason: "need_two_players" });
-        return;
-      }
-
-      const parsed = unoNewSchema.safeParse(payload);
-      if (!parsed.success) {
-        ack({ ok: false, reason: "invalid_payload" });
-        return;
-      }
-      const { mode } = parsed.data;
-
-      const orderedPlayers = await getOrderedPlayers(roomCode, presence);
-      if (orderedPlayers.length !== 2) {
-        ack({ ok: false, reason: "need_two_players" });
-        return;
-      }
-
-      const existing = await redis.get(unoGameKey(roomCode));
-      if (existing) {
-        ack({ ok: false, reason: "game_in_progress" });
-        return;
-      }
-
-      const pendingUno = await consumePendingGame(roomCode, "uno");
-      // 로비에서 시작한 판은 로비 옵션의 모드만 쓴다. 로비 밖(결과 화면의 새 판)은 요청 모드.
-      const gameState = createUnoGameState(orderedPlayers, 7, { mode: pendingUno.fromLobby ? pendingUno.options.mode : mode });
-      gameState.stake = pendingUno.stake; // payload의 stake는 무시한다.
-      gameState.gameId = pendingUno.gameId;
-
-      // 양 플레이어 스탯 + 장착 아이템 미리 로드
-      const unoPlayerStats = {};
-      const unoEquippedItems = {};
-      for (const code of orderedPlayers) {
-        const { rows } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [code]);
-        const numId = rows[0]?.UserId;
-        unoPlayerStats[code] = numId ? await getEquippedStats(numId) : {};
-        unoEquippedItems[code] = numId ? await getEquippedItemsInfo(numId) : {};
-      }
-      gameState.playerStats = unoPlayerStats;
-      gameState.equippedItems = unoEquippedItems;
-
-      await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
-
-      // Broadcast common info to room
-      io.to(roomCode).emit("game:uno:started", {
-        topCard: gameState.discardPile[gameState.discardPile.length - 1],
-        currentPlayer: gameState.currentPlayer,
-        mode: gameState.mode,
-        declaredColor: gameState.declaredColor,
-        drawStack: 0,
-        drawStackType: null,
-        handCount: getUnoHandCount(gameState),
-        equippedItems: gameState.equippedItems,
-      });
-
-      // Send each player their private hand separately
-      const sockets = await io.in(roomCode).fetchSockets();
-      for (const sock of sockets) {
-        const pid = sock.data.userId;
-        if (gameState.hands[pid]) {
-          sock.emit("game:uno:hand_update", { hand: gameState.hands[pid] });
-        }
-      }
-
-      ack({ ok: true });
-      }); // withRoomLock
-    });
-
-    socket.on("game:uno:play", async (payload, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const roomCode = socket.data.roomCode;
-      const userId = socket.data.userId;
-      if (!roomCode || !userId) {
-        ack({ ok: false, reason: "not_joined" });
-        return;
-      }
-
-      const parsed = unoPlaySchema.safeParse(payload);
-      if (!parsed.success) {
-        ack({ ok: false, reason: "invalid_payload" });
-        return;
-      }
-
-      await withRoomLock(roomCode, async () => {
-      const gameText = await redis.get(unoGameKey(roomCode));
-      if (!gameText) {
-        ack({ ok: false, reason: "no_game" });
-        return;
-      }
-
-      const gameState = JSON.parse(gameText);
-      if (gameState.currentPlayer !== userId) {
-        ack({ ok: false, reason: "not_your_turn" });
-        return;
-      }
-
-      const { cardId, declaredColor } = parsed.data;
-      const hand = gameState.hands[userId];
-      const cardIndex = hand.findIndex((c) => c.id === cardId);
-
-      if (cardIndex === -1) {
-        ack({ ok: false, reason: "card_not_found" });
-        return;
-      }
-
-      if (gameState.drawnCardId && gameState.drawnCardId !== cardId) {
-        ack({ ok: false, reason: "must_choose_drawn_card" });
-        return;
-      }
-
-      const card = hand[cardIndex];
-
-      // Wild and Wild Draw4 require a declared color
-      if ((card.value === 'wild' || card.value === 'wild_draw4') && !declaredColor) {
-        ack({ ok: false, reason: 'must_declare_color' });
-        return;
-      }
-
-      const topCard = gameState.discardPile[gameState.discardPile.length - 1];
-
-      // Draw stack restriction: when stack is pending, only matching defense cards allowed
-      const hasStack = (gameState.drawStack || 0) > 0 && gameState.drawStackType;
-      if (hasStack) {
-        if (!canPlayCard(
-          card,
-          topCard,
-          gameState.declaredColor,
-          gameState.drawStack,
-          gameState.drawStackType,
-          { mode: gameState.mode },
-        )) {
-          ack({ ok: false, reason: "must_draw_or_defend" });
-          return;
-        }
-      } else if (!canPlayCard(card, topCard, gameState.declaredColor, 0, null, { mode: gameState.mode })) {
-        ack({ ok: false, reason: "cannot_play_card" });
-        return;
-      }
-
-      // Capture previous effective color (needed for +4 challenge tracking)
-      const previousColor = gameState.declaredColor || topCard.color;
-
-      // Remove card from hand. Discard All is a colored card: after the
-      // trigger card is removed, all remaining cards of that color are also
-      // discarded in current hand order.
-      hand.splice(cardIndex, 1);
-      gameState.drawnCardId = null;
-      const playedCards = gameState.mode === "go_wild"
-        ? collectDiscardAllBatch(hand, card)
-        : [card];
-      for (const playedCard of playedCards) {
-        gameState.discardPile.push(playedCard);
-      }
-      // Only Wild cards may declare a color; normal cards must not override it.
-      const isWild = card.value === 'wild' || card.value === 'wild_draw4';
-      gameState.declaredColor = isWild ? (declaredColor || null) : null;
-
-      // Apply card effects in the same order the cards reached the discard pile.
-      // A +2 swept up by an All card is discarded, not played as an attack.
-      if (card.value === 'discard_all') {
-        applyDiscardAllBatchEffects(gameState, playedCards, previousColor);
-      } else {
-        for (const playedCard of playedCards) {
-          applyCardEffect(gameState, playedCard, previousColor);
-        }
-      }
-
-      // card_reverse_bonus: 리버스 카드 플레이 시 상대방이 1장 추가 드로우 (capped 20%)
-      if (card.value === 'reverse') {
-        const myPlayStats = gameState.playerStats?.[userId] ?? {};
-        const reversePct = Math.min(myPlayStats.card_reverse_bonus ?? 0, 20);
-        if (reversePct > 0 && Math.random() * 100 < reversePct) {
-          const opponentId = gameState.players.find((p) => p !== userId);
-          if (opponentId && gameState.hands[opponentId]) {
-            const bonusCards = drawCards(gameState, 1);
-            gameState.hands[opponentId].push(...bonusCards);
-            socket.emit("game:item_effect", { stat: "card_reverse_bonus", amount: 0 });
-          }
-        }
-      }
-
-      // Check win
-      const won = checkUnoWin(gameState, userId);
-      if (won) {
-        gameState.winner = userId;
-      }
-
-      // Next turn
-      if (!won) {
-        gameState.currentPlayer = getNextPlayer(gameState);
-      }
-
-      // UNO call window: previous window from opponent is now expired
-      if (gameState.unoCallNeeded && gameState.unoCallNeeded !== userId) {
-        gameState.unoCallNeeded = null;
-      }
-      // Open new window if this player now has exactly 1 card
-      if (!won && hand.length === 1) {
-        gameState.unoCallNeeded = userId;
-      }
-
-      await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
-
-      const event = {
-        by: userId,
-        card: playedCards[playedCards.length - 1],
-        cards: playedCards,
-        count: playedCards.length,
-        mode: gameState.mode,
-        declaredColor: gameState.declaredColor,
-        nextPlayer: gameState.currentPlayer,
-        drawStack: gameState.drawStack,
-        drawStackType: gameState.drawStackType ?? null,
-        handCount: getUnoHandCount(gameState),
-        winner: gameState.winner,
-        unoCallNeeded: gameState.unoCallNeeded ?? null,
-        at: Date.now(),
-      };
-
-      io.to(roomCode).emit("game:uno:played", event);
-      socket.emit("game:uno:hand_update", { hand: gameState.hands[userId] });
-
-      // card_reverse_bonus 발동 시 상대방 핸드도 업데이트
-      if (card.value === 'reverse') {
-        const opponentForHand = gameState.players.find((p) => p !== userId);
-        if (opponentForHand && gameState.hands[opponentForHand]) {
-          const roomSockets = await io.in(roomCode).fetchSockets();
-          for (const sock of roomSockets) {
-            if (sock.data.userId === opponentForHand) {
-              sock.emit("game:uno:hand_update", { hand: gameState.hands[opponentForHand] });
-              break;
-            }
-          }
-        }
-      }
-
-      ack({ ok: true, event });
-
-      if (gameState.winner) {
-        const unoLoserId = gameState.players.find(p => p !== gameState.winner);
-        io.to(roomCode).emit("game:uno:ended", { winner: gameState.winner });
-        const [{ rows: unoWinnerRows }, { rows: unoLoserRows }] = await Promise.all([
-          query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [gameState.winner]),
-          query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [unoLoserId]),
-        ]);
-        const unoPreStreak = await _getWinStreak(roomCode, gameState.winner);
-        // 정산 → 결과 기록 → 상태 삭제 (ref 고정으로 멱등).
-        const unoGameId = gameState.gameId ?? `legacy-${roomCode}-${gameState.discardPile?.length ?? 0}`;
-        const unoWallet = await settleAndEmitWallet(io, roomCode, gameState.winner, unoLoserId, gameState.stake ?? 0, `uno:${unoGameId}`, unoWinnerRows[0]?.UserId, 0, unoLoserRows[0]?.UserId, unoPreStreak);
-        if (!unoWallet.ok) io.to(roomCode).emit("wallet:settle_failed", { gameType: "uno", reason: unoWallet.reason });
-        await Promise.all([
-          saveGameResult(roomCode, gameState.winner, unoLoserId, 'uno', gameState.stake ?? 0, { gameId: unoGameId }),
-          grantGameXpAndMissions(gameState.winner, unoLoserId, 'onecard'),
-        ]);
-        await redis.del(unoGameKey(roomCode));
-      }
-      }); // withRoomLock
-    });
-
-    socket.on("game:uno:call", async (_, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const roomCode = socket.data.roomCode;
-      const userId = socket.data.userId;
-      if (!roomCode || !userId) { ack({ ok: false, reason: "not_joined" }); return; }
-
-      await withRoomLock(roomCode, async () => {
-        const gameText = await redis.get(unoGameKey(roomCode));
-        if (!gameText) { ack({ ok: false, reason: "no_game" }); return; }
-
-        const gameState = JSON.parse(gameText);
-        if (gameState.unoCallNeeded !== userId) {
-          ack({ ok: false, reason: "not_needed" });
-          return;
-        }
-
-        gameState.unoCallNeeded = null;
-        await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
-
-        io.to(roomCode).emit("game:uno:called", { by: userId });
-        ack({ ok: true });
-      }); // withRoomLock
-    });
-
-    socket.on("game:uno:catch", async (_, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const roomCode = socket.data.roomCode;
-      const userId = socket.data.userId;
-      if (!roomCode || !userId) { ack({ ok: false, reason: "not_joined" }); return; }
-
-      await withRoomLock(roomCode, async () => {
-      const gameText = await redis.get(unoGameKey(roomCode));
-      if (!gameText) { ack({ ok: false, reason: "no_game" }); return; }
-
-      const gameState = JSON.parse(gameText);
-      const target = gameState.unoCallNeeded;
-      if (!target || target === userId) {
-        ack({ ok: false, reason: "no_target" });
-        return;
-      }
-
-      // card_uno_protect_pct: target has % chance to avoid penalty (capped 15%)
-      const targetUnoStats = gameState.playerStats?.[target] ?? {};
-      const protectPct = Math.min(targetUnoStats.card_uno_protect_pct ?? 0, 15);
-      if (protectPct > 0 && Math.random() * 100 < protectPct) {
-        gameState.unoCallNeeded = null;
-        await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
-        io.to(roomCode).emit("game:uno:penalty", {
-          target,
-          caughtBy: userId,
-          count: 0,
-          protected: true,
-          handCount: getUnoHandCount(gameState),
-        });
-        ack({ ok: true, protected: true });
-        return;
-      }
-
-      // Penalty: draw 2 cards for target
-      const drawnCards = drawCards(gameState, 2);
-      gameState.hands[target].push(...drawnCards);
-      gameState.unoCallNeeded = null;
-
-      await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
-
-      io.to(roomCode).emit("game:uno:penalty", {
-        target,
-        caughtBy: userId,
-        count: 2,
-        handCount: getUnoHandCount(gameState),
-      });
-
-      // Send updated hand to penalty target
-      const sockets = await io.in(roomCode).fetchSockets();
-      for (const sock of sockets) {
-        if (sock.data.userId === target) {
-          sock.emit("game:uno:hand_update", { hand: gameState.hands[target] });
-          break;
-        }
-      }
-
-      ack({ ok: true });
-      }); // withRoomLock
-    });
-
-    // +4 도전: 상대가 +4를 낼 자격이 있었는지 확인
-    socket.on("game:uno:challenge", async (_, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const roomCode = socket.data.roomCode;
-      const userId = socket.data.userId;
-      if (!roomCode || !userId) { ack({ ok: false, reason: "not_joined" }); return; }
-
-      await withRoomLock(roomCode, async () => {
-      const gameText = await redis.get(unoGameKey(roomCode));
-      if (!gameText) { ack({ ok: false, reason: "no_game" }); return; }
-
-      const gameState = JSON.parse(gameText);
-
-      // Only allowed when draw4 stack is pending and it's the challenger's turn
-      if (!canChallengeDraw4(gameState, userId)) {
-        ack({ ok: false, reason: "cannot_challenge_during_stack" });
-        return;
-      }
-
-      const attackerPlayer = gameState.lastDraw4Player;
-      const colorBefore = gameState.colorBeforeDraw4;
-
-      if (!attackerPlayer || !colorBefore) {
-        ack({ ok: false, reason: "no_challenge_data" });
-        return;
-      }
-
-      // Did the attacker have a card of colorBefore? → challenge success
-      const attackerHand = gameState.hands[attackerPlayer] ?? [];
-      const challengeSuccess = hadPlayableCardOfColor(attackerHand, colorBefore);
-
-      let drawnPlayer, drawnCount, nextPlayer;
-
-      if (challengeSuccess) {
-        // B의 도전 성공: A가 +4를 불법으로 냈음 → A가 4장 받기, B 턴 유지, 선언 색상 유지
-        drawnCount = 4;
-        drawnPlayer = attackerPlayer;
-        nextPlayer = userId; // B(challenger)의 턴 유지
-      } else {
-        // B의 도전 실패: A가 정당하게 냈음 → B가 6장 받기(4장+벌칙2장), A 턴 유지
-        drawnCount = 6;
-        drawnPlayer = userId;
-        nextPlayer = attackerPlayer; // A 턴 유지
-      }
-
-      const drawnCards = drawCards(gameState, drawnCount);
-      gameState.hands[drawnPlayer].push(...drawnCards);
-      clearDrawStack(gameState);
-      gameState.currentPlayer = nextPlayer;
-      // 도전 처리 후 남은 "뽑은 카드 선택" 상태와, 카드를 받은 쪽의 UNO 선언 의무를 정리한다.
-      gameState.drawnCardId = null;
-      if (gameState.unoCallNeeded === drawnPlayer) gameState.unoCallNeeded = null;
-      // 선언 색상: 성공/실패 모두 A가 선언한 색상 유지 (공식 룰)
-      // gameState.declaredColor는 이미 +4 플레이 시 설정된 상태로 유지
-
-      await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
-
-      io.to(roomCode).emit("game:uno:challenged", {
-        by: userId,
-        challenged: attackerPlayer,
-        success: challengeSuccess,
-        drawnPlayer,
-        drawnCount,
-        nextPlayer,
-        mode: gameState.mode,
-        drawStack: 0,
-        drawStackType: null,
-        handCount: getUnoHandCount(gameState),
-      });
-
-      // Send updated hand to the player who drew
-      const sockets = await io.in(roomCode).fetchSockets();
-      for (const sock of sockets) {
-        if (sock.data.userId === drawnPlayer) {
-          sock.emit("game:uno:hand_update", { hand: gameState.hands[drawnPlayer] });
-          break;
-        }
-      }
-
-      ack({ ok: true, success: challengeSuccess });
-      }); // withRoomLock
-    });
-
-    socket.on("game:uno:reaction", async (payload, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const roomCode = socket.data.roomCode;
-      const userId = socket.data.userId;
-      if (!roomCode || !userId) {
-        ack({ ok: false, reason: "not_joined" });
-        return;
-      }
-
-      const parsed = unoReactionSchema.safeParse(payload);
-      if (!parsed.success) {
-        ack({ ok: false, reason: "invalid_payload" });
-        return;
-      }
-
-      const gameText = await redis.get(unoGameKey(roomCode));
-      if (!gameText) {
-        ack({ ok: false, reason: "no_game" });
-        return;
-      }
-
-      const event = {
-        by: userId,
-        type: parsed.data.type,
-        at: Date.now(),
-      };
-      io.to(roomCode).emit("game:uno:reaction", event);
-      ack({ ok: true, event });
-    });
-
-    // ── 모두 내기 (Discard All) ────────────────────────────────────────────────
-    // Deprecated: Discard All is now a colored card handled by game:uno:play.
-    socket.on("game:uno:discard_all", async (_, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      ack({ ok: false, reason: "discard_all_is_card" });
-    });
-
-    socket.on("game:uno:draw", async (_, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const roomCode = socket.data.roomCode;
-      const userId = socket.data.userId;
-      if (!roomCode || !userId) {
-        ack({ ok: false, reason: "not_joined" });
-        return;
-      }
-
-      await withRoomLock(roomCode, async () => {
-      const gameText = await redis.get(unoGameKey(roomCode));
-      if (!gameText) {
-        ack({ ok: false, reason: "no_game" });
-        return;
-      }
-
-      const gameState = JSON.parse(gameText);
-      if (gameState.currentPlayer !== userId) {
-        ack({ ok: false, reason: "not_your_turn" });
-        return;
-      }
-
-      if (gameState.drawnCardId) {
-        // 뽑은 카드를 낼지 넘길지 아직 고르지 않았다. 다시 뽑으면 스택을 이중으로 받는다.
-        ack({ ok: false, reason: "must_choose_drawn_card" });
-        return;
-      }
-
-      const myUnoStats = gameState.playerStats?.[userId] ?? {};
-      let drawCount = (gameState.drawStack || 0) > 0 ? gameState.drawStack : 1;
-
-      // card_shield_pct: chance to fully negate an attack draw stack (capped 15%)
-      if (gameState.drawStack > 0) {
-        const shieldPct = Math.min(myUnoStats.card_shield_pct ?? 0, 15);
-        if (shieldPct > 0 && Math.random() * 100 < shieldPct) {
-          drawCount = 0;
-          socket.emit("game:item_effect", { stat: "card_shield_pct", amount: 0 });
-        }
-      }
-
-      // card_lucky_draw_pct: chance to draw 1 less card (capped 20%)
-      if (drawCount > 1) {
-        const luckyPct = Math.min(myUnoStats.card_lucky_draw_pct ?? 0, 20);
-        if (luckyPct > 0 && Math.random() * 100 < luckyPct) {
-          drawCount = Math.max(1, drawCount - 1);
-          socket.emit("game:item_effect", { stat: "card_lucky_draw_pct", amount: 0 });
-        }
-      }
-
-      // onecard_draw_reduce: 보장된 드로우 감소 (최소 1장)
-      const drawReduce = Math.floor(myUnoStats.onecard_draw_reduce ?? 0);
-      if (drawReduce > 0 && drawCount > 1) {
-        drawCount = Math.max(1, drawCount - drawReduce);
-      }
-
-      const drawnCards = drawCards(gameState, drawCount);
-      gameState.hands[userId].push(...drawnCards);
-
-      const drawnCard = drawnCards[drawnCards.length - 1] ?? null;
-      const topCard = gameState.discardPile[gameState.discardPile.length - 1];
-      // Check playability with drawStack cleared — the penalty draw has been served,
-      // so the drawn card only needs to be playable as a normal card.
-      const drawnCardIsPlayable = drawnCard != null && canPlayCard(
-        drawnCard,
-        topCard,
-        gameState.declaredColor,
-        0,    // drawStack cleared after penalty draw
-        null, // drawStackType cleared
-        { mode: gameState.mode },
-      );
-
-      // 벌칙(공격 스택)은 이번 드로우로 이미 받았다. 뽑은 카드를 낼 수 있든 없든
-      // 스택은 비워야 한다. 남겨 두면 "내기"가 must_draw_or_defend로 거부되거나,
-      // 뽑은 카드가 +2일 때 이미 받은 스택에 더해져 상대가 이중 벌칙을 받는다.
-      clearDrawStack(gameState);
-      if (drawnCardIsPlayable) {
-        gameState.drawnCardId = drawnCard.id;
-      } else {
-        gameState.drawnCardId = null;
-        gameState.currentPlayer = getNextPlayer(gameState);
-      }
-
-      // UNO 선언 창 처리:
-      // - 상대가 드로우할 때 내 선언 기회 소멸 (기존)
-      // - 자신이 드로우하면 자신의 선언 의무도 소멸 (패가 늘었으므로 캐치 불가 상태)
-      if (gameState.unoCallNeeded && gameState.unoCallNeeded !== userId && !drawnCardIsPlayable) {
-        gameState.unoCallNeeded = null;
-      }
-      if (gameState.unoCallNeeded === userId) {
-        gameState.unoCallNeeded = null;
-      }
-
-      await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
-
-      const event = {
-        by: userId,
-        count: drawCount,
-        nextPlayer: gameState.currentPlayer,
-        canPlayDrawn: drawnCardIsPlayable,
-        mode: gameState.mode,
-        declaredColor: gameState.declaredColor,
-        drawStack: 0,
-        drawStackType: null,
-        handCount: getUnoHandCount(gameState),
-        unoCallNeeded: gameState.unoCallNeeded ?? null,
-      };
-
-      io.to(roomCode).emit("game:uno:drawn", event);
-      // Send updated hand privately to the player who drew
-      socket.emit("game:uno:hand_update", { hand: gameState.hands[userId] });
-      if (drawnCardIsPlayable) {
-        socket.emit("game:uno:draw_choice", {
-          card: drawnCard,
-          drawStack: 0,
-          drawStackType: null,
-        });
-      }
-      ack({ ok: true, event });
-      }); // withRoomLock
-    });
-
-    socket.on("game:uno:draw_decision", async (payload, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const roomCode = socket.data.roomCode;
-      const userId = socket.data.userId;
-      if (!roomCode || !userId) {
-        ack({ ok: false, reason: "not_joined" });
-        return;
-      }
-
-      await withRoomLock(roomCode, async () => {
-      const gameText = await redis.get(unoGameKey(roomCode));
-      if (!gameText) {
-        ack({ ok: false, reason: "no_game" });
-        return;
-      }
-
-      const gameState = JSON.parse(gameText);
-      if (gameState.currentPlayer !== userId || !gameState.drawnCardId) {
-        ack({ ok: false, reason: "no_draw_choice" });
-        return;
-      }
-
-      if (payload?.play === true) {
-        ack({ ok: true, play: true, cardId: gameState.drawnCardId });
-        return;
-      }
-
-      gameState.drawnCardId = null;
-      clearDrawStack(gameState);
-      gameState.currentPlayer = getNextPlayer(gameState);
-      if (gameState.unoCallNeeded && gameState.unoCallNeeded !== userId) {
-        gameState.unoCallNeeded = null;
-      }
-      await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
-
-      const event = {
-        by: userId,
-        nextPlayer: gameState.currentPlayer,
-        mode: gameState.mode,
-        declaredColor: gameState.declaredColor,
-        drawStack: 0,
-        drawStackType: null,
-        handCount: getUnoHandCount(gameState),
-        unoCallNeeded: gameState.unoCallNeeded ?? null,
-      };
-      io.to(roomCode).emit("game:uno:draw_decided", event);
-      ack({ ok: true, play: false, event });
-      }); // withRoomLock
-    });
-
     socket.on("game:bomb:new", async (payload, ackRaw) => {
       const ack = normalizeAck(ackRaw);
       const roomCode = socket.data.roomCode;
@@ -4481,43 +3750,6 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
 
         await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
         emitYutState(io, roomCode, "game:yut:started", gameState);
-      } else if (gameType === "uno") {
-        const previousText = await redis.get(unoGameKey(roomCode));
-        const previous = previousText ? JSON.parse(previousText) : {};
-        const gameState = createUnoGameState(orderedPlayers, 7, {
-          mode: previous.mode ?? DEFAULT_UNO_MODE,
-        });
-        gameState.stake = previous.stake ?? 0;
-        gameState.gameId = randomUUID();
-
-        // 아이템 스탯 + 장착 아이템 재적재
-        const unoRestartStats = {};
-        const unoRestartEquipped = {};
-        for (const code of orderedPlayers) {
-          const { rows } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [code]);
-          const numId = rows[0]?.UserId;
-          unoRestartStats[code] = numId ? await getEquippedStats(numId) : {};
-          unoRestartEquipped[code] = numId ? await getEquippedItemsInfo(numId) : {};
-        }
-        gameState.playerStats = unoRestartStats;
-        gameState.equippedItems = unoRestartEquipped;
-
-        await redis.set(unoGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
-        io.to(roomCode).emit("game:uno:started", {
-          topCard: gameState.discardPile[gameState.discardPile.length - 1],
-          currentPlayer: gameState.currentPlayer,
-          mode: gameState.mode,
-          declaredColor: gameState.declaredColor,
-          drawStack: 0,
-          drawStackType: null,
-          handCount: getUnoHandCount(gameState),
-          equippedItems: gameState.equippedItems,
-        });
-        const sockets = await io.in(roomCode).fetchSockets();
-        for (const sock of sockets) {
-          const pid = sock.data.userId;
-          if (gameState.hands[pid]) sock.emit("game:uno:hand_update", { hand: gameState.hands[pid] });
-        }
       } else if (gameType === "marble") {
         const previousText = await redis.get(marbleGameKey(roomCode));
         const previous = previousText ? JSON.parse(previousText) : {};
