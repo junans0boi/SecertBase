@@ -87,7 +87,6 @@ import {
   drawCard as drawOldMaidCard,
 } from "./oldmaid-engine.js";
 import { TELEPATHY_RESPONSE_TIMEOUT_MS, TELEPATHY_SESSION_TTL_SEC, telepathyResult } from "./telepathy-engine.js";
-import { resolveHanabagiRound } from "./rps-engine.js";
 
 import {
   initBowlingGame,
@@ -340,13 +339,11 @@ const rpsSchema = z.object({
 });
 
 const rpsStartSchema = z.object({
-  mode: z.enum(["single", "rps3", "mukjippa", "hanabagi"]),
+  mode: z.enum(["single", "rps3", "mukjippa"]),
 });
 
 const rpsPickSchema = z.object({
   choice: z.enum(["rock", "paper", "scissors"]).optional(),
-  fingers: z.number().int().min(0).max(5).optional(),
-  guess: z.number().int().min(0).max(10).optional(),
 });
 
 const telepathySchema = z.object({
@@ -1952,15 +1949,9 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         if (game.picks[userId] !== undefined) { ack({ ok: true, waiting: true }); return; }
 
         // Record pick
-        if (game.mode === "hanabagi") {
-          const { fingers, guess } = parsed.data;
-          if (fingers === undefined || guess === undefined) { ack({ ok: false, reason: "need_fingers_and_guess" }); return; }
-          game.picks[userId] = { fingers, guess };
-        } else {
-          const { choice } = parsed.data;
-          if (!choice) { ack({ ok: false, reason: "need_choice" }); return; }
-          game.picks[userId] = choice;
-        }
+        const { choice } = parsed.data;
+        if (!choice) { ack({ ok: false, reason: "need_choice" }); return; }
+        game.picks[userId] = choice;
 
         const [p1, p2] = game.players;
         if (game.picks[p1] === undefined || game.picks[p2] === undefined) {
@@ -2059,44 +2050,6 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
             });
           }
         }
-
-      } else if (game.mode === "hanabagi") {
-        const pick1 = game.picks[p1], pick2 = game.picks[p2];
-        const result = resolveHanabagiRound(pick1, pick2);
-        const total = result.total;
-        if (result.roundWinner === 'p1') {
-          roundWinner = p1;
-          game.scores[p1] = (game.scores[p1] || 0) + 1;
-        } else if (result.roundWinner === 'p2') {
-          roundWinner = p2;
-          game.scores[p2] = (game.scores[p2] || 0) + 1;
-        } else {
-          roundWinner = "draw";
-        }
-        if (roundWinner !== "draw" && game.scores[roundWinner] >= 3) {
-          game.gameWinner = roundWinner;
-        }
-        const roundRecord = {
-          round: game.round,
-          fingers: { [p1]: pick1.fingers, [p2]: pick2.fingers },
-          guesses: { [p1]: pick1.guess, [p2]: pick2.guess },
-          total,
-          roundWinner,
-          scores: { ...game.scores },
-        };
-        game.history = [...(game.history || []), roundRecord];
-        game.round++;
-        const event = {
-          mode: "hanabagi", round: game.round - 1,
-          fingers: { [p1]: pick1.fingers, [p2]: pick2.fingers },
-          guesses: { [p1]: pick1.guess, [p2]: pick2.guess },
-          total, roundWinner, scores: { ...game.scores },
-          history: game.history,
-          gameWinner: game.gameWinner,
-        };
-        game.picks = {};
-        await redis.set(rpsGameKey(roomCode), JSON.stringify(game), "EX", 600);
-        io.to(roomCode).emit("game:rps:round_result", event);
       }
 
       // 승부가 났으면 결과·XP를 기록한다(이후 pick은 game_over로 거부되므로 한 번만).
@@ -2104,7 +2057,7 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         await recordGameOutcome(roomCode, {
           winner: game.gameWinner,
           players: game.players,
-          gameType: game.mode === "hanabagi" ? "zero" : "rps",
+          gameType: "rps",
         });
       }
 
