@@ -651,6 +651,25 @@ class _StageHand extends StatelessWidget {
           child: Stack(
             alignment: Alignment.center,
             children: [
+              // 손마다 작은 핀 조명: 무대 옆 어둠 속에서도 장갑이 또렷하게 떠 보인다.
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: RadialGradient(
+                        center: const Alignment(0, 0.25),
+                        radius: 0.62,
+                        colors: [
+                          const Color(0xFFFFF1D6).withValues(alpha: 0.22),
+                          color.withValues(alpha: 0.06),
+                          Colors.transparent,
+                        ],
+                        stops: const [0, 0.55, 1],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
               FittedBox(
                 child: Padding(
                   padding: const EdgeInsets.all(6),
