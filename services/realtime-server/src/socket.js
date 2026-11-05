@@ -82,10 +82,6 @@ import {
   serializeFor as serializeBlackjackFor,
 } from "./blackjack-engine.js";
 
-import {
-  startGame as startOldMaidGame,
-  drawCard as drawOldMaidCard,
-} from "./oldmaid-engine.js";
 import { TELEPATHY_RESPONSE_TIMEOUT_MS, TELEPATHY_SESSION_TTL_SEC, telepathyResult } from "./telepathy-engine.js";
 import { resolveHanabagiRound } from "./rps-engine.js";
 
@@ -196,45 +192,6 @@ function withBowlingFrames(gameState) {
     frames[pid] = buildFrameDisplayData(rolls);
   }
   return { ...gameState, frames };
-}
-
-// Old Maid cards are private information. The drawing player sees their own
-// hand, while the other player receives only stable card ids so they can be
-// selected without leaking rank/suit/Joker state.
-function serializeOldMaidGame(gameState, viewerId) {
-  const players = Object.fromEntries(
-    Object.entries(gameState.players ?? {}).map(([playerId, player]) => [
-      playerId,
-      {
-        ...player,
-        // 상대 카드의 실제 id(card_0…, card_joker)는 랭크와 조커 위치를 드러낸다.
-        // 위치 별칭만 보내고, 뽑기 요청의 별칭은 서버가 실제 카드로 바꾼다.
-        hand: (player.hand ?? []).map((card, index) =>
-          playerId === viewerId ? card : { id: `slot-${index}` },
-        ),
-      },
-    ]),
-  );
-  const lastDrawnCard = gameState.lastDrawnCard
-    ? {
-        ...gameState.lastDrawnCard,
-        card: gameState.lastDrawnCard.by === viewerId
-          ? gameState.lastDrawnCard.card
-          : { id: gameState.lastDrawnCard.card?.id },
-      }
-    : null;
-  return { ...gameState, players, lastDrawnCard };
-}
-
-function emitOldMaidState(io, roomCode, gameState) {
-  return io.in(roomCode).fetchSockets().then((sockets) => {
-    for (const roomSocket of sockets) {
-      roomSocket.emit(
-        "game:oldmaid:updated",
-        serializeOldMaidGame(gameState, roomSocket.data.userId),
-      );
-    }
-  });
 }
 
 // Blackjack hands are private during a round. Send each socket a projection
@@ -1062,17 +1019,6 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         await recordGameOutcome(roomCode, { winner, players: s.players, gameType: "blackjack" });
       },
     },
-    oldmaid: {
-      key: (rc) => `game:${rc}:oldmaid`,
-      playersOf: (s) => Object.keys(s.players ?? {}),
-      waitingOn: (s) => (s.status === "playing" ? s.turn ?? null : null),
-      forfeit: async (roomCode, s, loser, winner) => {
-        const finished = { ...s, status: "finished", result: { winner, loser, reason: "forfeit" } };
-        await redis.set(`game:${roomCode}:oldmaid`, JSON.stringify(finished), "EX", 3600);
-        await emitOldMaidState(io, roomCode, finished);
-        await recordGameOutcome(roomCode, { winner, players: [winner, loser], gameType: "oldmaid" });
-      },
-    },
     bowling: {
       key: (rc) => `game:${rc}:bowling`,
       playersOf: (s) => Object.keys(s.scores ?? {}),
@@ -1698,9 +1644,8 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         // 비재개형 게임: 각 게임의 기존 업데이트 이벤트로 현재 상태를 이 소켓에만 다시 보낸다.
         // (클라이언트의 기존 리스너가 그대로 처리하므로 재접속 교착이 사라진다.)
         const userId = socket.data.userId;
-        const [bjRaw, omRaw, pkRaw, bwRaw, tkRaw, ctRaw] = await Promise.all([
+        const [bjRaw, pkRaw, bwRaw, tkRaw, ctRaw] = await Promise.all([
           redis.get(`game:${roomCode}:blackjack`),
-          redis.get(`game:${roomCode}:oldmaid`),
           redis.get(`game:${roomCode}:penalty`),
           redis.get(`game:${roomCode}:bowling`),
           redis.get(`game:${roomCode}:tank`),
@@ -1715,13 +1660,6 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
           if (g.status !== "finished" && g.players?.includes(userId)) {
             socket.emit("game:blackjack:updated", serializeBlackjackFor(g, userId));
             restored.push("blackjack");
-          }
-        }
-        if (omRaw) {
-          const g = JSON.parse(omRaw);
-          if (g.status !== "finished" && g.players?.[userId]) {
-            socket.emit("game:oldmaid:updated", serializeOldMaidGame(g, userId));
-            restored.push("oldmaid");
           }
         }
         if (pkRaw) {
@@ -3403,87 +3341,6 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       const userId = socket.data.userId;
       if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
       return runBlackjackAction(userId, roomCode, nextBlackjackRound, ack);
-    });
-
-    socket.on("game:oldmaid:start", async (payload, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const roomCode = socket.data.roomCode;
-      const userId = socket.data.userId;
-      if (!roomCode || !userId) {
-        ack({ ok: false, reason: "not_joined" });
-        return;
-      }
-      await withRoomLock(roomCode, async () => {
-        const presence = getPresence(io, roomCode);
-        if (presence.length !== 2) {
-          ack({ ok: false, reason: "need_two_players" });
-          return;
-        }
-        const orderedPlayers = await getOrderedPlayers(roomCode, presence);
-        if (orderedPlayers.length !== 2) {
-          ack({ ok: false, reason: "need_two_players" });
-          return;
-        }
-        const existing = await redis.get(`game:${roomCode}:oldmaid`);
-        const existingState = existing ? JSON.parse(existing) : null;
-        const { game: gameState, resumed } = startOldMaidGame(
-          existingState,
-          orderedPlayers[0],
-          orderedPlayers[1],
-        );
-        await redis.set(`game:${roomCode}:oldmaid`, JSON.stringify(gameState), "EX", 3600);
-        await emitOldMaidState(io, roomCode, gameState);
-        ack({ ok: true, resumed });
-      });
-    });
-
-    socket.on("game:oldmaid:draw", async (payload, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const roomCode = socket.data.roomCode;
-      const userId = socket.data.userId;
-      if (!roomCode || !userId) {
-        ack({ ok: false, reason: "not_joined" });
-        return;
-      }
-      const cardId = payload?.cardId;
-      if (!cardId) {
-        ack({ ok: false, reason: "invalid_payload" });
-        return;
-      }
-      await withRoomLock(roomCode, async () => {
-        const raw = await redis.get(`game:${roomCode}:oldmaid`);
-        if (!raw) {
-          ack({ ok: false, reason: "no_game" });
-          return;
-        }
-        const previousState = JSON.parse(raw);
-        if (!previousState.players?.[String(userId)]) {
-          ack({ ok: false, reason: "not_a_player" });
-          return;
-        }
-        // 위치 별칭(slot-N)을 상대 손패의 실제 카드 id로 바꾼다.
-        let targetCardId = String(cardId);
-        const slotMatch = /^slot-(\d+)$/.exec(targetCardId);
-        if (slotMatch) {
-          const opponentId = Object.keys(previousState.players).find((id) => id !== String(userId));
-          targetCardId = previousState.players[opponentId]?.hand?.[Number(slotMatch[1])]?.id ?? "";
-        }
-        const gameState = drawOldMaidCard(previousState, String(userId), targetCardId);
-        if (gameState === previousState) {
-          ack({ ok: false, reason: "invalid_action" });
-          return;
-        }
-        await redis.set(`game:${roomCode}:oldmaid`, JSON.stringify(gameState), "EX", 3600);
-        await emitOldMaidState(io, roomCode, gameState);
-        if (previousState.status !== 'finished' && gameState.status === 'finished' && gameState.result?.winner) {
-          await recordGameOutcome(roomCode, {
-            winner: gameState.result.winner,
-            players: [gameState.result.winner, gameState.result.loser],
-            gameType: 'oldmaid',
-          });
-        }
-        ack({ ok: true });
-      });
     });
 
     // ── Penalty Shootout ──────────────────────────────────────────────────
