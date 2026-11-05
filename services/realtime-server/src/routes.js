@@ -20,6 +20,8 @@ import {
   buildTombstoneFields,
   classifyPinsForDeletion,
   collectMediaPaths,
+  purgeUserData,
+  USER_MEDIA_COLUMNS,
 } from './account-deletion.js';
 import { businessDate } from './business-date.js';
 import { createExplanationProvider } from './relationship-explanation-provider.js';
@@ -2776,7 +2778,7 @@ router.post('/pairing/requests', async (req, res) => {
     if (!recipientCode) return res.status(400).json({ ok: false, reason: 'missing_recipient_code' });
 
     const recipientResult = await query(
-      'SELECT UserId, UserCode, Nickname FROM Users WHERE UserCode = ? LIMIT 1',
+      'SELECT UserId, UserCode, Nickname FROM Users WHERE UserCode = ? AND IsDeleted = 0 LIMIT 1',
       [recipientCode],
     );
     const recipient = recipientResult.rows[0];
@@ -3210,11 +3212,11 @@ router.delete('/user', async (req, res) => {
       `SELECT mp.id,
               EXISTS(
                 SELECT 1 FROM setlog_posts sp
-                WHERE sp.map_pin_id = mp.id
+                WHERE sp.map_pin_id = mp.id AND sp.user_id <> ?
               ) AS hasLinkedMoment
        FROM map_pins mp
        WHERE mp.user_id = ?`,
-      [userId],
+      [userId, userId],
     );
     const pinRows = (pinsRes.rows || []).map((r) => ({
       id: r.id,
@@ -3222,8 +3224,26 @@ router.delete('/user', async (req, res) => {
     }));
     const { toAnonymize, toDelete } = classifyPinsForDeletion(pinRows);
 
-    // 미디어 파일 경로 목록
+    // 미디어 파일 경로 목록 (게시물 + 삭제되는 핀/리뷰/앨범 사진)
     const mediaPaths = collectMediaPaths(setlogPosts, mediaFilePath);
+    if (toDelete.length > 0) {
+      const pinMedia = await query(
+        `SELECT media_url FROM map_pins WHERE id IN (${toDelete.map(() => '?').join(',')})`,
+        toDelete,
+      );
+      mediaPaths.push(...collectMediaPaths(pinMedia.rows || [], mediaFilePath));
+    }
+    for (const { table, column, userColumn } of USER_MEDIA_COLUMNS) {
+      try {
+        const extra = await query(
+          `SELECT ${column} AS media_url FROM ${table} WHERE ${userColumn} = ?`,
+          [userId],
+        );
+        mediaPaths.push(...collectMediaPaths(extra.rows || [], mediaFilePath));
+      } catch (error) {
+        console.error(`[API] /user DELETE media lookup skipped for ${table}:`, error.message);
+      }
+    }
 
     // ─── 트랜잭션으로 DB 변경 ─────────────────────────────────────────────
     await transaction(async (conn) => {
@@ -3246,11 +3266,16 @@ router.delete('/user', async (req, res) => {
         await conn.execute('DELETE FROM setlog_posts WHERE user_id = ?', [userId]);
       }
 
+      // 사용자 소유 개인 데이터 일괄 삭제 (Users 행은 남으므로 CASCADE가 동작하지 않는다)
+      await purgeUserData(conn, userId, (table, error) => {
+        console.error(`[API] /user DELETE purge skipped ${table}:`, error.message);
+      });
+
       // map_pins 처리
       if (toAnonymize.length > 0) {
         await conn.execute(
           `UPDATE map_pins
-           SET user_id = NULL, archived_at = CURRENT_TIMESTAMP
+           SET user_id = NULL, created_by = '', memo = NULL, archived_at = CURRENT_TIMESTAMP
            WHERE id IN (${toAnonymize.map(() => '?').join(',')})`,
           toAnonymize,
         );
@@ -3268,6 +3293,7 @@ router.delete('/user', async (req, res) => {
         `UPDATE Users
          SET Email = ?, UserName = ?, FullName = ?, Nickname = ?,
              PasswordHash = ?, GoogleSubject = NULL, GooglePictureUrl = NULL,
+             BirthDate = ?, BirthTime = ?, BirthPlace = ?, BirthCalendarType = ?,
              IsDeleted = ?, DeletedAt = ?
          WHERE UserId = ?`,
         [
@@ -3276,6 +3302,10 @@ router.delete('/user', async (req, res) => {
           tombstone.FullName,
           tombstone.Nickname,
           tombstone.PasswordHash,
+          tombstone.BirthDate,
+          tombstone.BirthTime,
+          tombstone.BirthPlace,
+          tombstone.BirthCalendarType,
           tombstone.IsDeleted,
           tombstone.DeletedAt,
           userId,
