@@ -11,6 +11,9 @@ class GameScaffold extends StatelessWidget {
   final bool fullBleed;
   final bool showAppBar;
 
+  /// 화면 배경색(기본: 앱 배경). 어두운 게임 화면은 상태바 영역까지 맞춘다.
+  final Color? backgroundColor;
+
   const GameScaffold({
     super.key,
     required this.title,
@@ -19,12 +22,13 @@ class GameScaffold extends StatelessWidget {
     this.maxContentWidth = 540,
     this.fullBleed = false,
     this.showAppBar = true,
+    this.backgroundColor,
   });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: kBg,
+      backgroundColor: backgroundColor ?? kBg,
       appBar: showAppBar
           ? AppBar(
               backgroundColor: kSurface,
