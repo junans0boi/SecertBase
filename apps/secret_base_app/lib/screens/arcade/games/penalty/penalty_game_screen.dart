@@ -17,7 +17,7 @@ const _howToLines = [
   '5번씩 번갈아 차서 골이 많으면 승리! 동점이면 한 번씩 더 차요.',
 ];
 
-/// 패널티킥 2.0 — 선셋 스타디움. 서버가 판을 만들고 이 화면은 보여 주고 고르기만 한다.
+/// 패널티킥 2.0 — 조명탑 아래 나이트 스타디움, TV 중계 화면처럼. 서버가 판을 만들고 이 화면은 보여 주고 고르기만 한다.
 class PenaltyGameScreen extends StatefulWidget {
   const PenaltyGameScreen({super.key});
 
@@ -52,8 +52,7 @@ class _PenaltyGameScreenState extends State<PenaltyGameScreen>
   Object? _bannerId;
   String _bannerText = '';
   String? _bannerSub;
-  Color? _bannerColor;
-  Object? _confettiId;
+  Color _bannerColor = Colors.white;
   Object? _toastId;
   String? _toast;
 
@@ -124,8 +123,8 @@ class _PenaltyGameScreenState extends State<PenaltyGameScreen>
         final first = s.firstKicker ?? s.kicker;
         GameSfx.instance.play(GameSound.whistle);
         _banner(
-          '경기 시작!',
-          first == _c.me ? '내가 먼저 차요' : '상대가 먼저 차요',
+          '킥오프!',
+          first == _c.me ? '승부차기 시작 · 내가 먼저 차요' : '승부차기 시작 · 상대가 먼저 차요',
           _theme.accent,
         );
       }
@@ -175,18 +174,16 @@ class _PenaltyGameScreenState extends State<PenaltyGameScreen>
         pb.kicker == me ? '멋진 슛이에요!' : '$kickerName의 슛이 들어갔어요',
         pb.kicker == me ? _theme.me : _theme.opponent,
       );
-      if (pb.kicker == me) _confettiId = 'goal-$_gameId-${pb.round}';
     } else {
       GameSfx.instance.play(GameSound.save);
       GameSfx.instance.play(GameSound.aww);
       _banner(
-        '나이스 세이브!',
+        '선방!',
         pb.keeper == me
             ? '내가 막았어요!'
             : '$keeperName${josa(keeperName, '이', '가')} 막았어요',
         pb.keeper == me ? _theme.me : _theme.opponent,
       );
-      if (pb.keeper == me) _confettiId = 'save-$_gameId-${pb.round}';
     }
     if ((pb.kicker == me && pb.autoKicker) ||
         (pb.keeper == me && pb.autoKeeper)) {
@@ -320,6 +317,12 @@ class _PenaltyGameScreenState extends State<PenaltyGameScreen>
     final showResult =
         s.finished && pb == null && _shownRounds >= s.rounds.length;
     Color colorOf(String id) => id == me ? t.me : t.opponent;
+    // 등번호는 화면 장식: 키퍼는 1번, 키커는 나 7번·상대 10번.
+    PenaltyKit kitOf(String id, {required bool keeper}) => PenaltyKit(
+      color: colorOf(id),
+      number: keeper ? 1 : (id == me ? 7 : 10),
+    );
+    final wide = MediaQuery.sizeOf(context).width > 540;
 
     final mySide = PenaltySide(
       id: me,
@@ -358,7 +361,7 @@ class _PenaltyGameScreenState extends State<PenaltyGameScreen>
               children: [
                 topBar,
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
                   child: PenaltyScoreboard(
                     theme: t,
                     state: s,
@@ -371,7 +374,7 @@ class _PenaltyGameScreenState extends State<PenaltyGameScreen>
                 ),
                 const SizedBox(height: 6),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
                   child: PenaltyHabitStrip(
                     theme: t,
                     cells: s.cells,
@@ -381,77 +384,90 @@ class _PenaltyGameScreenState extends State<PenaltyGameScreen>
                         .toList(),
                   ),
                 ),
-                const SizedBox(height: 8),
                 Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: PenaltyPitch(
-                            theme: t,
-                            cells: s.cells,
-                            kicker: MascotLook(
-                              emoji: _c.emojiOf(kickerId),
-                              color: colorOf(kickerId),
-                            ),
-                            keeper: MascotLook(
-                              emoji: _c.emojiOf(keeperId),
-                              color: colorOf(keeperId),
-                            ),
-                            playback: pb,
-                            progress: _shot,
-                            idle: _idle,
-                            selected: pb == null ? _selected : null,
-                            zonesEnabled: canChoose,
-                            selectColor: t.me,
-                            iAmKicker: iAmKicker,
-                            onZoneTap: (c) {
-                              GameSfx.instance.play(GameSound.select);
-                              _select(c);
-                            },
-                            onSkip: _skip,
-                          ),
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: PenaltyPitch(
+                          theme: t,
+                          cells: s.cells,
+                          kicker: kitOf(kickerId, keeper: false),
+                          keeper: kitOf(keeperId, keeper: true),
+                          playback: pb,
+                          progress: _shot,
+                          idle: _idle,
+                          selected: pb == null ? _selected : null,
+                          zonesEnabled: canChoose,
+                          iAmKicker: iAmKicker,
+                          fadeSides: wide,
+                          onZoneTap: (c) {
+                            GameSfx.instance.play(GameSound.select);
+                            _select(c);
+                          },
+                          onSkip: _skip,
                         ),
+                      ),
+                      Positioned.fill(
+                        child: PenaltyLowerThird(
+                          theme: t,
+                          id: _bannerId,
+                          title: _bannerText,
+                          sub: _bannerSub,
+                          color: _bannerColor,
+                        ),
+                      ),
+                      Positioned(
+                        top: 14,
+                        right: 12,
+                        child: ReactionBubble(
+                          theme: t,
+                          forPlayer: opp,
+                          gameType: 'penalty',
+                        ),
+                      ),
+                      Positioned(
+                        bottom: 12,
+                        right: 12,
+                        child: ReactionBubble(
+                          theme: t,
+                          forPlayer: me,
+                          gameType: 'penalty',
+                        ),
+                      ),
+                      if (oppSubmitted && s.playing && pb == null)
                         Positioned(
-                          top: 8,
-                          right: 10,
-                          child: ReactionBubble(
+                          top: 14,
+                          left: 12,
+                          child: _ReadyChip(
+                            key: const Key('penalty_opp_ready'),
                             theme: t,
-                            forPlayer: opp,
-                            gameType: 'penalty',
+                            color: t.opponent,
                           ),
                         ),
-                        Positioned(
-                          bottom: 10,
-                          left: 10,
-                          child: ReactionBubble(
-                            theme: t,
-                            forPlayer: me,
-                            gameType: 'penalty',
-                          ),
-                        ),
-                        if (oppSubmitted && s.playing && pb == null)
-                          Positioned(
-                            top: 8,
-                            left: 10,
-                            child: GameChip(
-                              key: const Key('penalty_opp_ready'),
-                              theme: t,
-                              leading: '✅',
-                              label: '상대는 골랐어요',
-                              color: t.opponent,
-                            ),
-                          ),
-                      ],
-                    ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 8),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  padding: const EdgeInsets.fromLTRB(14, 2, 10, 0),
                   child: Row(
                     children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: canChoose ? t.accent : t.subInk,
+                          boxShadow: canChoose
+                              ? [
+                                  BoxShadow(
+                                    color: t.accent.withValues(alpha: 0.8),
+                                    blurRadius: 6,
+                                  ),
+                                ]
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           status,
@@ -467,7 +483,7 @@ class _PenaltyGameScreenState extends State<PenaltyGameScreen>
                 ),
                 const SizedBox(height: 6),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(9, 0, 9, 10),
+                  padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
                   child: PenaltyControls(
                     theme: t,
                     cells: s.cells,
@@ -475,28 +491,12 @@ class _PenaltyGameScreenState extends State<PenaltyGameScreen>
                     enabled: canChoose,
                     iAmKicker: iAmKicker,
                     waiting: s.playing && (submitted || _c.submitting),
-                    color: t.me,
                     onSelect: _select,
                     onConfirm: _confirm,
                   ),
                 ),
               ],
             ),
-          ),
-        ),
-        Positioned.fill(
-          child: GameTurnBanner(
-            theme: t,
-            id: _bannerId,
-            text: _bannerText,
-            sub: _bannerSub,
-            color: _bannerColor,
-          ),
-        ),
-        Positioned.fill(
-          child: ConfettiBurst(
-            trigger: _confettiId,
-            colors: [t.me, t.gold, t.opponent, Colors.white, t.accent],
           ),
         ),
         Positioned(
@@ -552,6 +552,40 @@ class _PenaltyGameScreenState extends State<PenaltyGameScreen>
         resultId: s.gameId,
         rematchWaiting: _socket.restartWaiting,
         onRematch: () => _socket.requestRestart('penalty'),
+      ),
+    );
+  }
+}
+
+/// "상대는 골랐어요" 작은 중계 칩.
+class _ReadyChip extends StatelessWidget {
+  final GameTheme theme;
+  final Color color;
+
+  const _ReadyChip({super.key, required this.theme, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = theme;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(6, 4, 10, 4),
+      decoration: PenaltyColors.glass(radius: 999),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 16,
+            height: 16,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+            child: const Icon(
+              Icons.check_rounded,
+              size: 12,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text('상대는 골랐어요', style: t.body(size: 12, weight: FontWeight.w800)),
+        ],
       ),
     );
   }
