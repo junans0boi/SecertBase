@@ -149,6 +149,29 @@ time out when exactly one player has answered. The resumable-game cleanup grace
 (150 s) is longer than the AFK limit so an abandoned game is forfeited, not
 silently deleted.
 
+### Games 2.0 modules (2026-11)
+
+Blackjack, Old Maid, One Card (`uno`), Penalty Kick, Pirate Roulette and Zero
+each live in one server module (`services/realtime-server/src/games/<game>.js`,
+registry in `src/games/index.js`). The server creates the game itself when the
+lobby starts (`game:lobby:started` metadata carries `serverStart: true`, so the
+host sends no creation event), screens fetch state with `game:<type>:sync`,
+rematches go through `game:restart:*`, and results carry a per-room `series`
+(`{ wins: { [userCode]: n }, draws, games }`). Turn deadlines are sent as
+`turnDeadline` together with `serverNow`.
+
+Shared: `game:reaction { emoji, gameType? }` → broadcast
+`game:reaction { by, emoji, gameType, at }`; allowed emojis 😏 😅 😱 🤞 😭 😎,
+1.5 s per user (`invalid_reaction`, `too_fast`).
+
+Per-game contracts:
+[blackjack](socket-events/blackjack.md) ·
+[oldmaid](socket-events/oldmaid.md) ·
+[one card](socket-events/onecard.md) ·
+[penalty](socket-events/penalty.md) ·
+[pirate](socket-events/pirate.md) ·
+[zero](socket-events/zero.md).
+
 ### Tank Battle 2.0 (`game:tank:*`)
 
 ```text
