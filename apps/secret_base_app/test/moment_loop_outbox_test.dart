@@ -460,4 +460,75 @@ void main() {
       expect(store.files, isEmpty);
     },
   );
+
+  test('initialize retries after a failed first load', () async {
+    final store = _FlakyLoadStore();
+    final queue = UploadOutbox(
+      store: store,
+      currentUserId: () => 7,
+      apiClient: ApiClient(
+        baseUrl: 'https://secretbase.example',
+        tokenProvider: () => 'token',
+        client: MockClient((_) async => http.Response('{"ok":true}', 200)),
+      ),
+    );
+    await expectLater(queue.initialize(), throwsA(isA<StateError>()));
+    await queue.initialize();
+    expect(store.loads, 2);
+  });
+
+  test(
+    'draft is released to pending when the worker bails out mid-upload',
+    () async {
+      var signedIn = true;
+      final store = MemoryOutboxStore();
+      final queue = UploadOutbox(
+        store: store,
+        currentUserId: () => 7,
+        canUpload: () => signedIn,
+        apiClient: ApiClient(
+          baseUrl: 'https://secretbase.example',
+          tokenProvider: () => 'token',
+          client: MockClient((_) async {
+            signedIn = false;
+            return http.Response('{"ok":true,"post":{"id":9}}', 201);
+          }),
+        ),
+      );
+      final id = await queue.enqueue(
+        MomentDraft(
+          caption: '두 장',
+          takenAt: DateTime(2026, 10, 12),
+          capturedAt: DateTime(2026, 10, 12),
+          sessionId: 'two',
+          media: [
+            MomentMedia(
+              name: 'a.jpg',
+              bytes: Uint8List.fromList([1]),
+              isVideo: false,
+            ),
+            MomentMedia(
+              name: 'b.jpg',
+              bytes: Uint8List.fromList([2]),
+              isVideo: false,
+            ),
+          ],
+        ),
+      );
+      await queue.resume();
+      expect(store.records[id]!['status'], 'pending');
+      expect(queue.drafts.single.status, UploadDraftStatus.pending);
+    },
+  );
+}
+
+class _FlakyLoadStore extends MemoryOutboxStore {
+  int loads = 0;
+
+  @override
+  Future<List<Map<String, dynamic>>> load() async {
+    loads++;
+    if (loads == 1) throw StateError('disk not ready');
+    return super.load();
+  }
 }

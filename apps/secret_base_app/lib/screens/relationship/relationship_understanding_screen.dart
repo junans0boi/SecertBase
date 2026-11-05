@@ -105,6 +105,32 @@ const _birthCountryOptions = [
   _BirthCountryOption('나이지리아', 'Africa/Lagos'),
 ];
 
+/// Disposes the picker wheel controllers only once the bottom sheet route has
+/// actually been removed (after its closing animation), not when the route's
+/// future completes.
+class _DisposeControllers extends StatefulWidget {
+  final List<ScrollController> controllers;
+  final Widget child;
+
+  const _DisposeControllers({required this.controllers, required this.child});
+
+  @override
+  State<_DisposeControllers> createState() => _DisposeControllersState();
+}
+
+class _DisposeControllersState extends State<_DisposeControllers> {
+  @override
+  void dispose() {
+    for (final controller in widget.controllers) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
 class _PickerSelection<T> {
   final bool confirmed;
   final T? value;
@@ -276,12 +302,14 @@ class _RelationshipUnderstandingScreenState
     final ownsClient = widget.coupleInfoClient == null;
     if (mounted) setState(() => _coupleLoadFailed = false);
     try {
-      final response = await client.get(
-        Uri.parse('${auth.baseUrl}/api/couple/info'),
-        headers: {
-          if (auth.token != null) 'Authorization': 'Bearer ${auth.token}',
-        },
-      );
+      final response = await client
+          .get(
+            Uri.parse('${auth.baseUrl}/api/couple/info'),
+            headers: {
+              if (auth.token != null) 'Authorization': 'Bearer ${auth.token}',
+            },
+          )
+          .timeout(const Duration(seconds: 20));
       final body = response.body.isEmpty ? null : jsonDecode(response.body);
       final active =
           response.statusCode == 200 &&
@@ -415,84 +443,86 @@ class _RelationshipUnderstandingScreenState
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) {
-          final dayCount = DateUtils.getDaysInMonth(year, month);
-          void updateDayBounds() {
-            day = math.min(day, dayCount);
-            dayController.jumpToItem(day - 1);
-          }
+      builder: (context) => _DisposeControllers(
+        controllers: [yearController, monthController, dayController],
+        child: StatefulBuilder(
+          builder: (context, setModalState) {
+            final dayCount = DateUtils.getDaysInMonth(year, month);
+            void updateDayBounds() {
+              day = math.min(day, dayCount);
+              dayController.jumpToItem(day - 1);
+            }
 
-          return Container(
-            padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    Text('생년월일 선택', style: mainTitle(size: 20)),
-                    const Spacer(),
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('취소'),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(
-                        context,
-                        _PickerSelection.confirmed(DateTime(year, month, day)),
-                      ),
-                      child: const Text('선택'),
-                    ),
-                  ],
-                ),
-                SizedBox(
-                  height: 220,
-                  child: Row(
+            return Container(
+              padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
                     children: [
-                      _pickerWheel(
-                        controller: yearController,
-                        itemCount: maxYear - minYear + 1,
-                        labelBuilder: (index) => '${minYear + index}년',
-                        onSelectedItemChanged: (index) {
-                          setModalState(() {
-                            year = minYear + index;
-                            updateDayBounds();
-                          });
-                        },
+                      Text('생년월일 선택', style: mainTitle(size: 20)),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('취소'),
                       ),
-                      _pickerWheel(
-                        controller: monthController,
-                        itemCount: 12,
-                        labelBuilder: (index) => '${index + 1}월',
-                        onSelectedItemChanged: (index) {
-                          setModalState(() {
-                            month = index + 1;
-                            updateDayBounds();
-                          });
-                        },
-                      ),
-                      _pickerWheel(
-                        controller: dayController,
-                        itemCount: dayCount,
-                        labelBuilder: (index) => '${index + 1}일',
-                        onSelectedItemChanged: (index) => day = index + 1,
+                      TextButton(
+                        onPressed: () => Navigator.pop(
+                          context,
+                          _PickerSelection.confirmed(
+                            DateTime(year, month, day),
+                          ),
+                        ),
+                        child: const Text('선택'),
                       ),
                     ],
                   ),
-                ),
-              ],
-            ),
-          );
-        },
+                  SizedBox(
+                    height: 220,
+                    child: Row(
+                      children: [
+                        _pickerWheel(
+                          controller: yearController,
+                          itemCount: maxYear - minYear + 1,
+                          labelBuilder: (index) => '${minYear + index}년',
+                          onSelectedItemChanged: (index) {
+                            setModalState(() {
+                              year = minYear + index;
+                              updateDayBounds();
+                            });
+                          },
+                        ),
+                        _pickerWheel(
+                          controller: monthController,
+                          itemCount: 12,
+                          labelBuilder: (index) => '${index + 1}월',
+                          onSelectedItemChanged: (index) {
+                            setModalState(() {
+                              month = index + 1;
+                              updateDayBounds();
+                            });
+                          },
+                        ),
+                        _pickerWheel(
+                          controller: dayController,
+                          itemCount: dayCount,
+                          labelBuilder: (index) => '${index + 1}일',
+                          onSelectedItemChanged: (index) => day = index + 1,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
-    yearController.dispose();
-    monthController.dispose();
-    dayController.dispose();
     if (!mounted ||
         result == null ||
         !result.confirmed ||
@@ -518,70 +548,71 @@ class _RelationshipUnderstandingScreenState
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Text('출생 시각 선택', style: mainTitle(size: 20)),
-                const Spacer(),
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('취소'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(
-                    context,
-                    _PickerSelection.confirmed(
-                      '${_twoDigits(hour)}:${_twoDigits(minute)}',
-                    ),
-                  ),
-                  child: const Text('선택'),
-                ),
-              ],
-            ),
-            SizedBox(
-              height: 220,
-              child: Row(
+      builder: (context) => _DisposeControllers(
+        controllers: [hourController, minuteController],
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
                 children: [
-                  _pickerWheel(
-                    controller: hourController,
-                    itemCount: 24,
-                    labelBuilder: (index) => '${_twoDigits(index)}시',
-                    onSelectedItemChanged: (index) => hour = index,
+                  Text('출생 시각 선택', style: mainTitle(size: 20)),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('취소'),
                   ),
-                  _pickerWheel(
-                    controller: minuteController,
-                    itemCount: 60,
-                    labelBuilder: (index) => '${_twoDigits(index)}분',
-                    onSelectedItemChanged: (index) => minute = index,
+                  TextButton(
+                    onPressed: () => Navigator.pop(
+                      context,
+                      _PickerSelection.confirmed(
+                        '${_twoDigits(hour)}:${_twoDigits(minute)}',
+                      ),
+                    ),
+                    child: const Text('선택'),
                   ),
                 ],
               ),
-            ),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: () => Navigator.pop(
-                  context,
-                  const _PickerSelection<String?>.confirmed(null),
+              SizedBox(
+                height: 220,
+                child: Row(
+                  children: [
+                    _pickerWheel(
+                      controller: hourController,
+                      itemCount: 24,
+                      labelBuilder: (index) => '${_twoDigits(index)}시',
+                      onSelectedItemChanged: (index) => hour = index,
+                    ),
+                    _pickerWheel(
+                      controller: minuteController,
+                      itemCount: 60,
+                      labelBuilder: (index) => '${_twoDigits(index)}분',
+                      onSelectedItemChanged: (index) => minute = index,
+                    ),
+                  ],
                 ),
-                icon: const Icon(Icons.backspace_outlined, size: 16),
-                label: const Text('출생 시각 지우기'),
               ),
-            ),
-          ],
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => Navigator.pop(
+                    context,
+                    const _PickerSelection<String?>.confirmed(null),
+                  ),
+                  icon: const Icon(Icons.backspace_outlined, size: 16),
+                  label: const Text('출생 시각 지우기'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
-    hourController.dispose();
-    minuteController.dispose();
     if (!mounted || result == null || !result.confirmed) return;
     setState(() => _birthTimeController.text = result.value ?? '');
   }

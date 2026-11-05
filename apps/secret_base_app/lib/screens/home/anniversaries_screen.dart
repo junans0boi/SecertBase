@@ -16,6 +16,7 @@ class _AnniversariesScreenState extends State<AnniversariesScreen> {
   late final ApiClient _api;
   List<Map<String, dynamic>> _items = [];
   bool _loading = true;
+  bool _loadFailed = false;
 
   @override
   void initState() {
@@ -31,7 +32,10 @@ class _AnniversariesScreenState extends State<AnniversariesScreen> {
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _loadFailed = false;
+    });
     try {
       final body = await _api.getJson('/api/anniversaries');
       if (!mounted) return;
@@ -43,7 +47,12 @@ class _AnniversariesScreenState extends State<AnniversariesScreen> {
         _loading = false;
       });
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _loadFailed = true;
+        });
+      }
     }
   }
 
@@ -68,7 +77,7 @@ class _AnniversariesScreenState extends State<AnniversariesScreen> {
       backgroundColor: Colors.transparent,
       builder: (_) => _AnniversaryForm(existing: existing),
     );
-    if (result == null) return;
+    if (result == null || !mounted) return;
 
     try {
       if (existing != null) {
@@ -79,6 +88,7 @@ class _AnniversariesScreenState extends State<AnniversariesScreen> {
       } else {
         await _api.postJson('/api/anniversaries', body: result);
       }
+      if (!mounted) return;
       await _load();
     } catch (_) {
       if (mounted) {
@@ -98,6 +108,7 @@ class _AnniversariesScreenState extends State<AnniversariesScreen> {
         elevation: 0,
         actions: [
           IconButton(
+            tooltip: '기념일 추가',
             icon: const Icon(Icons.add_rounded),
             onPressed: () => _showForm(),
           ),
@@ -105,6 +116,27 @@ class _AnniversariesScreenState extends State<AnniversariesScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
+          : _loadFailed
+          ? Center(
+              key: const Key('anniversaries_error'),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.cloud_off_rounded,
+                    size: 56,
+                    color: kMainRoseSoft,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    '기념일을 불러오지 못했어요',
+                    style: mainBody(size: 15, color: kMainMuted),
+                  ),
+                  const SizedBox(height: 16),
+                  OutlinedButton(onPressed: _load, child: const Text('다시 시도')),
+                ],
+              ),
+            )
           : _items.isEmpty
           ? Center(
               child: Column(
@@ -205,6 +237,9 @@ class _AnniversariesScreenState extends State<AnniversariesScreen> {
   }
 }
 
+/// Matches the server column limit (anniversaries.label VARCHAR(100)).
+const int _maxLabelLength = 100;
+
 class _AnniversaryForm extends StatefulWidget {
   final Map<String, dynamic>? existing;
 
@@ -218,6 +253,7 @@ class _AnniversaryFormState extends State<_AnniversaryForm> {
   late final TextEditingController _labelCtrl;
   late DateTime _date;
   late bool _repeatYearly;
+  String? _labelError;
 
   @override
   void initState() {
@@ -283,9 +319,14 @@ class _AnniversaryFormState extends State<_AnniversaryForm> {
             const SizedBox(height: 16),
             TextField(
               controller: _labelCtrl,
-              decoration: const InputDecoration(
+              maxLength: _maxLabelLength,
+              onChanged: (_) {
+                if (_labelError != null) setState(() => _labelError = null);
+              },
+              decoration: InputDecoration(
                 labelText: '이름 (예: 100일, 생일)',
-                border: OutlineInputBorder(),
+                errorText: _labelError,
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
@@ -306,7 +347,10 @@ class _AnniversaryFormState extends State<_AnniversaryForm> {
             FilledButton(
               onPressed: () {
                 final label = _labelCtrl.text.trim();
-                if (label.isEmpty) return;
+                if (label.isEmpty) {
+                  setState(() => _labelError = '기념일 이름을 입력해주세요');
+                  return;
+                }
                 Navigator.pop(context, {
                   'label': label,
                   'date': _fmt(_date),

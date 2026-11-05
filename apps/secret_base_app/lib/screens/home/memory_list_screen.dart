@@ -32,19 +32,33 @@ class _MemoryListScreenState extends State<MemoryListScreen> {
   }
 
   Future<void> _load() async {
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
-      final res = await http.get(
-        Uri.parse('${widget.baseUrl}/api/retention/memory-card/list'),
-        headers: widget.authHeaders,
-      );
+      final res = await http
+          .get(
+            Uri.parse('${widget.baseUrl}/api/retention/memory-card/list'),
+            headers: widget.authHeaders,
+          )
+          .timeout(const Duration(seconds: 20));
       if (!mounted) return;
-      final data = jsonDecode(res.body) as Map<String, dynamic>;
-      if (data['ok'] == true) {
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        setState(() => _error = '기억을 불러오지 못했어요.');
+        return;
+      }
+      final decoded = jsonDecode(res.body);
+      final data = decoded is Map<String, dynamic> ? decoded : null;
+      if (data != null && data['ok'] == true) {
         setState(() {
           _posts = (data['posts'] as List? ?? [])
               .map((p) => Map<String, dynamic>.from(p as Map))
               .toList();
           _businessDate = data['business_date'] as String?;
+          _error = null;
         });
       } else {
         setState(() => _error = '기억을 불러오지 못했어요.');

@@ -88,14 +88,20 @@ class UploadOutbox extends ChangeNotifier {
   );
 
   Future<void> initialize() => _initializing ??= () async {
-    for (final record in await store.load()) {
-      _records[record['id'] as String] = record;
+    try {
+      for (final record in await store.load()) {
+        _records[record['id'] as String] = record;
+      }
+      for (final record
+          in _records.values.where((r) => r['status'] == 'complete').toList()) {
+        await _cleanupCompleted(record);
+      }
+      _changed();
+    } catch (_) {
+      // Do not cache a failed initialization; allow the next call to retry.
+      _initializing = null;
+      rethrow;
     }
-    for (final record
-        in _records.values.where((r) => r['status'] == 'complete').toList()) {
-      await _cleanupCompleted(record);
-    }
-    _changed();
   }();
 
   static String newId() {
@@ -477,7 +483,10 @@ class UploadOutbox extends ChangeNotifier {
         }
         final service = HttpMediaUploadService(apiClient);
         for (var position = 0; position < items.length; position++) {
-          if (!_ready || !_owns(record)) return;
+          if (!_ready || !_owns(record)) {
+            await _releaseUploading(record);
+            return;
+          }
           final item = items[position];
           if (item['post'] != null) continue;
           final media = item['name'] == null
@@ -516,7 +525,10 @@ class UploadOutbox extends ChangeNotifier {
             });
           }
           for (final id in (record['remove'] as List).cast<int>()) {
-            if (!_ready || !_owns(record)) return;
+            if (!_ready || !_owns(record)) {
+              await _releaseUploading(record);
+              return;
+            }
             if ((record['deleted'] as List).contains(id)) continue;
             try {
               final body = await apiClient.deleteJson('/api/setlog/$id');
@@ -531,7 +543,10 @@ class UploadOutbox extends ChangeNotifier {
           }
           final session = record['session_id'] as String;
           if (session.isNotEmpty) {
-            if (!_ready || !_owns(record)) return;
+            if (!_ready || !_owns(record)) {
+              await _releaseUploading(record);
+              return;
+            }
             await _patch(
               '/api/setlog/session/${Uri.encodeComponent(session)}/order',
               {
@@ -558,6 +573,18 @@ class UploadOutbox extends ChangeNotifier {
           }
         }
       }
+    }
+  }
+
+  /// The worker bailed out (signed out / scope changed) after checkpointing
+  /// the record as `uploading`; make it resumable instead of stuck.
+  Future<void> _releaseUploading(Map<String, dynamic> record) async {
+    if (record['status'] != 'uploading') return;
+    record['status'] = 'pending';
+    try {
+      await _checkpoint(record);
+    } catch (_) {
+      // Best effort: a stale `uploading` status is recovered on next resume.
     }
   }
 

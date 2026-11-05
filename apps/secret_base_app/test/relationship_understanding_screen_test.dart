@@ -407,6 +407,35 @@ void main() {
     expect(find.byKey(const Key('relationship_couple_area')), findsOneWidget);
   });
 
+  testWidgets('couple lookup timeout leaves the resolving state', (
+    tester,
+  ) async {
+    final coupleClient = MockClient((_) => Completer<http.Response>().future);
+    final api = BirthProfileApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient((_) async => http.Response(_profileResponse, 200)),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RelationshipUnderstandingScreen(
+          api: api,
+          coupleInfoClient: coupleClient,
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(
+      find.byKey(const Key('relationship_couple_check_state')),
+      findsOneWidget,
+    );
+
+    await tester.pump(const Duration(seconds: 21));
+    await tester.pumpAndSettle();
+    expect(find.text('커플 연결 상태를 확인하지 못했어요'), findsOneWidget);
+  });
+
   testWidgets('separates personal and couple areas with top tabs', (
     tester,
   ) async {

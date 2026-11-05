@@ -372,6 +372,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
         ),
       ),
     );
+    if (!mounted) return;
     if (created is DateTime) {
       setState(() => _weekStart = _mondayOf(created));
       _resumeUploads();
@@ -380,9 +381,16 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
   }
 
   Future<void> _editPost(Map<String, dynamic> post) async {
-    final selected = _controller.state.moments.firstWhere(
-      (p) => p.id == post['id'],
-    );
+    final matches = _controller.state.moments.where((p) => p.id == post['id']);
+    if (matches.isEmpty) {
+      // The feed refreshed and this post vanished while the viewer was open.
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('이 순간을 찾을 수 없어요')));
+      return;
+    }
+    final selected = matches.first;
     final original =
         _controller.state.moments
             .where((p) => p.sessionKey == selected.sessionKey)
@@ -1009,6 +1017,7 @@ class _MonthCalendarSheetState extends State<_MonthCalendarSheet> {
             Row(
               children: [
                 IconButton(
+                  tooltip: '이전 달',
                   icon: const Icon(Icons.chevron_left_rounded),
                   onPressed: () => setState(
                     () => _month = DateTime(_month.year, _month.month - 1),
@@ -1022,6 +1031,7 @@ class _MonthCalendarSheetState extends State<_MonthCalendarSheet> {
                   ),
                 ),
                 IconButton(
+                  tooltip: '다음 달',
                   icon: const Icon(Icons.chevron_right_rounded),
                   onPressed:
                       DateTime(
@@ -1746,7 +1756,11 @@ class _WeekNavigator extends StatelessWidget {
           ),
           child: Row(
             children: [
-              _NavBtn(icon: Icons.chevron_left_rounded, onTap: onPrev),
+              _NavBtn(
+                icon: Icons.chevron_left_rounded,
+                label: '이전 주',
+                onTap: onPrev,
+              ),
               Expanded(
                 child: GestureDetector(
                   onTap: onPickWeek,
@@ -1788,6 +1802,7 @@ class _WeekNavigator extends StatelessWidget {
               ),
               _NavBtn(
                 icon: Icons.chevron_right_rounded,
+                label: '다음 주',
                 onTap: onNext,
                 disabled: onNext == null,
               ),
@@ -1801,22 +1816,38 @@ class _WeekNavigator extends StatelessWidget {
 
 class _NavBtn extends StatelessWidget {
   final IconData icon;
+  final String label;
   final VoidCallback? onTap;
   final bool disabled;
   const _NavBtn({
     required this.icon,
+    required this.label,
     required this.onTap,
     this.disabled = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Semantics(
+      button: true,
+      enabled: !disabled,
+      label: label,
+      excludeSemantics: true,
       onTap: disabled ? null : onTap,
-      child: SizedBox(
-        width: 48,
-        height: 52,
-        child: Icon(icon, size: 24, color: disabled ? kMainLine : kMainRose),
+      child: Tooltip(
+        message: label,
+        child: GestureDetector(
+          onTap: disabled ? null : onTap,
+          child: SizedBox(
+            width: 48,
+            height: 52,
+            child: Icon(
+              icon,
+              size: 24,
+              color: disabled ? kMainLine : kMainRose,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -2520,6 +2551,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
+          tooltip: '닫기',
           icon: const Icon(Icons.close_rounded, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
@@ -2833,7 +2865,9 @@ class _CommentSheetState extends State<_CommentSheet> {
   final _ctrl = TextEditingController();
   List<Map<String, dynamic>> _comments = [];
   bool _loading = true;
+  bool _loadFailed = false;
   bool _submitting = false;
+  bool _deleting = false;
 
   @override
   void initState() {
@@ -2853,6 +2887,12 @@ class _CommentSheetState extends State<_CommentSheet> {
   }
 
   Future<void> _load() async {
+    if (!_loading || _loadFailed) {
+      setState(() {
+        _loading = true;
+        _loadFailed = false;
+      });
+    }
     try {
       final body = await _api.getJson('/api/setlog/${widget.postId}/comments');
       if (!mounted) return;
@@ -2864,7 +2904,12 @@ class _CommentSheetState extends State<_CommentSheet> {
         _loading = false;
       });
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _loadFailed = true;
+        });
+      }
     }
   }
 
@@ -2897,6 +2942,8 @@ class _CommentSheetState extends State<_CommentSheet> {
   }
 
   Future<void> _delete(Map<String, dynamic> comment) async {
+    if (_deleting) return;
+    _deleting = true;
     final commentId = comment['id'];
     try {
       await _api.deleteJson('/api/setlog/${widget.postId}/comments/$commentId');
@@ -2908,6 +2955,8 @@ class _CommentSheetState extends State<_CommentSheet> {
           context,
         ).showSnackBar(const SnackBar(content: Text('댓글을 삭제하지 못했어요')));
       }
+    } finally {
+      _deleting = false;
     }
   }
 
@@ -2950,6 +2999,20 @@ class _CommentSheetState extends State<_CommentSheet> {
                 child: CircularProgressIndicator(
                   color: Colors.white38,
                   strokeWidth: 2,
+                ),
+              )
+            else if (_loadFailed)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      '댓글을 불러오지 못했어요',
+                      style: TextStyle(color: Colors.white54, fontSize: 13),
+                    ),
+                    TextButton(onPressed: _load, child: const Text('다시 시도')),
+                  ],
                 ),
               )
             else if (_comments.isEmpty)
@@ -3002,14 +3065,20 @@ class _CommentSheetState extends State<_CommentSheet> {
                             ),
                           ),
                           if (isMine)
-                            GestureDetector(
+                            Semantics(
+                              button: true,
+                              label: '댓글 삭제',
+                              excludeSemantics: true,
                               onTap: () => _delete(c),
-                              child: const Padding(
-                                padding: EdgeInsets.only(left: 8, top: 2),
-                                child: Icon(
-                                  Icons.close_rounded,
-                                  color: Colors.white38,
-                                  size: 16,
+                              child: GestureDetector(
+                                onTap: () => _delete(c),
+                                child: const Padding(
+                                  padding: EdgeInsets.only(left: 8, top: 2),
+                                  child: Icon(
+                                    Icons.close_rounded,
+                                    color: Colors.white38,
+                                    size: 16,
+                                  ),
                                 ),
                               ),
                             ),
@@ -3037,6 +3106,7 @@ class _CommentSheetState extends State<_CommentSheet> {
                     ),
                   ),
                   IconButton(
+                    tooltip: '댓글 보내기',
                     onPressed: _submitting ? null : _submit,
                     icon: Icon(
                       Icons.send_rounded,
@@ -3065,6 +3135,7 @@ class _VideoDetailPlayer extends StatefulWidget {
 class _VideoDetailPlayerState extends State<_VideoDetailPlayer> {
   late final VideoPlayerController _ctrl;
   bool _ready = false;
+  bool _failed = false;
   bool _muted = false;
 
   @override
@@ -3080,7 +3151,10 @@ class _VideoDetailPlayerState extends State<_VideoDetailPlayer> {
             ..setLooping(true)
             ..play();
         })
-        .catchError((_) {});
+        .catchError((_) {
+          if (!mounted) return;
+          setState(() => _failed = true);
+        });
   }
 
   @override
@@ -3091,6 +3165,21 @@ class _VideoDetailPlayerState extends State<_VideoDetailPlayer> {
 
   @override
   Widget build(BuildContext context) {
+    if (_failed) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.videocam_off_outlined, color: Colors.white70),
+            const SizedBox(height: 8),
+            Text(
+              '영상을 불러오지 못했어요',
+              style: mainBody(size: 12, color: Colors.white70),
+            ),
+          ],
+        ),
+      );
+    }
     if (!_ready) {
       return const Center(
         child: CircularProgressIndicator(color: Colors.white),
@@ -3250,6 +3339,7 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
   bool _dateTouched = false;
 
   static const _maxMedia = 10;
+  bool _picking = false;
   bool get _editing => widget.edit != null;
   bool get _dateLocked =>
       widget.edit?.original.any((p) => p.mediaEditLocked) == true;
@@ -3293,9 +3383,10 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
   }
 
   Future<void> _showMediaPicker() async {
-    if (_mediaLocked || _saving) return;
+    if (_mediaLocked || _saving || _picking) return;
     final remaining = _maxMedia - _pickedMedia.length;
     if (remaining <= 0) return;
+    _picking = true;
     try {
       if (widget.mediaPicker != null) {
         final picked = await widget.mediaPicker!();
@@ -3314,7 +3405,12 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
             ),
           );
         }
-        if (mounted) setState(() => _pickedMedia.addAll(normalized));
+        if (mounted) {
+          setState(() {
+            final room = _maxMedia - _pickedMedia.length;
+            _pickedMedia.addAll(normalized.take(room < 0 ? 0 : room));
+          });
+        }
         return;
       }
       final files = await _imagePicker.pickMultipleMedia(limit: remaining);
@@ -3355,7 +3451,8 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
       }
       if (!mounted) return;
       setState(() {
-        _pickedMedia.addAll(media);
+        final room = _maxMedia - _pickedMedia.length;
+        _pickedMedia.addAll(media.take(room < 0 ? 0 : room));
         final today = _dateOnly(DateTime.now());
         if (suggested != null &&
             !suggested.isAfter(today) &&
@@ -3369,6 +3466,8 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
       });
     } catch (_) {
       _toast('미디어를 불러오지 못했어요');
+    } finally {
+      _picking = false;
     }
   }
 
@@ -3573,6 +3672,7 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
+          tooltip: '닫기',
           onPressed: _saving ? null : () => Navigator.pop(context, false),
           icon: const Icon(Icons.close_rounded),
           color: kMainInk,
