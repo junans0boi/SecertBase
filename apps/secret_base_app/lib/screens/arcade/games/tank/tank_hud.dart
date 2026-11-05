@@ -67,100 +67,103 @@ class TankHud extends StatelessWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 860),
           child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              _RoundIcon(
-                icon: Icons.arrow_back_ios_new_rounded,
-                tooltip: '게임 나가기',
-                onTap: onBack,
-              ),
-              const SizedBox(width: 8),
-              Text('탱크 대작전', style: tankDisplay(size: 17)),
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: TankUi.panel,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: TankUi.panelLine),
-                ),
-                child: Text(
-                  look.name,
-                  style: tankBody(size: 10, color: TankUi.sub),
-                ),
-              ),
-              const Spacer(),
-              _RoundIcon(
-                icon: overview
-                    ? Icons.zoom_in_map_rounded
-                    : Icons.zoom_out_map_rounded,
-                tooltip: overview ? '전차 따라가기' : '전장 전체 보기',
-                onTap: onToggleOverview,
-                active: overview,
-              ),
-              const SizedBox(width: 6),
-              _RoundIcon(
-                icon: muted
-                    ? Icons.volume_off_rounded
-                    : Icons.volume_up_rounded,
-                tooltip: muted ? '소리 켜기' : '소리 끄기',
-                onTap: onToggleMute,
-              ),
-              const SizedBox(width: 2),
-              menu,
-            ],
-          ),
-          const SizedBox(height: 6),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: TankPlayerCard(
-                  name: myName,
-                  player: _player(myIndex),
-                  team: TankUi.me,
-                  active: aiming && turn == myIndex,
-                  alignRight: false,
-                  timeouts: timeoutsOf(myIndex),
-                ),
-              ),
-              const SizedBox(width: 6),
-              SizedBox(
-                width: 100,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (remainingMs != null && aiming)
-                      TankTimerRing(remainingMs: remainingMs!)
-                    else
-                      const SizedBox(height: 40),
-                    const SizedBox(height: 4),
-                    TankWindGauge(wind: wind),
-                    const SizedBox(height: 3),
-                    Text(
-                      '${math.min(turnNumber + 1, kTankFinalTurn)} / $kTankFinalTurn턴',
-                      style: tankBody(size: 10, color: TankUi.muted),
+              Row(
+                children: [
+                  _RoundIcon(
+                    icon: Icons.arrow_back_ios_new_rounded,
+                    tooltip: '게임 나가기',
+                    onTap: onBack,
+                  ),
+                  const SizedBox(width: 8),
+                  Text('탱크 대작전', style: tankDisplay(size: 17)),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2,
                     ),
-                    if (suddenDeath) const _SuddenDeathBadge(),
-                  ],
-                ),
+                    decoration: BoxDecoration(
+                      color: TankUi.panel,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: TankUi.panelLine),
+                    ),
+                    child: Text(
+                      look.name,
+                      style: tankBody(size: 10, color: TankUi.sub),
+                    ),
+                  ),
+                  const Spacer(),
+                  _RoundIcon(
+                    icon: overview
+                        ? Icons.zoom_in_map_rounded
+                        : Icons.zoom_out_map_rounded,
+                    tooltip: overview ? '전차 따라가기' : '전장 전체 보기',
+                    onTap: onToggleOverview,
+                    active: overview,
+                  ),
+                  const SizedBox(width: 6),
+                  _RoundIcon(
+                    icon: muted
+                        ? Icons.volume_off_rounded
+                        : Icons.volume_up_rounded,
+                    tooltip: muted ? '소리 켜기' : '소리 끄기',
+                    onTap: onToggleMute,
+                  ),
+                  const SizedBox(width: 2),
+                  menu,
+                ],
               ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: TankPlayerCard(
-                  name: oppName,
-                  player: _player(1 - myIndex),
-                  team: TankUi.enemy,
-                  active: aiming && turn == 1 - myIndex,
-                  alignRight: true,
-                  timeouts: timeoutsOf(1 - myIndex),
-                ),
+              const SizedBox(height: 6),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: TankPlayerCard(
+                      name: myName,
+                      player: _player(myIndex),
+                      team: TankUi.me,
+                      active: aiming && turn == myIndex,
+                      alignRight: false,
+                      timeouts: timeoutsOf(myIndex),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  SizedBox(
+                    width: 100,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (remainingMs != null && aiming)
+                          TankTimerRing(remainingMs: remainingMs!)
+                        else
+                          const SizedBox(height: 40),
+                        const SizedBox(height: 4),
+                        TankWindGauge(wind: wind),
+                        const SizedBox(height: 3),
+                        Text(
+                          '${math.min(turnNumber + 1, kTankFinalTurn)} / $kTankFinalTurn턴',
+                          style: tankBody(size: 10, color: TankUi.muted),
+                        ),
+                        if (suddenDeath) const _SuddenDeathBadge(),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: TankPlayerCard(
+                      name: oppName,
+                      player: _player(1 - myIndex),
+                      team: TankUi.enemy,
+                      active: aiming && turn == 1 - myIndex,
+                      alignRight: true,
+                      timeouts: timeoutsOf(1 - myIndex),
+                    ),
+                  ),
+                ],
               ),
             ],
-          ),
-        ],
           ),
         ),
       ),
