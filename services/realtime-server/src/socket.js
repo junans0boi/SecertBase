@@ -75,14 +75,6 @@ import {
 } from "./bomb-engine.js";
 
 import {
-  initGame as initBlackjackGame,
-  hit as hitBlackjack,
-  stand as standBlackjack,
-  nextRound as nextBlackjackRound,
-  serializeFor as serializeBlackjackFor,
-} from "./blackjack-engine.js";
-
-import {
   startGame as startOldMaidGame,
   drawCard as drawOldMaidCard,
 } from "./oldmaid-engine.js";
@@ -232,19 +224,6 @@ function emitOldMaidState(io, roomCode, gameState) {
       roomSocket.emit(
         "game:oldmaid:updated",
         serializeOldMaidGame(gameState, roomSocket.data.userId),
-      );
-    }
-  });
-}
-
-// Blackjack hands are private during a round. Send each socket a projection
-// containing its own cards, and reveal both hands only after the round ends.
-function emitBlackjackState(io, roomCode, gameState) {
-  return io.in(roomCode).fetchSockets().then((sockets) => {
-    for (const roomSocket of sockets) {
-      roomSocket.emit(
-        "game:blackjack:updated",
-        serializeBlackjackFor(gameState, roomSocket.data.userId),
       );
     }
   });
@@ -1051,17 +1030,6 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         await emitGostopRoom(roomCode, "game:gostop:ended", { ...finished, settlementStatus: "settled" });
       },
     },
-    blackjack: {
-      key: (rc) => `game:${rc}:blackjack`,
-      playersOf: (s) => s.players ?? [],
-      waitingOn: (s) => (s.status === "playing" && s.phase !== "round_result" ? s.currentTurn ?? null : null),
-      forfeit: async (roomCode, s, loser, winner) => {
-        const finished = { ...s, status: "finished", currentTurn: null, result: { ...(s.result ?? {}), winner, loser, reason: "forfeit" } };
-        await redis.set(`game:${roomCode}:blackjack`, JSON.stringify(finished), "EX", 3600);
-        await emitBlackjackState(io, roomCode, finished);
-        await recordGameOutcome(roomCode, { winner, players: s.players, gameType: "blackjack" });
-      },
-    },
     oldmaid: {
       key: (rc) => `game:${rc}:oldmaid`,
       playersOf: (s) => Object.keys(s.players ?? {}),
@@ -1698,8 +1666,7 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         // 비재개형 게임: 각 게임의 기존 업데이트 이벤트로 현재 상태를 이 소켓에만 다시 보낸다.
         // (클라이언트의 기존 리스너가 그대로 처리하므로 재접속 교착이 사라진다.)
         const userId = socket.data.userId;
-        const [bjRaw, omRaw, pkRaw, bwRaw, tkRaw, ctRaw] = await Promise.all([
-          redis.get(`game:${roomCode}:blackjack`),
+        const [omRaw, pkRaw, bwRaw, tkRaw, ctRaw] = await Promise.all([
           redis.get(`game:${roomCode}:oldmaid`),
           redis.get(`game:${roomCode}:penalty`),
           redis.get(`game:${roomCode}:bowling`),
@@ -1709,13 +1676,6 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         const restored = [];
         for (const mod of GAME_MODULES) {
           if (mod.restore && await mod.restore(roomCode, socket, kit)) restored.push(mod.gameType);
-        }
-        if (bjRaw) {
-          const g = JSON.parse(bjRaw);
-          if (g.status !== "finished" && g.players?.includes(userId)) {
-            socket.emit("game:blackjack:updated", serializeBlackjackFor(g, userId));
-            restored.push("blackjack");
-          }
         }
         if (omRaw) {
           const g = JSON.parse(omRaw);
@@ -3319,90 +3279,6 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       const event = { by: userId, message: parsed.data.message, at: Date.now() };
       io.to(roomCode).emit("game:marble:chat", event);
       ack({ ok: true, event });
-    });
-
-    socket.on("game:blackjack:start", async (payload, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const roomCode = socket.data.roomCode;
-      const userId = socket.data.userId;
-      if (!roomCode || !userId) {
-        ack({ ok: false, reason: "not_joined" });
-        return;
-      }
-      await withRoomLock(roomCode, async () => {
-        const presence = getPresence(io, roomCode);
-        if (presence.length !== 2) {
-          ack({ ok: false, reason: "need_two_players" });
-          return;
-        }
-        const orderedPlayers = await getOrderedPlayers(roomCode, presence);
-        if (orderedPlayers.length !== 2) {
-          ack({ ok: false, reason: "need_two_players" });
-          return;
-        }
-        const existing = await redis.get(`game:${roomCode}:blackjack`);
-        if (existing && JSON.parse(existing).status !== 'finished') {
-          // 이탈 후 다시 들어온 경우: 거절하지 않고 진행 중인 판을 이어서 보여준다.
-          socket.emit("game:blackjack:updated", serializeBlackjackFor(JSON.parse(existing), userId));
-          ack({ ok: true, resumed: true });
-          return;
-        }
-        const gameState = initBlackjackGame(orderedPlayers[0], orderedPlayers[1]);
-        await redis.set(`game:${roomCode}:blackjack`, JSON.stringify(gameState), "EX", 3600);
-        await emitBlackjackState(io, roomCode, gameState);
-        ack({ ok: true });
-      });
-    });
-
-    const runBlackjackAction = async (userId, roomCode, action, ack) => {
-      await withRoomLock(roomCode, async () => {
-        const raw = await redis.get(`game:${roomCode}:blackjack`);
-        if (!raw) {
-          ack({ ok: false, reason: "no_game" });
-          return;
-        }
-        const previousState = JSON.parse(raw);
-        const gameState = action(previousState, String(userId));
-        if (gameState === previousState) {
-          ack({ ok: false, reason: "invalid_action" });
-          return;
-        }
-        await redis.set(`game:${roomCode}:blackjack`, JSON.stringify(gameState), "EX", 3600);
-        await emitBlackjackState(io, roomCode, gameState);
-        if (previousState.status !== 'finished' && gameState.status === 'finished') {
-          const winner = gameState.result?.winner;
-          await recordGameOutcome(roomCode, {
-            winner: winner && winner !== 'tie' ? winner : null,
-            players: gameState.players,
-            gameType: 'blackjack',
-          });
-        }
-        ack({ ok: true });
-      });
-    };
-
-    socket.on("game:blackjack:hit", async (payload, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const roomCode = socket.data.roomCode;
-      const userId = socket.data.userId;
-      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
-      return runBlackjackAction(userId, roomCode, hitBlackjack, ack);
-    });
-
-    socket.on("game:blackjack:stand", async (payload, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const roomCode = socket.data.roomCode;
-      const userId = socket.data.userId;
-      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
-      return runBlackjackAction(userId, roomCode, standBlackjack, ack);
-    });
-
-    socket.on("game:blackjack:next_round", async (payload, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const roomCode = socket.data.roomCode;
-      const userId = socket.data.userId;
-      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
-      return runBlackjackAction(userId, roomCode, nextBlackjackRound, ack);
     });
 
     socket.on("game:oldmaid:start", async (payload, ackRaw) => {
