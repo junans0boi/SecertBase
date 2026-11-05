@@ -161,7 +161,9 @@ class TankBattlefieldPainter extends CustomPainter {
       for (int i = 0; i < 90; i++) {
         final x = _hash(i, 1) * size.width;
         final y = _hash(i, 2) * size.height * 0.75;
-        final tw = 0.35 + 0.65 * (0.5 + 0.5 * math.sin(s.time * (1 + _hash(i, 3) * 2.5) + i));
+        final tw =
+            0.35 +
+            0.65 * (0.5 + 0.5 * math.sin(s.time * (1 + _hash(i, 3) * 2.5) + i));
         star.color = Colors.white.withValues(alpha: tw * 0.85);
         canvas.drawCircle(Offset(x, y), 0.5 + _hash(i, 4) * 1.3, star);
       }
@@ -216,7 +218,10 @@ class TankBattlefieldPainter extends CustomPainter {
       size.width * (desert ? 0.72 : 0.82) - parallax,
       size.height * (desert ? 0.26 : 0.15),
     );
-    final r = math.max(16.0, math.min(size.width, size.height) * (desert ? 0.08 : 0.05));
+    final r = math.max(
+      16.0,
+      math.min(size.width, size.height) * (desert ? 0.08 : 0.05),
+    );
     canvas.drawCircle(
       c,
       r * 2.6,
@@ -236,7 +241,9 @@ class TankBattlefieldPainter extends CustomPainter {
     final paint = Paint()..color = _a(look.cloud, 0.78);
     final span = size.width + 260;
     for (int i = 0; i < 5; i++) {
-      final base = _hash(i, 11) * span + drift * (0.6 + _hash(i, 12) * 0.8) -
+      final base =
+          _hash(i, 11) * span +
+          drift * (0.6 + _hash(i, 12) * 0.8) -
           v.left * v.scale * 0.12;
       final x = (base % span + span) % span - 130;
       final y = size.height * (0.06 + 0.07 * (i % 3)) + _hash(i, 13) * 18;
@@ -255,17 +262,25 @@ class TankBattlefieldPainter extends CustomPainter {
   }
 
   void _ridges(Canvas canvas, Size size, TankThemeLook look) {
-    void ridge(Color color, double baseRow, double amp, double factor, int seed) {
+    void ridge(
+      Color color,
+      double baseRow,
+      double amp,
+      double factor,
+      int seed,
+    ) {
       final path = Path()..moveTo(-30, size.height + 30);
       final step = math.max(6.0, size.width / 48);
       for (double x = -30; x <= size.width + 30; x += step) {
         final wx = v.left * factor + x / v.scale;
-        final row = baseRow -
+        final row =
+            baseRow -
             amp *
                 (0.6 * math.sin(wx * 0.11 + seed) +
                     0.4 * math.sin(wx * 0.047 + seed * 2.3));
         // 세로 위치도 시차를 주어 멀리 있는 느낌을 낸다.
-        final y = (row - v.top * factor) * v.scale +
+        final y =
+            (row - v.top * factor) * v.scale +
             (1 - factor) * (size.height * 0.08);
         path.lineTo(x, y);
       }
@@ -319,11 +334,10 @@ class TankBattlefieldPainter extends CustomPainter {
     canvas.drawPath(
       fill,
       Paint()
-        ..shader = ui.Gradient.linear(
-          Offset(0, topY),
-          Offset(0, bottomY),
-          [look.ground, look.groundDeep],
-        ),
+        ..shader = ui.Gradient.linear(Offset(0, topY), Offset(0, bottomY), [
+          look.ground,
+          look.groundDeep,
+        ]),
     );
 
     canvas.save();
@@ -349,11 +363,17 @@ class TankBattlefieldPainter extends CustomPainter {
     // 돌멩이
     final rock = Paint()..color = _a(look.groundDeep, 0.35);
     final colStart = math.max(0, v.left.floor() - 1);
-    final colEnd = math.min(kTerrainW - 1, (v.left + size.width / v.scale).ceil() + 1);
+    final colEnd = math.min(
+      kTerrainW - 1,
+      (v.left + size.width / v.scale).ceil() + 1,
+    );
     for (int c = colStart; c <= colEnd; c++) {
       if (_hash(c, 21) > 0.35) continue;
       final depth = 2.5 + _hash(c, 22) * 10;
-      final p = v.toScreen(c + _hash(c, 23) - 0.5, kTerrainH - h[c] - 0.5 + depth);
+      final p = v.toScreen(
+        c + _hash(c, 23) - 0.5,
+        kTerrainH - h[c] - 0.5 + depth,
+      );
       canvas.drawOval(
         Rect.fromCenter(
           center: p,
@@ -407,7 +427,10 @@ class TankBattlefieldPainter extends CustomPainter {
         for (int c = colStart; c <= colEnd; c++) {
           final base = v.toScreen(c.toDouble(), kTerrainH - h[c] - 0.5);
           for (int k = 0; k < 3; k++) {
-            final x = base.dx + (k - 1) * u * 0.3 + (_hash(c * 3 + k, 31) - 0.5) * u * 0.2;
+            final x =
+                base.dx +
+                (k - 1) * u * 0.3 +
+                (_hash(c * 3 + k, 31) - 0.5) * u * 0.2;
             final len = u * (0.45 + _hash(c * 3 + k, 32) * 0.6);
             final sway = math.sin(s.time * 2 + c * 0.7 + k) * u * 0.12;
             blade.color = k == 1 ? const Color(0xFF4E8F2E) : look.surface;
@@ -499,7 +522,9 @@ class TankBattlefieldPainter extends CustomPainter {
         final k = ((s.time - appear) / 1.4).clamp(0.0, 1.0);
         fall = (1 - _easeOut(k)) * 22;
         sway = math.sin((s.time - appear) * 5) * (1 - k) * 0.35;
-        canopyAlpha = k < 1 ? 1 : (1 - ((s.time - appear - 1.4) / 0.5)).clamp(0.0, 1.0);
+        canopyAlpha = k < 1
+            ? 1
+            : (1 - ((s.time - appear - 1.4) / 0.5)).clamp(0.0, 1.0);
       }
       final bottom = v.toScreen(col, row + 0.5 - fall);
       canvas.save();
@@ -862,7 +887,8 @@ class TankBattlefieldPainter extends CustomPainter {
       final cls = p['tankClass'] as String?;
       final rad = -pb.angle * math.pi / 180;
       final dir = Offset(math.cos(rad), math.sin(rad));
-      final tip = base + tankTurretOffset(cls) * u + dir * (tankBarrelLength(cls) * u);
+      final tip =
+          base + tankTurretOffset(cls) * u + dir * (tankBarrelLength(cls) * u);
       if (t < 160) {
         final k = t / 160;
         final r = u * (1.2 + k * 1.4);
@@ -870,11 +896,16 @@ class TankBattlefieldPainter extends CustomPainter {
           tip,
           r * 1.6,
           Paint()
-            ..shader = ui.Gradient.radial(tip, r * 1.6, [
-              _a(Colors.white, 1 - k),
-              _a(const Color(0xFFFFC94A), (1 - k) * 0.8),
-              _a(const Color(0xFFFF7A2F), 0),
-            ], const [0, 0.4, 1]),
+            ..shader = ui.Gradient.radial(
+              tip,
+              r * 1.6,
+              [
+                _a(Colors.white, 1 - k),
+                _a(const Color(0xFFFFC94A), (1 - k) * 0.8),
+                _a(const Color(0xFFFF7A2F), 0),
+              ],
+              const [0, 0.4, 1],
+            ),
         );
         final star = Path();
         for (int i = 0; i < 10; i++) {
@@ -888,17 +919,19 @@ class TankBattlefieldPainter extends CustomPainter {
           }
         }
         star.close();
-        canvas.drawPath(star, Paint()..color = _a(const Color(0xFFFFF3C4), 1 - k));
+        canvas.drawPath(
+          star,
+          Paint()..color = _a(const Color(0xFFFFF3C4), 1 - k),
+        );
       }
       if (t < 1000) {
         final k = t / 1000;
         for (int i = 0; i < 5; i++) {
           final spread = (i - 2) * 0.35;
-          final d = Offset(
-            math.cos(rad + spread),
-            math.sin(rad + spread),
-          );
-          final pt = tip + d * (u * (0.8 + k * 3 * (0.6 + _hash(i, 61) * 0.6))) +
+          final d = Offset(math.cos(rad + spread), math.sin(rad + spread));
+          final pt =
+              tip +
+              d * (u * (0.8 + k * 3 * (0.6 + _hash(i, 61) * 0.6))) +
               Offset(0, -k * u * 1.5);
           canvas.drawCircle(
             pt,
@@ -935,7 +968,9 @@ class TankBattlefieldPainter extends CustomPainter {
     final prev = pts[math.max(0, head - 1)];
     final dirW = pts[head] - prev;
     final ang = dirW.distance == 0 ? 0.0 : math.atan2(dirW.dy, dirW.dx);
-    final weapon = shell.stage > 0 && shell.weapon == 'cluster' ? 'bomblet' : shell.weapon;
+    final weapon = shell.stage > 0 && shell.weapon == 'cluster'
+        ? 'bomblet'
+        : shell.weapon;
 
     final (Color trail, Color core, double size, int len) = switch (weapon) {
       'heavy' => (const Color(0xFFFF5A2A), const Color(0xFF2B1A12), 0.6, 18),
@@ -981,7 +1016,11 @@ class TankBattlefieldPainter extends CustomPainter {
         ..color = const Color(0xFF7A8890);
       for (int i = 0; i < 3; i++) {
         final x = -r * 0.5 + i * r * 0.6 + (s.time * 40 % (r * 0.6));
-        canvas.drawLine(Offset(x, -r * 0.6), Offset(x + r * 0.3, r * 0.6), spiral);
+        canvas.drawLine(
+          Offset(x, -r * 0.6),
+          Offset(x + r * 0.3, r * 0.6),
+          spiral,
+        );
       }
       canvas.restore();
       return;
@@ -1055,11 +1094,10 @@ class TankBattlefieldPainter extends CustomPainter {
             height: u * 12,
           ),
           Paint()
-            ..shader = ui.Gradient.linear(
-              c.translate(0, -u * 12),
-              c,
-              [_a(TankUi.purple, 0), _a(Colors.white, 0.8 * (1 - k))],
-            ),
+            ..shader = ui.Gradient.linear(c.translate(0, -u * 12), c, [
+              _a(TankUi.purple, 0),
+              _a(Colors.white, 0.8 * (1 - k)),
+            ]),
         );
         for (int i = 0; i < 12; i++) {
           final a = i * math.pi / 6 + k * 2;
@@ -1102,7 +1140,8 @@ class TankBattlefieldPainter extends CustomPainter {
       for (int i = 0; i < n; i++) {
         final a = _hash(i + b.stage * 13, 91) * math.pi * 2;
         final d = r * (0.3 + _hash(i, 92) * 0.7) * (0.6 + k);
-        final pt = c + Offset(math.cos(a) * d, math.sin(a) * d * 0.5 - k * u * 4);
+        final pt =
+            c + Offset(math.cos(a) * d, math.sin(a) * d * 0.5 - k * u * 4);
         canvas.drawCircle(
           pt,
           r * (0.35 + k * 0.6),
@@ -1146,12 +1185,17 @@ class TankBattlefieldPainter extends CustomPainter {
       c,
       fr,
       Paint()
-        ..shader = ui.Gradient.radial(c, fr, [
-          _a(const Color(0xFFFFFDE7), 1 - k),
-          _a(const Color(0xFFFFD54F), (1 - k) * 0.95),
-          _a(const Color(0xFFFF7043), (1 - k) * 0.85),
-          _a(const Color(0xFFB71C1C), 0),
-        ], const [0, 0.25, 0.6, 1]),
+        ..shader = ui.Gradient.radial(
+          c,
+          fr,
+          [
+            _a(const Color(0xFFFFFDE7), 1 - k),
+            _a(const Color(0xFFFFD54F), (1 - k) * 0.95),
+            _a(const Color(0xFFFF7043), (1 - k) * 0.85),
+            _a(const Color(0xFFB71C1C), 0),
+          ],
+          const [0, 0.25, 0.6, 1],
+        ),
     );
     if (b.kind == TankBoomKind.ko) {
       // 연쇄 폭발
@@ -1181,7 +1225,9 @@ class TankBattlefieldPainter extends CustomPainter {
     for (int i = 0; i < count; i++) {
       final seed = i + b.stage * 31 + b.col.round();
       final up = b.kind == TankBoomKind.drill ? 0.5 : 0.0;
-      final a = -math.pi * (0.1 + _hash(seed, 101) * 0.8) - up * (_hash(seed, 104) - 0.5);
+      final a =
+          -math.pi * (0.1 + _hash(seed, 101) * 0.8) -
+          up * (_hash(seed, 104) - 0.5);
       final speed = (6 + _hash(seed, 102) * 10) * (b.radius / 4 + 0.4);
       final vx = math.cos(a) * speed;
       final vy = math.sin(a) * speed;
@@ -1232,10 +1278,12 @@ class TankBattlefieldPainter extends CustomPainter {
           popup.target < players.length &&
           players[popup.target] is Map) {
         final p = players[popup.target] as Map;
-        anchor = v.toScreen(
-          (p['col'] as num).toDouble(),
-          (p['row'] as num).toDouble() + 0.5,
-        ).translate(0, -v.scale * 4.4 - 46);
+        anchor = v
+            .toScreen(
+              (p['col'] as num).toDouble(),
+              (p['row'] as num).toDouble() + 0.5,
+            )
+            .translate(0, -v.scale * 4.4 - 46);
       } else {
         anchor = v.toScreen(popup.col, popup.row);
       }
@@ -1289,13 +1337,17 @@ class TankBattlefieldPainter extends CustomPainter {
         for (int i = 0; i < 80; i++) {
           final speed = 22 + _hash(i, 121) * 30;
           final y = (_hash(i, 122) * h + time * speed) % (h + 10) - 5;
-          final x = ((_hash(i, 123) * w + time * wind * 34 +
-                          math.sin(time * 1.3 + i) * 10) %
-                      (w + 20) +
-                  (w + 20)) %
-              (w + 20) -
+          final x =
+              ((_hash(i, 123) * w +
+                              time * wind * 34 +
+                              math.sin(time * 1.3 + i) * 10) %
+                          (w + 20) +
+                      (w + 20)) %
+                  (w + 20) -
               10;
-          flake.color = Colors.white.withValues(alpha: 0.55 + _hash(i, 124) * 0.4);
+          flake.color = Colors.white.withValues(
+            alpha: 0.55 + _hash(i, 124) * 0.4,
+          );
           canvas.drawCircle(Offset(x, y), 1 + _hash(i, 125) * 1.8, flake);
         }
         break;
@@ -1306,12 +1358,16 @@ class TankBattlefieldPainter extends CustomPainter {
           ..strokeCap = StrokeCap.round;
         for (int i = 0; i < 45; i++) {
           final speed = 70 + wind.abs() * 90 + _hash(i, 131) * 60;
-          final x = ((_hash(i, 132) * w + time * speed * dir) % (w + 40) + (w + 40)) %
+          final x =
+              ((_hash(i, 132) * w + time * speed * dir) % (w + 40) + (w + 40)) %
                   (w + 40) -
               20;
           final y = h * (0.25 + _hash(i, 133) * 0.7);
           final len = 8 + _hash(i, 134) * 18;
-          streak.color = _a(const Color(0xFFFFF1D6), 0.18 + _hash(i, 135) * 0.2);
+          streak.color = _a(
+            const Color(0xFFFFF1D6),
+            0.18 + _hash(i, 135) * 0.2,
+          );
           canvas.drawLine(Offset(x, y), Offset(x - len * dir, y), streak);
         }
         break;
@@ -1319,7 +1375,8 @@ class TankBattlefieldPainter extends CustomPainter {
         for (int i = 0; i < 12; i++) {
           final speedX = 18 + wind * 40 + _hash(i, 141) * 12;
           final speedY = 14 + _hash(i, 142) * 16;
-          final x = ((_hash(i, 143) * w + time * speedX) % (w + 40) + (w + 40)) %
+          final x =
+              ((_hash(i, 143) * w + time * speedX) % (w + 40) + (w + 40)) %
                   (w + 40) -
               20;
           final y = (_hash(i, 144) * h + time * speedY) % (h + 20) - 10;
@@ -1420,7 +1477,9 @@ void paintTank(
   double time = 0,
 }) {
   final facingRight = angle <= 90 || angle > 270;
-  final main = destroyed ? Color.lerp(team, const Color(0xFF34343A), 0.8)! : team;
+  final main = destroyed
+      ? Color.lerp(team, const Color(0xFF34343A), 0.8)!
+      : team;
   final dark = Color.lerp(main, Colors.black, 0.45)!;
   final light = Color.lerp(main, Colors.white, 0.3)!;
   final outline = Paint()
@@ -1469,7 +1528,11 @@ void paintTank(
 
   // 그림자
   canvas.drawOval(
-    Rect.fromCenter(center: const Offset(0, 0.05), width: width + 1.0, height: 0.45),
+    Rect.fromCenter(
+      center: const Offset(0, 0.05),
+      width: width + 1.0,
+      height: 0.45,
+    ),
     Paint()..color = Colors.black.withValues(alpha: 0.25),
   );
 
@@ -1579,7 +1642,11 @@ void paintTank(
         ..color = const Color(0xFF6E7880);
       for (int i = 0; i < 3; i++) {
         final x = width / 2 + 0.15 + i * 0.32;
-        canvas.drawLine(Offset(x, -1.28 + i * 0.08), Offset(x + 0.12, -0.8 - i * 0.03), groove);
+        canvas.drawLine(
+          Offset(x, -1.28 + i * 0.08),
+          Offset(x + 0.12, -0.8 - i * 0.03),
+          groove,
+        );
       }
       break;
     default:

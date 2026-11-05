@@ -99,7 +99,9 @@ class TankHud extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               _RoundIcon(
-                icon: muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                icon: muted
+                    ? Icons.volume_off_rounded
+                    : Icons.volume_up_rounded,
                 tooltip: muted ? '소리 켜기' : '소리 끄기',
                 onTap: onToggleMute,
               ),
@@ -280,63 +282,55 @@ class TankPlayerCard extends StatelessWidget {
               ),
               if (cls != null) ...[
                 const SizedBox(width: 4),
-                Text(
-                  cls.name,
-                  style: tankBody(size: 10, color: TankUi.muted),
-                ),
+                Text(cls.name, style: tankBody(size: 10, color: TankUi.muted)),
               ],
             ],
           ),
           const SizedBox(height: 4),
-          TankHpBar(
-            ratio: hp / maxHp,
-            color: team,
-            alignRight: alignRight,
-          ),
+          TankHpBar(ratio: hp / maxHp, color: team, alignRight: alignRight),
           const SizedBox(height: 3),
           FittedBox(
             fit: BoxFit.scaleDown,
-            alignment: alignRight ? Alignment.centerRight : Alignment.centerLeft,
+            alignment: alignRight
+                ? Alignment.centerRight
+                : Alignment.centerLeft,
             child: Row(
-            mainAxisSize: MainAxisSize.min,
-            textDirection: alignRight ? TextDirection.rtl : TextDirection.ltr,
-            children: [
-              Text(
-                '$hp',
-                style: tankDisplay(size: 13, color: TankUi.text),
-              ),
-              Text(
-                ' / $maxHp',
-                style: tankBody(size: 10, color: TankUi.muted),
-              ),
-              if (buffs['power'] == true)
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 3),
-                  child: Icon(
-                    Icons.local_fire_department_rounded,
-                    size: 13,
-                    color: Color(0xFFFF7A3D),
-                  ),
+              mainAxisSize: MainAxisSize.min,
+              textDirection: alignRight ? TextDirection.rtl : TextDirection.ltr,
+              children: [
+                Text('$hp', style: tankDisplay(size: 13, color: TankUi.text)),
+                Text(
+                  ' / $maxHp',
+                  style: tankBody(size: 10, color: TankUi.muted),
                 ),
-              if (buffs['shield'] == true)
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 3),
-                  child: Icon(
-                    Icons.shield_rounded,
-                    size: 13,
-                    color: TankUi.cyan,
+                if (buffs['power'] == true)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 3),
+                    child: Icon(
+                      Icons.local_fire_department_rounded,
+                      size: 13,
+                      color: Color(0xFFFF7A3D),
+                    ),
                   ),
-                ),
-              if (timeouts > 0)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 3),
-                  child: Text(
-                    '⏱$timeouts/3',
-                    style: tankBody(size: 9.5, color: TankUi.danger),
+                if (buffs['shield'] == true)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 3),
+                    child: Icon(
+                      Icons.shield_rounded,
+                      size: 13,
+                      color: TankUi.cyan,
+                    ),
                   ),
-                ),
-            ],
-          ),
+                if (timeouts > 0)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                    child: Text(
+                      '⏱$timeouts/3',
+                      style: tankBody(size: 9.5, color: TankUi.danger),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ],
       ),
@@ -493,7 +487,11 @@ class TankWindGauge extends StatelessWidget {
         children: [
           Text(
             calm ? '무풍' : '바람 ${wind.abs().toStringAsFixed(1)}',
-            style: tankBody(size: 9.5, color: TankUi.sub, weight: FontWeight.w700),
+            style: tankBody(
+              size: 9.5,
+              color: TankUi.sub,
+              weight: FontWeight.w700,
+            ),
           ),
           SizedBox(
             height: 14,
@@ -528,7 +526,9 @@ class TankTimerRing extends StatelessWidget {
     final seconds = (remainingMs / 1000).ceil();
     final urgent = seconds <= 5;
     final color = urgent ? TankUi.danger : TankUi.gold;
-    final pulse = urgent ? 1 + 0.08 * math.sin(remainingMs / 1000 * math.pi * 2) : 1.0;
+    final pulse = urgent
+        ? 1 + 0.08 * math.sin(remainingMs / 1000 * math.pi * 2)
+        : 1.0;
     return Transform.scale(
       scale: pulse,
       child: SizedBox(
@@ -542,7 +542,12 @@ class TankTimerRing extends StatelessWidget {
                 color: TankUi.panel,
                 shape: BoxShape.circle,
                 boxShadow: urgent
-                    ? [BoxShadow(color: color.withValues(alpha: 0.5), blurRadius: 10)]
+                    ? [
+                        BoxShadow(
+                          color: color.withValues(alpha: 0.5),
+                          blurRadius: 10,
+                        ),
+                      ]
                     : const [],
               ),
             ),

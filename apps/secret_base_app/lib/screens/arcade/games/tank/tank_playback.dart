@@ -460,7 +460,14 @@ class TankPlayback {
         ),
       );
       fixedPopups.add(
-        TankPopup(i, '격파!', TankUi.gold, maxStage, size: 30, delayMs: koDelay + 80),
+        TankPopup(
+          i,
+          '격파!',
+          TankUi.gold,
+          maxStage,
+          size: 30,
+          delayMs: koDelay + 80,
+        ),
       );
       cues.add(TankSoundCue(lastBoom + koDelay, TankSound.explosionBig));
       cues.add(TankSoundCue(lastBoom + koDelay + 40, TankSound.clang, 0.7));
@@ -538,9 +545,7 @@ class TankPlayback {
 
     final settle = booms.isEmpty
         ? lastBoom
-        : booms
-                  .map((b) => boomStartOf(b.stage) + b.delayMs)
-                  .reduce(math.max) +
+        : booms.map((b) => boomStartOf(b.stage) + b.delayMs).reduce(math.max) +
               boomMs * 0.5;
 
     return TankPlayback._(

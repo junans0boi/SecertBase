@@ -79,9 +79,15 @@ void main() {
           focus: Offset(focusX, 20),
         );
         expect(view.left, greaterThanOrEqualTo(-0.5 - 1e-9));
-        expect(view.left + desktop.width / view.scale, lessThanOrEqualTo(99.5 + 1e-9));
+        expect(
+          view.left + desktop.width / view.scale,
+          lessThanOrEqualTo(99.5 + 1e-9),
+        );
         // 땅 밑바닥이 조작부 위로 떠오르지 않는다.
-        expect(view.toScreen(0, 40).dy, greaterThanOrEqualTo(desktop.height - 196 - 1e-6));
+        expect(
+          view.toScreen(0, 40).dy,
+          greaterThanOrEqualTo(desktop.height - 196 - 1e-6),
+        );
       }
     });
 
@@ -97,7 +103,10 @@ void main() {
   group('TankPlayback', () {
     test('builds a timeline with fire, flight, blast, hit-stop and KO', () {
       final state = tankTestState(oppHp: 30);
-      final pb = TankPlayback.fromShot(tankTestShot(state, damage: 40), pre: state);
+      final pb = TankPlayback.fromShot(
+        tankTestShot(state, damage: 40),
+        pre: state,
+      );
       expect(pb.shells, hasLength(1));
       expect(pb.stageCount, 1);
       expect(pb.booms.where((b) => b.kind == TankBoomKind.blast), hasLength(1));
@@ -120,7 +129,10 @@ void main() {
 
     test('no KO when the target survives', () {
       final state = tankTestState(oppHp: 70);
-      final pb = TankPlayback.fromShot(tankTestShot(state, damage: 40), pre: state);
+      final pb = TankPlayback.fromShot(
+        tankTestShot(state, damage: 40),
+        pre: state,
+      );
       expect(pb.booms.where((b) => b.kind == TankBoomKind.ko), isEmpty);
     });
 

@@ -212,13 +212,29 @@ class TankSynth {
   static Float64List _thud() {
     final o = _buf(0.35);
     _tone(o, f0: 80, f1: 40, attack: 0.002, decay: 0.08, gain: 1);
-    _noise(o, seed: 10, fc0: 600, fc1: 150, attack: 0.002, decay: 0.05, gain: 0.5);
+    _noise(
+      o,
+      seed: 10,
+      fc0: 600,
+      fc1: 150,
+      attack: 0.002,
+      decay: 0.05,
+      gain: 0.5,
+    );
     return _finish(o, 0.65);
   }
 
   static Float64List _mound() {
     final o = _buf(0.5);
-    _noise(o, seed: 11, fc0: 900, fc1: 200, attack: 0.01, decay: 0.15, gain: 0.9);
+    _noise(
+      o,
+      seed: 11,
+      fc0: 900,
+      fc1: 200,
+      attack: 0.01,
+      decay: 0.15,
+      gain: 0.9,
+    );
     _tone(o, f0: 70, f1: 45, attack: 0.005, decay: 0.1, gain: 0.6);
     return _finish(o, 0.6);
   }
@@ -349,7 +365,15 @@ class TankSynth {
       wave: _Wave.saw,
       expSweep: false,
     );
-    _noise(o, seed: 12, fc0: 500, fc1: 500, attack: 0.02, decay: 0.15, gain: 0.3);
+    _noise(
+      o,
+      seed: 12,
+      fc0: 500,
+      fc1: 500,
+      attack: 0.02,
+      decay: 0.15,
+      gain: 0.3,
+    );
     return _finish(o, 0.45);
   }
 

@@ -66,10 +66,7 @@ class TankCamera {
     if (viewCols >= kTerrainW) {
       left = -0.5 - (viewCols - kTerrainW) / 2;
     } else {
-      left = (focus.dx - viewCols / 2).clamp(
-        -0.5,
-        kTerrainW - 0.5 - viewCols,
-      );
+      left = (focus.dx - viewCols / 2).clamp(-0.5, kTerrainW - 0.5 - viewCols);
     }
 
     // 세로: 초점을 보이는 띠의 60% 높이에 두되, 땅 밑바닥이 띠 위로 올라오지 않게 한다.

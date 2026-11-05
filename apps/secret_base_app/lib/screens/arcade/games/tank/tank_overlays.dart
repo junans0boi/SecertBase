@@ -251,7 +251,9 @@ class TankSelectView extends StatelessWidget {
                                 ? const []
                                 : [
                                     BoxShadow(
-                                      color: TankUi.fireB.withValues(alpha: 0.5),
+                                      color: TankUi.fireB.withValues(
+                                        alpha: 0.5,
+                                      ),
                                       blurRadius: 16,
                                     ),
                                   ],
@@ -346,7 +348,12 @@ class TankClassCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: border, width: selected ? 2 : 1),
             boxShadow: selected
-                ? [BoxShadow(color: TankUi.me.withValues(alpha: 0.35), blurRadius: 16)]
+                ? [
+                    BoxShadow(
+                      color: TankUi.me.withValues(alpha: 0.35),
+                      blurRadius: 16,
+                    ),
+                  ]
                 : const [],
           ),
           child: Column(
@@ -380,7 +387,11 @@ class TankClassCard extends StatelessWidget {
               const SizedBox(height: 6),
               _StatBar(label: '체력', value: info.hp / 130, text: '${info.hp}'),
               const SizedBox(height: 3),
-              _StatBar(label: '기동', value: info.fuel / 45, text: '${info.fuel}'),
+              _StatBar(
+                label: '기동',
+                value: info.fuel / 45,
+                text: '${info.fuel}',
+              ),
               const SizedBox(height: 6),
               Row(
                 children: [
@@ -431,7 +442,11 @@ class _StatBar extends StatelessWidget {
   final String label;
   final double value;
   final String text;
-  const _StatBar({required this.label, required this.value, required this.text});
+  const _StatBar({
+    required this.label,
+    required this.value,
+    required this.text,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -562,16 +577,36 @@ class _TankResultOverlayState extends State<TankResultOverlay>
         : (widget.win ? TankUi.gold : TankUi.enemy);
     final title = widget.draw ? '무승부' : (widget.win ? '승리!' : '패배');
     final rows = <(String, int, int, String)>[
-      ('가한 피해', _stat(widget.mine, 'damageDealt'), _stat(widget.theirs, 'damageDealt'), ''),
+      (
+        '가한 피해',
+        _stat(widget.mine, 'damageDealt'),
+        _stat(widget.theirs, 'damageDealt'),
+        '',
+      ),
       (
         '명중률',
         (widget.mine?['accuracy'] as num?)?.toInt() ?? 0,
         (widget.theirs?['accuracy'] as num?)?.toInt() ?? 0,
         '%',
       ),
-      ('직격', _stat(widget.mine, 'directHits'), _stat(widget.theirs, 'directHits'), ''),
-      ('최대 한 방', _stat(widget.mine, 'maxHit'), _stat(widget.theirs, 'maxHit'), ''),
-      ('보급 획득', _stat(widget.mine, 'crates'), _stat(widget.theirs, 'crates'), ''),
+      (
+        '직격',
+        _stat(widget.mine, 'directHits'),
+        _stat(widget.theirs, 'directHits'),
+        '',
+      ),
+      (
+        '최대 한 방',
+        _stat(widget.mine, 'maxHit'),
+        _stat(widget.theirs, 'maxHit'),
+        '',
+      ),
+      (
+        '보급 획득',
+        _stat(widget.mine, 'crates'),
+        _stat(widget.theirs, 'crates'),
+        '',
+      ),
     ];
 
     return AnimatedBuilder(
@@ -595,7 +630,10 @@ class _TankResultOverlayState extends State<TankResultOverlay>
             Center(
               child: Opacity(
                 opacity: enter.clamp(0.0, 1.0),
-                child: Transform.scale(scale: 0.85 + 0.15 * enter, child: child),
+                child: Transform.scale(
+                  scale: 0.85 + 0.15 * enter,
+                  child: child,
+                ),
               ),
             ),
           ],
@@ -640,10 +678,17 @@ class _TankResultOverlayState extends State<TankResultOverlay>
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  _ScoreBadge(label: '나', value: widget.myWins, color: TankUi.me),
+                  _ScoreBadge(
+                    label: '나',
+                    value: widget.myWins,
+                    color: TankUi.me,
+                  ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Text(':', style: tankDisplay(size: 24, color: TankUi.muted)),
+                    child: Text(
+                      ':',
+                      style: tankDisplay(size: 24, color: TankUi.muted),
+                    ),
                   ),
                   _ScoreBadge(
                     label: '상대',
@@ -691,7 +736,9 @@ class _TankResultOverlayState extends State<TankResultOverlay>
                           color: Colors.transparent,
                           child: InkWell(
                             borderRadius: BorderRadius.circular(14),
-                            onTap: widget.restartWaiting ? null : widget.onRematch,
+                            onTap: widget.restartWaiting
+                                ? null
+                                : widget.onRematch,
                             child: Center(
                               child: Text(
                                 widget.restartWaiting ? '상대 응답 대기 중' : '재대결',
@@ -717,7 +764,11 @@ class _ScoreBadge extends StatelessWidget {
   final String label;
   final int value;
   final Color color;
-  const _ScoreBadge({required this.label, required this.value, required this.color});
+  const _ScoreBadge({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {

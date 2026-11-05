@@ -105,7 +105,10 @@ Map<String, dynamic> tankTestState({
 }
 
 /// 직격 + 낙하가 들어간 발사 결과.
-Map<String, dynamic> tankTestShot(Map<String, dynamic> state, {int damage = 40}) {
+Map<String, dynamic> tankTestShot(
+  Map<String, dynamic> state, {
+  int damage = 40,
+}) {
   final players = state['players'] as List;
   final target = players[1] as Map;
   final path = [

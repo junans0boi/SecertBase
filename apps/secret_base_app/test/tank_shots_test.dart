@@ -109,12 +109,22 @@ void main() {
           {
             'id': 'me',
             'accuracy': 75,
-            'stats': {'damageDealt': 120, 'directHits': 2, 'maxHit': 55, 'crates': 1},
+            'stats': {
+              'damageDealt': 120,
+              'directHits': 2,
+              'maxHit': 55,
+              'crates': 1,
+            },
           },
           {
             'id': 'opp',
             'accuracy': 40,
-            'stats': {'damageDealt': 60, 'directHits': 0, 'maxHit': 30, 'crates': 0},
+            'stats': {
+              'damageDealt': 60,
+              'directHits': 0,
+              'maxHit': 30,
+              'crates': 0,
+            },
           },
         ],
       };

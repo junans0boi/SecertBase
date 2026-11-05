@@ -5,7 +5,10 @@ import 'package:secret_base_app/screens/arcade/games/tank_screen.dart';
 
 import 'tank_test_support.dart';
 
-Future<void> _pumpTank(WidgetTester tester, {Size size = const Size(390, 844)}) async {
+Future<void> _pumpTank(
+  WidgetTester tester, {
+  Size size = const Size(390, 844),
+}) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = size;
   addTearDown(tester.view.reset);
@@ -27,7 +30,9 @@ void main() {
   });
   tearDown(resetTankSocket);
 
-  testWidgets('select phase: preview a tank, then confirm to deploy', (tester) async {
+  testWidgets('select phase: preview a tank, then confirm to deploy', (
+    tester,
+  ) async {
     SocketService().tankState = tankTestState(phase: 'select');
     await _pumpTank(tester);
 
@@ -46,7 +51,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('my turn: HUD, weapons, aim steppers and fire button', (tester) async {
+  testWidgets('my turn: HUD, weapons, aim steppers and fire button', (
+    tester,
+  ) async {
     SocketService().tankState = tankTestState();
     await _pumpTank(tester);
 
@@ -88,7 +95,9 @@ void main() {
     }
   });
 
-  testWidgets('a shot plays back with blast, KO and then the result', (tester) async {
+  testWidgets('a shot plays back with blast, KO and then the result', (
+    tester,
+  ) async {
     final state = tankTestState(oppHp: 30);
     SocketService().tankState = state;
     await _pumpTank(tester);
@@ -113,12 +122,22 @@ void main() {
           {
             'id': 'me',
             'accuracy': 75,
-            'stats': {'damageDealt': 120, 'directHits': 2, 'maxHit': 55, 'crates': 1},
+            'stats': {
+              'damageDealt': 120,
+              'directHits': 2,
+              'maxHit': 55,
+              'crates': 1,
+            },
           },
           {
             'id': 'opp',
             'accuracy': 40,
-            'stats': {'damageDealt': 60, 'directHits': 0, 'maxHit': 30, 'crates': 0},
+            'stats': {
+              'damageDealt': 60,
+              'directHits': 0,
+              'maxHit': 30,
+              'crates': 0,
+            },
           },
         ],
       };

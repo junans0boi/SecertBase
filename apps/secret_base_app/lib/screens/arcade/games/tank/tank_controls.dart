@@ -207,11 +207,18 @@ class TankWeaponTile extends StatelessWidget {
               border: Border.all(
                 color: selected
                     ? color
-                    : (special ? TankUi.gold.withValues(alpha: 0.6) : TankUi.panelLine),
+                    : (special
+                          ? TankUi.gold.withValues(alpha: 0.6)
+                          : TankUi.panelLine),
                 width: selected ? 2 : 1,
               ),
               boxShadow: selected
-                  ? [BoxShadow(color: color.withValues(alpha: 0.45), blurRadius: 10)]
+                  ? [
+                      BoxShadow(
+                        color: color.withValues(alpha: 0.45),
+                        blurRadius: 10,
+                      ),
+                    ]
                   : const [],
             ),
             child: Stack(
@@ -251,7 +258,11 @@ class TankWeaponTile extends StatelessWidget {
                   const Positioned(
                     left: 4,
                     top: 3,
-                    child: Icon(Icons.star_rounded, size: 11, color: TankUi.gold),
+                    child: Icon(
+                      Icons.star_rounded,
+                      size: 11,
+                      color: TankUi.gold,
+                    ),
                   ),
                 if (index < 9)
                   Positioned(
@@ -309,7 +320,10 @@ class TankStepper extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(label, style: tankBody(size: 9, color: TankUi.muted, height: 1)),
+                Text(
+                  label,
+                  style: tankBody(size: 9, color: TankUi.muted, height: 1),
+                ),
                 Text(value, style: tankDisplay(size: 17)),
                 const SizedBox(height: 2),
                 ClipRRect(
@@ -508,7 +522,11 @@ class _TankRepeatButtonState extends State<TankRepeatButton> {
 class TankFireButton extends StatefulWidget {
   final bool enabled;
   final VoidCallback onFire;
-  const TankFireButton({super.key, required this.enabled, required this.onFire});
+  const TankFireButton({
+    super.key,
+    required this.enabled,
+    required this.onFire,
+  });
 
   @override
   State<TankFireButton> createState() => _TankFireButtonState();
@@ -583,7 +601,9 @@ class _TankFireButtonState extends State<TankFireButton>
                           colors: [Color(0xFF3A4256), Color(0xFF2A3042)],
                         ),
                   border: Border.all(
-                    color: Colors.white.withValues(alpha: enabled ? 0.55 : 0.15),
+                    color: Colors.white.withValues(
+                      alpha: enabled ? 0.55 : 0.15,
+                    ),
                     width: 2,
                   ),
                   boxShadow: [
@@ -603,7 +623,9 @@ class _TankFireButtonState extends State<TankFireButton>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
-                enabled ? Icons.rocket_launch_rounded : Icons.hourglass_top_rounded,
+                enabled
+                    ? Icons.rocket_launch_rounded
+                    : Icons.hourglass_top_rounded,
                 color: Colors.white.withValues(alpha: enabled ? 1 : 0.5),
                 size: 24,
               ),
