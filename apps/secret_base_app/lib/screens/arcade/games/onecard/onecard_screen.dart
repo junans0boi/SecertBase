@@ -102,6 +102,7 @@ class _OneCardScreenState extends State<OneCardScreen>
   bool _showResult = false;
   int _syncRetries = 0;
   bool _colorSheetOpen = false;
+  BuildContext? _colorSheetContext;
 
   final List<({int id, String stat})> _itemEffects = [];
   int _effectSeq = 0;
@@ -138,7 +139,7 @@ class _OneCardScreenState extends State<OneCardScreen>
   static const _howToLines = [
     '지금 색이나 같은 숫자·기호 카드를 내요. 먼저 손패를 비우면 승리!',
     '낼 카드가 없으면 더미에서 한 장 뽑아요. 낼 수 있으면 바로 내거나 넘겨요.',
-    '⊘ 건너뛰기·⇄ 방향 바꾸기는 한 번 더, +2·+4는 상대에게 벌칙. 고와일드에선 벌칙을 쌓아 넘길 수 있어요.',
+    '건너뛰기·방향 바꾸기 카드는 한 번 더, +2·+4는 상대에게 벌칙. 고와일드에선 벌칙을 쌓아 넘길 수 있어요.',
     '◐ 색 바꾸기와 +4는 원하는 색을 골라요. "모두"는 같은 색 카드를 한꺼번에 내요.',
     '한 장 남으면 "원카드!"를 눌러요. 먼저 "잡기!"를 당하면 2장을 받아요.',
     '+4는 그 색이 있었는데 냈다면 "도전!"으로 잡을 수 있어요. 20초가 지나면 자동으로 한 장 뽑고 넘어가요.',
@@ -180,6 +181,11 @@ class _OneCardScreenState extends State<OneCardScreen>
   // ── 상태 변화 → 연출·소리 ─────────────────────────────────────────────────
   void _onController() {
     if (!mounted) return;
+    // 색 고르기 창을 띄운 사이 차례가 넘어가면(시간 초과 등) 창을 닫는다.
+    final sheet = _colorSheetContext;
+    if (_colorSheetOpen && sheet != null && !c.isMyTurn && sheet.mounted) {
+      Navigator.of(sheet).pop();
+    }
     if (c.noticeSeq != _seenNotice) {
       _seenNotice = c.noticeSeq;
       if (c.notice != null) _showToast(c.notice!);
@@ -506,7 +512,8 @@ class _OneCardScreenState extends State<OneCardScreen>
       _colorSheetOpen = true;
       final color = await _pickColor(v);
       _colorSheetOpen = false;
-      if (color == null || !mounted) return;
+      _colorSheetContext = null;
+      if (color == null || !mounted || !c.isMyTurn) return;
       c.play(card, color: color);
       return;
     }
@@ -528,49 +535,52 @@ class _OneCardScreenState extends State<OneCardScreen>
     return showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-          child: GamePanel(
-            theme: t,
-            radius: 26,
-            padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('어떤 색으로 바꿀까요?', style: t.display(size: 21)),
-                const SizedBox(height: 4),
-                Text(
-                  '상대도 바뀐 색을 바로 봐요',
-                  style: t.body(size: 12.5, color: t.subInk),
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    for (final color in OneCardColors.order)
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: _ColorButton(
-                            color: color,
-                            count: counts[color] ?? 0,
-                            suggested: color == best,
-                            onTap: () => Navigator.of(ctx).pop(color),
+      builder: (ctx) {
+        _colorSheetContext = ctx;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+            child: GamePanel(
+              theme: t,
+              radius: 26,
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('어떤 색으로 바꿀까요?', style: t.display(size: 21)),
+                  const SizedBox(height: 4),
+                  Text(
+                    '상대도 바뀐 색을 바로 봐요',
+                    style: t.body(size: 12.5, color: t.subInk),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      for (final color in OneCardColors.order)
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: _ColorButton(
+                              color: color,
+                              count: counts[color] ?? 0,
+                              suggested: color == best,
+                              onTap: () => Navigator.of(ctx).pop(color),
+                            ),
                           ),
                         ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: Text('취소', style: t.body(size: 14, color: t.subInk)),
-                ),
-              ],
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: Text('취소', style: t.body(size: 14, color: t.subInk)),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
