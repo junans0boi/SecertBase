@@ -6,6 +6,7 @@ import '../../../core/app_theme.dart';
 import '../../../core/socket_service.dart';
 import '../../../widgets/game_scaffold.dart';
 import '../../../widgets/game_menu.dart';
+import 'zero/zero_screen.dart';
 
 // ── Phase state ──────────────────────────────────────────────────────────────
 enum _Phase {
@@ -17,6 +18,7 @@ enum _Phase {
 }
 
 // ── Screen ───────────────────────────────────────────────────────────────────
+/// 가위바위보. 예전 진입점 `RpsScreen(fixedMode: 'hanabagi')`(제로)는 [ZeroScreen]으로 보낸다.
 class RpsScreen extends StatefulWidget {
   final String? fixedMode;
 
@@ -34,9 +36,6 @@ class _RpsScreenState extends State<RpsScreen> with TickerProviderStateMixin {
   int _chantStep = 0;
   Timer? _chantTimer;
 
-  int _hanaFingers = 0;
-  int _hanaGuess = 0;
-
   // ── 묵찌빠 carry-over (이전 라운드 승자가 낸 패 label: '묵'/'찌'/'빠') ────
   // null = 결정전 단계, not null = 플레이 단계
   String? _mukCarryover;
@@ -45,9 +44,13 @@ class _RpsScreenState extends State<RpsScreen> with TickerProviderStateMixin {
   bool _tapped = false;
   bool _fixedModeStartRequested = false;
 
+  bool get _isZero =>
+      widget.fixedMode == 'hanabagi' || widget.fixedMode == 'zero';
+
   @override
   void initState() {
     super.initState();
+    if (_isZero) return;
     _socket.addListener(_rebuild);
   }
 
@@ -85,17 +88,6 @@ class _RpsScreenState extends State<RpsScreen> with TickerProviderStateMixin {
         _phase != _Phase.postChant &&
         _phase != _Phase.result) {
       _startPostChant();
-      return;
-    }
-
-    // 제로 모드는 시작 전 가위바위보 없이 바로 동시 선택
-    if (active && mode == 'hanabagi' && _phase == _Phase.idle) {
-      setState(() {
-        _phase = _Phase.picking;
-        _tapped = false;
-        _hanaFingers = 0;
-        _hanaGuess = 0;
-      });
       return;
     }
 
@@ -159,7 +151,7 @@ class _RpsScreenState extends State<RpsScreen> with TickerProviderStateMixin {
         letters = [_mukCarryover!, attackerThrow, defenderThrow];
       }
     } else {
-      // zero
+      // 단판
       letters = ['하나', '둘'];
     }
 
@@ -196,14 +188,8 @@ class _RpsScreenState extends State<RpsScreen> with TickerProviderStateMixin {
           setState(() {
             _phase = _Phase.idle;
             _tapped = false;
-            _hanaFingers = 0;
-            _hanaGuess = 0;
           });
           _socket.clearRpsRound();
-          // 제로: 다음 라운드도 가위바위보 없이 바로 선택
-          if (_socket.rpsActive && _socket.rpsMode == 'hanabagi') {
-            setState(() => _phase = _Phase.picking);
-          }
         });
       },
       stepMs: 420,
@@ -270,16 +256,6 @@ class _RpsScreenState extends State<RpsScreen> with TickerProviderStateMixin {
     _socket.pickRps(choice);
   }
 
-  void _submitHanabagi() {
-    if (_tapped) return;
-    setState(() {
-      _tapped = true;
-      _phase = _Phase.waiting;
-    });
-    HapticFeedback.selectionClick();
-    _socket.pickHanabagi(_hanaFingers, _hanaGuess);
-  }
-
   void _resetGame() {
     _mukCarryover = null;
     _fixedModeStartRequested = false;
@@ -304,7 +280,6 @@ class _RpsScreenState extends State<RpsScreen> with TickerProviderStateMixin {
   Color _chantColor() {
     final mode = _socket.rpsMode ?? 'rps3';
     if (mode == 'mukjippa') return const Color(0xFFE53935);
-    if (mode == 'hanabagi') return const Color(0xFF2E7D32);
     return kPrimary;
   }
 
@@ -312,13 +287,14 @@ class _RpsScreenState extends State<RpsScreen> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    if (_isZero) return const ZeroScreen();
     final sock = _socket;
     final mode = sock.rpsMode;
     final active = sock.rpsActive;
     final gameWinner = sock.rpsGameWinner;
 
     return GameScaffold(
-      title: widget.fixedMode == 'hanabagi' ? '0️⃣ 제로' : '✊ 가위바위보',
+      title: '✊ 가위바위보',
       actions: [const GameMenuButton()],
       child: LayoutBuilder(
         builder: (ctx, box) {
@@ -343,10 +319,8 @@ class _RpsScreenState extends State<RpsScreen> with TickerProviderStateMixin {
               return _FixedModeWaitingView(
                 compact: compact,
                 pad: pad,
-                title: widget.fixedMode == 'hanabagi' ? '제로' : '게임 준비 중',
-                description: widget.fixedMode == 'hanabagi'
-                    ? '내 숫자와 합계 예측을 동시에 고르고, 하나~둘~ 후 결과를 확인해요.'
-                    : '방장이 게임을 준비하고 있어요.',
+                title: '게임 준비 중',
+                description: '방장이 게임을 준비하고 있어요.',
                 isHost: _isHost,
               );
             }
@@ -368,7 +342,6 @@ class _RpsScreenState extends State<RpsScreen> with TickerProviderStateMixin {
               gameWinner: gameWinner,
               userId: sock.userId,
               scores: sock.rpsScores,
-              history: sock.rpsRoundHistory,
               isHost: _isHost,
               onReset: _resetGame,
             );
@@ -410,22 +383,6 @@ class _RpsScreenState extends State<RpsScreen> with TickerProviderStateMixin {
               carryover: _mukCarryover,
             );
           }
-          if (mode == 'hanabagi') {
-            return _HanabagiView(
-              compact: compact,
-              pad: pad,
-              sock: sock,
-              tapped: _tapped,
-              waiting: isWaiting,
-              pickerEnabled: _phase == _Phase.picking,
-              fingers: _hanaFingers,
-              guess: _hanaGuess,
-              onFingersChanged: (v) => setState(() => _hanaFingers = v),
-              onGuessChanged: (v) => setState(() => _hanaGuess = v),
-              onSubmit: _submitHanabagi,
-            );
-          }
-
           return const SizedBox.shrink();
         },
       ),
@@ -608,59 +565,6 @@ class _ResultView extends StatelessWidget {
           ),
         ],
       );
-    } else if (mode == 'hanabagi') {
-      final fingers = sock.rpsLastFingers;
-      final guesses = sock.rpsLastGuesses;
-      final total = sock.rpsLastTotal ?? 0;
-      if (fingers != null && guesses != null) {
-        final myF = fingers[userId] ?? 0;
-        final opF = fingers[opId] ?? 0;
-        final myG = guesses[userId] ?? 0;
-        final opG = guesses[opId] ?? 0;
-        handRow = Column(
-          children: [
-            Text(
-              '합계: $total',
-              style: GoogleFonts.notoSans(
-                color: kText,
-                fontSize: compact ? 26 : 30,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                Expanded(
-                  child: _HanaResultCell(
-                    name: sock.nameOf(userId).isNotEmpty
-                        ? sock.nameOf(userId)
-                        : '나',
-                    fingers: myF,
-                    guess: myG,
-                    hit: myG == total,
-                    isMe: true,
-                    compact: compact,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _HanaResultCell(
-                    name: sock.nameOf(opId).isNotEmpty
-                        ? sock.nameOf(opId)
-                        : '상대',
-                    fingers: opF,
-                    guess: opG,
-                    hit: opG == total,
-                    isMe: false,
-                    compact: compact,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        );
-      }
     }
 
     return Padding(
@@ -692,7 +596,7 @@ class _ResultView extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           handRow,
-          if (mode == 'rps3' || mode == 'hanabagi') ...[
+          if (mode == 'rps3') ...[
             const SizedBox(height: 20),
             _ScoreBoard(
               myScore: myScore,
@@ -757,71 +661,6 @@ class _HandBubble extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _HanaResultCell extends StatelessWidget {
-  final String name;
-  final int fingers;
-  final int guess;
-  final bool hit;
-  final bool isMe;
-  final bool compact;
-
-  const _HanaResultCell({
-    required this.name,
-    required this.fingers,
-    required this.guess,
-    required this.hit,
-    required this.isMe,
-    required this.compact,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: compact ? 16 : 20,
-        vertical: compact ? 12 : 14,
-      ),
-      decoration: BoxDecoration(
-        color: hit ? kSuccess.withValues(alpha: 0.08) : kCard,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: hit ? kSuccess.withValues(alpha: 0.4) : kBorder,
-        ),
-      ),
-      child: Column(
-        children: [
-          Text(
-            name,
-            style: GoogleFonts.notoSans(
-              color: isMe ? kPrimary : kAccent,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '낸 수 $fingers',
-            style: GoogleFonts.notoSans(
-              color: kText,
-              fontSize: compact ? 22 : 26,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            '예측한 합 $guess ${hit ? '✅' : '❌'}',
-            style: GoogleFonts.notoSans(
-              color: hit ? kSuccess : kTextMuted,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -1011,7 +850,7 @@ class _FixedModeWaitingView extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('0️⃣', style: TextStyle(fontSize: compact ? 44 : 54)),
+              Text('✊', style: TextStyle(fontSize: compact ? 44 : 54)),
               const SizedBox(height: 12),
               Text(
                 title,
@@ -1033,7 +872,6 @@ class _FixedModeWaitingView extends StatelessWidget {
               ),
               const SizedBox(height: 18),
               _LiveWaitingView(
-                emojis: const ['0', '3', '5', '8'],
                 label: isHost ? '게임 시작 중...' : '방장이 게임을 시작하는 중...',
               ),
             ],
@@ -1121,7 +959,6 @@ class _GameOverView extends StatelessWidget {
   final String gameWinner;
   final String? userId;
   final Map<String, int> scores;
-  final List<Map<String, dynamic>> history;
   final bool isHost;
   final VoidCallback onReset;
 
@@ -1132,7 +969,6 @@ class _GameOverView extends StatelessWidget {
     required this.gameWinner,
     required this.userId,
     required this.scores,
-    required this.history,
     required this.isHost,
     required this.onReset,
   });
@@ -1196,14 +1032,6 @@ class _GameOverView extends StatelessWidget {
                 }).toList(),
               ),
             ],
-            if (mode == 'hanabagi' && history.isNotEmpty) ...[
-              const SizedBox(height: 22),
-              _ZeroHistoryList(
-                history: history,
-                userId: userId,
-                compact: compact,
-              ),
-            ],
             const SizedBox(height: 32),
             if (isHost)
               ElevatedButton.icon(
@@ -1231,109 +1059,6 @@ class _GameOverView extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class _ZeroHistoryList extends StatelessWidget {
-  final List<Map<String, dynamic>> history;
-  final String? userId;
-  final bool compact;
-
-  const _ZeroHistoryList({
-    required this.history,
-    required this.userId,
-    required this.compact,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final sock = SocketService();
-
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(compact ? 12 : 14),
-      decoration: BoxDecoration(
-        color: kCard,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '라운드 상세',
-            style: GoogleFonts.notoSans(
-              color: kText,
-              fontSize: 14,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 10),
-          ...history.map((round) {
-            final fingers = _intMap(round['fingers']);
-            final guesses = _intMap(round['guesses']);
-            final players = fingers.keys.toList();
-            final me = userId ?? '';
-            final opponent = players.firstWhere(
-              (p) => p != me,
-              orElse: () {
-                return players.isNotEmpty ? players.first : '';
-              },
-            );
-            final winner = '${round['roundWinner'] ?? ''}';
-            final total = round['total'] ?? 0;
-            final myName = sock.nameOf(me).isNotEmpty ? sock.nameOf(me) : '나';
-            final opName = sock.nameOf(opponent).isNotEmpty
-                ? sock.nameOf(opponent)
-                : '상대';
-            final result = winner == 'draw'
-                ? '무승부'
-                : winner == me
-                ? '$myName 승'
-                : '$opName 승';
-
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: kBg,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: kBorder.withValues(alpha: 0.6)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${round['round']}R · 합 $total · $result',
-                      style: GoogleFonts.notoSans(
-                        color: kText,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      '$myName: ${fingers[me] ?? 0} / 예측 ${guesses[me] ?? 0}    '
-                      '$opName: ${fingers[opponent] ?? 0} / 예측 ${guesses[opponent] ?? 0}',
-                      style: GoogleFonts.notoSans(
-                        color: kTextMuted,
-                        fontSize: compact ? 11 : 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
-  static Map<String, int> _intMap(dynamic value) {
-    if (value is! Map) return {};
-    return value.map((k, v) => MapEntry('$k', (v as num?)?.toInt() ?? 0));
   }
 }
 
@@ -1558,142 +1283,14 @@ class _MukjippaView extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Zero View
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _HanabagiView extends StatelessWidget {
-  final bool compact;
-  final double pad;
-  final SocketService sock;
-  final bool tapped;
-  final bool waiting;
-  final bool pickerEnabled;
-  final int fingers;
-  final int guess;
-  final void Function(int) onFingersChanged;
-  final void Function(int) onGuessChanged;
-  final VoidCallback onSubmit;
-
-  const _HanabagiView({
-    required this.compact,
-    required this.pad,
-    required this.sock,
-    required this.tapped,
-    required this.waiting,
-    required this.pickerEnabled,
-    required this.fingers,
-    required this.guess,
-    required this.onFingersChanged,
-    required this.onGuessChanged,
-    required this.onSubmit,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final userId = sock.userId ?? '';
-    final players = sock.rpsPlayers;
-    final opId = players.firstWhere((p) => p != userId, orElse: () => '');
-    final myScore = sock.rpsScores[userId] ?? 0;
-    final opScore = sock.rpsScores[opId] ?? 0;
-
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(pad),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _ScoreBoard(
-            myScore: myScore,
-            opScore: opScore,
-            target: 3,
-            compact: compact,
-            myLabel: sock.nameOf(userId).isNotEmpty ? sock.nameOf(userId) : '나',
-            opLabel: sock.nameOf(opId).isNotEmpty ? sock.nameOf(opId) : '상대',
-          ),
-          const SizedBox(height: 20),
-          if (waiting) ...[
-            const SizedBox(height: 20),
-            const _LiveWaitingView(
-              emojis: ['0', '3', '5', '8'],
-              label: '상대방 선택 대기 중...',
-            ),
-          ] else if (pickerEnabled) ...[
-            Text(
-              '내 숫자',
-              style: GoogleFonts.notoSans(
-                color: kText,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 10),
-            _FingerPicker(
-              value: fingers,
-              onChanged: onFingersChanged,
-              compact: compact,
-            ),
-            const SizedBox(height: 20),
-            Text(
-              '합계 예측 (0 ~ 10)',
-              style: GoogleFonts.notoSans(
-                color: kText,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 10),
-            _GuessStepper(
-              value: guess,
-              onChanged: onGuessChanged,
-              compact: compact,
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              height: compact ? 46 : 52,
-              child: ElevatedButton(
-                onPressed: tapped ? null : onSubmit,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2E7D32),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                child: Text(
-                  '제출!',
-                  style: GoogleFonts.notoSans(
-                    fontSize: compact ? 15 : 17,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ),
-          ] else ...[
-            const SizedBox(height: 40),
-            Center(
-              child: Text(
-                '잠시만요...',
-                style: GoogleFonts.notoSans(color: kTextMuted, fontSize: 14),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Live Waiting (선택 후 상대방 대기 - 생동감 있는 버전)
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _LiveWaitingView extends StatefulWidget {
-  final List<String> emojis;
+  static const emojis = ['✊', '✌️', '✋'];
   final String label;
 
-  const _LiveWaitingView({
-    this.emojis = const ['✊', '✌️', '✋'],
-    this.label = '상대방 선택 대기 중...',
-  });
+  const _LiveWaitingView({this.label = '상대방 선택 대기 중...'});
 
   @override
   State<_LiveWaitingView> createState() => _LiveWaitingViewState();
@@ -1719,7 +1316,9 @@ class _LiveWaitingViewState extends State<_LiveWaitingView>
     ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
     _timer = Timer.periodic(const Duration(milliseconds: 650), (_) {
       if (mounted) {
-        setState(() => _emojiIdx = (_emojiIdx + 1) % widget.emojis.length);
+        setState(
+          () => _emojiIdx = (_emojiIdx + 1) % _LiveWaitingView.emojis.length,
+        );
       }
     });
   }
@@ -1740,7 +1339,7 @@ class _LiveWaitingViewState extends State<_LiveWaitingView>
           builder: (_, child) => Transform.scale(
             scale: _pulse.value,
             child: Text(
-              widget.emojis[_emojiIdx],
+              _LiveWaitingView.emojis[_emojiIdx],
               style: const TextStyle(fontSize: 56),
             ),
           ),
@@ -1933,115 +1532,6 @@ class _ScoreCell extends StatelessWidget {
               ),
             ),
           ),
-        ),
-      ],
-    );
-  }
-}
-
-class _FingerPicker extends StatelessWidget {
-  final int value;
-  final void Function(int) onChanged;
-  final bool compact;
-
-  const _FingerPicker({
-    required this.value,
-    required this.onChanged,
-    required this.compact,
-  });
-
-  static const _labels = ['✊', '☝️', '✌️', '🤟', '🖖', '🖐️'];
-  static const _nums = ['0', '1', '2', '3', '4', '5'];
-
-  @override
-  Widget build(BuildContext context) {
-    final sz = compact ? 46.0 : 54.0;
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: List.generate(6, (i) {
-        final sel = value == i;
-        return GestureDetector(
-          onTap: () => onChanged(i),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            width: sz,
-            height: sz,
-            decoration: BoxDecoration(
-              color: sel ? kPrimary.withValues(alpha: 0.12) : kCard,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: sel ? kPrimary : kBorder,
-                width: sel ? 2 : 1,
-              ),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(_labels[i], style: TextStyle(fontSize: compact ? 14 : 16)),
-                Text(
-                  _nums[i],
-                  style: GoogleFonts.notoSans(
-                    color: sel ? kPrimary : kTextMuted,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      }),
-    );
-  }
-}
-
-class _GuessStepper extends StatelessWidget {
-  final int value;
-  final void Function(int) onChanged;
-  final bool compact;
-
-  const _GuessStepper({
-    required this.value,
-    required this.onChanged,
-    required this.compact,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        IconButton(
-          onPressed: value > 0 ? () => onChanged(value - 1) : null,
-          icon: Icon(
-            Icons.remove_circle,
-            color: value > 0 ? kPrimary : kBorder,
-            size: compact ? 30 : 34,
-          ),
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-        ),
-        SizedBox(
-          width: 70,
-          child: Text(
-            '$value',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.notoSans(
-              color: kText,
-              fontSize: compact ? 32 : 38,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ),
-        IconButton(
-          onPressed: value < 10 ? () => onChanged(value + 1) : null,
-          icon: Icon(
-            Icons.add_circle,
-            color: value < 10 ? kPrimary : kBorder,
-            size: compact ? 30 : 34,
-          ),
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
         ),
       ],
     );
