@@ -1935,6 +1935,9 @@ class SocketService extends ChangeNotifier {
   // ── 서버 거부 사유 안내 ────────────────────────────────────────────────────
 
   static const Set<String> _silentGameReasons = {
+    // 게임 2.0: 두 기기가 동시에 보낸 중복 요청이나 지난 판 요청은 조용히 넘긴다.
+    'stale_game',
+    'stale_round',
     'wrong_answer',
     'time_up',
     'already_selected',
@@ -1972,6 +1975,32 @@ class SocketService extends ChangeNotifier {
     'land_action_pending': '영지 선택을 먼저 마쳐 주세요.',
     'must_move_first': '먼저 말을 움직여 주세요.',
     'not_a_player': '이 게임의 참가자가 아니에요.',
+    // 게임 2.0
+    'finished': '이미 끝난 판이에요.',
+    'game_over': '이미 끝난 판이에요.',
+    'not_playing': '지금은 진행 중인 판이 없어요.',
+    'invalid_choice': '고를 수 없는 칸이에요.',
+    'invalid_slot': '고를 수 없는 구멍이에요.',
+    'slot_taken': '이미 칼이 꽂힌 구멍이에요.',
+    'not_exploded': '아직 통이 터지지 않았어요.',
+    'not_winner': '벌칙은 이긴 사람이 정해요.',
+    'not_loser': '벌칙을 받은 사람만 완료할 수 있어요.',
+    'no_penalty': '아직 벌칙이 정해지지 않았어요.',
+    'penalty_already_set': '벌칙은 이미 정해졌어요.',
+    'penalty_already_done': '벌칙은 이미 완료했어요.',
+    'penalty_empty': '벌칙 내용을 적어 주세요.',
+    'penalty_too_long': '벌칙은 30자 이내로 적어 주세요.',
+    'invalid_guess': '고를 수 없는 숫자예요.',
+    'invalid_fingers': '손가락 수를 다시 골라 주세요.',
+    'already_picked': '이번 라운드는 이미 골랐어요.',
+    'cannot_play_card': '지금은 그 카드를 낼 수 없어요.',
+    'card_not_found': '손에 없는 카드예요.',
+    'must_declare_color': '바꿀 색을 골라 주세요.',
+    'no_target': '잡을 상대가 없어요.',
+    'not_needed': '지금은 원카드를 외칠 때가 아니에요.',
+    'cannot_challenge_during_stack': '공격이 쌓여 있을 때는 도전할 수 없어요.',
+    'no_draw_choice': '낼 수 있는 뽑은 카드가 없어요.',
+    'no_challenge': '도전할 +4가 없어요.',
   };
 
   void _setGameNotice(String message, {String? gameType}) {
