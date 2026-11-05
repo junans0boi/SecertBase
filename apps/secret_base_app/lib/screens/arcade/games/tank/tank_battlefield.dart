@@ -70,8 +70,8 @@ class _TankBattlefieldState extends State<TankBattlefield>
   double _time = 0;
   TankView? _view;
   Size _size = Size.zero;
-  final Map<int, double> _crateDrops = {};
-  final Set<int> _seenCrates = {};
+  final Map<String, double> _crateDrops = {};
+  final Set<String> _seenCrates = {};
   bool _cratesPrimed = false;
   Offset? _drag;
 
@@ -120,7 +120,8 @@ class _TankBattlefieldState extends State<TankBattlefield>
   void _checkIntro() {
     final st = widget.state;
     if (st['phase'] != 'aiming') return;
-    final game = st['gameId'];
+    // 서버 상태에 gameId가 없을 수 있어 지형 seed로 판을 구분한다.
+    final game = st['gameId'] ?? st['seed'];
     if (game == _introGame) return;
     _introGame = game;
     final turnNumber = (st['turnNumber'] as num?)?.toInt() ?? 0;
@@ -131,7 +132,8 @@ class _TankBattlefieldState extends State<TankBattlefield>
     final crates = (widget.state['crates'] as List?) ?? const [];
     for (final raw in crates) {
       if (raw is! Map) continue;
-      final id = (raw['id'] as num?)?.toInt();
+      // 서버의 보급 상자 id는 'c1' 같은 문자열이다.
+      final id = raw['id']?.toString();
       if (id == null || _seenCrates.contains(id)) continue;
       _seenCrates.add(id);
       // 화면을 연 순간 이미 있던 상자는 떨어지는 연출 없이 둔다.

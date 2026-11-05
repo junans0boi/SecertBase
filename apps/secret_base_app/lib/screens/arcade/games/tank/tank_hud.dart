@@ -142,11 +142,22 @@ class TankHud extends StatelessWidget {
                         const SizedBox(height: 4),
                         TankWindGauge(wind: wind),
                         const SizedBox(height: 3),
-                        Text(
-                          '${math.min(turnNumber + 1, kTankFinalTurn)} / $kTankFinalTurn턴',
-                          style: tankBody(size: 10, color: TankUi.muted),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '${math.min(turnNumber + 1, kTankFinalTurn)} / $kTankFinalTurn턴',
+                                style: tankBody(size: 10, color: TankUi.muted),
+                              ),
+                              if (suddenDeath) ...[
+                                const SizedBox(width: 4),
+                                const _SuddenDeathBadge(),
+                              ],
+                            ],
+                          ),
                         ),
-                        if (suddenDeath) const _SuddenDeathBadge(),
                       ],
                     ),
                   ),
@@ -210,8 +221,7 @@ class _SuddenDeathBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(top: 3),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
         gradient: const LinearGradient(colors: [TankUi.fireB, TankUi.fireA]),
         borderRadius: BorderRadius.circular(8),
@@ -304,7 +314,6 @@ class TankPlayerCard extends StatelessWidget {
                 : Alignment.centerLeft,
             child: Row(
               mainAxisSize: MainAxisSize.min,
-              textDirection: alignRight ? TextDirection.rtl : TextDirection.ltr,
               children: [
                 Text('$hp', style: tankDisplay(size: 13, color: TankUi.text)),
                 Text(

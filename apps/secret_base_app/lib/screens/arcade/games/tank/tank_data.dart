@@ -128,6 +128,15 @@ const Map<String, TankClassInfo> kTankClasses = {
 
 const List<String> kTankClassOrder = ['rhino', 'falcon', 'mole', 'turtle'];
 
+/// 받침에 맞춰 '로'/'으로'를 붙인다(받침 없음·ㄹ받침 → 로).
+String tankWithRo(String word) {
+  if (word.isEmpty) return word;
+  final code = word.codeUnitAt(word.length - 1);
+  if (code < 0xAC00 || code > 0xD7A3) return '$word(으)로';
+  final jong = (code - 0xAC00) % 28;
+  return jong == 0 || jong == 8 ? '$word로' : '$word으로';
+}
+
 // ── 무기 ─────────────────────────────────────────────────────────────────────
 
 class TankWeaponInfo {
@@ -216,6 +225,15 @@ const List<String> kTankWeaponOrder = [
   'drill',
   'wall',
 ];
+
+/// 가진 무기 목록. 전용탄은 폰 화면에서도 바로 보이도록 기본탄 다음에 둔다.
+List<String> tankWeaponList(Map<dynamic, dynamic> ammo, String? special) {
+  final owned = kTankWeaponOrder.where(ammo.containsKey).toList();
+  if (special != null && owned.remove(special)) {
+    owned.insert(owned.isEmpty ? 0 : 1, special);
+  }
+  return owned;
+}
 
 const Map<String, String> kTankCrateNames = {
   'repair': '수리 키트',

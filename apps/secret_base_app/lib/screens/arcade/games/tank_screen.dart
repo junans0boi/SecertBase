@@ -29,7 +29,7 @@ class TankScreen extends StatefulWidget {
 }
 
 class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
-  static const double _hudInset = 150;
+  static const double _hudInset = 172;
   static const double _controlsInset = 205;
 
   final _socket = SocketService();
@@ -63,6 +63,8 @@ class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
   bool _turnPrimed = false;
   TankBannerData? _banner;
   int _bannerSeq = 0;
+  TankBannerData? _toast;
+  int _toastSeq = 0;
   bool _suddenAnnounced = false;
   int _lastTickSecond = -1;
   String? _resultSoundKey;
@@ -156,7 +158,11 @@ class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
   }
 
   String _resultKey() =>
-      '${_state?['gameId']}:${_socket.tankWinner}:${_socket.tankEndReason}';
+      '${_gameKey(_state)}:${_socket.tankWinner}:${_socket.tankEndReason}';
+
+  /// 서버 상태에 gameId가 없을 수 있어 지형 seed로 판을 구분한다.
+  static Object? _gameKey(Map<String, dynamic>? state) =>
+      state?['gameId'] ?? state?['seed'];
 
   void _syncAimFromState() {
     final me = _player(_state, _myIndex);
@@ -204,6 +210,11 @@ class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
     if (_socket.tankMoveSeq != _seenMoveSeq) {
       _seenMoveSeq = _socket.tankMoveSeq;
       for (final raw in _socket.tankMoveEvents) {
+        if (raw is Map &&
+            raw['type'] == 'blocked' &&
+            (raw['target'] as num?)?.toInt() == _myIndex) {
+          _snack('경사가 가팔라 더 갈 수 없어요', color: TankUi.cyan);
+        }
         if (raw is Map && raw['type'] == 'crate') {
           final mine = (raw['owner'] as num?)?.toInt() == _myIndex;
           final item = kTankCrateNames[raw['item']] ?? '보급';
@@ -215,8 +226,8 @@ class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
 
     final state = _state;
     if (state != null) {
-      if (state['gameId'] != _scorchGame) {
-        _scorchGame = state['gameId'];
+      if (_gameKey(state) != _scorchGame) {
+        _scorchGame = _gameKey(state);
         _scorches.clear();
         _suddenAnnounced = false;
       }
@@ -285,17 +296,10 @@ class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
     _sfx.play(winner == _socket.userId ? TankSound.win : TankSound.lose);
   }
 
-  void _snack(String message) {
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    messenger
-      ?..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          duration: const Duration(milliseconds: 1600),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+  /// 조작부를 가리지 않는 짧은 알림(미니맵 아래).
+  void _snack(String message, {Color color = TankUi.gold}) {
+    _toastSeq++;
+    _toast = TankBannerData(_toastSeq, message, color);
   }
 
   // ── playback ───────────────────────────────────────────────────────────────
@@ -450,7 +454,10 @@ class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
       if (n == null || n < 1 || n > 9) return KeyEventResult.ignored;
       final me = _player(_state, _myIndex);
       final ammo = (me?['ammo'] as Map?) ?? const {};
-      final weapons = kTankWeaponOrder.where(ammo.containsKey).toList();
+      final weapons = tankWeaponList(
+        ammo,
+        kTankClasses[me?['tankClass']]?.special,
+      );
       if (n - 1 < weapons.length &&
           _canAct &&
           TankControls.hasAmmo(ammo[weapons[n - 1]])) {
@@ -666,6 +673,12 @@ class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
           right: 0,
           top: _hudInset + 20,
           child: TankTurnBanner(banner: _banner),
+        ),
+        Positioned(
+          left: 16,
+          right: 16,
+          top: _hudInset + 44,
+          child: TankToast(toast: _toast),
         ),
         if (showResult) Positioned.fill(child: _buildResult(winner)),
       ],

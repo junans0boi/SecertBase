@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secret_base_app/core/socket_service.dart';
@@ -46,9 +49,9 @@ void main() {
 
     await tester.tap(find.text('거북'));
     await tester.pump(const Duration(milliseconds: 200));
-    expect(find.text('거북(으)로 출격!'), findsOneWidget);
+    expect(find.text('거북으로 출격!'), findsOneWidget);
 
-    await tester.tap(find.text('거북(으)로 출격!'));
+    await tester.tap(find.text('거북으로 출격!'));
     await tester.pump(const Duration(milliseconds: 200));
     expect(tester.takeException(), isNull);
   });
@@ -151,5 +154,45 @@ void main() {
     expect(find.text('상대 전차를 격파했어요!'), findsOneWidget);
     expect(find.text('재대결'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'a supply crate dropping mid-game renders (server ids are strings)',
+    (tester) async {
+      final before = tankTestState();
+      before['crates'] = [];
+      SocketService().tankState = before;
+      await _pumpTank(tester);
+      SocketService().tankState = tankTestState(); // 'c1' 상자가 떨어진다
+      _notify();
+      for (int i = 0; i < 40; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(tester.takeException(), isNull, reason: 'frame $i');
+      }
+    },
+  );
+
+  testWidgets('a real server shot (engine output) plays back cleanly', (
+    tester,
+  ) async {
+    final data =
+        jsonDecode(File('test/fixtures/tank_real_shot.json').readAsStringSync())
+            as Map<String, dynamic>;
+    SocketService().tankState = Map<String, dynamic>.from(data['pre'] as Map);
+    await _pumpTank(tester);
+    SocketService().tankLastShot = Map<String, dynamic>.from(
+      data['shot'] as Map,
+    );
+    _notify();
+    for (int i = 0; i < 60; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+      if (i == 10) {
+        SocketService().tankState = Map<String, dynamic>.from(
+          data['post'] as Map,
+        );
+        _notify();
+      }
+      expect(tester.takeException(), isNull, reason: 'frame $i');
+    }
   });
 }

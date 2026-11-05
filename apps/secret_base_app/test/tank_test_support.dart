@@ -77,7 +77,12 @@ Map<String, dynamic> tankTestState({
     'turnDeadline': DateTime.now().millisecondsSinceEpoch + 20000,
     'timeouts': [0, 1],
     'crates': [
-      {'id': 3, 'col': 50, 'row': tankTestRow(terrain, 50), 'item': 'repair'},
+      {
+        'id': 'c1',
+        'col': 50,
+        'row': tankTestRow(terrain, 50),
+        'item': 'repair',
+      },
     ],
     'suddenDeath': suddenDeath,
     'players': [

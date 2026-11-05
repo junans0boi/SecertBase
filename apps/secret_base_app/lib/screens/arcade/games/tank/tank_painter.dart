@@ -41,7 +41,7 @@ class TankScene {
   final List<TankScorch> scorches;
 
   /// 보급 상자 id → 나타난 시각(time 기준).
-  final Map<int, double> crateDrops;
+  final Map<String, double> crateDrops;
   final String myName;
   final String oppName;
 
@@ -159,7 +159,7 @@ class TankBattlefieldPainter extends CustomPainter {
   /// 미니맵 위치(화면 좌표). 전장 위젯이 탭 판정에 쓴다.
   static Rect minimapRect(Size size, double insetTop) {
     final w = math.min(300.0, size.width - 32);
-    return Rect.fromLTWH((size.width - w) / 2, insetTop + 4, w, 38);
+    return Rect.fromLTWH((size.width - w) / 2, insetTop - 2, w, 36);
   }
 
   /// 재생 중 날아가는 포탄의 칸 좌표.
@@ -289,12 +289,13 @@ class TankBattlefieldPainter extends CustomPainter {
       final col = (raw['col'] as num).toDouble();
       final row = (raw['row'] as num).toDouble();
       final p = v.toScreen(col, row);
-      const pad = 18.0;
+      // 전차가 화면 가장자리에 조금이라도 보이면 표시하지 않는다(겹침 방지).
+      final half = v.scale * 2.2;
       final inside =
-          p.dx >= pad &&
-          p.dx <= size.width - pad &&
-          p.dy >= top - 20 &&
-          p.dy <= bottom;
+          p.dx >= -half &&
+          p.dx <= size.width + half &&
+          p.dy >= top - 40 &&
+          p.dy <= bottom + v.scale;
       if (inside) continue;
       final mine = i == s.myIndex;
       final color = mine ? TankUi.me : TankUi.enemy;
@@ -714,7 +715,8 @@ class TankBattlefieldPainter extends CustomPainter {
       if (raw is! Map) continue;
       final col = (raw['col'] as num).toDouble();
       final row = (raw['row'] as num).toDouble();
-      final id = (raw['id'] as num?)?.toInt() ?? -1;
+      // 서버의 보급 상자 id는 'c1' 같은 문자열이다.
+      final id = raw['id']?.toString() ?? '';
       final appear = s.crateDrops[id];
       double fall = 0;
       double canopyAlpha = 0;
@@ -760,7 +762,7 @@ class TankBattlefieldPainter extends CustomPainter {
         canvas.drawLine(canopy.centerRight, Offset(w / 2, -hh), cord);
       } else {
         // 착지한 상자는 금빛으로 은은하게 빛난다.
-        final pulse = 0.5 + 0.5 * math.sin(s.time * 4 + id);
+        final pulse = 0.5 + 0.5 * math.sin(s.time * 4 + id.hashCode % 7);
         canvas.drawCircle(
           Offset(0, -hh / 2),
           w * 0.9,

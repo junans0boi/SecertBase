@@ -50,7 +50,7 @@ class TankControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final weapons = kTankWeaponOrder.where(ammo.containsKey).toList();
+    final weapons = tankWeaponList(ammo, special);
     final info = kTankWeapons[weapon];
     return Container(
       decoration: const BoxDecoration(

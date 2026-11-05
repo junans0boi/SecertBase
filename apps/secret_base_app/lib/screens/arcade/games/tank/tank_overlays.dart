@@ -12,7 +12,13 @@ class TankBannerData {
   final String text;
   final String? sub;
   final Color color;
-  const TankBannerData(this.id, this.text, this.color, {this.sub});
+  final DateTime createdAt;
+  TankBannerData(this.id, this.text, this.color, {this.sub})
+    : createdAt = DateTime.now();
+
+  /// 백그라운드 탭에서 돌아왔을 때처럼 이미 지난 알림은 다시 띄우지 않는다.
+  bool get stale =>
+      DateTime.now().difference(createdAt) > const Duration(milliseconds: 1500);
 }
 
 /// 화면을 가로지르며 "내 차례!" 등을 알리는 배너. [banner.id]가 바뀔 때마다 재생한다.
@@ -34,13 +40,15 @@ class _TankTurnBannerState extends State<TankTurnBanner>
   @override
   void initState() {
     super.initState();
-    if (widget.banner != null) _ctrl.forward(from: 0);
+    final b = widget.banner;
+    if (b != null && !b.stale) _ctrl.forward(from: 0);
   }
 
   @override
   void didUpdateWidget(TankTurnBanner old) {
     super.didUpdateWidget(old);
-    if (widget.banner != null && widget.banner?.id != old.banner?.id) {
+    final b = widget.banner;
+    if (b != null && b.id != old.banner?.id && !b.stale) {
       _ctrl.forward(from: 0);
     }
   }
@@ -132,6 +140,94 @@ class _TankTurnBannerState extends State<TankTurnBanner>
   }
 }
 
+// ── 짧은 알림(토스트) ────────────────────────────────────────────────────────
+
+/// 조작부를 가리지 않도록 미니맵 아래에 잠깐 떠오르는 알림.
+class TankToast extends StatefulWidget {
+  final TankBannerData? toast;
+  const TankToast({super.key, required this.toast});
+
+  @override
+  State<TankToast> createState() => _TankToastState();
+}
+
+class _TankToastState extends State<TankToast>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2200),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    final t = widget.toast;
+    if (t != null && !t.stale) _ctrl.forward(from: 0);
+  }
+
+  @override
+  void didUpdateWidget(TankToast old) {
+    super.didUpdateWidget(old);
+    final t = widget.toast;
+    if (t != null && t.id != old.toast?.id && !t.stale) _ctrl.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.toast;
+    if (t == null) return const SizedBox.shrink();
+    return IgnorePointer(
+      child: AnimatedBuilder(
+        animation: _ctrl,
+        builder: (context, _) {
+          final v = _ctrl.value;
+          if (v <= 0 || v >= 1) return const SizedBox.shrink();
+          final opacity = v < 0.1
+              ? v / 0.1
+              : v > 0.85
+              ? (1 - v) / 0.15
+              : 1.0;
+          return Opacity(
+            opacity: opacity.clamp(0.0, 1.0),
+            child: Transform.translate(
+              offset: Offset(0, (1 - opacity) * -8),
+              child: Center(
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 340),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xE6101624),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: t.color.withValues(alpha: 0.7)),
+                  ),
+                  child: Text(
+                    t.text,
+                    textAlign: TextAlign.center,
+                    style: tankBody(
+                      size: 12.5,
+                      color: TankUi.text,
+                      weight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
 // ── 전차 선택 ────────────────────────────────────────────────────────────────
 
 class TankSelectView extends StatelessWidget {
@@ -169,117 +265,133 @@ class TankSelectView extends StatelessWidget {
           final cardWidth = wide
               ? math.min(260.0, (c.maxWidth - 64) / 4)
               : (c.maxWidth - 42) / 2;
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 70, 16, 24),
+          return Column(
             children: [
-              Text(
-                '전차 선택',
-                textAlign: TextAlign.center,
-                style: tankDisplay(
-                  size: 32,
-                  letterSpacing: 3,
-                  shadows: const [Shadow(color: Colors.black, blurRadius: 10)],
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                runSpacing: 6,
-                children: [
-                  _Chip(
-                    icon: Icons.terrain_rounded,
-                    text: '전장: ${look.name}',
-                    color: TankUi.gold,
-                  ),
-                  _Chip(
-                    icon: Icons.air_rounded,
-                    text: look.hint,
-                    color: TankUi.cyan,
-                  ),
-                  _Chip(
-                    icon: oppPicked
-                        ? Icons.check_circle_rounded
-                        : Icons.hourglass_top_rounded,
-                    text: oppPicked ? '상대 준비 완료' : '상대가 고르는 중',
-                    color: oppPicked ? TankUi.me : TankUi.sub,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  for (final id in kTankClassOrder)
-                    SizedBox(
-                      width: cardWidth,
-                      child: TankClassCard(
-                        info: kTankClasses[id]!,
-                        selected: preview == id,
-                        locked: locked,
-                        onTap: locked ? null : () => onPreview(id),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 70, 16, 16),
+                  children: [
+                    Text(
+                      '전차 선택',
+                      textAlign: TextAlign.center,
+                      style: tankDisplay(
+                        size: 32,
+                        letterSpacing: 3,
+                        shadows: const [
+                          Shadow(color: Colors.black, blurRadius: 10),
+                        ],
                       ),
                     ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              Center(
-                child: locked
-                    ? Text(
-                        oppPicked ? '곧 전투가 시작돼요!' : '출격 준비 완료! 상대를 기다리고 있어요',
-                        style: tankBody(
-                          size: 13,
-                          color: TankUi.me,
-                          weight: FontWeight.w800,
+                    const SizedBox(height: 8),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        _Chip(
+                          icon: Icons.terrain_rounded,
+                          text: '전장: ${look.name}',
+                          color: TankUi.gold,
                         ),
-                      )
-                    : SizedBox(
-                        width: 260,
-                        height: 52,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: preview == null
-                                ? null
-                                : const LinearGradient(
-                                    colors: [TankUi.fireA, TankUi.fireB],
-                                  ),
-                            color: preview == null ? TankUi.panelHi : null,
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: preview == null
-                                ? const []
-                                : [
-                                    BoxShadow(
-                                      color: TankUi.fireB.withValues(
-                                        alpha: 0.5,
-                                      ),
-                                      blurRadius: 16,
-                                    ),
-                                  ],
+                        _Chip(
+                          icon: Icons.air_rounded,
+                          text: look.hint,
+                          color: TankUi.cyan,
+                        ),
+                        _Chip(
+                          icon: oppPicked
+                              ? Icons.check_circle_rounded
+                              : Icons.hourglass_top_rounded,
+                          text: oppPicked ? '상대 준비 완료' : '상대가 고르는 중',
+                          color: oppPicked ? TankUi.me : TankUi.sub,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        for (final id in kTankClassOrder)
+                          SizedBox(
+                            width: cardWidth,
+                            child: TankClassCard(
+                              info: kTankClasses[id]!,
+                              selected: preview == id,
+                              locked: locked,
+                              onTap: locked ? null : () => onPreview(id),
+                            ),
                           ),
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              // 출격 버튼은 화면 아래에 고정해 카드가 길어도 항상 보이게 한다.
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+                decoration: const BoxDecoration(
+                  color: Color(0xF2070B14),
+                  border: Border(top: BorderSide(color: TankUi.panelLine)),
+                ),
+                child: Center(
+                  child: locked
+                      ? Text(
+                          oppPicked ? '곧 전투가 시작돼요!' : '출격 준비 완료! 상대를 기다리고 있어요',
+                          style: tankBody(
+                            size: 13,
+                            color: TankUi.me,
+                            weight: FontWeight.w800,
+                          ),
+                        )
+                      : SizedBox(
+                          width: 260,
+                          height: 52,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: preview == null
+                                  ? null
+                                  : const LinearGradient(
+                                      colors: [TankUi.fireA, TankUi.fireB],
+                                    ),
+                              color: preview == null ? TankUi.panelHi : null,
                               borderRadius: BorderRadius.circular(16),
-                              onTap: preview == null ? null : onConfirm,
-                              child: Center(
-                                child: Text(
-                                  preview == null
-                                      ? '전차를 골라 주세요'
-                                      : '${kTankClasses[preview]?.name ?? ''}(으)로 출격!',
-                                  style: tankDisplay(
-                                    size: 18,
-                                    color: preview == null
-                                        ? TankUi.muted
-                                        : Colors.white,
+                              boxShadow: preview == null
+                                  ? const []
+                                  : [
+                                      BoxShadow(
+                                        color: TankUi.fireB.withValues(
+                                          alpha: 0.5,
+                                        ),
+                                        blurRadius: 16,
+                                      ),
+                                    ],
+                            ),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(16),
+                                onTap: preview == null ? null : onConfirm,
+                                child: Center(
+                                  child: Text(
+                                    preview == null
+                                        ? '전차를 골라 주세요'
+                                        : '${tankWithRo(kTankClasses[preview]?.name ?? '')} 출격!',
+                                    style: tankDisplay(
+                                      size: 18,
+                                      color: preview == null
+                                          ? TankUi.muted
+                                          : Colors.white,
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      ),
+                ),
               ),
             ],
           );
@@ -800,6 +912,7 @@ class _CompareRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final total = math.max(1, mine + theirs);
+    final empty = mine + theirs == 0;
     final mineBetter = mine > theirs;
     final theirsBetter = theirs > mine;
     return Padding(
@@ -845,14 +958,22 @@ class _CompareRow extends StatelessWidget {
               height: 5,
               child: Row(
                 children: [
-                  Expanded(
-                    flex: math.max(1, (mine / total * 100).round()),
-                    child: Container(color: TankUi.me),
-                  ),
-                  Expanded(
-                    flex: math.max(1, (theirs / total * 100).round()),
-                    child: Container(color: TankUi.enemy),
-                  ),
+                  if (empty)
+                    Expanded(
+                      child: Container(
+                        color: Colors.white.withValues(alpha: 0.12),
+                      ),
+                    )
+                  else ...[
+                    Expanded(
+                      flex: math.max(1, (mine / total * 100).round()),
+                      child: Container(color: TankUi.me),
+                    ),
+                    Expanded(
+                      flex: math.max(1, (theirs / total * 100).round()),
+                      child: Container(color: TankUi.enemy),
+                    ),
+                  ],
                 ],
               ),
             ),
