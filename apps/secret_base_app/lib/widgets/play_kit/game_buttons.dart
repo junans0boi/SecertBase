@@ -226,7 +226,9 @@ class GameChip extends StatelessWidget {
             label,
             style: t.body(
               size: 12,
-              color: emphasized ? (t.dark ? Colors.white : c) : t.ink,
+              color: emphasized
+                  ? (t.dark ? Colors.white : Color.lerp(c, Colors.black, 0.5)!)
+                  : t.ink,
               weight: FontWeight.w800,
             ),
           ),
@@ -244,6 +246,9 @@ class GamePanel extends StatelessWidget {
   final double radius;
   final Color? glow;
 
+  /// 아래 내용이 비치지 않게 불투명하게(결과 카드·대화상자).
+  final bool opaque;
+
   const GamePanel({
     super.key,
     required this.theme,
@@ -251,6 +256,7 @@ class GamePanel extends StatelessWidget {
     this.padding = const EdgeInsets.all(14),
     this.radius = 20,
     this.glow,
+    this.opaque = false,
   });
 
   @override
@@ -260,7 +266,23 @@ class GamePanel extends StatelessWidget {
       duration: const Duration(milliseconds: 220),
       padding: padding,
       decoration: BoxDecoration(
-        color: t.surface.withValues(alpha: t.dark ? 0.72 : 0.92),
+        color: opaque
+            ? Color.alphaBlend(t.surface, t.backdrop.last)
+            : t.surface.withValues(alpha: t.dark ? 0.72 : 0.92),
+        gradient: opaque
+            ? LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color.lerp(
+                    Color.alphaBlend(t.surface, t.backdrop.last),
+                    Colors.white,
+                    t.dark ? 0.06 : 0.4,
+                  )!,
+                  Color.alphaBlend(t.surface, t.backdrop.last),
+                ],
+              )
+            : null,
         borderRadius: BorderRadius.circular(radius),
         border: Border.all(
           color: glow ?? t.surfaceBorder,

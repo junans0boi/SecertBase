@@ -22,6 +22,7 @@ Future<void> showGameHowTo(
       child: GamePanel(
         theme: t,
         radius: 26,
+        opaque: true,
         padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
         child: Column(
           mainAxisSize: MainAxisSize.min,

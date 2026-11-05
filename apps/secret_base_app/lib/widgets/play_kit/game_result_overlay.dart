@@ -105,6 +105,7 @@ class _GameResultOverlayState extends State<GameResultOverlay>
                   child: GamePanel(
                     theme: t,
                     radius: 28,
+                    opaque: true,
                     glow: widget.outcome == GameOutcome.win ? t.gold : null,
                     padding: const EdgeInsets.fromLTRB(22, 24, 22, 18),
                     child: Column(
