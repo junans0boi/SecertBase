@@ -270,47 +270,18 @@ class _GameMenuListenerState extends State<GameMenuListener> {
 
   void _showRestartDialog() {
     if (!mounted) return;
+    final requester = _sock.nameOf(_sock.partnerId);
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        backgroundColor: kCard,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          '다시 시작 요청',
-          style: GoogleFonts.notoSans(
-            color: kText,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        content: Text(
-          '상대방이 게임을 다시 시작하고 싶어해요.\n수락하면 새 게임이 시작됩니다.',
-          style: GoogleFonts.notoSans(color: kTextSub),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _sock.respondToRestart(false, widget.gameType);
-              setState(() => _restartDialogShown = false);
-            },
-            child: Text('거절', style: GoogleFonts.notoSans(color: kTextMuted)),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _sock.respondToRestart(true, widget.gameType);
-              setState(() => _restartDialogShown = false);
-            },
-            child: Text(
-              '수락',
-              style: GoogleFonts.notoSans(
-                color: kPrimary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
+      barrierColor: Colors.black.withValues(alpha: 0.5),
+      builder: (dialogContext) => _RematchDialog(
+        requester: requester.isEmpty ? '상대' : requester,
+        onAnswer: (accept) {
+          Navigator.pop(dialogContext);
+          _sock.respondToRestart(accept, widget.gameType);
+          setState(() => _restartDialogShown = false);
+        },
       ),
     ).then((_) {
       if (mounted) setState(() => _restartDialogShown = false);
@@ -320,4 +291,112 @@ class _GameMenuListenerState extends State<GameMenuListener> {
   @override
   Widget build(BuildContext context) =>
       GameNoticeListener(gameType: widget.gameType, child: widget.child);
+}
+
+/// 재대결 요청 카드. 게임 테마를 모르므로 앱의 브랜드 톤(장밋빛)으로 그린다.
+class _RematchDialog extends StatelessWidget {
+  final String requester;
+  final ValueChanged<bool> onAnswer;
+
+  const _RematchDialog({required this.requester, required this.onAnswer});
+
+  @override
+  Widget build(BuildContext context) {
+    const rose = Color(0xFFFF6F9F);
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(22, 24, 22, 18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(color: const Color(0xFFF3DCE6)),
+          boxShadow: [
+            BoxShadow(
+              color: rose.withValues(alpha: 0.25),
+              blurRadius: 30,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              alignment: Alignment.center,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0xFFFFEEF5),
+              ),
+              child: const Text('🔁', style: TextStyle(fontSize: 30)),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              '한 판 더 할까요?',
+              style: GoogleFonts.notoSans(
+                color: kText,
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '$requester님이 다시 겨루고 싶어해요.\n수락하면 바로 새 판이 시작돼요.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.notoSans(
+                color: kTextSub,
+                fontSize: 14,
+                height: 1.45,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => onAnswer(false),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(50),
+                      side: const BorderSide(color: Color(0xFFF3DCE6)),
+                      shape: const StadiumBorder(),
+                      foregroundColor: kTextSub,
+                    ),
+                    child: Text(
+                      '다음에',
+                      style: GoogleFonts.notoSans(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () => onAnswer(true),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size.fromHeight(50),
+                      backgroundColor: rose,
+                      shape: const StadiumBorder(),
+                    ),
+                    child: Text(
+                      '좋아요!',
+                      style: GoogleFonts.notoSans(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
