@@ -615,6 +615,8 @@ class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
           insetBottom: ended ? 0 : _controlsInset,
           overview: _overview,
           onAim: _setAim,
+          showGuides: true,
+          onMinimapTap: () => setState(() => _overview = !_overview),
         ),
         Positioned(
           top: 0,

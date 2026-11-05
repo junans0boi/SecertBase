@@ -48,6 +48,13 @@ class TankScene {
   /// 끌어서 조준하는 중인 손가락 위치(화면 좌표).
   final Offset? dragPoint;
 
+  /// HUD·조작부가 가리는 위·아래 높이(미니맵·화면 밖 표시 위치 계산용).
+  final double insetTop;
+  final double insetBottom;
+
+  /// 미니맵과 화면 밖 전차 표시를 그린다(전투 화면).
+  final bool showGuides;
+
   const TankScene({
     required this.state,
     required this.myIndex,
@@ -66,6 +73,9 @@ class TankScene {
     this.myName = '나',
     this.oppName = '상대',
     this.dragPoint,
+    this.insetTop = 0,
+    this.insetBottom = 0,
+    this.showGuides = false,
   });
 }
 
@@ -139,6 +149,197 @@ class TankBattlefieldPainter extends CustomPainter {
         );
       }
       _offscreenMarker(canvas, size, pb);
+    }
+    if (s.showGuides) {
+      _edgeMarkers(canvas, size);
+      if (terrain != null) _minimap(canvas, size, terrain, pb);
+    }
+  }
+
+  /// 미니맵 위치(화면 좌표). 전장 위젯이 탭 판정에 쓴다.
+  static Rect minimapRect(Size size, double insetTop) {
+    final w = math.min(300.0, size.width - 32);
+    return Rect.fromLTWH((size.width - w) / 2, insetTop + 4, w, 38);
+  }
+
+  /// 재생 중 날아가는 포탄의 칸 좌표.
+  Offset? _shellHead(TankPlayback pb) {
+    for (final shell in pb.shells) {
+      final st = shell.stage;
+      if (st >= pb.stageCount) continue;
+      final flight = pb.stageFlightMs[st];
+      final k = flight <= 0 ? 1.0 : (s.playMs - pb.stageStartMs[st]) / flight;
+      if (k < 0 || k > 1) continue;
+      final pts = shell.path;
+      return pts[(k * (pts.length - 1)).round().clamp(0, pts.length - 1)];
+    }
+    return null;
+  }
+
+  void _minimap(Canvas canvas, Size size, List<double> h, TankPlayback? pb) {
+    final rect = minimapRect(size, s.insetTop);
+    final rr = RRect.fromRectAndRadius(rect, const Radius.circular(10));
+    canvas.drawRRect(rr, Paint()..color = const Color(0xB0101624));
+    canvas.save();
+    canvas.clipRRect(rr);
+    final inner = rect.deflate(4);
+    // 지형 실루엣(맵 상단 10행은 하늘로 잘라 높이 차가 잘 보이게 한다)
+    const topRow = 10.0;
+    Offset mm(double col, double row) => Offset(
+      inner.left + (col + 0.5) / kTerrainW * inner.width,
+      inner.top +
+          ((row - topRow) / (kTerrainH - topRow)).clamp(0.0, 1.0) *
+              inner.height,
+    );
+    final ground = Path()..moveTo(inner.left, inner.bottom);
+    for (int c = 0; c < kTerrainW; c++) {
+      final p = mm(c.toDouble(), kTerrainH - h[c] - 0.5);
+      ground.lineTo(p.dx, p.dy);
+    }
+    ground
+      ..lineTo(inner.right, inner.bottom)
+      ..close();
+    final look = tankThemeOf(s.state);
+    canvas.drawPath(ground, Paint()..color = _a(look.groundTop, 0.85));
+    // 지금 보이는 범위
+    final viewLeft = v.left;
+    final viewRight = v.left + size.width / v.scale;
+    final vx0 = mm(viewLeft.clamp(-0.5, kTerrainW - 0.5), 0).dx;
+    final vx1 = mm(viewRight.clamp(-0.5, kTerrainW - 0.5), 0).dx;
+    canvas.drawRect(
+      Rect.fromLTRB(vx0, rect.top + 1, vx1, rect.bottom - 1),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2
+        ..color = Colors.white.withValues(alpha: 0.55),
+    );
+    // 보급 상자
+    for (final raw in (s.state['crates'] as List?) ?? const []) {
+      if (raw is! Map) continue;
+      final p = mm(
+        (raw['col'] as num).toDouble(),
+        (raw['row'] as num).toDouble(),
+      );
+      canvas.drawRect(
+        Rect.fromCenter(center: p, width: 4, height: 4),
+        Paint()..color = TankUi.gold,
+      );
+    }
+    // 전차
+    final players = (s.state['players'] as List?) ?? const [];
+    final turn = (s.state['turn'] as num?)?.toInt() ?? -1;
+    for (int i = 0; i < players.length; i++) {
+      final raw = players[i];
+      if (raw is! Map) continue;
+      final p = mm(
+        (raw['col'] as num).toDouble(),
+        (raw['row'] as num).toDouble(),
+      );
+      final color = i == s.myIndex ? TankUi.me : TankUi.enemy;
+      final dead = ((raw['hp'] as num?) ?? 1) <= 0;
+      if (turn == i && pb == null && !dead) {
+        final pulse = 0.5 + 0.5 * math.sin(s.time * 6);
+        canvas.drawCircle(p, 6 + pulse * 2, Paint()..color = _a(color, 0.3));
+      }
+      canvas.drawCircle(p, 4, Paint()..color = dead ? Colors.grey : color);
+      canvas.drawCircle(
+        p,
+        4,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1
+          ..color = Colors.white,
+      );
+    }
+    // 포탄
+    if (pb != null) {
+      final head = _shellHead(pb);
+      if (head != null) {
+        canvas.drawCircle(
+          mm(head.dx, math.max(head.dy, topRow)),
+          2.5,
+          Paint()..color = Colors.yellowAccent,
+        );
+      }
+    }
+    canvas.restore();
+    canvas.drawRRect(
+      rr,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..color = TankUi.panelLine,
+    );
+  }
+
+  /// 화면 밖에 있는 전차를 가장자리 화살표로 알려준다(방향·거리).
+  void _edgeMarkers(Canvas canvas, Size size) {
+    final players = (s.state['players'] as List?) ?? const [];
+    final top = s.insetTop + 50;
+    final bottom = size.height - s.insetBottom - 10;
+    if (bottom <= top) return;
+    Offset? me;
+    if (s.myIndex < players.length && players[s.myIndex] is Map) {
+      final m = players[s.myIndex] as Map;
+      me = Offset((m['col'] as num).toDouble(), (m['row'] as num).toDouble());
+    }
+    for (int i = 0; i < players.length; i++) {
+      final raw = players[i];
+      if (raw is! Map) continue;
+      final col = (raw['col'] as num).toDouble();
+      final row = (raw['row'] as num).toDouble();
+      final p = v.toScreen(col, row);
+      const pad = 18.0;
+      final inside =
+          p.dx >= pad &&
+          p.dx <= size.width - pad &&
+          p.dy >= top - 20 &&
+          p.dy <= bottom;
+      if (inside) continue;
+      final mine = i == s.myIndex;
+      final color = mine ? TankUi.me : TankUi.enemy;
+      final pos = Offset(
+        p.dx.clamp(30.0, size.width - 30),
+        p.dy.clamp(top, bottom),
+      );
+      final dir = p - pos;
+      final ang = dir.distance == 0 ? 0.0 : math.atan2(dir.dy, dir.dx);
+      final pulse = 0.5 + 0.5 * math.sin(s.time * 5);
+      canvas.drawCircle(pos, 20, Paint()..color = const Color(0xD0101624));
+      canvas.drawCircle(
+        pos,
+        20,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..color = _a(color, 0.6 + pulse * 0.4),
+      );
+      canvas.save();
+      canvas.translate(pos.dx, pos.dy);
+      canvas.rotate(ang);
+      final arrow = Path()
+        ..moveTo(26, 0)
+        ..lineTo(17, -7)
+        ..lineTo(17, 7)
+        ..close();
+      canvas.drawPath(arrow, Paint()..color = color);
+      canvas.restore();
+      final dist = me == null || mine ? null : (col - me.dx).abs().round();
+      final label = mine ? '나' : (dist == null ? s.oppName : '${dist}m');
+      final tp = TextPainter(
+        text: TextSpan(
+          text: label,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: label.length > 4 ? 9 : 11,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+        maxLines: 1,
+        ellipsis: '…',
+      )..layout(maxWidth: 36);
+      tp.paint(canvas, pos - Offset(tp.width / 2, tp.height / 2));
     }
   }
 

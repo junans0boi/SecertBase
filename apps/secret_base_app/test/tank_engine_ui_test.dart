@@ -83,10 +83,15 @@ void main() {
           view.left + desktop.width / view.scale,
           lessThanOrEqualTo(99.5 + 1e-9),
         );
-        // 땅 밑바닥이 조작부 위로 떠오르지 않는다.
+        // 가장 깊은 구덩이 바닥(행 38.5)의 전차도 조작부에 가려지지 않고,
+        // 맵 바닥은 조작부 위로 크게 떠오르지 않는다.
+        expect(
+          view.toScreen(0, 38.5).dy,
+          lessThanOrEqualTo(desktop.height - 196),
+        );
         expect(
           view.toScreen(0, 40).dy,
-          greaterThanOrEqualTo(desktop.height - 196 - 1e-6),
+          greaterThanOrEqualTo(desktop.height - 196 - 3 * view.scale),
         );
       }
     });

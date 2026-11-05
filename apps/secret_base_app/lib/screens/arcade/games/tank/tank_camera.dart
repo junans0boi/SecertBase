@@ -73,11 +73,16 @@ class TankCamera {
       left = (focus.dx - viewCols / 2).clamp(-0.5, kTerrainW - 0.5 - viewCols);
     }
 
-    // 세로: 초점을 보이는 띠의 60% 높이에 두되, 땅 밑바닥이 띠 위로 올라오지 않게 한다.
+    // 세로: 맵 바닥을 조작부 바로 위에 고정해, 깊은 구덩이 바닥(행 38.5)의 전차도
+    // 가려지지 않게 한다. 아주 높이 뜬 포탄은 따라가지 않고 화면 위 화살표로 알린다.
+    // 화면이 너무 낮아 초점이 띠 위로 벗어날 때만 위로 올린다.
+    final bottomPx = h - insetBottom;
+    final lower = 39 - bottomPx / scale;
+    final upper = kTerrainH + 2.5 - bottomPx / scale;
     final focusTop = focus.dy - (insetTop + band * 0.6) / scale;
-    final maxTop = kTerrainH - (h - insetBottom) / scale;
-    const minTop = -60.0;
-    final top = math.min(maxTop, math.max(minTop, focusTop));
+    var top = focusTop.clamp(lower, upper);
+    final focusMax = focus.dy - insetTop / scale - 2;
+    if (top > focusMax) top = math.max(-60.0, focusMax);
     return TankView(left, top, scale);
   }
 

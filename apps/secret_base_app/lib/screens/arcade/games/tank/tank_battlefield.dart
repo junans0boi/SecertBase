@@ -32,6 +32,10 @@ class TankBattlefield extends StatefulWidget {
   final bool overview;
   final void Function(double angle, double power)? onAim;
 
+  /// 미니맵·화면 밖 전차 표시(전투 화면).
+  final bool showGuides;
+  final VoidCallback? onMinimapTap;
+
   const TankBattlefield({
     super.key,
     required this.state,
@@ -51,6 +55,8 @@ class TankBattlefield extends StatefulWidget {
     this.insetBottom = 0,
     this.overview = false,
     this.onAim,
+    this.showGuides = false,
+    this.onMinimapTap,
   });
 
   @override
@@ -69,6 +75,10 @@ class _TankBattlefieldState extends State<TankBattlefield>
   bool _cratesPrimed = false;
   Offset? _drag;
 
+  /// 게임을 시작하면 잠시 전장 전체를 보여준 뒤 확대한다.
+  double _introUntil = -1;
+  Object? _introGame;
+
   @override
   void initState() {
     super.initState();
@@ -86,6 +96,7 @@ class _TankBattlefieldState extends State<TankBattlefield>
     _last = elapsed;
     _time += dt;
     _trackCrates();
+    _checkIntro();
     if (_size.width > 0 && _size.height > 0) {
       final target = _targetView();
       final speed = widget.playback != null ? 6.5 : 3.2;
@@ -102,8 +113,19 @@ class _TankBattlefieldState extends State<TankBattlefield>
     insetTop: widget.insetTop,
     insetBottom: widget.insetBottom,
     focus: _focus(),
-    overview: widget.overview,
+    overview:
+        widget.overview || (widget.playback == null && _time < _introUntil),
   );
+
+  void _checkIntro() {
+    final st = widget.state;
+    if (st['phase'] != 'aiming') return;
+    final game = st['gameId'];
+    if (game == _introGame) return;
+    _introGame = game;
+    final turnNumber = (st['turnNumber'] as num?)?.toInt() ?? 0;
+    if (turnNumber <= 1) _introUntil = _time + 2.6;
+  }
 
   void _trackCrates() {
     final crates = (widget.state['crates'] as List?) ?? const [];
@@ -205,6 +227,17 @@ class _TankBattlefieldState extends State<TankBattlefield>
           onPanUpdate: widget.canAim
               ? (d) => _dragTo(d.localPosition, view)
               : null,
+          onTapUp: widget.onMinimapTap == null
+              ? null
+              : (d) {
+                  final rect = TankBattlefieldPainter.minimapRect(
+                    _size,
+                    widget.insetTop,
+                  );
+                  if (rect.inflate(6).contains(d.localPosition)) {
+                    widget.onMinimapTap!();
+                  }
+                },
           onPanEnd: (_) => setState(() => _drag = null),
           onPanCancel: () => setState(() => _drag = null),
           child: CustomPaint(
@@ -228,6 +261,9 @@ class _TankBattlefieldState extends State<TankBattlefield>
                 myName: widget.myName,
                 oppName: widget.oppName,
                 dragPoint: widget.canAim ? _drag : null,
+                insetTop: widget.insetTop,
+                insetBottom: widget.insetBottom,
+                showGuides: widget.showGuides,
               ),
             ),
           ),
