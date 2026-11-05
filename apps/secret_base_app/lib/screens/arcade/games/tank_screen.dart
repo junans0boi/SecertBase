@@ -264,7 +264,7 @@ class _Playback {
           booms.add(
             _Boom(
               (e['col'] as num).toDouble(),
-              kTerrainH / 2,
+              (e['row'] as num?)?.toDouble() ?? kTerrainH / 2,
               (e['r'] as num?)?.toDouble() ?? 4,
               stage,
               true,
@@ -317,6 +317,31 @@ class _Playback {
             );
           }
           break;
+        case 'split':
+          // 집속탄이 정점에서 갈라지는 순간의 작은 섬광
+          booms.add(
+            _Boom(
+              (e['col'] as num).toDouble(),
+              (e['row'] as num).toDouble(),
+              1.5,
+              stage,
+              false,
+            ),
+          );
+          break;
+        case 'heal':
+          final healed = (e['amount'] as num?)?.toInt() ?? 0;
+          if (healed > 0) {
+            popups.add(
+              _Popup(
+                (e['target'] as num).toInt(),
+                e['cause'] == 'regen' ? '재생 +$healed' : '회복 +$healed',
+                const Color(0xFF4CD787),
+                maxStage,
+              ),
+            );
+          }
+          break;
         case 'teleport':
           popups.add(
             _Popup(
@@ -343,6 +368,8 @@ class _Playback {
           break;
       }
     }
+    // 지진탄은 피해량과 상관없이 화면을 크게 흔든다.
+    if (shot['weapon'] == 'quake') shake = math.max(shake, 108.0);
     final stageStart = <double>[];
     final stageFlight = <double>[];
     double cursor = 0;
@@ -581,7 +608,7 @@ class _TankScreenState extends State<TankScreen> with TickerProviderStateMixin {
     for (int s = 0; s < pb.stageStartMs.length; s++) {
       if (now >= pb.boomStart(s) && !_hapticStages.contains(s)) {
         _hapticStages.add(s);
-        if (pb.booms.any((b) => b.stage == s)) {
+        if (pb.booms.any((b) => b.stage == s && b.radius >= 2)) {
           if (pb.shakePower >= 30) {
             HapticFeedback.heavyImpact();
           } else {
@@ -1697,8 +1724,10 @@ class _BattlefieldPainter extends CustomPainter {
     if (pb != null) {
       for (int s = 0; s < pb.stageStartMs.length; s++) {
         final t = playMs - pb.boomStart(s);
-        if (t >= 0 && t < 320 && pb.booms.any((b) => b.stage == s)) {
-          final amp = (pb.shakePower / 12).clamp(1.0, 6.0) * (1 - t / 320);
+        if (t >= 0 &&
+            t < 320 &&
+            pb.booms.any((b) => b.stage == s && b.radius >= 2)) {
+          final amp = (pb.shakePower / 12).clamp(1.0, 9.0) * (1 - t / 320);
           shakeX = math.sin(t / 18) * amp;
           shakeY = math.cos(t / 23) * amp * 0.6;
         }
