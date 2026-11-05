@@ -463,7 +463,11 @@ export const RESTARTABLE_GAME_TYPES = new Set(["yut", "bomb", "marble", "tank"])
 for (const mod of GAME_MODULES) if (mod.restart) RESTARTABLE_GAME_TYPES.add(mod.gameType);
 const GAME_MODULE_BY_TYPE = new Map(GAME_MODULES.map((mod) => [mod.gameType, mod]));
 // 로비 종류(예: 제로의 로비는 'zero') → 모듈.
-const GAME_MODULE_BY_LOBBY_TYPE = new Map(GAME_MODULES.map((mod) => [mod.lobbyType ?? mod.gameType, mod]));
+const GAME_MODULE_BY_LOBBY_TYPE = new Map(GAME_MODULES.flatMap((mod) => [
+  [mod.lobbyType ?? mod.gameType, mod],
+  // 옛 클라이언트가 보내는 로비 종류(예: uno_classic)도 같은 모듈로 연다.
+  ...(mod.lobbyAliases ?? []).map((alias) => [alias, mod]),
+]));
 // 로비 카운트다운(클라이언트 game_lobby_screen.dart 5초) + 화면 전환 여유.
 export const LOBBY_COUNTDOWN_MS = 5300;
 const PENDING_GAME_TTL_SEC = 120;
@@ -3108,7 +3112,12 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
 
       const restartModule = GAME_MODULE_BY_TYPE.get(gameType);
       if (restartModule?.restart) {
-        await restartModule.restart(roomCode, kit, { p1, p2, orderedPlayers, requestedBy: request.by });
+        const restarted = await restartModule.restart(roomCode, kit, { p1, p2, orderedPlayers, requestedBy: request.by });
+        if (restarted && restarted.ok === false) {
+          io.to(roomCode).emit("game:restart:declined", { by: userId, reason: restarted.reason });
+          ack(restarted);
+          return;
+        }
       } else if (gameType === "yut") {
         const previousText = await redis.get(yutGameKey(roomCode));
         const previous = previousText ? JSON.parse(previousText) : {};

@@ -1436,10 +1436,15 @@ class SocketService extends ChangeNotifier {
       notifyListeners();
     });
 
-    socket.on('game:restart:declined', (_) {
+    socket.on('game:restart:declined', (data) {
       restartWaiting = false;
+      restartPending = false;
       _log('다시 시작 거절됨');
-      notifyListeners();
+      if (_m(data)['reason'] == 'game_in_progress') {
+        _setGameNotice('판돈이 걸린 판은 끝까지 마친 뒤에 다시 할 수 있어요.');
+      } else {
+        notifyListeners();
+      }
     });
 
     // ── catch mind listeners ──────────────────────────────────────────────

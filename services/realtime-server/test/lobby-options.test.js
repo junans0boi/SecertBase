@@ -22,6 +22,8 @@ test('only listed values pass validation, with no type coercion', () => {
   assert.equal(isValidLobbyOption('uno', 'mode', 'classic'), true);
   assert.equal(isValidLobbyOption('uno', 'cells', 3), false);
   assert.equal(isValidLobbyOption('blackjack', 'cells', 3), false);
+  assert.equal(isValidLobbyOption('penalty', '__proto__', 3), false, 'prototype keys are not options');
+  assert.equal(isValidLobbyOption('penalty', 'constructor', 3), false);
 });
 
 test('normalizing keeps valid values, drops unknown keys and fills defaults', () => {

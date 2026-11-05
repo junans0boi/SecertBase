@@ -93,6 +93,8 @@ const mod = {
     const userId = socket.data.userId;
     const game = await load(kit, roomCode);
     if (!game || game.status !== "playing" || !game.players.includes(userId)) return false;
+    // 서버가 다시 켜졌으면 차례 타이머가 없다. 진행 중인 판이면 다시 건다.
+    if (!timers.has(roomCode)) scheduleTurnTimer(kit, roomCode, game);
     socket.emit("game:oldmaid:state", view(game, userId));
     return true;
   },

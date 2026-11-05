@@ -26,8 +26,10 @@ export function defaultLobbyOptions(gameType) {
 
 /** 이 게임에서 key=value가 허용되는지. */
 export function isValidLobbyOption(gameType, key, value) {
-  const def = specFor(gameType)?.[key];
-  return Boolean(def) && def.values.includes(value);
+  const spec = specFor(gameType);
+  if (!spec || typeof key !== "string" || !Object.hasOwn(spec, key)) return false;
+  const def = spec[key];
+  return Array.isArray(def?.values) && def.values.includes(value);
 }
 
 /** 저장된(또는 오래된) 옵션을 허용된 값만 남기고 빠진 값은 기본값으로 채운다. */

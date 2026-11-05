@@ -195,6 +195,8 @@ const pirate = {
   async restore(roomCode, socket, kit) {
     const state = await readState(kit, roomCode);
     if (!state || !state.players.includes(socket.data.userId)) return false;
+    // 서버가 다시 켜졌으면 차례 타이머가 없다. 진행 중인 판이면 다시 건다.
+    if (!turnTimers.has(roomCode)) this.scheduleTurn(kit, roomCode, state);
     socket.emit("game:pirate:state", await this.view(kit, roomCode, state));
     return true;
   },
