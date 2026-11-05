@@ -377,3 +377,43 @@ test('sync without a game reports no_game (the screen shows the preparing state)
   assert.equal((await f.call(0, 'game:uno:sync', {})).reason, 'no_game');
   assert.equal((await f.call(0, 'game:uno:play', { cardId: 'x' })).reason, 'no_game');
 });
+
+test('a rematch cannot overwrite a staked game that is still running (no stake escape)', async t => {
+  const f = await fixture(t);
+  t.mock.timers.enable({ apis: ['Date'], now: 2_000_000 });
+  const before = await startFromLobby(f, { stake: 500 });
+  const declined = collect(f, 'game:restart:declined');
+  assert.equal((await f.call(1, 'game:restart:request', { gameType: 'uno' })).ok, true);
+  const answer = await f.call(0, 'game:restart:respond', { gameType: 'uno', accept: true });
+  assert.equal(answer.ok, false);
+  assert.equal(answer.reason, 'game_in_progress');
+  await flush();
+  assert.equal(declined[1][0]?.reason, 'game_in_progress', 'the requester is told why');
+  const after = await readGame(f);
+  assert.equal(after.gameId, before.gameId, 'the staked game is untouched');
+  assert.equal(after.stake, 500);
+});
+
+test('a free game in progress restarts with its own mode, not an older finished game summary', async t => {
+  const f = await fixture(t);
+  t.mock.timers.enable({ apis: ['Date'], now: 3_000_000 });
+  await f.redis.set(`uno:${f.roomCode}:last`, JSON.stringify({ mode: 'classic', stake: 700 }), 'EX', 3600);
+  const before = await startFromLobby(f, { mode: 'go_wild' });
+  assert.equal((await f.call(1, 'game:restart:request', { gameType: 'uno' })).ok, true);
+  assert.equal((await f.call(0, 'game:restart:respond', { gameType: 'uno', accept: true })).ok, true);
+  const after = await readGame(f);
+  assert.notEqual(after.gameId, before.gameId);
+  assert.equal(after.mode, 'go_wild');
+  assert.equal(after.stake, 0);
+});
+
+test('an old app lobby type (uno_go_wild) still gets a server-created game', async t => {
+  const f = await fixture(t);
+  await f.call(0, 'game:lobby:join', { gameType: 'uno_go_wild' });
+  await f.call(1, 'game:lobby:join', { gameType: 'uno_go_wild' });
+  const started = new Promise(resolve => f.clients[1].once('game:lobby:started', resolve));
+  assert.equal((await f.call(0, 'game:lobby:start', { gameType: 'uno_go_wild' })).ok, true);
+  assert.equal((await started).metadata.serverStart, true);
+  await flush();
+  assert.ok(await f.redis.get(gameKey(f)));
+});

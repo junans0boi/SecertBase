@@ -188,11 +188,13 @@ const penalty = {
 
   async startFromLobby(roomCode, kit, ctx) {
     const { cells } = normalizeLobbyOptions(GAME_TYPE, ctx.options);
-    await createGame(kit, roomCode, ctx.players.map(String), {
-      cells,
-      gameId: ctx.gameId ?? kit.randomUUID(),
-      startsAt: ctx.startsAt ?? Date.now(),
-    });
+    await kit.withRoomLock(roomCode, () =>
+      createGame(kit, roomCode, ctx.players.map(String), {
+        cells,
+        gameId: ctx.gameId ?? kit.randomUUID(),
+        startsAt: ctx.startsAt ?? Date.now(),
+      }),
+    );
   },
 
   async restart(roomCode, kit, ctx) {

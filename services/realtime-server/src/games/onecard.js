@@ -141,6 +141,8 @@ export async function finishUnoGame(kit, roomCode, state, reason, winner = state
     series = await kit.series.record(roomCode, GAME_TYPE, state.players, winner);
   } catch (err) {
     console.error(`[onecard] settlement failed for ${roomCode}: ${err?.message ?? err}`);
+    // 정산이 중간에 실패해도 두 사람에게 알린다(잔액 확인 안내).
+    if (stake > 0) kit.io.to(roomCode).emit("wallet:settle_failed", { gameType: GAME_TYPE, reason: "settle_error" });
   } finally {
     await kit.redis.del(unoGameKey(roomCode));
     await kit.redis.set(
@@ -255,6 +257,8 @@ const random = () => onecardRuntime.random();
 
 export default {
   gameType: GAME_TYPE,
+  // 옛 앱이 보내던 로비 종류. 모드는 로비 옵션(uno.mode)을 쓴다.
+  lobbyAliases: ["uno_classic", "uno_go_wild"],
 
   register(socket, kit) {
     socket.on("game:uno:sync", async (_payload, ackRaw) => {
@@ -355,9 +359,13 @@ export default {
     } catch {
       last = null;
     }
-    // 끝난 판이 아직 남아 있으면(정산 도중 등) 그 설정을 쓴다.
     const current = await readState(kit, roomCode);
-    const source = last ?? current ?? {};
+    // 판돈이 걸린 판이 진행 중이면 정산 없이 덮어쓸 수 없다(진 쪽이 판돈을 피하는 것을 막음).
+    if (current && !current.winner && (current.stake ?? 0) > 0) {
+      return { ok: false, reason: "game_in_progress" };
+    }
+    // 진행 중인 판(무료)이 있으면 그 판 설정을, 없으면 끝난 판의 요약을 잇는다.
+    const source = (current && !current.winner ? current : null) ?? last ?? current ?? {};
     const lastStarter = last?.lastStarter ?? current?.starter ?? null;
     const starter = players.includes(lastStarter) ? players.find((p) => p !== lastStarter) : null;
     await createGame(kit, roomCode, {

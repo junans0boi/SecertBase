@@ -196,6 +196,8 @@ export default {
     const userId = socket.data.userId;
     const game = await load(kit, roomCode);
     if (!game || game.status === "finished" || !game.players.includes(userId)) return false;
+    // 서버가 다시 켜졌으면 차례 타이머가 없다. 진행 중인 판이면 다시 건다.
+    if (!turnTimers.has(roomCode)) scheduleTurnTimer(kit, roomCode, game);
     socket.emit("game:blackjack:updated", serializeFor(game, userId, { now: Date.now() }));
     return true;
   },
