@@ -2,7 +2,7 @@
 // Game-view occupancy tracking and lobby-join resume resolution.
 // Accepts io and redis explicitly so tests can inject fakes.
 
-import { DEFAULT_UNO_MODE } from './uno-engine.js';
+import { serializeOneCardFor } from './uno-engine.js';
 import { serializeYutGame } from './yut-engine.js';
 import { serializeFor as serializeGostopGameFor } from './gostop-engine.js';
 import { serializeMarbleGame } from './marble-engine.js';
@@ -33,27 +33,9 @@ export const getViewerCount = (io, roomCode, gameType) => {
   return room ? room.size : 0;
 };
 
-// Per-user UNO serialization — never exposes the opponent's hand or the card
-// the opponent just drew (drawnCardId reveals card identity, e.g. wild_draw4-1).
-export const serializeUnoGameFor = (game, userId) => {
-  if (!game.hands || !game.discardPile) return null;
-  const handCount = Object.fromEntries(
-    Object.entries(game.hands).map(([uid, hand]) => [uid, Array.isArray(hand) ? hand.length : 0]),
-  );
-  return {
-    gameId: 'active',
-    turn: game.currentPlayer,
-    mode: game.mode ?? DEFAULT_UNO_MODE,
-    topCard: game.discardPile[game.discardPile.length - 1],
-    declaredColor: game.declaredColor ?? null,
-    drawStack: game.drawStack ?? 0,
-    drawStackType: game.drawStackType ?? null,
-    handCount,
-    hand: game.hands[userId] ?? [],
-    drawnCardId: game.currentPlayer === userId ? (game.drawnCardId ?? null) : null,
-    unoCallNeeded: game.unoCallNeeded ?? null,
-  };
-};
+// Per-user one card (uno) view — never exposes the opponent's hand or the card
+// the opponent just drew. Same shape as the game:uno:state event.
+export const serializeUnoGameFor = (game, userId) => serializeOneCardFor(game, userId);
 
 // Check for an active game that can be resumed by this socket.
 // Side effect: joins the socket to the viewer subroom BEFORE returning to prevent

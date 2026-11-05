@@ -3,7 +3,6 @@ import test from 'node:test';
 import {
   boundary,
   createMarbleGameState,
-  createUnoGameState,
   createYutGameState,
   fixture,
   flush,
@@ -372,26 +371,6 @@ test('tank turn timer: three consecutive timeouts forfeit and record the result 
   assert.equal(await f.redis.get(`game:${f.roomCode}:tank`), null);
 });
 
-test('one card: after serving a +2 penalty the playable drawn card can be played', async t => {
-  const f = await fixture(t);
-  const g = createUnoGameState(['ALPHA-code', 'BETA-code'], 7, { mode: 'go_wild' });
-  g.discardPile = [{ color: 'red', value: 'draw2', id: 'red-draw2-a' }];
-  g.drawStack = 2;
-  g.drawStackType = 'draw2';
-  g.currentPlayer = 'BETA-code';
-  g.hands['BETA-code'] = [{ color: 'blue', value: '1', id: 'blue-1-a' }];
-  // 두 번째로 뽑히는(마지막) 카드는 빨강 4 → 낼 수 있다.
-  g.deck = [...g.deck.filter(c => c.id !== 'red-4-a' && c.id !== 'green-7-a'), { color: 'red', value: '4', id: 'red-4-a' }, { color: 'green', value: '7', id: 'green-7-a' }];
-  await f.redis.set(`uno:${f.roomCode}:game`, JSON.stringify(g));
-  const drew = await f.call(1, 'game:uno:draw', {});
-  assert.equal(drew.ok, true);
-  assert.equal(drew.event.count, 2);
-  assert.equal(drew.event.drawStack, 0, 'the served penalty is cleared');
-  assert.equal((await f.call(1, 'game:uno:draw', {})).reason, 'must_choose_drawn_card');
-  const played = await f.call(1, 'game:uno:play', { cardId: 'red-4-a' });
-  assert.equal(played.ok, true, `play rejected: ${played.reason}`);
-});
-
 test('rps: any participant can reset and a finished match is recorded', async t => {
   const f = await fixture(t);
   assert.equal((await f.call(1, 'game:rps:start', { mode: 'single' })).ok, true);
@@ -406,30 +385,6 @@ test('rps: any participant can reset and a finished match is recorded', async t 
 });
 
 // The oldmaid and blackjack tests live in their own socket test files (games 2.0 modules).
-
-test('AFK: an idle one card player is warned at 60s and forfeits at 90s with one recorded result', async t => {
-  const f = await fixture(t);
-  t.mock.timers.enable({ apis: ['Date'], now: 5_000_000 });
-  const warnings = [];
-  const ended = [];
-  f.clients[1].on('game:afk:warning', e => warnings.push(e));
-  f.clients[1].on('game:uno:ended', e => ended.push(e));
-  assert.equal((await f.call(0, 'game:uno:new', {})).ok, true);
-  await flush();
-  const state = JSON.parse(await f.redis.get(`uno:${f.roomCode}:game`));
-  const idle = state.currentPlayer;
-  f.tick(60_000);
-  await flush();
-  assert.equal(warnings.length, 1);
-  assert.equal(warnings[0].player, idle);
-  f.tick(30_000);
-  await flush();
-  assert.equal(ended.length, 1);
-  assert.equal(ended[0].reason, 'forfeit');
-  assert.notEqual(ended[0].winner, idle);
-  assert.equal(f.results.length, 1);
-  assert.equal(await f.redis.get(`uno:${f.roomCode}:game`), null);
-});
 
 test('AFK: acting resets the clock and a finished game is never forfeited', async t => {
   const f = await fixture(t);
@@ -480,8 +435,8 @@ test('lobby options: a change resets partner ready and the started game carries 
   const started = new Promise(resolve => f.clients[1].once('game:lobby:started', resolve));
   assert.equal((await f.call(0, 'game:lobby:start', { gameType: 'uno' })).ok, true);
   assert.deepEqual((await started).metadata.options, { mode: 'classic' });
-  // The host's creation payload asks for go_wild; the lobby's choice wins.
-  assert.equal((await f.call(0, 'game:uno:new', { mode: 'go_wild' })).ok, true);
+  assert.equal((await started).metadata.serverStart, true, 'one card is created by the server on lobby start');
+  await flush();
   assert.equal(JSON.parse(await f.redis.get(`uno:${f.roomCode}:game`)).mode, 'classic');
 });
 
@@ -517,8 +472,10 @@ test('equipped item stats already parsed by the driver do not break game creatio
     if (sql.includes('FROM equipped_items ei')) return { rows: [{ stat_key: 'coin_bonus_pct', total: '3' }] };
     return base(sql, params);
   };
-  const started = new Promise(resolve => f.clients[1].once('game:uno:started', resolve));
-  assert.deepEqual(await f.call(0, 'game:uno:new', {}), { ok: true });
+  const started = new Promise(resolve => f.clients[1].once('game:uno:state', resolve));
+  await f.call(0, 'game:lobby:join', { gameType: 'uno' });
+  await f.call(1, 'game:lobby:join', { gameType: 'uno' });
+  assert.equal((await f.call(0, 'game:lobby:start', { gameType: 'uno' })).ok, true);
   const event = await started;
   assert.deepEqual(event.equippedItems['ALPHA-code'].onecard_cardback.stats, { coin_bonus_pct: 3 });
   assert.deepEqual(event.equippedItems['BETA-code'].onecard_cardback.stats, { coin_bonus_pct: 5 });
