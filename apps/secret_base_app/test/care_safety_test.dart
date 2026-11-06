@@ -9,6 +9,7 @@ import 'package:secret_base_app/core/counseling_api.dart';
 import 'package:secret_base_app/core/mindcare_api.dart';
 import 'package:secret_base_app/core/safety_location.dart';
 import 'package:secret_base_app/screens/relationship/care_safety.dart';
+import 'package:secret_base_app/screens/relationship/care_settings_screen.dart';
 import 'package:secret_base_app/screens/relationship/counseling_screen.dart';
 import 'package:secret_base_app/screens/relationship/mindcare_screen.dart';
 import 'package:secret_base_app/v2/v2.dart';
@@ -258,4 +259,29 @@ void main() {
     expect(find.text('109'), findsOneWidget);
     expect(find.text('1577-0199'), findsOneWidget);
   });
+
+  testWidgets('돌봄 설정: location is off by default and needs OS permission to turn on', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    await _pump(tester, const CareSettingsScreen(locationProvider: _Denied()));
+    expect(await CarePrefs.locationEnabled(), isFalse);
+    for (final n in ['112', '119', '109', '1577-0199', '1366']) {
+      expect(find.text(n), findsOneWidget);
+    }
+    // Turning it on goes through the purpose sheet, then the OS (denied here).
+    await tester.tap(find.byType(V2Toggle));
+    await tester.pumpAndSettle();
+    expect(find.text('허용하기'), findsOneWidget);
+    await tester.tap(find.text('허용하기'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('위치를 켜지 못했어요'), findsOneWidget);
+    expect(await CarePrefs.locationEnabled(), isFalse);
+  });
+}
+
+class _Denied implements SafetyLocationProvider {
+  const _Denied();
+  @override
+  Future<SafetyLocation> resolve() async => const SafetyLocation.denied();
 }

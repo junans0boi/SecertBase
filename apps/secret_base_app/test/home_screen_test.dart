@@ -175,7 +175,8 @@ void main() {
     await tester.tap(find.text('운세'));
     await tester.pumpAndSettle();
     expect(find.byType(RelationshipFortuneScreen), findsOneWidget);
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('뒤로 가기'));
+    await tester.pumpAndSettle();
     await tester.pump();
 
     await tester.ensureVisible(find.text('타로'));
@@ -184,7 +185,8 @@ void main() {
     await tester.tap(find.text('타로'));
     await tester.pumpAndSettle();
     expect(find.byType(TarotScreen), findsOneWidget);
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('뒤로 가기'));
+    await tester.pumpAndSettle();
     await tester.pump();
 
     await tester.ensureVisible(find.text('사주'));

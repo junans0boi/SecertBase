@@ -17,6 +17,7 @@ import '../../core/tarot_api.dart';
 import 'assessment_catalog_screen.dart';
 import 'birth_info_sheet.dart';
 import 'care_safety.dart';
+import 'care_settings_screen.dart';
 import 'compatibility_screen.dart';
 import 'counseling_screen.dart';
 import 'fortune_screen.dart';
@@ -720,6 +721,14 @@ class _RelationshipUnderstandingScreenState
             title: 'AI 상담',
             subtitle: 'AI 가이드와 이야기해요. 전문 상담이 아니에요',
             onTap: () => _openCounseling(shared: false),
+          ),
+          V2ListTile(
+            key: const Key('hub_care_settings'),
+            icon: V2Icons.settings,
+            tone: V2Tone.neutral,
+            title: '돌봄 설정',
+            subtitle: '위치 사용 미리 정하기 · 긴급 연락처',
+            onTap: () => _push(const CareSettingsScreen()),
           ),
           if (_paired)
             V2ListTile(
