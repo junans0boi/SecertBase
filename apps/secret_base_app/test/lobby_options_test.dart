@@ -52,6 +52,7 @@ void main() {
     expect(lobbyOptionsFor('penalty').single.defaultValue, 3);
     expect(lobbyOptionsFor('pirate').single.defaultValue, 8);
     expect(lobbyOptionsFor('uno').single.defaultValue, 'go_wild');
+    expect(lobbyOptionsFor('catch').single.defaultValue, 6);
     expect(lobbyOptionsFor('blackjack'), isEmpty);
   });
 

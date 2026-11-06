@@ -31,6 +31,18 @@ class LobbyOptionDef {
 }
 
 const kLobbyOptions = <String, List<LobbyOptionDef>>{
+  'catch': [
+    LobbyOptionDef(
+      key: 'rounds',
+      title: '라운드 수',
+      icon: '🎨',
+      choices: [
+        LobbyChoice(6, '보통 6', '한 사람이 세 번씩 그려요'),
+        LobbyChoice(4, '짧게 4', '한 사람이 두 번씩, 금방 끝나요'),
+        LobbyChoice(8, '길게 8', '한 사람이 네 번씩 느긋하게'),
+      ],
+    ),
+  ],
   'penalty': [
     LobbyOptionDef(
       key: 'cells',

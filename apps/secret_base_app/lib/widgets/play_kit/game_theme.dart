@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 /// 게임 화면의 바탕 질감.
-enum GameTexture { felt, paper, stage, deck, stadium, velvet }
+enum GameTexture { felt, paper, stage, deck, stadium, velvet, atelier }
 
 /// 게임 2.0 테마 토큰. 게임마다 그 게임에 맞는 고급 테마를 쓰고(01-grilling Q6),
 /// 공용 부품은 하드코딩 색 없이 이 토큰만 쓴다.
@@ -225,6 +225,30 @@ class GameTheme {
     displayFont: _batang,
   );
 
+  static TextStyle _jua({
+    double size = 24,
+    Color? color,
+    FontWeight weight = FontWeight.w400,
+  }) => GoogleFonts.jua(fontSize: size, color: color, height: 1.12);
+
+  /// 그림 맞히기: 아틀리에 스케치북(리넨 벽 위에 크림 종이와 파란 테두리).
+  static const atelier = GameTheme(
+    id: 'atelier',
+    texture: GameTexture.atelier,
+    dark: false,
+    backdrop: [Color(0xFFF4ECDD), Color(0xFFEBE0CB), Color(0xFFDFD1B8)],
+    surface: Color(0xFFFFFAEE),
+    surfaceBorder: Color(0x662B5FD6),
+    accent: Color(0xFF2B5FD6),
+    accentSoft: Color(0x1F2B5FD6),
+    gold: Color(0xFFB98B3A),
+    ink: Color(0xFF2A2B3D),
+    subInk: Color(0xFF6B6A7C),
+    me: Color(0xFF2B5FD6),
+    opponent: Color(0xFFE2625A),
+    displayFont: _jua,
+  );
+
   static const all = [
     lounge,
     storybook,
@@ -232,6 +256,7 @@ class GameTheme {
     pirateNight,
     sunsetStadium,
     salon,
+    atelier,
   ];
 }
 
@@ -295,6 +320,8 @@ class _BackdropPainter extends CustomPainter {
         _stadium(canvas, size);
       case GameTexture.velvet:
         _velvet(canvas, size);
+      case GameTexture.atelier:
+        _atelier(canvas, size);
     }
     // 비네트: 가장자리를 살짝 눌러 시선을 가운데로.
     canvas.drawRect(
@@ -692,6 +719,101 @@ class _BackdropPainter extends CustomPainter {
       13,
     );
     _goldFrame(canvas, size, 10, 0.45);
+  }
+
+  void _atelier(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    // 위쪽 창가에서 들어오는 따뜻한 빛.
+    _spotlight(
+      canvas,
+      size,
+      Offset(w * 0.5, h * 0.1),
+      math.max(w, h) * 0.7,
+      const Color(0x66FFF6DC),
+    );
+    // 리넨 직조 무늬: 가는 가로·세로선.
+    final weave = Paint()
+      ..strokeWidth = 0.5
+      ..color = const Color(0x0F6B5A3C);
+    for (double y = 0; y < h; y += 6) {
+      canvas.drawLine(Offset(0, y), Offset(w, y), weave);
+    }
+    for (double x = 0; x < w; x += 6) {
+      canvas.drawLine(Offset(x, 0), Offset(x, h), weave);
+    }
+    // 가장자리에 흩어진 연필 낙서(별·하트·물결). 판 뒤라서 아주 옅게.
+    final rnd = math.Random(41);
+    final doodle = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.3
+      ..strokeCap = StrokeCap.round
+      ..color = theme.accent.withValues(alpha: 0.10);
+    for (int i = 0; i < 16; i++) {
+      final left = i.isEven;
+      final cx = left
+          ? rnd.nextDouble() * w * 0.12 + 8
+          : w - rnd.nextDouble() * w * 0.12 - 8;
+      final cy = (i / 16) * h + rnd.nextDouble() * 24;
+      final r = 6 + rnd.nextDouble() * 8;
+      switch (i % 4) {
+        case 0:
+          final p = Path();
+          for (int k = 0; k < 10; k++) {
+            final a = -math.pi / 2 + k * math.pi / 5;
+            final rr = k.isEven ? r : r * 0.45;
+            final o = Offset(cx + math.cos(a) * rr, cy + math.sin(a) * rr);
+            k == 0 ? p.moveTo(o.dx, o.dy) : p.lineTo(o.dx, o.dy);
+          }
+          canvas.drawPath(p..close(), doodle);
+        case 1:
+          final p = Path()
+            ..moveTo(cx, cy + r * 0.9)
+            ..cubicTo(
+              cx - r * 1.6,
+              cy - r * 0.2,
+              cx - r * 0.5,
+              cy - r * 1.1,
+              cx,
+              cy - r * 0.2,
+            )
+            ..cubicTo(
+              cx + r * 0.5,
+              cy - r * 1.1,
+              cx + r * 1.6,
+              cy - r * 0.2,
+              cx,
+              cy + r * 0.9,
+            );
+          canvas.drawPath(p, doodle);
+        case 2:
+          final p = Path()..moveTo(cx - r * 1.3, cy);
+          for (int k = 0; k < 3; k++) {
+            p.relativeQuadraticBezierTo(r * 0.4, -r * 0.8, r * 0.8, 0);
+            p.relativeQuadraticBezierTo(r * 0.4, r * 0.8, r * 0.8, 0);
+          }
+          canvas.drawPath(p, doodle);
+        default:
+          canvas.drawCircle(Offset(cx, cy), r * 0.7, doodle);
+          canvas.drawLine(
+            Offset(cx - r, cy + r),
+            Offset(cx + r, cy - r),
+            doodle,
+          );
+      }
+    }
+    // 아래쪽 책상 나무결이 살짝 보이는 띠.
+    final desk = Rect.fromLTRB(0, h - 14, w, h);
+    canvas.drawRect(
+      desk,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0x00B58B5A), Color(0x33B58B5A)],
+        ).createShader(desk),
+    );
+    _grain(canvas, size, const Color(0x0C5A3A2A), (w * h / 1500).round(), 43);
   }
 
   @override
