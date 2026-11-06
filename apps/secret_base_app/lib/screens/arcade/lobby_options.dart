@@ -54,6 +54,18 @@ const kLobbyOptions = <String, List<LobbyOptionDef>>{
       ],
     ),
   ],
+  'yut': [
+    LobbyOptionDef(
+      key: 'pieces',
+      title: '말 개수',
+      icon: '🐎',
+      choices: [
+        LobbyChoice(4, '4개', '정석 · 약 10분'),
+        LobbyChoice(3, '3개', '조금 짧게'),
+        LobbyChoice(2, '2개', '빠른 판 · 약 5분'),
+      ],
+    ),
+  ],
   'uno': [
     LobbyOptionDef(
       key: 'mode',

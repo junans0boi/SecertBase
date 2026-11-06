@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 /// 게임 화면의 바탕 질감.
-enum GameTexture { felt, paper, stage, deck, stadium, velvet }
+enum GameTexture { felt, paper, stage, deck, stadium, velvet, hanji }
 
 /// 게임 2.0 테마 토큰. 게임마다 그 게임에 맞는 고급 테마를 쓰고(01-grilling Q6),
 /// 공용 부품은 하드코딩 색 없이 이 토큰만 쓴다.
@@ -102,6 +102,17 @@ class GameTheme {
     fontSize: size,
     color: color,
     fontWeight: weight,
+    height: 1.15,
+  );
+
+  static TextStyle _brush({
+    double size = 24,
+    Color? color,
+    FontWeight weight = FontWeight.w400,
+  }) => GoogleFonts.gowunBatang(
+    fontSize: size,
+    color: color,
+    fontWeight: FontWeight.w700,
     height: 1.15,
   );
 
@@ -225,6 +236,24 @@ class GameTheme {
     displayFont: _batang,
   );
 
+  /// 윷놀이: 한지 마당(한지 질감 바탕, 먹빛 글자, 오방색 포인트).
+  static const hanji = GameTheme(
+    id: 'hanji',
+    texture: GameTexture.hanji,
+    dark: false,
+    backdrop: [Color(0xFFF7F0DF), Color(0xFFF1E7D0), Color(0xFFE6D8B8)],
+    surface: Color(0xFFFBF6E9),
+    surfaceBorder: Color(0x662A2623),
+    accent: Color(0xFFB5412F),
+    accentSoft: Color(0x1FB5412F),
+    gold: Color(0xFFC49A3E),
+    ink: Color(0xFF2A2623),
+    subInk: Color(0xFF6D6254),
+    me: Color(0xFF2F5D8A),
+    opponent: Color(0xFFB5412F),
+    displayFont: _brush,
+  );
+
   static const all = [
     lounge,
     storybook,
@@ -232,6 +261,7 @@ class GameTheme {
     pirateNight,
     sunsetStadium,
     salon,
+    hanji,
   ];
 }
 
@@ -295,6 +325,8 @@ class _BackdropPainter extends CustomPainter {
         _stadium(canvas, size);
       case GameTexture.velvet:
         _velvet(canvas, size);
+      case GameTexture.hanji:
+        _hanji(canvas, size);
     }
     // 비네트: 가장자리를 살짝 눌러 시선을 가운데로.
     canvas.drawRect(
@@ -692,6 +724,82 @@ class _BackdropPainter extends CustomPainter {
       13,
     );
     _goldFrame(canvas, size, 10, 0.45);
+  }
+
+  /// 한지 마당: 닥종이 섬유 + 아주 옅은 먹 번짐(먼 산) + 가장자리 얼룩.
+  void _hanji(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    // 먼 산 먹 번짐(아래쪽, 아주 옅게).
+    for (final layer in [
+      (0.82, 0.10, const Color(0x142A2623), 3),
+      (0.88, 0.07, const Color(0x1A2A2623), 5),
+    ]) {
+      final base = h * layer.$1;
+      final amp = h * layer.$2;
+      final path = Path()..moveTo(0, h);
+      final rnd = math.Random(layer.$4);
+      path.lineTo(0, base);
+      for (double x = 0; x <= w; x += w / 8) {
+        path.quadraticBezierTo(
+          x + w / 16,
+          base - amp * (0.4 + rnd.nextDouble() * 0.9),
+          x + w / 8,
+          base - amp * (rnd.nextDouble() * 0.3),
+        );
+      }
+      path
+        ..lineTo(w, h)
+        ..close();
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = layer.$3
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
+      );
+    }
+    // 오방색 번짐 두 점(청·적)을 구석에 아주 옅게.
+    _spotlight(
+      canvas,
+      size,
+      Offset(w * 0.08, h * 0.1),
+      size.shortestSide * 0.55,
+      const Color(0x142F5D8A),
+    );
+    _spotlight(
+      canvas,
+      size,
+      Offset(w * 0.95, h * 0.9),
+      size.shortestSide * 0.55,
+      const Color(0x12B5412F),
+    );
+    // 닥나무 섬유: 짧은 곡선 가닥.
+    final rnd = math.Random(41);
+    final fiber = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    final count = (w * h / 520).round();
+    for (int i = 0; i < count; i++) {
+      final x = rnd.nextDouble() * w;
+      final y = rnd.nextDouble() * h;
+      final len = 4 + rnd.nextDouble() * 12;
+      final a = rnd.nextDouble() * math.pi;
+      final dark = rnd.nextBool();
+      fiber
+        ..strokeWidth = 0.4 + rnd.nextDouble() * 0.5
+        ..color = dark ? const Color(0x143A2E1C) : const Color(0x33FFFFFF);
+      final path = Path()
+        ..moveTo(x, y)
+        ..quadraticBezierTo(
+          x + math.cos(a) * len * 0.5,
+          y + math.sin(a) * len * 0.5 + 1.5,
+          x + math.cos(a) * len,
+          y + math.sin(a) * len,
+        );
+      canvas.drawPath(path, fiber);
+    }
+    _grain(canvas, size, const Color(0x0C5A4630), (w * h / 1500).round(), 43);
+    _goldFrame(canvas, size, 10, 0.55);
   }
 
   @override
