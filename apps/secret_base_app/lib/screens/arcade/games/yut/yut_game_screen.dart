@@ -812,7 +812,7 @@ class _YutGameScreenState extends State<YutGameScreen>
     final series = v.series;
     final hasSeries = ((series?['games'] as num?)?.toInt() ?? 0) > 0;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
+      padding: const EdgeInsets.fromLTRB(14, 0, 60, 4),
       child: Wrap(
         spacing: 6,
         runSpacing: 4,
@@ -1275,7 +1275,7 @@ class _PlayerStrip extends StatelessWidget {
                     children: [
                       Flexible(
                         child: Text(
-                          isMe ? '$name (나)' : name,
+                          isMe && name != '나' ? '$name (나)' : name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: t.body(size: 13.5, weight: FontWeight.w800),
@@ -1463,7 +1463,7 @@ class _ItemBadge extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 13),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
             decoration: BoxDecoration(

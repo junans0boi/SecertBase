@@ -101,6 +101,9 @@ class YutSticksStage extends StatefulWidget {
   final VoidCallback? onDone;
   final String? throwerName;
 
+  /// 테스트용: 0..1 사이 값이면 그 시점에서 멈춘 모습을 그린다.
+  final double? debugFreeze;
+
   const YutSticksStage({
     super.key,
     required this.thrown,
@@ -109,6 +112,7 @@ class YutSticksStage extends StatefulWidget {
     this.onLanded,
     this.onDone,
     this.throwerName,
+    this.debugFreeze,
   });
 
   static Duration durationFor(YutThrow t) =>
@@ -129,6 +133,10 @@ class _YutSticksStageState extends State<YutSticksStage>
   @override
   void initState() {
     super.initState();
+    if (widget.debugFreeze != null) {
+      _ctl.value = widget.debugFreeze!;
+      return;
+    }
     _ctl.addListener(() {
       if (!_landed && _ctl.value >= 0.86) {
         _landed = true;
@@ -185,7 +193,9 @@ class _YutSticksStageState extends State<YutSticksStage>
                       left: 14,
                       top: 10,
                       child: Text(
-                        '${widget.throwerName}의 윷',
+                        widget.throwerName == '내'
+                            ? '내 윷'
+                            : '${widget.throwerName}의 윷',
                         style: GoogleFonts.notoSans(
                           fontSize: 12.5,
                           fontWeight: FontWeight.w800,
@@ -373,7 +383,7 @@ class _SticksPainter extends CustomPainter {
     final slot = (i + 0.5) / 4;
     return _StickMotion(
       endX: 0.5 + (slot - 0.5) * 0.78 + (r.nextDouble() - 0.5) * 0.03,
-      endY: 0.56 + (r.nextDouble() - 0.5) * 0.08,
+      endY: 0.62 + (r.nextDouble() - 0.5) * 0.06,
       yawEnd: (r.nextDouble() - 0.5) * 0.5 + (i.isEven ? 0.06 : -0.06),
       yawSpin:
           (r.nextBool() ? 1 : -1) * (math.pi * (2.2 + r.nextDouble() * 1.4)),
@@ -413,7 +423,7 @@ class _SticksPainter extends CustomPainter {
     }
     // 낮은 것부터(높이 순) 그려 겹침이 자연스럽게.
     order.sort((a, b) => states[a]!.z.compareTo(states[b]!.z));
-    final len = size.height * 0.68;
+    final len = size.height * 0.6;
     final thick = size.width * 0.072;
     for (final i in order) {
       final s = states[i]!;

@@ -359,6 +359,7 @@ class _YutBoardViewState extends State<YutBoardView>
         label:
             '${mine ? '내' : '상대'} 말 ${tk.ids.length}개, ${yutSquareName(tk.position) ?? '${tk.position}번 칸'}',
         child: GestureDetector(
+          key: ValueKey('yut_token_${tk.player}_$pick'),
           behavior: HitTestBehavior.opaque,
           onTap: canPick ? () => widget.onTapPiece(pick) : null,
           child: Center(
