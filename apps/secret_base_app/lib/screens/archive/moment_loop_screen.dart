@@ -13,6 +13,7 @@ import '../../features/moment_loop/data/moment_loop_repository.dart';
 import '../../features/moment_loop/domain/moment.dart';
 import '../../features/moment_loop/domain/moment_edit.dart';
 import '../../v2/v2.dart';
+import '../home/today_loop_viewer.dart';
 import 'moment/couple_names.dart';
 import 'moment/moment_composer.dart';
 import 'moment/moment_detail.dart';
@@ -226,6 +227,31 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
       userKey: '${_userId ?? ''}',
     );
     if (mounted && name != null) setState(() => _partner = name);
+  }
+
+  /// 둘의 순간이 열렸다면 홈과 같은 뷰어로 함께 보고, 아니면 오늘 탭으로 돌아온다.
+  Future<void> _openTodayLoop() async {
+    final state = _today;
+    final opened =
+        state != null &&
+        (state.status == TodayStatus.complete ||
+            state.status == TodayStatus.viewed);
+    if (!opened) {
+      setState(() => _tab = _FeedTab.today);
+      return;
+    }
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => TodayLoopViewer(
+          state: state,
+          baseUrl: _baseUrl,
+          myName: _myName,
+          partnerName: _partnerName,
+          reveal: true,
+        ),
+      ),
+    );
+    if (mounted) unawaited(_loadToday());
   }
 
   Future<void> _loadToday() async {
@@ -582,7 +608,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
             myName: _myName,
             partnerName: partner,
             onCompose: () => _openComposer(),
-            onOpenLoop: () => setState(() => _tab = _FeedTab.today),
+            onOpenLoop: _openTodayLoop,
           ),
         ),
         if (drafts.isNotEmpty || _storageError != null)
