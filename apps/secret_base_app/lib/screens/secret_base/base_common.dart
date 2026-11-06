@@ -19,9 +19,11 @@ class BaseHub {
 /// "오늘의 순간 ON" named parameter, pass it here. Until then the screen opens
 /// with its existing parameters only.
 Future<void> openMomentComposer(BuildContext context) {
-  return Navigator.of(
-    context,
-  ).push<void>(MaterialPageRoute(builder: (_) => const MomentLoopScreen()));
+  return Navigator.of(context).push<void>(
+    MaterialPageRoute(
+      builder: (_) => const MomentLoopScreen(openComposer: true),
+    ),
+  );
 }
 
 Future<void> openPartnerScreen(BuildContext context) => Navigator.of(

@@ -13,6 +13,7 @@ import '../core/server_config.dart';
 import 'arcade/arcade_screen.dart';
 import 'archive/map_screen.dart';
 import 'archive/moment_loop_screen.dart';
+import 'auth/partner_screen.dart';
 import 'home/home_screen.dart';
 import 'settings/settings_screen.dart';
 import '../v2/v2.dart';
@@ -84,7 +85,11 @@ class _HomeShellState extends State<HomeShell> {
       onNavigate: _handleHomeNavigation,
       offline: _offlineNotifier,
     ),
-    1 => const MomentLoopScreen(),
+    1 => MomentLoopScreen(
+      onGoPairing: () => Navigator.of(
+        context,
+      ).push<void>(MaterialPageRoute(builder: (_) => const PartnerScreen())),
+    ),
     2 => const MapScreen(),
     3 => const ArcadeScreen(),
     _ => SettingsScreen(onNavigate: _handleHomeNavigation),

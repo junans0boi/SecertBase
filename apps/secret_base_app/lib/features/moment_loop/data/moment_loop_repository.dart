@@ -167,7 +167,7 @@ class HttpMomentLoopRepository implements MomentLoopRepository {
           '/api/map',
           body: {
             'place_name': draft.name,
-            'category': draft.category ?? 'MomentLoop',
+            'category': draft.category ?? '기타',
             'visit_date': _dateOnly(draft.visitDate),
             'memo': draft.memo,
             'latitude': 0,

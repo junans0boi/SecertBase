@@ -37,6 +37,6 @@ const kChangelog = <ChangelogEntry>[
     version: '1.0.0',
     date: '2026-07-23',
     title: '첫 정식 릴리즈',
-    items: ['MomentLoop, 비밀 지도, 함께 놀기 등 비밀기지의 첫 번째 정식 버전이에요.'],
+    items: ['기록, 비밀 지도, 함께 놀기 등 비밀기지의 첫 번째 정식 버전이에요.'],
   ),
 ];

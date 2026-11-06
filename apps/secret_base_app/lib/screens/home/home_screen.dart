@@ -620,9 +620,7 @@ class _HomeScreenState extends State<HomeScreen> {
       state: state,
       myName: _myName,
       partnerName: _partnerName,
-      // TODO(moment-agent): open the composer with "오늘의 순간" ON once
-      // MomentLoopScreen exposes the optional named parameter (see
-      // openMomentComposer in secret_base/base_common.dart).
+      // _createMoment → openMomentComposer → MomentLoopScreen(openComposer: true).
       onCreateMoment: _createMoment,
       onOpenLoop: _openLoop,
       onPoke: _sendPoke,
