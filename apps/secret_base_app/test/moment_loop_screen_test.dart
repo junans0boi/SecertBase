@@ -72,7 +72,12 @@ void main() {
     await tester.pump(const Duration(milliseconds: 499));
     expect(find.text('새 순간'), findsNothing);
     expect(queue.drafts.single.caption, '기록 보존');
-    pending.complete(_json({'ok': true, 'post': {'id': 10, 'user_id': 7}}, 201));
+    pending.complete(
+      _json({
+        'ok': true,
+        'post': {'id': 10, 'user_id': 7},
+      }, 201),
+    );
     await tester.pump(const Duration(seconds: 1));
     expect(queue.drafts, isEmpty);
   });
@@ -140,9 +145,7 @@ void main() {
     );
   });
 
-  testWidgets('openComposer opens the composer with 오늘의 순간 on', (
-    tester,
-  ) async {
+  testWidgets('openComposer opens the composer with 오늘의 순간 on', (tester) async {
     final posted = <Map<String, String>>[];
     final api = _recordingApi(posted);
     await _pump(tester, api, openComposer: true);
@@ -269,10 +272,7 @@ void main() {
     });
 
     test('files over 30MB are rejected', () {
-      final issue = momentMediaIssue(
-        isVideo: false,
-        bytes: momentMaxBytes + 1,
-      );
+      final issue = momentMediaIssue(isVideo: false, bytes: momentMaxBytes + 1);
       expect(issue, MomentMediaIssue.tooLarge);
       expect(momentMediaIssueLabel(issue!), '30MB 이하만 올릴 수 있어요');
     });

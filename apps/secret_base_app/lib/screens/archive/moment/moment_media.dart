@@ -151,19 +151,13 @@ class MomentTile extends StatelessWidget {
         ],
       );
     } else if (moment.hasMedia && moment.isVideo) {
-      body = MomentVideoThumb(
-        url: _url(moment.mediaUrl),
-        seed: moment.id,
-      );
+      body = MomentVideoThumb(url: _url(moment.mediaUrl), seed: moment.id);
     } else if (moment.hasMedia) {
       body = Image.network(
         _url(moment.mediaUrl),
         fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => V2PhotoPlaceholder(
-          seed: moment.id,
-          icon: V2Icons.image,
-          radius: 0,
-        ),
+        errorBuilder: (_, _, _) =>
+            V2PhotoPlaceholder(seed: moment.id, icon: V2Icons.image, radius: 0),
       );
     } else {
       final caption = (moment.caption ?? '').trim();

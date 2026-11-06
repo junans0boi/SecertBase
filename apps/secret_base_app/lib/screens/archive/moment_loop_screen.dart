@@ -530,7 +530,9 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     }
     final failed = state.status == MomentLoopStatus.failure;
     final loading =
-        state.status != MomentLoopStatus.ready && state.moments.isEmpty && !failed;
+        state.status != MomentLoopStatus.ready &&
+        state.moments.isEmpty &&
+        !failed;
     final me = _userId;
     final partner = _partnerName;
     final drafts = _outbox.drafts;
@@ -660,7 +662,9 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     ),
     onNext: _isCurrentWeek
         ? null
-        : () => setState(() => _weekStart = _weekStart.add(const Duration(days: 7))),
+        : () => setState(
+            () => _weekStart = _weekStart.add(const Duration(days: 7)),
+          ),
     onCalendar: _showCalendar,
     gridView: _gridView,
     onToggleView: _toggleViewMode,
@@ -708,11 +712,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     ]);
   }
 
-  Widget _weekFeed(
-    List<List<Moment>> groups,
-    int? me,
-    String partner,
-  ) {
+  Widget _weekFeed(List<List<Moment>> groups, int? me, String partner) {
     final end = _weekStart.add(const Duration(days: 7));
     final inWeek = groups.where((g) {
       final d = momentDay(g.first);

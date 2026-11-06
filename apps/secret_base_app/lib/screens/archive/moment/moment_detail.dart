@@ -5,7 +5,8 @@ import 'package:video_player/video_player.dart';
 
 import '../../../core/auth_service.dart';
 import '../../../core/http/api_client.dart';
-import '../../../features/moment_loop/data/media_upload_service.dart' show MomentLoopException;
+import '../../../features/moment_loop/data/media_upload_service.dart'
+    show MomentLoopException;
 import '../../../features/moment_loop/domain/moment.dart';
 import '../../../v2/v2.dart';
 import 'moment_format.dart';
@@ -200,7 +201,8 @@ class _MomentDetailPageState extends State<MomentDetailPage> {
         await _run(
           widget.onRemoveTodayDesignation,
           done: '오늘의 순간에서 뺐어요',
-          failure: (e) => e is MomentLoopException && e.code == 'today_loop_locked'
+          failure: (e) =>
+              e is MomentLoopException && e.code == 'today_loop_locked'
               ? '둘의 순간이 열린 뒤에는 뺄 수 없어요'
               : '오늘의 순간에서 빼지 못했어요',
         );
@@ -208,7 +210,11 @@ class _MomentDetailPageState extends State<MomentDetailPage> {
         final ok = await showV2ConfirmDestructiveSheet(
           context,
           title: '이 순간을 지울까요?',
-          consequences: const ['사진과 한 줄이 사라져요', '받은 반응과 댓글도 함께 사라져요', '되돌릴 수 없어요'],
+          consequences: const [
+            '사진과 한 줄이 사라져요',
+            '받은 반응과 댓글도 함께 사라져요',
+            '되돌릴 수 없어요',
+          ],
           confirmLabel: '지우기',
         );
         if (!ok || !mounted) return;
@@ -238,142 +244,151 @@ class _MomentDetailPageState extends State<MomentDetailPage> {
   Widget build(BuildContext context) {
     return V2Theme(
       dark: true,
-      child: Builder(builder: (context) {
-        final p = V2Palette.of(context);
-        final post = _post;
-        final mine = _isMine(post);
-        final author = mine
-            ? widget.myName
-            : (post.userName ?? widget.partnerName);
-        final day = momentDay(post);
-        final caption = (post.caption ?? '').trim();
-        final count = _commentCounts[post.id];
-        final myEmoji = _myEmoji;
-        return Scaffold(
-          backgroundColor: p.bg,
-          appBar: V2Header(
-            title: day == null ? '순간' : longDate(day),
-            showBack: true,
-            backTooltip: '닫기',
-            actions: [
-              if (mine)
-                V2IconButton(
-                  key: const Key('moment_detail_menu'),
-                  icon: V2Icons.menu,
-                  tooltip: '더 보기',
-                  onPressed: _busy ? null : _openMenu,
-                ),
-            ],
-          ),
-          body: Column(
-            children: [
-              Expanded(
-                child: PageView.builder(
-                  controller: _pages,
-                  itemCount: widget.group.length,
-                  onPageChanged: (i) {
-                    setState(() => _current = i);
-                    unawaited(_loadCommentCount(widget.group[i].id));
-                  },
-                  itemBuilder: (context, i) => _Page(
-                    moment: widget.group[i],
-                    baseUrl: _auth.baseUrl,
+      child: Builder(
+        builder: (context) {
+          final p = V2Palette.of(context);
+          final post = _post;
+          final mine = _isMine(post);
+          final author = mine
+              ? widget.myName
+              : (post.userName ?? widget.partnerName);
+          final day = momentDay(post);
+          final caption = (post.caption ?? '').trim();
+          final count = _commentCounts[post.id];
+          final myEmoji = _myEmoji;
+          return Scaffold(
+            backgroundColor: p.bg,
+            appBar: V2Header(
+              title: day == null ? '순간' : longDate(day),
+              showBack: true,
+              backTooltip: '닫기',
+              actions: [
+                if (mine)
+                  V2IconButton(
+                    key: const Key('moment_detail_menu'),
+                    icon: V2Icons.menu,
+                    tooltip: '더 보기',
+                    onPressed: _busy ? null : _openMenu,
+                  ),
+              ],
+            ),
+            body: Column(
+              children: [
+                Expanded(
+                  child: PageView.builder(
+                    controller: _pages,
+                    itemCount: widget.group.length,
+                    onPageChanged: (i) {
+                      setState(() => _current = i);
+                      unawaited(_loadCommentCount(widget.group[i].id));
+                    },
+                    itemBuilder: (context, i) =>
+                        _Page(moment: widget.group[i], baseUrl: _auth.baseUrl),
                   ),
                 ),
-              ),
-              Container(
-                color: p.bg,
-                padding: EdgeInsets.fromLTRB(
-                  V2Space.page,
-                  V2Space.x3,
-                  V2Space.page,
-                  MediaQuery.paddingOf(context).bottom + V2Space.x3,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (widget.group.length > 1) ...[
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          for (var i = 0; i < widget.group.length; i++)
-                            AnimatedContainer(
-                              duration: V2Motion.of(context, V2Motion.fast),
-                              width: i == _current ? 16 : 6,
-                              height: 6,
-                              margin: const EdgeInsets.symmetric(horizontal: 3),
-                              decoration: BoxDecoration(
-                                color: i == _current ? p.ink : p.line2,
-                                borderRadius: BorderRadius.circular(3),
+                Container(
+                  color: p.bg,
+                  padding: EdgeInsets.fromLTRB(
+                    V2Space.page,
+                    V2Space.x3,
+                    V2Space.page,
+                    MediaQuery.paddingOf(context).bottom + V2Space.x3,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (widget.group.length > 1) ...[
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            for (var i = 0; i < widget.group.length; i++)
+                              AnimatedContainer(
+                                duration: V2Motion.of(context, V2Motion.fast),
+                                width: i == _current ? 16 : 6,
+                                height: 6,
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: i == _current ? p.ink : p.line2,
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
                               ),
+                          ],
+                        ),
+                        const SizedBox(height: V2Space.x3),
+                      ],
+                      Row(
+                        children: [
+                          V2Avatar(
+                            name: author,
+                            color: mine
+                                ? V2Avatar.meColor
+                                : V2Avatar.partnerColor,
+                            size: V2AvatarSize.sm,
+                          ),
+                          const SizedBox(width: V2Space.x2),
+                          Expanded(
+                            child: Text(
+                              [
+                                author,
+                                clockLabel(momentTime(post)),
+                                if (post.linkedPlaceName != null)
+                                  post.linkedPlaceName!,
+                              ].where((s) => s.isNotEmpty).join(' · '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: V2Text.cap.copyWith(color: p.sub),
                             ),
+                          ),
                         ],
                       ),
-                      const SizedBox(height: V2Space.x3),
-                    ],
-                    Row(
-                      children: [
-                        V2Avatar(
-                          name: author,
-                          color: mine ? V2Avatar.meColor : V2Avatar.partnerColor,
-                          size: V2AvatarSize.sm,
-                        ),
-                        const SizedBox(width: V2Space.x2),
-                        Expanded(
-                          child: Text(
-                            [
-                              author,
-                              clockLabel(momentTime(post)),
-                              if (post.linkedPlaceName != null)
-                                post.linkedPlaceName!,
-                            ].where((s) => s.isNotEmpty).join(' · '),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: V2Text.cap.copyWith(color: p.sub),
-                          ),
+                      if (caption.isNotEmpty) ...[
+                        const SizedBox(height: V2Space.x2),
+                        Text(
+                          caption,
+                          style: V2Text.body.copyWith(color: p.ink),
                         ),
                       ],
-                    ),
-                    if (caption.isNotEmpty) ...[
+                      if (_sessionId.isNotEmpty) ...[
+                        const SizedBox(height: V2Space.x3),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            for (final emoji in _emojiOptions)
+                              _ReactionChip(
+                                emoji: emoji,
+                                count: _reactions
+                                    .where((r) => r.emoji == emoji)
+                                    .length,
+                                selected: myEmoji == emoji,
+                                onTap: () => _toggleReaction(emoji),
+                              ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: V2Space.x2),
-                      Text(caption, style: V2Text.body.copyWith(color: p.ink)),
-                    ],
-                    if (_sessionId.isNotEmpty) ...[
-                      const SizedBox(height: V2Space.x3),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          for (final emoji in _emojiOptions)
-                            _ReactionChip(
-                              emoji: emoji,
-                              count: _reactions.where((r) => r.emoji == emoji).length,
-                              selected: myEmoji == emoji,
-                              onTap: () => _toggleReaction(emoji),
-                            ),
-                        ],
+                      V2Button(
+                        key: const Key('moment_comment_summary'),
+                        label: count == null
+                            ? '댓글 보기'
+                            : count == 0
+                            ? '댓글 남기기'
+                            : '댓글 $count개',
+                        icon: V2Icons.chat,
+                        variant: V2ButtonVariant.soft,
+                        size: V2ButtonSize.sm,
+                        onPressed: _openComments,
                       ),
                     ],
-                    const SizedBox(height: V2Space.x2),
-                    V2Button(
-                      key: const Key('moment_comment_summary'),
-                      label: count == null
-                          ? '댓글 보기'
-                          : count == 0
-                          ? '댓글 남기기'
-                          : '댓글 $count개',
-                      icon: V2Icons.chat,
-                      variant: V2ButtonVariant.soft,
-                      size: V2ButtonSize.sm,
-                      onPressed: _openComments,
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ],
-          ),
-        );
-      }),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -403,13 +418,19 @@ class _ReactionChip extends StatelessWidget {
         child: Material(
           color: selected ? p.primarySoft : p.soft,
           shape: StadiumBorder(
-            side: BorderSide(color: selected ? p.primary : Colors.transparent, width: 1.5),
+            side: BorderSide(
+              color: selected ? p.primary : Colors.transparent,
+              width: 1.5,
+            ),
           ),
           child: InkWell(
             onTap: onTap,
             customBorder: const StadiumBorder(),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(minWidth: 52, minHeight: V2Space.tap),
+              constraints: const BoxConstraints(
+                minWidth: 52,
+                minHeight: V2Space.tap,
+              ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: V2Space.x3),
                 child: Row(
@@ -419,7 +440,10 @@ class _ReactionChip extends StatelessWidget {
                     Text(emoji, style: const TextStyle(fontSize: 20)),
                     if (count > 0) ...[
                       const SizedBox(width: 4),
-                      Text('$count', style: V2Text.label.copyWith(color: p.ink)),
+                      Text(
+                        '$count',
+                        style: V2Text.label.copyWith(color: p.ink),
+                      ),
                     ],
                   ],
                 ),
@@ -522,7 +546,9 @@ class _MomentVideoPlayerState extends State<MomentVideoPlayer> {
       );
     }
     if (!_ready) {
-      return const Center(child: V2SkeletonBox(height: 200, radius: V2Radius.card));
+      return const Center(
+        child: V2SkeletonBox(height: 200, radius: V2Radius.card),
+      );
     }
     void toggle() {
       setState(() => _muted = !_muted);
@@ -641,7 +667,9 @@ class _MomentCommentSheetState extends State<MomentCommentSheet> {
       if (!mounted) return;
       final comment = body['comment'];
       if (comment != null) {
-        setState(() => _comments.add(Map<String, dynamic>.from(comment as Map)));
+        setState(
+          () => _comments.add(Map<String, dynamic>.from(comment as Map)),
+        );
         widget.onCount(_comments.length);
       }
       _ctrl.clear();
@@ -678,14 +706,16 @@ class _MomentCommentSheetState extends State<MomentCommentSheet> {
         if (_loading)
           const V2SkeletonList(count: 2)
         else if (_failed)
-          V2ErrorState(
-            title: '댓글을 불러오지 못했어요',
-            onRetry: _load,
-          )
+          V2ErrorState(title: '댓글을 불러오지 못했어요', onRetry: _load)
         else if (_comments.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: V2Space.x6),
-            child: Center(child: Text('아직 댓글이 없어요', style: V2Text.cap.copyWith(color: p.sub))),
+            child: Center(
+              child: Text(
+                '아직 댓글이 없어요',
+                style: V2Text.cap.copyWith(color: p.sub),
+              ),
+            ),
           )
         else
           ConstrainedBox(
@@ -712,7 +742,10 @@ class _MomentCommentSheetState extends State<MomentCommentSheet> {
                               style: V2Text.label.copyWith(color: p.sub),
                             ),
                             const SizedBox(height: 2),
-                            Text('${c['body']}', style: V2Text.body.copyWith(color: p.ink)),
+                            Text(
+                              '${c['body']}',
+                              style: V2Text.body.copyWith(color: p.ink),
+                            ),
                           ],
                         ),
                       ),

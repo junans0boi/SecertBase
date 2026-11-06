@@ -31,7 +31,9 @@ class MomentUploadBanner extends StatelessWidget {
       return V2Banner(
         key: const Key('moment_upload_banner'),
         tone: V2BannerTone.err,
-        title: failed.length > 1 ? '기록 ${failed.length}개를 올리지 못했어요' : '기록을 올리지 못했어요',
+        title: failed.length > 1
+            ? '기록 ${failed.length}개를 올리지 못했어요'
+            : '기록을 올리지 못했어요',
         message: reason,
         actionLabel: needsEdit ? '고치기' : '다시 시도',
         onAction: needsEdit ? onOpen : onRetry,
@@ -202,7 +204,9 @@ class _MomentCalendarSheetState extends State<MomentCalendarSheet> {
           Row(
             children: [
               for (var c = 0; c < 7; c++)
-                Expanded(child: _cell(r * 7 + c - lead + 1, daysInMonth, today, p)),
+                Expanded(
+                  child: _cell(r * 7 + c - lead + 1, daysInMonth, today, p),
+                ),
             ],
           ),
       ],
@@ -210,7 +214,9 @@ class _MomentCalendarSheetState extends State<MomentCalendarSheet> {
   }
 
   Widget _cell(int day, int daysInMonth, DateTime today, V2Palette p) {
-    if (day < 1 || day > daysInMonth) return const SizedBox(height: V2Space.tap);
+    if (day < 1 || day > daysInMonth) {
+      return const SizedBox(height: V2Space.tap);
+    }
     final date = DateTime(_month.year, _month.month, day);
     final future = date.isAfter(today);
     final has = widget.daysWithMoments.contains(dayKey(date));
@@ -239,7 +245,9 @@ class _MomentCalendarSheetState extends State<MomentCalendarSheet> {
                   child: Text(
                     '$day',
                     style: V2Text.bodyStrong.copyWith(
-                      color: future ? p.disabled : (isToday ? p.onPrimarySoft : p.ink),
+                      color: future
+                          ? p.disabled
+                          : (isToday ? p.onPrimarySoft : p.ink),
                     ),
                   ),
                 ),

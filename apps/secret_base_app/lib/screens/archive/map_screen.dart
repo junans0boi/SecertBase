@@ -1,54 +1,43 @@
-import 'dart:convert';
-import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../core/auth_service.dart';
 import '../../core/afterglow_api.dart';
-import '../../core/main_design.dart';
-import 'afterglow_section.dart';
+import '../../core/auth_service.dart';
+import '../../core/http/api_client.dart';
+import '../../v2/v2.dart';
+import 'map/map_api.dart';
+import 'map/map_logic.dart';
+import 'map/map_sheets.dart';
+import 'moment/couple_names.dart';
+import 'moment_loop_screen.dart';
 
-const _categories = ['식당', '카페', '활동', '여행', '쇼핑', '기타'];
-const _categoryEmojis = {
-  '식당': '🍽️',
-  '카페': '☕',
-  '활동': '🎯',
-  '여행': '✈️',
-  '쇼핑': '🛍️',
-  '기타': '📍',
-};
+export 'map/map_logic.dart'
+    show
+        linkedSetlogPostsForMap,
+        mapFallbackTileUrl,
+        mapTileUrl,
+        normalizePlaceResultForMap,
+        placeDoubleForMap,
+        placeIntForMap;
 
-const _emotionTags = [
-  '또 가자',
-  '특별했어',
-  '웃겼어',
-  '우리 취향',
-  '사진 맛집',
-  '대화가 잘 됐어',
-  '재방문 후보',
-];
+enum _Directions { naver, kakao, tmap, web }
 
-final _koreaCenter = LatLng(36.35, 127.85);
-
-const _sheetCollapsed = 0.12;
-const _sheetHalf = 0.45;
-const _sheetExpanded = 0.92;
-
-const mapTileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-const mapFallbackTileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-
+/// 비밀지도: 오버레이는 검색 + 내 위치뿐. 장소는 미니 시트로 추가하고,
+/// 상세는 3섹션 + 하단 CTA.
 class MapScreen extends StatefulWidget {
   final bool closeAsModal;
 
-  const MapScreen({super.key, this.closeAsModal = false});
+  /// Test seam; production uses the ambient HTTP client.
+  final http.Client? client;
+
+  const MapScreen({super.key, this.closeAsModal = false, this.client});
 
   @override
   State<MapScreen> createState() => _MapScreenState();
@@ -56,3691 +45,1103 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen> {
   final _auth = AuthService();
-  final MapController _mapController = MapController();
-  final DraggableScrollableController _sheetCtrl =
-      DraggableScrollableController();
-  final TextEditingController _searchCtrl = TextEditingController();
+  final _mapController = MapController();
+  final _searchCtrl = TextEditingController();
+  late final MapApi _api = MapApi(auth: _auth, client: widget.client);
+  Timer? _debounce;
+  int _searchSeq = 0;
 
   List<Map<String, dynamic>> _pins = [];
-  List<Map<String, dynamic>> _setlogPosts = [];
-  List<Map<String, dynamic>> _searchResults = [];
+  List<Map<String, dynamic>> _posts = [];
+  List<Map<String, dynamic>> _results = [];
   bool _loading = true;
-  bool _isSearching = false;
-  bool _showSearchResults = false;
-  bool _locatingUser = false;
-  bool _locationDenied = false;
-  bool _mapTileError = false;
-  String? _mapLoadError;
+  MapApiException? _error;
+  bool _searching = false;
   bool _searchFailed = false;
-  String? _activeCategory;
-  String _activeStatus = 'all';
-  LatLng? _userLatLng;
-  LatLng? _tempSelectedLatLng;
-  String? _tempSelectedName;
-  String? _tempSelectedCategory;
-  // Non-modal bottom sheet: null panel => place list, else detail/add form.
-  Widget Function(ScrollController)? _panel;
-  int _panelSeq = 0;
-  Map<String, dynamic>? _selectedPin;
-  double _sheetExtent = _sheetCollapsed;
-  bool _afterglowStarting = false;
+  bool _showResults = false;
+  bool _locating = false;
+  String? _locationNotice;
+  bool _tileError = false;
+  String _status = 'all';
+  String? _category;
+  LatLng? _user;
+  LatLng? _temp;
+  Object? _selectedId;
+  String _partner = CoupleNames.cachedPartner ?? '상대';
 
-  @override
-  void initState() {
-    super.initState();
-    _load();
-    _requestUserLocation(quiet: true);
-  }
-
-  @override
-  void dispose() {
-    _searchCtrl.dispose();
-    _sheetCtrl.dispose();
-    super.dispose();
-  }
-
-  int? get _currentUserId {
+  int? get _myId {
     final value = _auth.user?['UserId'] ?? _auth.user?['id'];
     if (value is int) return value;
     return int.tryParse('$value');
   }
 
-  Map<String, String> _jsonHeaders({bool includeAuth = false}) {
-    return {
-      'Content-Type': 'application/json',
-      if (includeAuth && _auth.token != null)
-        'Authorization': 'Bearer ${_auth.token}',
-    };
+  String get _myName => CoupleNames.myNickname(_auth);
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+    unawaited(_loadPartner());
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _mapLoadError = null;
-      _mapTileError = false;
-    });
-    try {
-      final userId = _currentUserId;
-      final mapUrl = '${_auth.baseUrl}/api/map';
-      final res = await http.get(
-        Uri.parse(mapUrl),
-        headers: _jsonHeaders(includeAuth: true),
-      );
-      if (!mounted) return;
-      final data = jsonDecode(res.body) as Map<String, dynamic>;
-      if (data['ok'] == true) {
-        setState(() {
-          _pins =
-              (data['pins'] as List?)
-                  ?.map((e) => Map<String, dynamic>.from(e as Map))
-                  .toList() ??
-              [];
-        });
-      }
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchCtrl.dispose();
+    _api.close();
+    super.dispose();
+  }
 
-      if (userId != null) {
-        final setlogUri = Uri.parse(
-          '${_auth.baseUrl}/api/setlog',
-        ).replace(queryParameters: {'user_id': '$userId'});
-        final setlogRes = await http.get(
-          setlogUri,
-          headers: _jsonHeaders(includeAuth: true),
+  void _toast(String message, {V2Tone tone = V2Tone.neutral}) {
+    if (!mounted) return;
+    showV2Snack(context, message, tone: tone);
+  }
+
+  Future<void> _loadPartner() async {
+    final api = ApiClient(
+      baseUrl: _auth.baseUrl,
+      tokenProvider: () => _auth.token,
+      client: widget.client,
+    );
+    try {
+      final name = await CoupleNames.loadPartner(
+        api,
+        userKey: '${_myId ?? ''}',
+      );
+      if (mounted && name != null) setState(() => _partner = name);
+    } finally {
+      api.close();
+    }
+  }
+
+  Future<void> _load({bool quiet = false}) async {
+    if (!quiet) {
+      setState(() {
+        _loading = true;
+        _error = null;
+        _tileError = false;
+      });
+    }
+    try {
+      final pins = await _api.fetchPins();
+      if (!mounted) return;
+      setState(() {
+        _pins = pins;
+        _error = null;
+      });
+      final id = _myId;
+      if (id != null) {
+        unawaited(
+          _api.fetchPosts(id).then((posts) {
+            if (mounted) setState(() => _posts = posts);
+          }),
         );
-        final setlogData = jsonDecode(setlogRes.body) as Map<String, dynamic>;
-        if (setlogData['ok'] == true && mounted) {
-          setState(() {
-            _setlogPosts =
-                (setlogData['posts'] as List?)
-                    ?.map((e) => Map<String, dynamic>.from(e as Map))
-                    .toList() ??
-                [];
-          });
-        }
       }
-    } catch (_) {
-      if (mounted) setState(() => _mapLoadError = '지도를 불러오지 못했어요.');
+    } on MapApiException catch (e) {
+      if (mounted) setState(() => _error = e);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  List<Map<String, dynamic>> get _filteredPins {
-    return _pins.where((pin) {
-      final statusMatches =
-          _activeStatus == 'all' || _pinStatus(pin) == _activeStatus;
-      final categoryMatches =
-          _activeCategory == null || pin['category'] == _activeCategory;
-      return statusMatches && categoryMatches;
-    }).toList();
-  }
+  List<Map<String, dynamic>> get _filtered => _pins.where((pin) {
+    final statusOk = _status == 'all' || pinStatus(pin) == _status;
+    final categoryOk = _category == null || pin['category'] == _category;
+    return statusOk && categoryOk;
+  }).toList();
 
-  int get _visitedCount =>
-      _pins.where((pin) => _pinStatus(pin) == 'visited').length;
-  int get _wishlistCount =>
-      _pins.where((pin) => _pinStatus(pin) == 'wishlist').length;
-
-  Future<void> _searchAddress(String query) async {
-    if (query.trim().isEmpty) return;
-    setState(() {
-      _isSearching = true;
-      _searchFailed = false;
-      _showSearchResults = true;
-      _tempSelectedLatLng = null;
-      _tempSelectedName = null;
-      _tempSelectedCategory = null;
-    });
-
-    try {
-      final center = _searchOrigin();
-      final url = Uri.parse(
-        '${_auth.baseUrl}/api/places/search?q=${Uri.encodeQueryComponent(query)}&limit=10&lat=${center.latitude}&lng=${center.longitude}',
-      );
-      final res = await http.get(url, headers: _jsonHeaders(includeAuth: true));
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body) as Map<String, dynamic>;
-        final places = data['places'] as List? ?? [];
-        setState(() {
-          _searchResults = places
-              .map(
-                (e) => normalizePlaceResultForMap(
-                  Map<String, dynamic>.from(e as Map),
-                ),
-              )
-              .toList();
-        });
-      } else {
-        final found = await _searchAddressFallback(query);
-        if (!found && mounted) setState(() => _searchFailed = true);
-      }
-    } catch (e) {
-      debugPrint('Search error: $e');
-      final found = await _searchAddressFallback(query);
-      if (!found && mounted) setState(() => _searchFailed = true);
-    } finally {
-      if (mounted) setState(() => _isSearching = false);
-    }
-  }
-
-  Future<bool> _searchAddressFallback(String query) async {
-    try {
-      final center = _searchOrigin();
-      final url = Uri.parse(
-        'https://nominatim.openstreetmap.org/search?q=${Uri.encodeComponent(query)}&format=json&limit=6&countrycodes=kr',
-      );
-      final res = await http.get(url, headers: {'User-Agent': 'SecretBaseApp'});
-      if (res.statusCode != 200) return false;
-      final data = jsonDecode(res.body) as List;
-      if (!mounted) return false;
-      setState(() {
-        _searchResults =
-            data
-                .map(
-                  (e) => {
-                    'display_name': e['display_name'],
-                    'name': e['display_name'].toString().split(',')[0],
-                    'address': e['display_name'],
-                    'provider': 'osm',
-                    'lat': double.tryParse('${e['lat']}') ?? 37.5665,
-                    'lon': double.tryParse('${e['lon']}') ?? 126.9780,
-                    'category': '기타',
-                  },
-                )
-                .map((place) {
-                  final lat = place['lat'] as double;
-                  final lon = place['lon'] as double;
-                  return {
-                    ...place,
-                    'distanceMeters': const Distance().as(
-                      LengthUnit.Meter,
-                      center,
-                      LatLng(lat, lon),
-                    ),
-                  };
-                })
-                .toList()
-              ..sort((a, b) {
-                final aDistance =
-                    placeDoubleForMap(a['distanceMeters']) ?? double.infinity;
-                final bDistance =
-                    placeDoubleForMap(b['distanceMeters']) ?? double.infinity;
-                return aDistance.compareTo(bDistance);
-              });
-      });
-      return true;
-    } catch (e) {
-      debugPrint('Fallback search error: $e');
-      return false;
-    }
-  }
+  int _count(String status) =>
+      _pins.where((p) => pinStatus(p) == status).length;
 
   LatLng _searchOrigin() {
-    if (_userLatLng != null) return _userLatLng!;
+    if (_user != null) return _user!;
     try {
       return _mapController.camera.center;
     } catch (_) {
-      return _koreaCenter;
+      return koreaCenter;
     }
   }
 
-  Future<void> _requestUserLocation({
-    bool moveMap = false,
-    bool quiet = false,
-  }) async {
-    if (_locatingUser) return;
-    setState(() => _locatingUser = true);
-
+  void _moveTo(LatLng point, {double zoom = 15}) {
     try {
-      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        if (mounted) setState(() => _locationDenied = true);
-        if (!quiet) _toast('위치 서비스를 켜면 주변 장소를 먼저 볼 수 있어요');
+      _mapController.move(point, zoom);
+    } catch (_) {
+      // The map may still be mounting.
+    }
+  }
+
+  LatLng? _pinPoint(Map<String, dynamic> pin) {
+    final lat = placeDoubleForMap(pin['latitude']);
+    final lng = placeDoubleForMap(pin['longitude']);
+    return lat == null || lng == null ? null : LatLng(lat, lng);
+  }
+
+  // ── Search ─────────────────────────────────────────────────────────────────
+
+  void _onSearchChanged(String value) {
+    _debounce?.cancel();
+    setState(() {});
+    if (value.trim().isEmpty) {
+      setState(() {
+        _showResults = false;
+        _results = [];
+      });
+      return;
+    }
+    _debounce = Timer(const Duration(milliseconds: 400), () => _search(value));
+  }
+
+  Future<void> _search(String query) async {
+    final q = query.trim();
+    if (q.isEmpty) return;
+    _debounce?.cancel();
+    final seq = ++_searchSeq;
+    setState(() {
+      _searching = true;
+      _searchFailed = false;
+      _showResults = true;
+    });
+    try {
+      final origin = _searchOrigin();
+      final results = await _api.searchPlaces(
+        q,
+        lat: origin.latitude,
+        lng: origin.longitude,
+      );
+      if (!mounted || seq != _searchSeq) return;
+      setState(() => _results = results);
+    } on MapApiException {
+      if (mounted && seq == _searchSeq) {
+        setState(() {
+          _results = [];
+          _searchFailed = true;
+        });
+      }
+    } finally {
+      if (mounted && seq == _searchSeq) setState(() => _searching = false);
+    }
+  }
+
+  void _pickResult(Map<String, dynamic> place) {
+    final point = LatLng(
+      placeDoubleForMap(place['lat']) ?? koreaCenter.latitude,
+      placeDoubleForMap(place['lon']) ?? koreaCenter.longitude,
+    );
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _showResults = false;
+      _temp = point;
+    });
+    _moveTo(point);
+    _openAdd(
+      point,
+      name: '${place['name'] ?? ''}',
+      category: '${place['category'] ?? '기타'}',
+    );
+  }
+
+  // ── Location (only on user action) ─────────────────────────────────────────
+
+  Future<void> _locate() async {
+    if (_locating) return;
+    setState(() => _locating = true);
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        if (mounted) {
+          setState(() => _locationNotice = '위치 서비스가 꺼져 있어요');
+        }
         return;
       }
-
       var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
+        if (!mounted) return;
+        final choice = await showV2PermissionSheet(
+          context,
+          V2PermissionKind.location,
+        );
+        if (choice != V2PermissionChoice.allow) return;
         permission = await Geolocator.requestPermission();
       }
-
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
-        if (mounted) setState(() => _locationDenied = true);
-        if (!quiet) _toast('위치 권한 없이도 검색은 계속 사용할 수 있어요');
+        if (!mounted) return;
+        setState(() => _locationNotice = '위치 권한이 꺼져 있어요');
+        final choice = await showV2PermissionSheet(
+          context,
+          V2PermissionKind.location,
+          denied: true,
+        );
+        if (choice == V2PermissionChoice.openSettings) {
+          await Geolocator.openAppSettings();
+        }
         return;
       }
-
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
           timeLimit: Duration(seconds: 8),
         ),
       );
+      if (!mounted) return;
       final point = LatLng(position.latitude, position.longitude);
-
-      if (!mounted) return;
       setState(() {
-        _userLatLng = point;
-        _locationDenied = false;
+        _user = point;
+        _locationNotice = null;
       });
-
-      if (moveMap || _pins.isEmpty) {
-        try {
-          _mapController.move(point, 14.0);
-        } catch (_) {
-          // The map can still be mounting during the first permission prompt.
-        }
-      }
-    } catch (e) {
-      debugPrint('location error: $e');
-      if (mounted) setState(() => _locationDenied = true);
-      if (!quiet) _toast('현재 위치를 가져오지 못했어요');
+      _moveTo(point, zoom: 15);
+    } catch (_) {
+      _toast('현재 위치를 가져오지 못했어요. 잠시 후 다시 눌러 주세요.', tone: V2Tone.err);
     } finally {
-      if (mounted) setState(() => _locatingUser = false);
+      if (mounted) setState(() => _locating = false);
     }
   }
 
-  Future<bool> _addPin({
-    required String name,
-    required String status,
-    required String category,
-    required int rating,
-    DateTime? visitDate,
-    required List<String> emotionTags,
-    required String memo,
-    required double lat,
-    required double lng,
+  // ── Add ────────────────────────────────────────────────────────────────────
+
+  Future<void> _openAdd(
+    LatLng point, {
+    String name = '',
+    String category = '기타',
   }) async {
-    final visitDateStr = visitDate == null ? null : _dateValue(visitDate);
-    final bodyMemo = _composeMemo(memo, emotionTags);
-
-    try {
-      final response = await http.post(
-        Uri.parse('${_auth.baseUrl}/api/map'),
-        headers: _jsonHeaders(includeAuth: true),
-        body: jsonEncode({
-          'place_name': name,
-          'category': category,
-          'rating': status == 'visited' ? rating : null,
-          'visit_date': status == 'visited' ? visitDateStr : null,
-          'memo': bodyMemo.isNotEmpty ? bodyMemo : null,
-          'latitude': lat,
-          'longitude': lng,
-          'status': status,
-          'emotion_tags': emotionTags,
-        }),
-      );
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw const HttpException('Map pin save failed');
-      }
-      if (!mounted) return false;
-      setState(() {
-        _tempSelectedLatLng = null;
-        _tempSelectedName = null;
-        _tempSelectedCategory = null;
-        _activeStatus = status;
-        _activeCategory = category;
-      });
-      await _load();
-      if (!mounted) return false;
-      _moveToFirstFiltered();
-      return true;
-    } catch (_) {
-      if (!mounted) return false;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('장소를 저장하지 못했어요', style: mainBody(color: Colors.white)),
-        ),
-      );
-      return false;
-    }
-  }
-
-  Future<AfterglowState?> _loadAfterglow(Map<String, dynamic> pin) async {
-    final token = _auth.token;
-    final pinId = placeIntForMap(pin['id']);
-    if (token == null || pinId == null) return null;
-    final api = AfterglowApi(baseUrl: _auth.baseUrl, token: token);
-    try {
-      return await api.fetchForPin(pinId);
-    } catch (_) {
-      return null;
-    } finally {
-      api.close();
-    }
-  }
-
-  Future<void> _startAfterglow(
-    Map<String, dynamic> pin,
-    BuildContext detailContext,
-  ) async {
-    if (_afterglowStarting) return;
-    final token = _auth.token;
-    final pinId = placeIntForMap(pin['id']);
-    if (token == null || pinId == null) return;
-    _afterglowStarting = true;
-    final api = AfterglowApi(baseUrl: _auth.baseUrl, token: token);
-    try {
-      final visit = await api.createVisit(pinId);
-      if (!mounted) return;
-      setState(() {
-        pin['status'] = 'visited';
-        pin['visit_date'] = visit.visitDate;
-        _activeStatus = 'visited';
-      });
-      if (!detailContext.mounted) return;
-      Navigator.of(detailContext).pop();
-      if (!mounted) return;
-      await _showAfterglowContributionSheet(pin, visit);
-    } on AfterglowApiException {
-      _toast('방문을 기록하지 못했어요');
-    } finally {
-      _afterglowStarting = false;
-      api.close();
-    }
-  }
-
-  Future<void> _showAfterglowContributionSheet(
-    Map<String, dynamic> pin,
-    AfterglowVisit visit,
-  ) async {
-    final userId = _currentUserId;
-    final token = _auth.token;
-    if (!mounted || userId == null || token == null) return;
-    final candidates = afterglowMomentCandidates(
-      pinId: visit.mapPinId,
-      visitDate: visit.visitDate,
-      userId: userId,
-      posts: _setlogPosts,
-    );
-    int? selectedPostId;
-    String? selectedEmotion;
-    final caption = TextEditingController();
-    final saved = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheet) => _SheetFrame(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              20,
-              16,
-              20,
-              MediaQuery.of(ctx).viewInsets.bottom + 20,
-            ),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('오늘의 여운 한 장', style: mainTitle(size: 24)),
-                  const SizedBox(height: 5),
-                  Text(
-                    '각자 한 장만 남겨도 충분해요. 상대를 기다리지 않아도 돼요.',
-                    style: mainBody(size: 13, color: kMainSub),
-                  ),
-                  const SizedBox(height: 14),
-                  if (candidates.isEmpty)
-                    Text(
-                      '이 장소와 오늘 직접 연결된 내 MomentLoop가 없어요. 나중에 남겨도 괜찮아요.',
-                      style: mainBody(size: 13, color: kMainMuted, height: 1.5),
-                    )
-                  else ...[
-                    ...candidates.map((post) {
-                      final id = placeIntForMap(post['id']);
-                      final selected = selectedPostId == id;
-                      return ListTile(
-                        onTap: id == null
-                            ? null
-                            : () => setSheet(() => selectedPostId = id),
-                        leading: Icon(
-                          selected
-                              ? Icons.radio_button_checked_rounded
-                              : Icons.radio_button_unchecked_rounded,
-                          color: selected ? kMainRose : kMainMuted,
-                        ),
-                        title: Text(
-                          '${post['caption'] ?? 'MomentLoop 한 장'}',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        contentPadding: EdgeInsets.zero,
-                      );
-                    }),
-                    const SizedBox(height: 8),
-                    _SoftTextField(
-                      controller: caption,
-                      hintText: '한마디 (선택)',
-                      maxLines: 2,
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 7,
-                      runSpacing: 7,
-                      children: _emotionTags
-                          .take(5)
-                          .map(
-                            (tag) => ChoiceChip(
-                              label: Text(tag),
-                              selected: selectedEmotion == tag,
-                              onSelected: (selected) => setSheet(
-                                () => selectedEmotion = selected ? tag : null,
-                              ),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  ],
-                  const SizedBox(height: 18),
-                  if (candidates.isNotEmpty)
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        onPressed: selectedPostId == null
-                            ? null
-                            : () => Navigator.pop(ctx, true),
-                        child: const Text('한 장 남기기'),
-                      ),
-                    ),
-                  Center(
-                    child: TextButton(
-                      onPressed: () => Navigator.pop(ctx, false),
-                      child: const Text('나중에 남기기'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-    if (saved == true && selectedPostId != null) {
-      final api = AfterglowApi(baseUrl: _auth.baseUrl, token: token);
-      try {
-        await api.contribute(
-          visitId: visit.id,
-          postId: selectedPostId!,
-          caption: caption.text,
-          emotionTag: selectedEmotion,
-        );
-        _toast('우리의 여운에 한 장을 남겼어요');
-      } catch (_) {
-        _toast('여운을 저장하지 못했어요');
-      } finally {
-        api.close();
-      }
-    }
-    caption.dispose();
-    if (mounted) _showPinDetail(pin);
-  }
-
-  Future<void> _editPin(Map<String, dynamic> pin) async {
-    final status = _pinStatus(pin);
-    final isVisited = status == 'visited';
-    final existingDate = _parseDateString(pin['visit_date']);
-    DateTime selectedDate = existingDate ?? DateTime.now();
-    int selectedRating = placeIntForMap(pin['rating']) ?? 0;
-    final selectedTags = <String>{..._extractTags(pin)};
-    final memoCtrl = TextEditingController(text: _cleanMemo(pin['memo']));
-    final pinId = pin['id'];
-    final candidatePosts = _setlogPosts;
-
-    XFile? pickedNewImage;
-    bool removeExistingImage = false;
-
-    final saved = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheet) {
-          final currentMediaUrl = '${pin['media_url'] ?? ''}'.trim();
-          final displayMediaUrl = currentMediaUrl.isEmpty
-              ? ''
-              : (currentMediaUrl.startsWith('http')
-                    ? currentMediaUrl
-                    : '${_auth.baseUrl}$currentMediaUrl');
-
-          return _SheetFrame(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                20,
-                16,
-                20,
-                MediaQuery.of(ctx).viewInsets.bottom + 20,
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 42,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: kMainLine,
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    Text('장소 수정', style: mainTitle(size: 24)),
-                    const SizedBox(height: 4),
-                    Text(
-                      pin['place_name'] ?? '',
-                      style: mainBody(
-                        size: 14,
-                        color: kMainSub,
-                        weight: FontWeight.w700,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 18),
-                    Text(
-                      '매장 대표 사진',
-                      style: mainBody(
-                        size: 13,
-                        color: kMainInk,
-                        weight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    if (pickedNewImage != null) ...[
-                      FutureBuilder<Uint8List>(
-                        future: pickedNewImage!.readAsBytes(),
-                        builder: (context, snapshot) {
-                          if (snapshot.hasData) {
-                            return ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: Image.memory(
-                                snapshot.data!,
-                                height: 160,
-                                width: double.infinity,
-                                fit: BoxFit.cover,
-                              ),
-                            );
-                          }
-                          return const SizedBox(
-                            height: 100,
-                            child: Center(child: CircularProgressIndicator()),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          TextButton.icon(
-                            onPressed: () async {
-                              final picker = ImagePicker();
-                              final file = await picker.pickImage(
-                                source: ImageSource.gallery,
-                              );
-                              if (file != null) {
-                                setSheet(() => pickedNewImage = file);
-                              }
-                            },
-                            icon: const Icon(
-                              Icons.photo_library_outlined,
-                              size: 18,
-                            ),
-                            label: const Text('사진 변경'),
-                          ),
-                          TextButton.icon(
-                            onPressed: () => setSheet(() {
-                              pickedNewImage = null;
-                              removeExistingImage = true;
-                            }),
-                            icon: const Icon(
-                              Icons.delete_outline,
-                              size: 18,
-                              color: Colors.red,
-                            ),
-                            label: const Text(
-                              '사진 취소',
-                              style: TextStyle(color: Colors.red),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ] else if (!removeExistingImage &&
-                        displayMediaUrl.isNotEmpty) ...[
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.network(
-                          displayMediaUrl,
-                          height: 160,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, a, b) => const SizedBox.shrink(),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          TextButton.icon(
-                            onPressed: () async {
-                              final picker = ImagePicker();
-                              final file = await picker.pickImage(
-                                source: ImageSource.gallery,
-                              );
-                              if (file != null) {
-                                setSheet(() => pickedNewImage = file);
-                              }
-                            },
-                            icon: const Icon(
-                              Icons.photo_library_outlined,
-                              size: 18,
-                            ),
-                            label: const Text('사진 변경'),
-                          ),
-                          TextButton.icon(
-                            onPressed: () =>
-                                setSheet(() => removeExistingImage = true),
-                            icon: const Icon(
-                              Icons.delete_outline,
-                              size: 18,
-                              color: Colors.red,
-                            ),
-                            label: const Text(
-                              '사진 삭제',
-                              style: TextStyle(color: Colors.red),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ] else ...[
-                      OutlinedButton.icon(
-                        onPressed: () async {
-                          final picker = ImagePicker();
-                          final file = await picker.pickImage(
-                            source: ImageSource.gallery,
-                          );
-                          if (file != null) {
-                            setSheet(() {
-                              pickedNewImage = file;
-                              removeExistingImage = false;
-                            });
-                          }
-                        },
-                        icon: const Icon(Icons.add_a_photo_outlined),
-                        label: const Text('매장 이미지 업로드'),
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size.fromHeight(48),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-                    if (isVisited) ...[
-                      _DatePickerTile(
-                        date: selectedDate,
-                        label: '방문 날짜',
-                        onPick: () async {
-                          final picked = await _pickDate(ctx, selectedDate);
-                          if (picked != null) {
-                            setSheet(() => selectedDate = picked);
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      _RatingPicker(
-                        rating: selectedRating,
-                        onChanged: (value) =>
-                            setSheet(() => selectedRating = value),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                    _EmotionPicker(
-                      selectedTags: selectedTags,
-                      onToggle: (tag) => setSheet(() {
-                        selectedTags.contains(tag)
-                            ? selectedTags.remove(tag)
-                            : selectedTags.add(tag);
-                      }),
-                    ),
-                    const SizedBox(height: 16),
-                    _SoftTextField(
-                      controller: memoCtrl,
-                      hintText: isVisited ? '오늘 어땠는지 짧게 남겨줘' : '가보고 싶은 이유를 남겨봐',
-                      maxLines: 3,
-                    ),
-                    const SizedBox(height: 18),
-                    Text(
-                      'MomentLoop 연결 설정',
-                      style: mainBody(
-                        size: 13,
-                        color: kMainInk,
-                        weight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '이 장소와 연결된 MomentLoop 순간을 추가하거나 해제할 수 있어요',
-                      style: mainBody(size: 11.5, color: kMainMuted),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      constraints: const BoxConstraints(maxHeight: 180),
-                      decoration: BoxDecoration(
-                        color: kMainPaperSoft,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: kMainLine),
-                      ),
-                      child: candidatePosts.isEmpty
-                          ? Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Text(
-                                '연결할 MomentLoop 순간이 없습니다.',
-                                style: mainBody(size: 12, color: kMainMuted),
-                              ),
-                            )
-                          : ListView.builder(
-                              shrinkWrap: true,
-                              itemCount: candidatePosts.length,
-                              itemBuilder: (context, idx) {
-                                final post = candidatePosts[idx];
-                                final isLinked =
-                                    '${post['map_pin_id'] ?? ''}' == '$pinId';
-                                final caption = '${post['caption'] ?? ''}'
-                                    .trim();
-                                final label = caption.isEmpty
-                                    ? 'MomentLoop 기록 (#${post['id']})'
-                                    : caption;
-                                return CheckboxListTile(
-                                  dense: true,
-                                  activeColor: kMainRose,
-                                  title: Text(
-                                    label,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: mainBody(
-                                      size: 12,
-                                      weight: isLinked
-                                          ? FontWeight.w800
-                                          : FontWeight.w500,
-                                    ),
-                                  ),
-                                  value: isLinked,
-                                  onChanged: (val) async {
-                                    if (pinId == null) return;
-                                    try {
-                                      final newPinId = val == true
-                                          ? pinId
-                                          : null;
-                                      await http.patch(
-                                        Uri.parse(
-                                          '${_auth.baseUrl}/api/setlog/${post['id']}',
-                                        ),
-                                        headers: _jsonHeaders(
-                                          includeAuth: true,
-                                        ),
-                                        body: jsonEncode({
-                                          'map_pin_id': newPinId,
-                                        }),
-                                      );
-                                      setSheet(() {
-                                        if (val == true) {
-                                          post['map_pin_id'] = pinId;
-                                        } else {
-                                          post['map_pin_id'] = null;
-                                        }
-                                      });
-                                    } catch (_) {
-                                      _toast('연결 변경에 실패했어요');
-                                    }
-                                  },
-                                );
-                              },
-                            ),
-                    ),
-                    const SizedBox(height: 18),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        onPressed: () => Navigator.pop(ctx, true),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: kMainSky,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                        ),
-                        child: Text(
-                          '저장',
-                          style: mainBody(
-                            color: Colors.white,
-                            weight: FontWeight.w900,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
+    setState(() => _temp = point);
+    await showV2Sheet<void>(
+      context,
+      title: '장소 추가',
+      subtitle: name.isEmpty ? '고른 위치에 이름을 붙여 주세요' : '이 장소를 우리 지도에 남길까요?',
+      builder: (ctx) => AddPlaceSheet(
+        initialName: name,
+        initialCategory: category,
+        onSave: (r) async {
+          await _savePin(point, r);
+          if (ctx.mounted) Navigator.pop(ctx);
         },
       ),
     );
+    if (mounted) setState(() => _temp = null);
+  }
 
-    if (saved != true) return;
-
-    final id = pin['id'];
-    if (id == null) {
-      _toast('수정할 수 없어요');
-      return;
-    }
-
-    final updatedMemo = _composeMemo(memoCtrl.text, selectedTags.toList());
-
+  Future<void> _savePin(LatLng point, AddPlaceResult r) async {
+    final before = _pins.map((p) => '${p['id']}').toSet();
+    int? newId;
     try {
-      if (pickedNewImage != null) {
-        final req = http.MultipartRequest(
-          'PATCH',
-          Uri.parse('${_auth.baseUrl}/api/map/$id'),
-        );
-        if (_auth.token != null) {
-          req.headers['Authorization'] = 'Bearer ${_auth.token}';
-        }
-        req.fields['memo'] = updatedMemo;
-        req.fields['emotion_tags'] = jsonEncode(selectedTags.toList());
-        if (isVisited) {
-          req.fields['rating'] = '$selectedRating';
-          req.fields['visit_date'] = _dateValue(selectedDate);
-        }
-        final bytes = await pickedNewImage!.readAsBytes();
-        req.files.add(
-          http.MultipartFile.fromBytes(
-            'media',
-            bytes,
-            filename: pickedNewImage!.name,
-            contentType: MediaType('image', 'jpeg'),
-          ),
-        );
-        final streamedRes = await req.send();
-        final res = await http.Response.fromStream(streamedRes);
-        final data = jsonDecode(res.body) as Map<String, dynamic>;
-        if (res.statusCode != 200 || data['ok'] != true) {
-          _toast('수정하지 못했어요');
-          return;
-        }
-      } else {
-        final body = <String, dynamic>{
-          'memo': updatedMemo,
-          'emotion_tags': selectedTags.toList(),
-        };
-        if (removeExistingImage) {
-          body['media_url'] = '';
-        }
-        if (isVisited) {
-          body['rating'] = selectedRating;
-          body['visit_date'] = _dateValue(selectedDate);
-        }
-
-        final response = await http.patch(
-          Uri.parse('${_auth.baseUrl}/api/map/$id'),
-          headers: _jsonHeaders(includeAuth: true),
-          body: jsonEncode(body),
-        );
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        if (response.statusCode != 200 || data['ok'] != true) {
-          _toast('수정하지 못했어요');
-          return;
-        }
-      }
-      await _load();
-    } catch (_) {
-      _toast('수정하지 못했어요');
-      return;
-    }
-
-    if (mounted) _toast('수정됐어요');
-  }
-
-  void _showAddDialog(
-    LatLng latLng, {
-    String? initialName,
-    String? initialCategory,
-  }) {
-    final nameCtrl = TextEditingController(
-      text: initialName ?? _tempSelectedName ?? '',
-    );
-    final memoCtrl = TextEditingController();
-    String selectedStatus = _activeStatus == 'wishlist'
-        ? 'wishlist'
-        : 'visited';
-    String selectedCategory =
-        initialCategory ?? _tempSelectedCategory ?? _activeCategory ?? '기타';
-    int selectedRating = 5;
-    DateTime selectedDate = DateTime.now();
-    final selectedTags = <String>{};
-    var submitting = false;
-
-    _openPanel(
-      (scrollController) => StatefulBuilder(
-        builder: (ctx, setSheet) => _SheetFrame(
-          child: SingleChildScrollView(
-            controller: scrollController,
-            padding: EdgeInsets.fromLTRB(
-              20,
-              16,
-              20,
-              MediaQuery.of(ctx).viewInsets.bottom + 20,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _sheetHandle(),
-                _panelCloseButton('닫기'),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.add_location_alt_rounded,
-                      color: kMainRose,
-                      size: 24,
-                    ),
-                    const SizedBox(width: 8),
-                    Text('비밀 장소 추가', style: mainTitle(size: 24)),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${latLng.latitude.toStringAsFixed(5)}, ${latLng.longitude.toStringAsFixed(5)}',
-                  style: mainBody(size: 11, color: kMainMuted),
-                ),
-                const SizedBox(height: 18),
-                _StatusSegment(
-                  value: selectedStatus,
-                  onChanged: (value) => setSheet(() => selectedStatus = value),
-                ),
-                const SizedBox(height: 16),
-                _SoftTextField(
-                  controller: nameCtrl,
-                  hintText: '장소 이름',
-                  prefixIcon: Icons.place_outlined,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  '카테고리',
-                  style: mainBody(
-                    size: 12,
-                    color: kMainMuted,
-                    weight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _categories
-                      .map(
-                        (cat) => _ChoiceChip(
-                          label: '${_categoryEmojis[cat]} $cat',
-                          selected: selectedCategory == cat,
-                          onTap: () => setSheet(() => selectedCategory = cat),
-                        ),
-                      )
-                      .toList(),
-                ),
-                if (selectedStatus == 'visited') ...[
-                  const SizedBox(height: 16),
-                  _DatePickerTile(
-                    date: selectedDate,
-                    label: '방문 날짜',
-                    onPick: () async {
-                      final picked = await _pickDate(ctx, selectedDate);
-                      if (picked != null) {
-                        setSheet(() => selectedDate = picked);
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  _RatingPicker(
-                    rating: selectedRating,
-                    onChanged: (value) =>
-                        setSheet(() => selectedRating = value),
-                  ),
-                  const SizedBox(height: 16),
-                  _EmotionPicker(
-                    selectedTags: selectedTags,
-                    onToggle: (tag) => setSheet(() {
-                      selectedTags.contains(tag)
-                          ? selectedTags.remove(tag)
-                          : selectedTags.add(tag);
-                    }),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                _SoftTextField(
-                  controller: memoCtrl,
-                  hintText: selectedStatus == 'visited' ? '우리 메모' : '가보고 싶은 이유',
-                  maxLines: 3,
-                ),
-                const SizedBox(height: 18),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: submitting
-                        ? null
-                        : () async {
-                            if (submitting || nameCtrl.text.trim().isEmpty) {
-                              return;
-                            }
-                            setSheet(() => submitting = true);
-                            final saved = await _addPin(
-                              name: nameCtrl.text.trim(),
-                              status: selectedStatus,
-                              category: selectedCategory,
-                              rating: selectedRating,
-                              visitDate: selectedStatus == 'visited'
-                                  ? selectedDate
-                                  : null,
-                              emotionTags: selectedStatus == 'visited'
-                                  ? selectedTags.toList()
-                                  : const [],
-                              memo: memoCtrl.text.trim(),
-                              lat: latLng.latitude,
-                              lng: latLng.longitude,
-                            );
-                            if (!ctx.mounted) return;
-                            if (!saved) {
-                              setSheet(() => submitting = false);
-                              return;
-                            }
-                            _closePanel();
-                            _snapSheetAfterBuild(_sheetCollapsed);
-                          },
-                    style: FilledButton.styleFrom(
-                      backgroundColor: kMainRose,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                    ),
-                    child: Text(
-                      '지도에 저장',
-                      style: mainBody(
-                        color: Colors.white,
-                        weight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<DateTime?> _pickDate(BuildContext context, DateTime initialDate) {
-    return showDatePicker(
-      context: context,
-      initialDate: initialDate,
-      firstDate: DateTime(2000),
-      lastDate: DateTime.now(),
-      builder: (c, child) => Theme(
-        data: Theme.of(c).copyWith(
-          colorScheme: const ColorScheme.light(
-            primary: kMainRose,
-            onPrimary: Colors.white,
-            surface: kMainPaper,
-            onSurface: kMainInk,
-          ),
-        ),
-        child: child!,
-      ),
-    );
-  }
-
-  void _moveToFirstFiltered() {
-    final pins = _filteredPins;
-    if (pins.isNotEmpty) _moveToPin(pins.first);
-  }
-
-  void _snapSheet(double size) {
-    if (_sheetCtrl.isAttached) {
-      _sheetCtrl.animateTo(
-        size,
-        duration: const Duration(milliseconds: 260),
-        curve: Curves.easeOut,
+      newId = await _api.createPin(
+        name: r.name,
+        status: r.status,
+        category: r.category,
+        lat: point.latitude,
+        lng: point.longitude,
+        visitDate: DateTime.now(),
       );
+    } on MapApiException catch (e) {
+      if (e.unpaired && mounted) setState(() => _error = e);
+      rethrow;
     }
-  }
-
-  void _snapSheetAfterBuild(double size) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _snapSheet(size);
-    });
-  }
-
-  void _openPanel(Widget Function(ScrollController) builder) {
-    setState(() {
-      _panel = builder;
-      _panelSeq++;
-    });
-    _snapSheetAfterBuild(_sheetHalf);
-  }
-
-  void _closePanel() {
-    setState(() {
-      _panel = null;
-      _selectedPin = null;
-    });
-  }
-
-  void _showListSheet() {
-    _closePanel();
-    _snapSheetAfterBuild(_sheetExpanded);
-  }
-
-  /// Marker / list tap: select the pin and show its detail inline at half.
-  void _selectPin(Map<String, dynamic> pin) {
-    setState(() {
-      _tempSelectedLatLng = null;
-      _tempSelectedName = null;
-      _showSearchResults = false;
-    });
-    _moveToPin(pin);
-    _showPinDetail(pin);
-  }
-
-  void _reshowPin(Map<String, dynamic> pin) {
+    await _load(quiet: true);
     if (!mounted) return;
-    final updated = _pins.where((p) => p['id'] == pin['id']);
-    if (updated.isEmpty) {
-      _closePanel();
-    } else {
-      _showPinDetail(updated.first);
+    Map<String, dynamic>? created;
+    for (final p in _pins) {
+      if (newId != null && placeIntForMap(p['id']) == newId) created = p;
     }
+    created ??= _pins.where((p) => !before.contains('${p['id']}')).lastOrNull;
+    setState(() {
+      _temp = null;
+      _selectedId = created?['id'];
+      // Never hide the pin the user just made.
+      if (_status != 'all' && _status != r.status) _status = 'all';
+      if (_category != null && _category != r.category) _category = null;
+    });
+    _moveTo(point);
+    _toast(r.status == 'visited' ? '다녀온 곳으로 남겼어요' : '가고 싶은 곳으로 남겼어요');
   }
 
-  void _moveToPin(Map<String, dynamic> pin, {double zoom = 15.0}) {
-    final lat = placeDoubleForMap(pin['latitude']) ?? 37.5665;
-    final lng = placeDoubleForMap(pin['longitude']) ?? 126.9780;
-    _mapController.move(LatLng(lat, lng), zoom);
+  // ── Detail ─────────────────────────────────────────────────────────────────
+
+  Map<String, dynamic> _fresh(Map<String, dynamic> pin) => _pins.firstWhere(
+    (p) => '${p['id']}' == '${pin['id']}',
+    orElse: () => pin,
+  );
+
+  void _closeSheet() => Navigator.of(context, rootNavigator: true).pop();
+
+  Future<void> _openPin(Map<String, dynamic> pin) async {
+    final point = _pinPoint(pin);
+    setState(() => _selectedId = pin['id']);
+    if (point != null) _moveTo(point);
+    await _showDetail(pin);
   }
 
-  void _showPinDetail(Map<String, dynamic> pin) {
-    final afterglowFuture = _pinStatus(pin) == 'visited'
-        ? _loadAfterglow(pin)
-        : Future<AfterglowState?>.value(null);
-
-    // Reviews state — captured by closure so StatefulBuilder rebuilds work
-    final reviews = <Map<String, dynamic>>[];
-    var reviewsLoaded = false;
-    var reviewsLoading = false;
-
-    Future<void> loadReviews(StateSetter setSheet) async {
-      if (reviewsLoaded || reviewsLoading) return;
-      reviewsLoading = true;
-      try {
-        final res = await http.get(
-          Uri.parse('${_auth.baseUrl}/api/map/${pin['id']}/reviews'),
-          headers: _jsonHeaders(includeAuth: true),
-        );
-        if (res.statusCode == 200) {
-          final data = jsonDecode(res.body) as Map<String, dynamic>;
-          reviews
-            ..clear()
-            ..addAll((data['reviews'] as List).cast<Map<String, dynamic>>());
-        }
-      } catch (_) {}
-      reviewsLoaded = true;
-      reviewsLoading = false;
-      if (mounted) setSheet(() {});
-    }
-
-    _selectedPin = pin;
-    _openPanel(
-      (sheetScroll) => StatefulBuilder(
-        builder: (ctx, setSheet) {
-          if (!reviewsLoaded && !reviewsLoading) loadReviews(setSheet);
-          final category = pin['category'] ?? '기타';
-          final emoji = _categoryEmojis[category] ?? '📍';
-          final status = _pinStatus(pin);
-          final isVisited = status == 'visited';
-          final rating = placeIntForMap(pin['rating']) ?? 0;
-          final tags = _extractTags(pin);
-          final memo = _cleanMemo(pin['memo']);
-          final date = _formattedDate(pin['visit_date']);
-          final author = '${pin['created_by'] ?? '우리'}';
-          final myCode =
-              '${_auth.user?['UserCode'] ?? _auth.user?['userCode'] ?? ''}';
-          final isCreator = myCode.isNotEmpty && author == myCode;
-          final linkedPosts = linkedSetlogPostsForMap(pin, _setlogPosts);
-          final rawMediaUrl = '${pin['media_url'] ?? ''}'.trim();
-          final pinMediaUrl = rawMediaUrl.isEmpty
-              ? ''
-              : (rawMediaUrl.startsWith('http')
-                    ? rawMediaUrl
-                    : '${_auth.baseUrl}$rawMediaUrl');
-
-          return _SheetFrame(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                20,
-                14,
-                20,
-                MediaQuery.of(ctx).viewInsets.bottom + 22,
-              ),
-              child: SingleChildScrollView(
-                controller: sheetScroll,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _sheetHandle(),
-                    _panelCloseButton('목록으로'),
-                    if (pinMediaUrl.isNotEmpty) ...[
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: Image.network(
-                          pinMediaUrl,
-                          height: 180,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, a, b) => const SizedBox.shrink(),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _PinBubble(
-                          emoji: emoji,
-                          status: status,
-                          active: true,
-                          size: 58,
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                pin['place_name'] ?? '',
-                                style: mainTitle(size: 26),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 6),
-                              Wrap(
-                                spacing: 7,
-                                runSpacing: 7,
-                                children: [
-                                  _MiniPill(
-                                    label: isVisited ? '다녀온 곳' : '가고 싶은 곳',
-                                    color: isVisited ? kMainRose : kMainLilac,
-                                    backgroundColor: isVisited
-                                        ? kMainRoseSoft
-                                        : kMainLilacSoft,
-                                  ),
-                                  _MiniPill(
-                                    label: category,
-                                    color: kMainPeach,
-                                    backgroundColor: kMainPeachSoft,
-                                  ),
-                                  if (date != null)
-                                    _MiniPill(
-                                      label: date,
-                                      color: kMainSage,
-                                      backgroundColor: kMainSageSoft,
-                                    ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-                    if (isVisited && rating > 0) ...[
-                      _DetailBlock(
-                        icon: Icons.favorite_rounded,
-                        title: '우리 온도',
-                        child: Row(
-                          children: [
-                            ...List.generate(
-                              5,
-                              (i) => Icon(
-                                Icons.star_rounded,
-                                size: 22,
-                                color: i < rating ? kMainHoney : kMainLine,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '$rating.0',
-                              style: mainBody(
-                                size: 13,
-                                color: kMainInk,
-                                weight: FontWeight.w900,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    if (tags.isNotEmpty) ...[
-                      _DetailBlock(
-                        icon: Icons.auto_awesome_rounded,
-                        title: '감정 태그',
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: tags
-                              .map(
-                                (tag) => _MiniPill(
-                                  label: tag,
-                                  color: kMainRose,
-                                  backgroundColor: kMainRoseSoft,
-                                ),
-                              )
-                              .toList(),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    _DetailBlock(
-                      icon: Icons.edit_note_rounded,
-                      title: isVisited ? '우리 메모' : '가보고 싶은 이유',
-                      child: Text(
-                        memo.isEmpty
-                            ? (isVisited ? '아직 메모가 없어요' : '언젠가 같이 가볼 장소예요')
-                            : memo,
-                        style: mainBody(
-                          size: 13.5,
-                          color: kMainInk,
-                          height: 1.55,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    FutureBuilder<AfterglowState?>(
-                      future: afterglowFuture,
-                      builder: (context, snapshot) {
-                        final state = snapshot.data;
-                        if (state?.visit == null) {
-                          return const SizedBox.shrink();
-                        }
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: _DetailBlock(
-                            icon: Icons.auto_awesome_rounded,
-                            title: 'Date Afterglow',
-                            child: AfterglowSection(
-                              state: state!,
-                              baseUrl: _auth.baseUrl,
-                              onContribute: () {
-                                _showAfterglowContributionSheet(
-                                  pin,
-                                  state.visit!,
-                                );
-                              },
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                    _DetailBlock(
-                      icon: Icons.photo_library_outlined,
-                      title: '연결된 추억',
-                      child: _LinkedMemorySummary(
-                        posts: linkedPosts,
-                        isVisited: isVisited,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    // ── 리뷰 섹션 ──
-                    _DetailBlock(
-                      icon: Icons.rate_review_outlined,
-                      title: '리뷰',
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (!reviewsLoaded)
-                            const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 8),
-                              child: SizedBox(
-                                height: 18,
-                                width: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              ),
-                            )
-                          else if (reviews.isEmpty)
-                            Text(
-                              '아직 리뷰가 없어요. 첫 리뷰를 남겨봐요!',
-                              style: mainBody(size: 13, color: kMainMuted),
-                            )
-                          else
-                            ...reviews.map((r) {
-                              final content = '${r['content'] ?? ''}'.trim();
-                              final mediaRaw = '${r['media_url'] ?? ''}'.trim();
-                              final mediaUrl = mediaRaw.isEmpty
-                                  ? ''
-                                  : (mediaRaw.startsWith('http')
-                                        ? mediaRaw
-                                        : '${_auth.baseUrl}$mediaRaw');
-                              final author = '${r['user_code'] ?? '?'}';
-                              final myCode =
-                                  '${_auth.user?['UserCode'] ?? _auth.user?['userCode'] ?? ''}';
-                              final isMyReview =
-                                  myCode.isNotEmpty && author == myCode;
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 10),
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: kMainPaperSoft,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  padding: const EdgeInsets.all(12),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Text(
-                                            author,
-                                            style: mainBody(
-                                              size: 12,
-                                              color: kMainRose,
-                                              weight: FontWeight.w700,
-                                            ),
-                                          ),
-                                          const Spacer(),
-                                          if (isMyReview)
-                                            GestureDetector(
-                                              onTap: () async {
-                                                final ok = await showDialog<bool>(
-                                                  context: context,
-                                                  builder: (c) => AlertDialog(
-                                                    title: const Text('리뷰 삭제'),
-                                                    content: const Text(
-                                                      '이 리뷰를 삭제할까요?',
-                                                    ),
-                                                    actions: [
-                                                      TextButton(
-                                                        onPressed: () =>
-                                                            Navigator.pop(
-                                                              c,
-                                                              false,
-                                                            ),
-                                                        child: const Text('취소'),
-                                                      ),
-                                                      TextButton(
-                                                        onPressed: () =>
-                                                            Navigator.pop(
-                                                              c,
-                                                              true,
-                                                            ),
-                                                        child: const Text('삭제'),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                );
-                                                if (ok != true) return;
-                                                try {
-                                                  await http.delete(
-                                                    Uri.parse(
-                                                      '${_auth.baseUrl}/api/map/${pin['id']}/reviews/${r['id']}',
-                                                    ),
-                                                    headers: _jsonHeaders(
-                                                      includeAuth: true,
-                                                    ),
-                                                  );
-                                                } catch (_) {}
-                                                reviewsLoaded = false;
-                                                await loadReviews(setSheet);
-                                              },
-                                              child: const Icon(
-                                                Icons.delete_outline,
-                                                size: 16,
-                                                color: kMainMuted,
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                      if (content.isNotEmpty) ...[
-                                        const SizedBox(height: 6),
-                                        Text(
-                                          content,
-                                          style: mainBody(
-                                            size: 13,
-                                            color: kMainInk,
-                                            height: 1.5,
-                                          ),
-                                        ),
-                                      ],
-                                      if (mediaUrl.isNotEmpty) ...[
-                                        const SizedBox(height: 8),
-                                        ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                          child: Image.network(
-                                            mediaUrl,
-                                            height: 140,
-                                            width: double.infinity,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (_, a, b) =>
-                                                const SizedBox.shrink(),
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                              );
-                            }),
-                          const SizedBox(height: 6),
-                          GestureDetector(
-                            onTap: () async {
-                              await _showWriteReviewSheet(pin, () {
-                                // Reopen detail to see updated reviews
-                                _showPinDetail(pin);
-                              });
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 10,
-                                horizontal: 14,
-                              ),
-                              decoration: BoxDecoration(
-                                border: Border.all(
-                                  color: kMainRose.withValues(alpha: 0.5),
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.edit_outlined,
-                                    size: 15,
-                                    color: kMainRose,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    '리뷰 쓰기',
-                                    style: mainBody(
-                                      size: 13,
-                                      color: kMainRose,
-                                      weight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: () => _showDirectionsSheet(pin),
-                        icon: const Icon(Icons.near_me_rounded, size: 18),
-                        label: Text(
-                          '길찾기',
-                          style: mainBody(
-                            color: Colors.white,
-                            weight: FontWeight.w900,
-                          ),
-                        ),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: kMainInk,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 13),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _ActionButton(
-                            icon: Icons.favorite_border_rounded,
-                            label: '하트',
-                            onTap: () => _toast('하트를 남겼어요'),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _ActionButton(
-                            icon: Icons.chat_bubble_outline_rounded,
-                            label: '댓글',
-                            onTap: () => _toast('댓글은 다음 연결에서 붙일게요'),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _ActionButton(
-                            icon: Icons.ios_share_rounded,
-                            label: '공유',
-                            onTap: () => _sharePin(pin),
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (!isVisited) ...[
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          onPressed: () => _startAfterglow(pin, ctx),
-                          icon: const Icon(
-                            Icons.check_circle_rounded,
-                            size: 18,
-                          ),
-                          label: Text(
-                            '오늘 다녀왔어요',
-                            style: mainBody(
-                              color: Colors.white,
-                              weight: FontWeight.w900,
-                            ),
-                          ),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: kMainRose,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 13),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(18),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 8),
-                    TextButton.icon(
-                      onPressed: () async {
-                        await _editPin(pin);
-                        _reshowPin(pin);
-                      },
-                      icon: const Icon(Icons.edit_outlined),
-                      label: const Text('장소 수정'),
-                      style: TextButton.styleFrom(foregroundColor: kMainSky),
-                    ),
-                    if (isCreator) ...[
-                      TextButton.icon(
-                        onPressed: () async {
-                          if (await _deletePin(pin)) _closePanel();
-                        },
-                        icon: const Icon(Icons.delete_outline),
-                        label: const Text('장소 삭제'),
-                      ),
-                    ],
-                    const SizedBox(height: 10),
-                    Center(
-                      child: Text(
-                        '등록: $author',
-                        style: mainBody(size: 11, color: kMainMuted),
-                      ),
-                    ),
-                  ],
+  Future<void> _showDetail(Map<String, dynamic> raw) async {
+    final pin = _fresh(raw);
+    final visited = pinStatus(pin) == 'visited';
+    final directions = V2Button(
+      key: const Key('map_cta_directions'),
+      label: '길찾기',
+      icon: V2Icons.location,
+      variant: visited ? V2ButtonVariant.primary : V2ButtonVariant.soft,
+      onPressed: () => _showDirections(pin),
+    );
+    await showV2Sheet<void>(
+      context,
+      title: '${pin['place_name'] ?? '우리 장소'}',
+      builder: (ctx) => PlaceDetailBody(
+        pin: pin,
+        api: _api,
+        posts: _posts,
+        myUserId: _myId,
+        myName: _myName,
+        partnerName: _partner,
+        onEdit: () {
+          _closeSheet();
+          unawaited(_editPin(pin));
+        },
+        onDelete: () {
+          _closeSheet();
+          unawaited(_deletePin(pin));
+        },
+        onShare: () => _sharePin(pin),
+        onLeaveMoment: widget.closeAsModal
+            ? null
+            : () {
+                _closeSheet();
+                _leaveMoment(pin);
+              },
+        onContributeAfterglow: () {
+          _closeSheet();
+          unawaited(_contributeFor(pin));
+        },
+        onWriteNote: _writeNote,
+      ),
+      actions: [
+        if (visited)
+          directions
+        else
+          Row(
+            children: [
+              Expanded(child: directions),
+              const SizedBox(width: V2Space.x3),
+              Expanded(
+                child: V2Button(
+                  key: const Key('map_cta_visited'),
+                  label: '다녀왔어요',
+                  onPressed: () {
+                    _closeSheet();
+                    unawaited(_markVisited(pin));
+                  },
                 ),
               ),
-            ),
-          );
-        },
+            ],
+          ),
+      ],
+    );
+  }
+
+  void _leaveMoment(Map<String, dynamic> pin) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MomentLoopScreen(
+          openComposer: true,
+          initialPinId: placeIntForMap(pin['id']),
+          initialPinName: '${pin['place_name'] ?? ''}',
+        ),
       ),
     );
   }
 
-  Future<void> _showWriteReviewSheet(
-    Map<String, dynamic> pin,
-    VoidCallback onSaved,
-  ) async {
-    final contentCtrl = TextEditingController();
-    XFile? pickedImage;
-    var submitting = false;
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheet) {
-          return _SheetFrame(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                20,
-                16,
-                20,
-                MediaQuery.of(ctx).viewInsets.bottom + 24,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 42,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: kMainLine,
-                        borderRadius: BorderRadius.circular(99),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Text('리뷰 쓰기', style: mainTitle(size: 18)),
-                  const SizedBox(height: 4),
-                  Text(
-                    pin['place_name'] ?? '',
-                    style: mainBody(size: 13, color: kMainMuted),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: contentCtrl,
-                    maxLines: 4,
-                    decoration: InputDecoration(
-                      hintText: '이 장소에서의 기억을 남겨봐요',
-                      filled: true,
-                      fillColor: kMainPaperSoft,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.all(14),
-                    ),
-                    style: mainBody(size: 14, color: kMainInk),
-                  ),
-                  const SizedBox(height: 12),
-                  if (pickedImage != null) ...[
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.file(
-                        File(pickedImage!.path),
-                        height: 130,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextButton.icon(
-                      onPressed: () => setSheet(() => pickedImage = null),
-                      icon: const Icon(Icons.close, size: 16),
-                      label: const Text('사진 제거'),
-                      style: TextButton.styleFrom(foregroundColor: kMainMuted),
-                    ),
-                  ] else
-                    GestureDetector(
-                      onTap: () async {
-                        final picker = ImagePicker();
-                        final img = await picker.pickImage(
-                          source: ImageSource.gallery,
-                          imageQuality: 85,
-                        );
-                        if (img != null) setSheet(() => pickedImage = img);
-                      },
-                      child: Container(
-                        height: 56,
-                        decoration: BoxDecoration(
-                          color: kMainPaperSoft,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: kMainLine),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(
-                              Icons.add_photo_alternate_outlined,
-                              size: 20,
-                              color: kMainMuted,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '사진 추가 (선택)',
-                              style: mainBody(size: 14, color: kMainMuted),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: submitting
-                          ? null
-                          : () async {
-                              final content = contentCtrl.text.trim();
-                              if (content.isEmpty && pickedImage == null) {
-                                _toast('리뷰 내용 또는 사진을 추가해주세요');
-                                return;
-                              }
-                              setSheet(() => submitting = true);
-                              try {
-                                final req = http.MultipartRequest(
-                                  'POST',
-                                  Uri.parse(
-                                    '${_auth.baseUrl}/api/map/${pin['id']}/reviews',
-                                  ),
-                                );
-                                if (_auth.token != null) {
-                                  req.headers['Authorization'] =
-                                      'Bearer ${_auth.token}';
-                                }
-                                if (content.isNotEmpty) {
-                                  req.fields['content'] = content;
-                                }
-                                if (pickedImage != null) {
-                                  final bytes = await pickedImage!
-                                      .readAsBytes();
-                                  req.files.add(
-                                    http.MultipartFile.fromBytes(
-                                      'media',
-                                      bytes,
-                                      filename: pickedImage!.name,
-                                      contentType: MediaType('image', 'jpeg'),
-                                    ),
-                                  );
-                                }
-                                final streamed = await req.send();
-                                final res = await http.Response.fromStream(
-                                  streamed,
-                                );
-                                if (res.statusCode == 200) {
-                                  if (ctx.mounted) Navigator.pop(ctx);
-                                  onSaved();
-                                } else {
-                                  _toast('저장하지 못했어요');
-                                }
-                              } catch (_) {
-                                _toast('오류가 발생했어요');
-                              } finally {
-                                setSheet(() => submitting = false);
-                              }
-                            },
-                      style: FilledButton.styleFrom(
-                        backgroundColor: kMainRose,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                      ),
-                      child: submitting
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : Text(
-                              '리뷰 등록',
-                              style: mainBody(
-                                color: Colors.white,
-                                weight: FontWeight.w900,
-                              ),
-                            ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
+  Future<void> _writeNote(Map<String, dynamic> pin) async {
+    await showV2Sheet<void>(
+      context,
+      title: '한마디 남기기',
+      builder: (ctx) => NoteComposeSheet(
+        onSubmit: (content, image) async {
+          await _api.addReview(pin['id'], content: content, image: image);
+          if (ctx.mounted) Navigator.pop(ctx);
         },
       ),
     );
-    contentCtrl.dispose();
-  }
-
-  Future<bool> _deletePin(Map<String, dynamic> pin) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('장소 삭제'),
-        content: const Text('연결된 MomentLoop가 있으면 장소 기록은 보관되고 지도에서만 사라져요.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('취소'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('삭제'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return false;
-    final response = await http.delete(
-      Uri.parse('${_auth.baseUrl}/api/map/${pin['id']}'),
-      headers: _jsonHeaders(includeAuth: true),
-    );
-    if (response.statusCode != 200) return false;
-    await _load();
-    return true;
   }
 
   Future<void> _sharePin(Map<String, dynamic> pin) async {
     final lat = placeDoubleForMap(pin['latitude']) ?? 0;
     final lng = placeDoubleForMap(pin['longitude']) ?? 0;
     final text = [
-      'Secret Base 비밀지도',
-      pin['place_name'] ?? '우리 장소',
-      '${_categoryEmojis[pin['category']] ?? '📍'} ${pin['category'] ?? '기타'}',
+      '비밀기지 비밀지도',
+      '${pin['place_name'] ?? '우리 장소'}',
+      '${mapCategoryEmojis[pin['category']] ?? '📍'} ${pin['category'] ?? '기타'}',
       'https://maps.google.com/?q=$lat,$lng',
     ].join('\n');
     await Clipboard.setData(ClipboardData(text: text));
-    _toast('공유 문구를 복사했어요');
+    _toast('장소 정보를 복사했어요');
   }
 
-  void _showDirectionsSheet(Map<String, dynamic> pin) {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => _SheetFrame(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 22),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 42,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: kMainLine,
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
-              Text('어떤 지도로 갈까요?', style: mainTitle(size: 24)),
-              const SizedBox(height: 4),
-              Text(
-                pin['place_name'] ?? '선택한 장소',
-                style: mainBody(
-                  size: 13,
-                  color: kMainMuted,
-                  weight: FontWeight.w700,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 16),
-              _MapAppTile(
-                icon: Icons.map_rounded,
-                title: '네이버지도',
-                subtitle: '대중교통/도보 길찾기 추천',
-                color: kMainSage,
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _launchDirections(pin, _DirectionsProvider.naver);
-                },
-              ),
-              const SizedBox(height: 9),
-              _MapAppTile(
-                icon: Icons.route_rounded,
-                title: '카카오맵',
-                subtitle: '차/대중교통/도보 선택이 쉬워요',
-                color: kMainHoney,
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _launchDirections(pin, _DirectionsProvider.kakao);
-                },
-              ),
-              const SizedBox(height: 9),
-              _MapAppTile(
-                icon: Icons.navigation_rounded,
-                title: 'TMAP',
-                subtitle: '차로 이동할 때 빠르게',
-                color: kMainSky,
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _launchDirections(pin, _DirectionsProvider.tmap);
-                },
-              ),
-              const SizedBox(height: 9),
-              _MapAppTile(
-                icon: Icons.public_rounded,
-                title: '웹 지도로 열기',
-                subtitle: '앱이 없어도 브라우저에서 확인',
-                color: kMainRose,
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _launchDirections(pin, _DirectionsProvider.web);
-                },
-              ),
-            ],
-          ),
-        ),
+  Future<void> _editPin(Map<String, dynamic> pin) async {
+    final id = pin['id'];
+    if (id == null) {
+      _toast('이 장소는 고칠 수 없어요', tone: V2Tone.err);
+      return;
+    }
+    final visited = pinStatus(pin) == 'visited';
+    var saved = false;
+    await showV2Sheet<void>(
+      context,
+      title: '장소 고치기',
+      subtitle: '${pin['place_name'] ?? ''}',
+      builder: (ctx) => EditPlaceSheet(
+        pin: pin,
+        baseUrl: _auth.baseUrl,
+        onSave: (r) async {
+          final fields = <String, dynamic>{
+            'memo': composePinMemo(r.memo, r.tags),
+            'emotion_tags': r.tags,
+            if (r.removeImage && r.newImage == null) 'media_url': '',
+            if (visited && r.rating > 0) 'rating': r.rating,
+            if (visited) 'visit_date': dateValue(r.date),
+          };
+          await _api.updatePin(id, fields: fields, newImage: r.newImage);
+          saved = true;
+          if (ctx.mounted) Navigator.pop(ctx);
+        },
+      ),
+    );
+    if (saved) {
+      await _load(quiet: true);
+      _toast('고쳤어요');
+    }
+    if (mounted) await _showDetail(pin);
+  }
+
+  Future<void> _deletePin(Map<String, dynamic> pin) async {
+    final ok = await showV2ConfirmDestructiveSheet(
+      context,
+      title: '이 장소를 지울까요?',
+      consequences: const [
+        '지도에서 장소가 사라져요',
+        '남긴 한마디와 여운도 함께 사라져요',
+        '연결해 둔 기록은 그대로 남아요',
+      ],
+      confirmLabel: '지우기',
+    );
+    if (!ok || !mounted) return;
+    try {
+      await _api.deletePin(pin['id']);
+      if (!mounted) return;
+      setState(() => _selectedId = null);
+      await _load(quiet: true);
+      _toast('장소를 지웠어요');
+    } on MapApiException {
+      _toast('지우지 못했어요. 다시 시도해 주세요.', tone: V2Tone.err);
+    }
+  }
+
+  // ── Visited / afterglow ────────────────────────────────────────────────────
+
+  Future<void> _markVisited(Map<String, dynamic> pin) async {
+    final token = _auth.token;
+    final pinId = placeIntForMap(pin['id']);
+    if (token == null || pinId == null) return;
+    final api = AfterglowApi(baseUrl: _auth.baseUrl, token: token);
+    try {
+      final visit = await api.createVisit(pinId);
+      await _load(quiet: true);
+      if (!mounted) return;
+      setState(() => _status = _status == 'wishlist' ? 'all' : _status);
+      _toast('다녀온 곳으로 바꿨어요');
+      await _showContribution(pin, visit);
+    } on AfterglowApiException {
+      _toast('다녀온 곳으로 바꾸지 못했어요. 다시 시도해 주세요.', tone: V2Tone.err);
+    } finally {
+      api.close();
+    }
+    if (mounted) await _showDetail(pin);
+  }
+
+  Future<void> _contributeFor(Map<String, dynamic> pin) async {
+    final token = _auth.token;
+    final pinId = placeIntForMap(pin['id']);
+    if (token == null || pinId == null) return;
+    final api = AfterglowApi(baseUrl: _auth.baseUrl, token: token);
+    try {
+      final state = await api.fetchForPin(pinId);
+      if (state.visit == null) {
+        _toast('다녀온 기록을 찾지 못했어요', tone: V2Tone.err);
+      } else if (mounted) {
+        await _showContribution(pin, state.visit!);
+      }
+    } catch (_) {
+      _toast('여운을 불러오지 못했어요. 다시 시도해 주세요.', tone: V2Tone.err);
+    } finally {
+      api.close();
+    }
+    if (mounted) await _showDetail(pin);
+  }
+
+  Future<void> _showContribution(
+    Map<String, dynamic> pin,
+    AfterglowVisit visit,
+  ) async {
+    final userId = _myId;
+    final token = _auth.token;
+    if (!mounted || userId == null || token == null) return;
+    final candidates = afterglowMomentCandidates(
+      pinId: visit.mapPinId,
+      visitDate: visit.visitDate,
+      userId: userId,
+      posts: _posts,
+    );
+    var leave = false;
+    final result = await showV2Sheet<AfterglowPickResult>(
+      context,
+      title: '우리의 여운 남기기',
+      subtitle: '${pin['place_name'] ?? ''}',
+      builder: (ctx) => AfterglowPickSheet(
+        candidates: candidates,
+        onLeaveMoment: () {
+          leave = true;
+          Navigator.pop(ctx);
+        },
+      ),
+    );
+    if (leave && mounted) {
+      _leaveMoment(pin);
+      return;
+    }
+    if (result == null) return;
+    final api = AfterglowApi(baseUrl: _auth.baseUrl, token: token);
+    try {
+      await api.contribute(
+        visitId: visit.id,
+        postId: result.postId,
+        caption: result.caption,
+        emotionTag: result.emotion,
+      );
+      _toast('우리의 여운에 한 장을 남겼어요');
+    } catch (_) {
+      _toast('여운을 저장하지 못했어요. 다시 시도해 주세요.', tone: V2Tone.err);
+    } finally {
+      api.close();
+    }
+  }
+
+  // ── Directions ─────────────────────────────────────────────────────────────
+
+  void _showDirections(Map<String, dynamic> pin) {
+    showV2Sheet<void>(
+      context,
+      title: '길찾기',
+      subtitle: '${pin['place_name'] ?? ''}',
+      builder: (ctx) => V2List(
+        children: [
+          for (final (provider, label, icon) in const [
+            (_Directions.naver, '네이버 지도', V2Icons.map),
+            (_Directions.kakao, '카카오맵', V2Icons.map),
+            (_Directions.tmap, '티맵', V2Icons.map),
+            (_Directions.web, '웹에서 열기', V2Icons.link),
+          ])
+            V2ListTile(
+              icon: icon,
+              title: label,
+              onTap: () {
+                Navigator.pop(ctx);
+                unawaited(_launchDirections(pin, provider));
+              },
+            ),
+        ],
       ),
     );
   }
 
   Future<void> _launchDirections(
     Map<String, dynamic> pin,
-    _DirectionsProvider provider,
+    _Directions provider,
   ) async {
     final lat = placeDoubleForMap(pin['latitude']) ?? 0;
     final lng = placeDoubleForMap(pin['longitude']) ?? 0;
-    final name = '${pin['place_name'] ?? '목적지'}';
-    final encodedName = Uri.encodeComponent(name);
+    final name = Uri.encodeComponent('${pin['place_name'] ?? '목적지'}');
     final fallback = Uri.parse(
       'https://www.google.com/maps/search/?api=1&query=$lat,$lng',
     );
-
     final uri = switch (provider) {
-      _DirectionsProvider.naver => Uri.parse(
-        'nmap://route/public?dlat=$lat&dlng=$lng&dname=$encodedName&appname=secretbase.cloud',
+      _Directions.naver => Uri.parse(
+        'nmap://route/public?dlat=$lat&dlng=$lng&dname=$name&appname=secretbase.cloud',
       ),
-      _DirectionsProvider.kakao => Uri.parse(
+      _Directions.kakao => Uri.parse(
         'kakaomap://route?ep=$lat,$lng&by=publictransit',
       ),
-      _DirectionsProvider.tmap => Uri.parse(
-        'tmap://route?goalname=$encodedName&goalx=$lng&goaly=$lat',
+      _Directions.tmap => Uri.parse(
+        'tmap://route?goalname=$name&goalx=$lng&goaly=$lat',
       ),
-      _DirectionsProvider.web => fallback,
+      _Directions.web => fallback,
     };
-
     try {
       final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
-      if (!opened && provider != _DirectionsProvider.web) {
+      if (!opened && provider != _Directions.web) {
         await launchUrl(fallback, mode: LaunchMode.externalApplication);
       }
     } catch (_) {
-      if (provider != _DirectionsProvider.web) {
+      try {
         await launchUrl(fallback, mode: LaunchMode.externalApplication);
-      } else {
-        _toast('지도를 열지 못했어요');
+      } catch (_) {
+        _toast('지도를 열지 못했어요', tone: V2Tone.err);
       }
     }
   }
 
-  void _toast(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          style: mainBody(color: Colors.white, weight: FontWeight.w700),
-        ),
-        duration: const Duration(milliseconds: 1200),
-      ),
-    );
-  }
+  // ── Lists ──────────────────────────────────────────────────────────────────
 
-  @override
-  Widget build(BuildContext context) {
-    final pins = _filteredPins;
-    final centerLatLng = pins.isNotEmpty
-        ? LatLng(
-            placeDoubleForMap(pins.first['latitude']) ?? 37.5665,
-            placeDoubleForMap(pins.first['longitude']) ?? 126.9780,
-          )
-        : _userLatLng ?? _koreaCenter;
-    final initialZoom = pins.isNotEmpty
-        ? 14.0
-        : (_userLatLng == null ? 6.5 : 14.0);
-
-    return Scaffold(
-      backgroundColor: kMainBg,
-      resizeToAvoidBottomInset: false,
-      body: LayoutBuilder(
-        builder: (context, constraints) => Stack(
-          children: [
-            _loading
-                ? const Center(
-                    child: CircularProgressIndicator(color: kMainRose),
-                  )
-                : FlutterMap(
-                    mapController: _mapController,
-                    options: MapOptions(
-                      initialCenter: centerLatLng,
-                      initialZoom: initialZoom,
-                      maxZoom: 18.0,
-                      minZoom: 3.0,
-                      onTap: (_, point) {
-                        setState(() {
-                          _tempSelectedLatLng = point;
-                          _tempSelectedName = null;
-                          _showSearchResults = false;
-                        });
-                        _mapController.move(point, _mapController.camera.zoom);
-                      },
-                    ),
-                    children: [
-                      TileLayer(
-                        urlTemplate: mapTileUrl,
-                        fallbackUrl: mapFallbackTileUrl,
-                        subdomains: const ['a', 'b', 'c'],
-                        userAgentPackageName: 'com.secretbase.app',
-                        errorTileCallback: (_, _, _) {
-                          if (mounted && !_mapTileError) {
-                            setState(() => _mapTileError = true);
-                          }
-                        },
-                      ),
-                      MarkerLayer(
-                        markers: [
-                          if (_userLatLng != null)
-                            Marker(
-                              point: _userLatLng!,
-                              width: 42,
-                              height: 42,
-                              child: const _UserLocationMarker(),
-                            ),
-                          ...pins.map((pin) {
-                            final lat =
-                                placeDoubleForMap(pin['latitude']) ?? 0.0;
-                            final lng =
-                                placeDoubleForMap(pin['longitude']) ?? 0.0;
-                            final category = pin['category'] ?? '기타';
-                            final emoji = _categoryEmojis[category] ?? '📍';
-                            final status = _pinStatus(pin);
-                            final isActive =
-                                _selectedPin != null &&
-                                _selectedPin!['id'] == pin['id'];
-
-                            return Marker(
-                              point: LatLng(lat, lng),
-                              width: isActive ? 66 : 48,
-                              height: isActive ? 66 : 48,
-                              child: GestureDetector(
-                                key: Key('map-pin-${pin['id']}'),
-                                onTap: () => _selectPin(pin),
-                                child: _PinBubble(
-                                  emoji: emoji,
-                                  status: status,
-                                  active: isActive,
-                                  size: isActive ? 58 : 44,
-                                ),
-                              ),
-                            );
-                          }),
-                          if (_tempSelectedLatLng != null)
-                            Marker(
-                              point: _tempSelectedLatLng!,
-                              width: 64,
-                              height: 64,
-                              child: const Icon(
-                                Icons.location_on_rounded,
-                                color: kMainRose,
-                                size: 52,
-                              ),
-                            ),
-                        ],
-                      ),
-                      RichAttributionWidget(
-                        attributions: [
-                          TextSourceAttribution(
-                            'OpenStreetMap contributors',
-                            onTap: () => launchUrl(
-                              Uri.parse(
-                                'https://www.openstreetmap.org/copyright',
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-            Positioned.fill(
-              child: IgnorePointer(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.center,
-                      colors: [
-                        kMainBg.withAlpha(215),
-                        kMainBg.withAlpha(55),
-                        Colors.transparent,
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (!widget.closeAsModal) ...[
-                      Row(
-                        children: [
-                          const BrandLogo(size: 34),
-                          const SizedBox(width: 9),
-                          Text(
-                            '우리 지도',
-                            style: mainTitle(size: 28, color: kMainRose),
-                          ),
-                          const Spacer(),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 11,
-                              vertical: 5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: kMainRoseSoft,
-                              borderRadius: BorderRadius.circular(99),
-                              border: Border.all(color: kMainLine),
-                            ),
-                            child: Text(
-                              '${_pins.length}곳',
-                              style: mainBody(
-                                size: 12,
-                                color: kMainRose,
-                                weight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    Row(
-                      children: [
-                        if (widget.closeAsModal) ...[
-                          _RoundIconButton(
-                            icon: Icons.close_rounded,
-                            onTap: () => Navigator.pop(context),
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                        Expanded(
-                          child: Container(
-                            height: 48,
-                            decoration: BoxDecoration(
-                              color: kMainPaper.withAlpha(245),
-                              borderRadius: BorderRadius.circular(26),
-                              border: Border.all(color: kMainLine),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: kMainRose.withAlpha(16),
-                                  blurRadius: 18,
-                                  offset: const Offset(0, 8),
-                                ),
-                              ],
-                            ),
-                            child: TextField(
-                              controller: _searchCtrl,
-                              onSubmitted: _searchAddress,
-                              decoration: InputDecoration(
-                                hintText: '장소 검색',
-                                hintStyle: mainBody(
-                                  size: 13,
-                                  color: kMainMuted,
-                                ),
-                                prefixIcon: const Icon(
-                                  Icons.search_rounded,
-                                  color: kMainRose,
-                                ),
-                                suffixIcon: _searchCtrl.text.isNotEmpty
-                                    ? IconButton(
-                                        icon: const Icon(
-                                          Icons.close_rounded,
-                                          size: 17,
-                                          color: kMainMuted,
-                                        ),
-                                        onPressed: () {
-                                          _searchCtrl.clear();
-                                          setState(() {
-                                            _searchResults.clear();
-                                            _showSearchResults = false;
-                                          });
-                                        },
-                                      )
-                                    : null,
-                                border: InputBorder.none,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  vertical: 13,
-                                ),
-                              ),
-                              style: mainBody(size: 14, color: kMainInk),
-                              onChanged: (val) {
-                                setState(() {});
-                                if (val.isEmpty) {
-                                  setState(() {
-                                    _searchResults.clear();
-                                    _showSearchResults = false;
-                                  });
-                                }
-                              },
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        _RoundIconButton(
-                          icon: _locationDenied
-                              ? Icons.location_disabled_rounded
-                              : (_locatingUser
-                                    ? Icons.gps_fixed_rounded
-                                    : Icons.my_location_rounded),
-                          onTap: () => _requestUserLocation(moveMap: true),
-                        ),
-                        const SizedBox(width: 8),
-                        _RoundIconButton(
-                          icon: Icons.format_list_bulleted_rounded,
-                          onTap: _showListSheet,
-                        ),
-                      ],
-                    ),
-                    if (_showSearchResults) ...[
-                      const SizedBox(height: 8),
-                      _SearchResultPanel(
-                        isSearching: _isSearching,
-                        failed: _searchFailed,
-                        results: _searchResults,
-                        onTap: (item) {
-                          final pos = LatLng(item['lat'], item['lon']);
-                          setState(() {
-                            _tempSelectedLatLng = pos;
-                            _tempSelectedName =
-                                item['name'] as String? ??
-                                item['display_name'].toString().split(',')[0];
-                            _tempSelectedCategory = item['category'] as String?;
-                            _showSearchResults = false;
-                            _searchCtrl.text = _tempSelectedName ?? '';
-                          });
-                          _mapController.move(pos, 15.0);
-                        },
-                      ),
-                    ],
-                    if (_mapLoadError != null || _mapTileError) ...[
-                      const SizedBox(height: 8),
-                      _MapFallbackBanner(
-                        message: _mapTileError
-                            ? '지도를 불러올 수 없어요'
-                            : _mapLoadError!,
-                        detail: _mapTileError
-                            ? '장소 목록과 검색은 계속 사용할 수 있어요.'
-                            : '장소 검색이나 목록에서 다음 행동을 선택해보세요.',
-                        onRetry: _load,
-                      ),
-                    ],
-                    if (_locationDenied) ...[
-                      const SizedBox(height: 8),
-                      const _MapInfoBanner(
-                        icon: Icons.location_disabled_outlined,
-                        text: '위치 권한 없이도 장소 검색과 저장을 사용할 수 있어요.',
-                      ),
-                    ],
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: Row(
-                              children: [
-                                _StatusChip(
-                                  label: '전체',
-                                  count: _pins.length,
-                                  selected: _activeStatus == 'all',
-                                  color: kMainInk,
-                                  onTap: () => _setStatus('all'),
-                                ),
-                                _StatusChip(
-                                  label: '다녀온 곳',
-                                  count: _visitedCount,
-                                  selected: _activeStatus == 'visited',
-                                  color: kMainRose,
-                                  onTap: () => _setStatus('visited'),
-                                ),
-                                _StatusChip(
-                                  label: '가고 싶은 곳',
-                                  count: _wishlistCount,
-                                  selected: _activeStatus == 'wishlist',
-                                  color: kMainLilac,
-                                  onTap: () => _setStatus('wishlist'),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        _buildFilterButton(),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            if (_sheetExtent < 0.6)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: _sheetExtent * constraints.maxHeight + 12,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_tempSelectedLatLng != null)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: MainCard(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 14,
-                          ),
-                          color: kMainPaper.withAlpha(246),
-                          borderColor: kMainRose.withAlpha(90),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.add_location_alt_rounded,
-                                color: kMainRose,
-                              ),
-                              const SizedBox(width: 9),
-                              Expanded(
-                                child: Text(
-                                  _tempSelectedName == null
-                                      ? '선택한 위치 저장하기'
-                                      : _tempSelectedName!,
-                                  style: mainBody(
-                                    size: 13,
-                                    color: kMainInk,
-                                    weight: FontWeight.w800,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              TextButton(
-                                onPressed: () => setState(() {
-                                  _tempSelectedLatLng = null;
-                                  _tempSelectedName = null;
-                                  _tempSelectedCategory = null;
-                                }),
-                                child: Text(
-                                  '취소',
-                                  style: mainBody(size: 12, color: kMainMuted),
-                                ),
-                              ),
-                              FilledButton(
-                                onPressed: () => _showAddDialog(
-                                  _tempSelectedLatLng!,
-                                  initialName: _tempSelectedName,
-                                  initialCategory: _tempSelectedCategory,
-                                ),
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: kMainRose,
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                  ),
-                                ),
-                                child: Text(
-                                  '저장',
-                                  style: mainBody(
-                                    size: 12,
-                                    color: Colors.white,
-                                    weight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    else if (pins.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 18),
-                        child: MainCard(
-                          radius: 26,
-                          color: kMainPaper.withAlpha(248),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                '아직 우리 지도가 비어 있어요',
-                                style: mainTitle(size: 22, color: kMainRose),
-                              ),
-                              const SizedBox(height: 5),
-                              Text(
-                                '검색하거나 지도 위를 눌러 첫 장소를 남겨봐요',
-                                style: mainBody(size: 12, color: kMainMuted),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 10),
-                              Text(
-                                '장소 검색 → 결과 선택 → 저장 순서로 기록할 수 있어요.',
-                                style: mainBody(size: 11, color: kMainMuted),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            if (_tempSelectedLatLng == null && _sheetExtent < 0.6)
-              Positioned(
-                right: 16,
-                bottom: _sheetExtent * constraints.maxHeight + 12,
-                child: FloatingActionButton(
-                  key: const Key('map-add-fab'),
-                  onPressed: () {
-                    final center = _mapController.camera.center;
-                    _showAddDialog(center);
-                  },
-                  backgroundColor: kMainRose,
-                  foregroundColor: Colors.white,
-                  elevation: 4,
-                  shape: const CircleBorder(),
-                  child: const Icon(Icons.add_location_alt_outlined),
-                ),
-              ),
-            _buildSheet(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _sheetHandle() => Center(
-    key: const Key('map-sheet-handle'),
-    child: Container(
-      width: 42,
-      height: 4,
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: kMainLine,
-        borderRadius: BorderRadius.circular(99),
-      ),
-    ),
-  );
-
-  Widget _panelCloseButton(String label) => Align(
-    alignment: Alignment.centerRight,
-    child: TextButton.icon(
-      onPressed: _closePanel,
-      icon: const Icon(Icons.format_list_bulleted_rounded, size: 16),
-      label: Text(label),
-      style: TextButton.styleFrom(foregroundColor: kMainMuted),
-    ),
-  );
-
-  Widget _buildSheet() {
-    return NotificationListener<DraggableScrollableNotification>(
-      onNotification: (n) {
-        if ((n.extent - _sheetExtent).abs() > 0.005) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) setState(() => _sheetExtent = n.extent);
-          });
+  void _showList() {
+    final pins = _filtered;
+    showV2Sheet<void>(
+      context,
+      title: '우리 장소 ${pins.length}곳',
+      builder: (ctx) {
+        if (pins.isEmpty) {
+          return const V2EmptyState(
+            illustration: V2SceneIllustration(V2Scene.map),
+            title: '표시할 장소가 없어요',
+            body: '필터를 바꾸거나, 검색하거나 지도를 눌러 장소를 추가해 보세요.',
+          );
         }
-        return false;
-      },
-      child: DraggableScrollableSheet(
-        controller: _sheetCtrl,
-        initialChildSize: _sheetCollapsed,
-        minChildSize: _sheetCollapsed,
-        maxChildSize: _sheetExpanded,
-        snap: true,
-        snapSizes: const [_sheetHalf],
-        builder: (context, scrollController) => SizedBox.expand(
-          key: const Key('map-sheet'),
-          child: KeyedSubtree(
-            key: ValueKey(_panelSeq),
-            child:
-                _panel?.call(scrollController) ??
-                _buildListPanel(scrollController),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildListPanel(ScrollController controller) {
-    final pins = _filteredPins;
-    return _SheetFrame(
-      child: ListView(
-        controller: controller,
-        padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
-        children: [
-          _sheetHandle(),
-          Row(
-            children: [
-              Expanded(child: Text('장소 모아보기', style: mainTitle(size: 24))),
-              Text(
-                '${pins.length}곳',
-                style: mainBody(
-                  size: 13,
-                  color: kMainMuted,
-                  weight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (pins.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: Center(
-                child: Text(
-                  '조건에 맞는 장소가 없어요',
-                  style: mainBody(size: 13, color: kMainMuted),
-                ),
-              ),
-            )
-          else
-            for (final pin in pins)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: GestureDetector(
-                  onTap: () => _selectPin(pin),
-                  child: _ListTilePin(pin: pin),
-                ),
-              ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFilterButton() {
-    final active = _activeCategory != null;
-    return GestureDetector(
-      key: const Key('map-filter-button'),
-      onTap: _showCategoryPicker,
-      child: AnimatedContainer(
-        key: active ? const Key('map-filter-active') : null,
-        duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        decoration: BoxDecoration(
-          color: active ? kMainPeach : kMainPaper.withAlpha(235),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: active ? kMainPeach : kMainLine.withAlpha(180),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
+        return V2List(
           children: [
-            Text(
-              active ? '${_categoryEmojis[_activeCategory]} 필터' : '필터',
-              style: mainBody(
-                size: 12,
-                color: active ? Colors.white : kMainInk,
-                weight: active ? FontWeight.w800 : FontWeight.w600,
+            for (final pin in pins)
+              V2ListTile(
+                key: Key('map_list_${pin['id']}'),
+                icon: V2Icons.location,
+                tone: pinStatus(pin) == 'visited' ? V2Tone.ok : V2Tone.lilac,
+                title: '${pin['place_name'] ?? ''}',
+                subtitle:
+                    '${pinStatus(pin) == 'visited' ? '다녀온 곳' : '가고 싶은 곳'} · ${pin['category'] ?? '기타'}',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  unawaited(_openPin(pin));
+                },
               ),
-            ),
-            Icon(
-              Icons.arrow_drop_down_rounded,
-              size: 18,
-              color: active ? Colors.white : kMainInk,
-            ),
           ],
-        ),
-      ),
+        );
+      },
     );
   }
 
-  Future<void> _showCategoryPicker() async {
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => _SheetFrame(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('카테고리', style: mainTitle(size: 22)),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final cat in <String?>[null, ..._categories])
-                    _ChoiceChip(
-                      label: cat == null
-                          ? '전체'
-                          : '${_categoryEmojis[cat]} $cat',
-                      selected: _activeCategory == cat,
-                      onTap: () => Navigator.pop(ctx, cat ?? ''),
-                    ),
-                ],
-              ),
-            ],
+  Future<void> _pickCategory() async {
+    final picked = await showV2Sheet<String>(
+      context,
+      title: '분류',
+      builder: (ctx) => V2List(
+        children: [
+          V2ListTile(
+            icon: V2Icons.filter,
+            title: '모든 분류',
+            onTap: () => Navigator.pop(ctx, ''),
           ),
-        ),
+          for (final c in mapCategories)
+            V2ListTile(
+              title: '${mapCategoryEmojis[c]} $c',
+              trailing: _category == c
+                  ? const Icon(V2Icons.ok, color: V2Colors.rose600)
+                  : null,
+              onTap: () => Navigator.pop(ctx, c),
+            ),
+        ],
       ),
     );
     if (picked == null || !mounted) return;
-    setState(() {
-      _activeCategory = picked.isEmpty ? null : picked;
-      _tempSelectedLatLng = null;
-      _tempSelectedName = null;
-    });
-    _moveToFirstFiltered();
+    setState(() => _category = picked.isEmpty ? null : picked);
   }
 
-  void _setStatus(String status) {
-    setState(() {
-      _activeStatus = status;
-      _tempSelectedLatLng = null;
-      _tempSelectedName = null;
-    });
-    _moveToFirstFiltered();
-  }
-}
-
-class _PinBubble extends StatelessWidget {
-  final String emoji;
-  final String status;
-  final bool active;
-  final double size;
-
-  const _PinBubble({
-    required this.emoji,
-    required this.status,
-    required this.active,
-    required this.size,
-  });
+  // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final isVisited = status == 'visited';
-    final color = isVisited ? kMainRose : kMainLilac;
-    final bg = isVisited ? kMainRoseSoft : kMainLilacSoft;
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: active ? color : bg,
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: active ? Colors.white : color.withAlpha(170),
-          width: active ? 3 : 2,
+    final p = V2Palette.of(context);
+    return V2Theme(
+      child: Scaffold(
+        backgroundColor: p.bg,
+        appBar: V2Header(
+          title: '비밀지도',
+          showBack: widget.closeAsModal ? true : null,
+          backTooltip: widget.closeAsModal ? '닫기' : '뒤로 가기',
         ),
-        boxShadow: [
-          BoxShadow(
-            color: color.withAlpha(active ? 88 : 40),
-            blurRadius: active ? 18 : 10,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Center(
-        child: Text(
-          emoji,
-          style: TextStyle(fontSize: active ? size * 0.42 : size * 0.36),
-        ),
+        body: _body(p),
       ),
     );
   }
-}
 
-class _UserLocationMarker extends StatelessWidget {
-  const _UserLocationMarker();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: kMainSky.withAlpha(45),
-        shape: BoxShape.circle,
-      ),
-      child: Center(
-        child: Container(
-          width: 18,
-          height: 18,
-          decoration: BoxDecoration(
-            color: kMainSky,
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 3),
-            boxShadow: [
-              BoxShadow(
-                color: kMainSky.withAlpha(90),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
+  Widget _body(V2Palette p) {
+    if (_loading && _pins.isEmpty && _error == null) {
+      return const Padding(
+        padding: EdgeInsets.all(V2Space.page),
+        child: V2Shimmer(
+          child: V2SkeletonBox(height: 420, radius: V2Radius.card),
         ),
-      ),
-    );
-  }
-}
-
-class _RoundIconButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-
-  const _RoundIconButton({required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: kMainPaper.withAlpha(245),
-      shape: const CircleBorder(),
-      elevation: 3,
-      shadowColor: kMainRose.withAlpha(60),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: kMainLine.withAlpha(180)),
-          ),
-          child: Icon(icon, size: 19, color: kMainRose),
-        ),
-      ),
-    );
-  }
-}
-
-class _StatusChip extends StatelessWidget {
-  final String label;
-  final int count;
-  final bool selected;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _StatusChip({
-    required this.label,
-    required this.count,
-    required this.selected,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 7),
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: selected ? color : kMainPaper.withAlpha(235),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: selected ? color : kMainLine.withAlpha(180),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: color.withAlpha(selected ? 34 : 8),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                label,
-                style: mainBody(
-                  size: 12,
-                  color: selected ? Colors.white : kMainInk,
-                  weight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(width: 5),
-              Text(
-                '$count',
-                style: mainBody(
-                  size: 11,
-                  color: selected ? Colors.white.withAlpha(220) : kMainMuted,
-                  weight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MapFallbackBanner extends StatelessWidget {
-  final String message;
-  final String detail;
-  final VoidCallback onRetry;
-
-  const _MapFallbackBanner({
-    required this.message,
-    required this.detail,
-    required this.onRetry,
-  });
-
-  @override
-  Widget build(BuildContext context) => MainCard(
-    color: kMainPaper.withAlpha(248),
-    borderColor: kMainPeach.withAlpha(130),
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-    child: Row(
-      children: [
-        const Icon(Icons.map_outlined, color: kMainPeach),
-        const SizedBox(width: 9),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(message, style: mainBody(weight: FontWeight.w800)),
-              Text(detail, style: mainBody(size: 11, color: kMainMuted)),
-            ],
-          ),
-        ),
-        TextButton(onPressed: onRetry, child: const Text('다시 시도')),
-      ],
-    ),
-  );
-}
-
-class _MapInfoBanner extends StatelessWidget {
-  final IconData icon;
-  final String text;
-
-  const _MapInfoBanner({required this.icon, required this.text});
-
-  @override
-  Widget build(BuildContext context) => MainCard(
-    color: kMainPaper.withAlpha(248),
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-    child: Row(
-      children: [
-        Icon(icon, color: kMainSky),
-        const SizedBox(width: 9),
-        Expanded(
-          child: Text(text, style: mainBody(size: 12, color: kMainSub)),
-        ),
-      ],
-    ),
-  );
-}
-
-class _SearchResultPanel extends StatelessWidget {
-  final bool isSearching;
-  final bool failed;
-  final List<Map<String, dynamic>> results;
-  final ValueChanged<Map<String, dynamic>> onTap;
-
-  const _SearchResultPanel({
-    required this.isSearching,
-    required this.failed,
-    required this.results,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return MainCard(
-      padding: EdgeInsets.zero,
-      color: kMainPaper.withAlpha(250),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxHeight: 230),
-        child: isSearching
-            ? const Padding(
-                padding: EdgeInsets.all(20),
-                child: Center(
-                  child: CircularProgressIndicator(color: kMainRose),
-                ),
-              )
-            : results.isEmpty
-            ? Padding(
-                padding: const EdgeInsets.all(18),
-                child: Text(
-                  failed
-                      ? '검색을 불러오지 못했어요. 장소명을 다시 확인하거나 지도에서 위치를 눌러보세요.'
-                      : '검색 결과가 없어요',
-                  style: mainBody(size: 13, color: kMainMuted),
-                ),
-              )
-            : ListView.separated(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                shrinkWrap: true,
-                itemCount: results.length,
-                separatorBuilder: (_, index) =>
-                    const Divider(height: 1, color: kMainLine),
-                itemBuilder: (ctx, idx) {
-                  final item = results[idx];
-                  final address =
-                      '${item['roadAddress'] ?? item['address'] ?? ''}';
-                  final provider = _placeProviderLabel(item['provider']);
-                  final distance = _formatDistanceMeters(
-                    item['distanceMeters'],
-                  );
-                  return ListTile(
-                    dense: true,
-                    leading: const Icon(Icons.place_outlined, color: kMainRose),
-                    title: Text(
-                      item['name'] ?? item['display_name'] ?? '',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: mainBody(
-                        size: 13,
-                        color: kMainInk,
-                        weight: FontWeight.w700,
-                      ),
-                    ),
-                    subtitle: Text(
-                      [
-                        if (address.isNotEmpty) address,
-                        ?distance,
-                        if (provider.isNotEmpty) provider,
-                      ].join(' · '),
-                      style: mainBody(size: 11, color: kMainMuted),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    onTap: () => onTap(item),
-                  );
-                },
-              ),
-      ),
-    );
-  }
-}
-
-class _SheetFrame extends StatelessWidget {
-  final Widget child;
-
-  const _SheetFrame({required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: kMainPaper,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      child: SafeArea(top: false, child: child),
-    );
-  }
-}
-
-class _StatusSegment extends StatelessWidget {
-  final String value;
-  final ValueChanged<String> onChanged;
-
-  const _StatusSegment({required this.value, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: kMainPaperSoft,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: kMainLine),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _SegmentButton(
-              label: '다녀온 곳',
-              icon: Icons.favorite_rounded,
-              selected: value == 'visited',
-              color: kMainRose,
-              onTap: () => onChanged('visited'),
-            ),
-          ),
-          Expanded(
-            child: _SegmentButton(
-              label: '가고 싶은 곳',
-              icon: Icons.bookmark_rounded,
-              selected: value == 'wishlist',
-              color: kMainLilac,
-              onTap: () => onChanged('wishlist'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SegmentButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _SegmentButton({
-    required this.label,
-    required this.icon,
-    required this.selected,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: selected ? color : Colors.transparent,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 16, color: selected ? Colors.white : color),
-            const SizedBox(width: 5),
-            Text(
-              label,
-              style: mainBody(
-                size: 12,
-                color: selected ? Colors.white : kMainInk,
-                weight: FontWeight.w900,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SoftTextField extends StatelessWidget {
-  final TextEditingController controller;
-  final String hintText;
-  final int maxLines;
-  final IconData? prefixIcon;
-
-  const _SoftTextField({
-    required this.controller,
-    required this.hintText,
-    this.maxLines = 1,
-    this.prefixIcon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      maxLines: maxLines,
-      decoration: InputDecoration(
-        hintText: hintText,
-        prefixIcon: prefixIcon == null
-            ? null
-            : Icon(prefixIcon, color: kMainRose, size: 20),
-        filled: true,
-        fillColor: kMainPaperSoft,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: kMainRose),
-        ),
-        hintStyle: mainBody(size: 13, color: kMainMuted),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 13,
-        ),
-      ),
-      style: mainBody(size: 14, color: kMainInk),
-    );
-  }
-}
-
-class _ChoiceChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _ChoiceChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? kMainPeach : kMainPaperSoft,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: selected ? kMainPeach : kMainLine),
-        ),
-        child: Text(
-          label,
-          style: mainBody(
-            size: 12,
-            color: selected ? Colors.white : kMainInk,
-            weight: selected ? FontWeight.w800 : FontWeight.w600,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DatePickerTile extends StatelessWidget {
-  final DateTime date;
-  final String label;
-  final VoidCallback onPick;
-
-  const _DatePickerTile({
-    required this.date,
-    required this.label,
-    required this.onPick,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onPick,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-        decoration: BoxDecoration(
-          color: kMainPaperSoft,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: kMainLine),
-        ),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.calendar_today_rounded,
-              color: kMainRose,
-              size: 18,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: mainBody(
-                size: 12,
-                color: kMainMuted,
-                weight: FontWeight.w800,
-              ),
-            ),
-            const Spacer(),
-            Text(
-              _dateLabel(date),
-              style: mainBody(
-                size: 13,
-                color: kMainInk,
-                weight: FontWeight.w800,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _RatingPicker extends StatelessWidget {
-  final int rating;
-  final ValueChanged<int> onChanged;
-
-  const _RatingPicker({required this.rating, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '우리 온도',
-          style: mainBody(size: 12, color: kMainMuted, weight: FontWeight.w800),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: List.generate(5, (i) {
-            final star = i + 1;
-            return GestureDetector(
-              onTap: () => onChanged(star),
-              child: Padding(
-                padding: const EdgeInsets.only(right: 5),
-                child: Icon(
-                  Icons.star_rounded,
-                  color: star <= rating ? kMainHoney : kMainLine,
-                  size: 30,
-                ),
-              ),
-            );
-          }),
-        ),
-      ],
-    );
-  }
-}
-
-class _EmotionPicker extends StatelessWidget {
-  final Set<String> selectedTags;
-  final ValueChanged<String> onToggle;
-
-  const _EmotionPicker({required this.selectedTags, required this.onToggle});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '감정 태그',
-          style: mainBody(size: 12, color: kMainMuted, weight: FontWeight.w800),
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: _emotionTags
-              .map(
-                (tag) => _ChoiceChip(
-                  label: tag,
-                  selected: selectedTags.contains(tag),
-                  onTap: () => onToggle(tag),
-                ),
-              )
-              .toList(),
-        ),
-      ],
-    );
-  }
-}
-
-class _MiniPill extends StatelessWidget {
-  final String label;
-  final Color color;
-  final Color backgroundColor;
-
-  const _MiniPill({
-    required this.label,
-    required this.color,
-    required this.backgroundColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Text(
-        label,
-        style: mainBody(
-          size: 10.5,
-          color: color,
-          weight: FontWeight.w900,
-          height: 1.1,
-        ),
-      ),
-    );
-  }
-}
-
-class _DetailBlock extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final Widget child;
-
-  const _DetailBlock({
-    required this.icon,
-    required this.title,
-    required this.child,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-        color: kMainPaperSoft,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: kMainLine.withAlpha(170)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 16, color: kMainRose),
-              const SizedBox(width: 6),
-              Text(
-                title,
-                style: mainBody(
-                  size: 12,
-                  color: kMainMuted,
-                  weight: FontWeight.w900,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 9),
-          child,
-        ],
-      ),
-    );
-  }
-}
-
-class _ActionButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  const _ActionButton({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: onTap,
-      icon: Icon(icon, size: 16),
-      label: Text(
-        label,
-        style: mainBody(size: 12, color: kMainInk, weight: FontWeight.w800),
-      ),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: kMainInk,
-        side: const BorderSide(color: kMainLine),
-        padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      ),
-    );
-  }
-}
-
-class _LinkedMemorySummary extends StatelessWidget {
-  final List<Map<String, dynamic>> posts;
-  final bool isVisited;
-
-  const _LinkedMemorySummary({required this.posts, required this.isVisited});
-
-  @override
-  Widget build(BuildContext context) {
-    if (posts.isEmpty) {
-      return Row(
-        children: [
-          _MemoryDot(color: kMainRoseSoft, icon: Icons.favorite_rounded),
-          const SizedBox(width: 8),
-          _MemoryDot(color: kMainSkySoft, icon: Icons.image_outlined),
-          const SizedBox(width: 8),
-          _MemoryDot(
-            color: kMainHoneySoft,
-            icon: Icons.chat_bubble_outline_rounded,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              isVisited
-                  ? '같은 날 MomentLoop 기록이 아직 없어요'
-                  : '다녀온 뒤 MomentLoop 기록과 이어져요',
-              style: mainBody(size: 12, color: kMainMuted),
-            ),
-          ),
-        ],
       );
     }
+    final error = _error;
+    if (error != null && _pins.isEmpty) {
+      if (error.unpaired) {
+        return V2EmptyState.unpaired(
+          body: '상대와 연결하면 둘만의 지도를 함께 채울 수 있어요.',
+          onAction: () => Navigator.of(context).popUntil((r) => r.isFirst),
+        );
+      }
+      return error.offline
+          ? V2ErrorState.offline(onRetry: _load)
+          : V2ErrorState(
+              title: '지도를 불러오지 못했어요',
+              body: '잠시 후 다시 시도해 주세요.',
+              onRetry: _load,
+            );
+    }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final pins = _filtered;
+    final points = [for (final pin in _pins) ?_pinPoint(pin)];
+    final center = pins.isNotEmpty
+        ? (_pinPoint(pins.first) ?? koreaCenter)
+        : (_user ?? koreaCenter);
+
+    return Stack(
       children: [
-        Row(
+        FlutterMap(
+          mapController: _mapController,
+          options: MapOptions(
+            initialCenter: center,
+            initialZoom: pins.isNotEmpty ? 14 : (_user == null ? 6.5 : 14),
+            initialCameraFit: points.length >= 2
+                ? CameraFit.coordinates(
+                    coordinates: points,
+                    padding: const EdgeInsets.fromLTRB(48, 150, 48, 120),
+                    maxZoom: 15,
+                  )
+                : null,
+            maxZoom: 18,
+            minZoom: 3,
+            onTap: (_, point) {
+              setState(() => _showResults = false);
+              FocusManager.instance.primaryFocus?.unfocus();
+              _openAdd(point);
+            },
+          ),
           children: [
-            _MemoryDot(color: kMainRoseSoft, icon: Icons.auto_stories_rounded),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'MomentLoop 기록 ${posts.length}개와 연결됐어요',
-                style: mainBody(
-                  size: 12.5,
-                  color: kMainInk,
-                  weight: FontWeight.w900,
-                ),
-              ),
+            TileLayer(
+              urlTemplate: mapTileUrl,
+              fallbackUrl: mapFallbackTileUrl,
+              subdomains: const ['a', 'b', 'c'],
+              userAgentPackageName: 'com.secretbase.app',
+              errorTileCallback: (_, _, _) {
+                if (mounted && !_tileError) setState(() => _tileError = true);
+              },
             ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        ...posts.take(3).map((post) {
-          final caption = '${post['caption'] ?? ''}'.trim();
-          final mediaType = '${post['media_type'] ?? 'text'}';
-          final date = _formattedDate(post['taken_at'] ?? post['captured_at']);
-          final icon = switch (mediaType) {
-            'image' => Icons.image_outlined,
-            'video' => Icons.play_circle_outline_rounded,
-            _ => Icons.notes_rounded,
-          };
-
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(icon, size: 16, color: kMainRose),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    [
-                      ?date,
-                      if (caption.isNotEmpty) caption else '사진/영상 기록',
-                    ].join(' · '),
-                    style: mainBody(size: 12, color: kMainSub, height: 1.35),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+            MarkerLayer(
+              markers: [
+                if (_user != null)
+                  Marker(
+                    point: _user!,
+                    width: 28,
+                    height: 28,
+                    child: const _UserDot(),
+                  ),
+                for (final pin in pins)
+                  if (_pinPoint(pin) != null)
+                    Marker(
+                      point: _pinPoint(pin)!,
+                      width: 56,
+                      height: 56,
+                      child: _PinMarker(
+                        key: Key('map-pin-${pin['id']}'),
+                        label:
+                            '${pin['place_name'] ?? '장소'}, ${pinStatus(pin) == 'visited' ? '다녀온 곳' : '가고 싶은 곳'}',
+                        emoji: mapCategoryEmojis[pin['category']] ?? '📍',
+                        visited: pinStatus(pin) == 'visited',
+                        active:
+                            _selectedId != null &&
+                            '$_selectedId' == '${pin['id']}',
+                        onTap: () => _openPin(pin),
+                      ),
+                    ),
+                if (_temp != null)
+                  Marker(
+                    point: _temp!,
+                    width: 48,
+                    height: 48,
+                    child: const Icon(
+                      Icons.location_on_rounded,
+                      color: V2Colors.rose600,
+                      size: 44,
+                    ),
+                  ),
+              ],
+            ),
+            RichAttributionWidget(
+              attributions: [
+                TextSourceAttribution(
+                  '© OpenStreetMap contributors',
+                  onTap: () => launchUrl(
+                    Uri.parse('https://www.openstreetmap.org/copyright'),
                   ),
                 ),
               ],
             ),
-          );
-        }),
+          ],
+        ),
+        Positioned(
+          left: V2Space.x4,
+          right: V2Space.x4,
+          top: V2Space.x3,
+          child: _overlay(p),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 30,
+          child: Center(child: _listHandle(pins.length)),
+        ),
       ],
     );
   }
-}
 
-class _MapAppTile extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _MapAppTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: kMainPaperSoft,
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Container(
-          padding: const EdgeInsets.all(13),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: kMainLine.withAlpha(170)),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: color.withAlpha(28),
-                  borderRadius: BorderRadius.circular(15),
+  Widget _overlay(V2Palette p) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Material(
+                color: p.surface,
+                elevation: 3,
+                shadowColor: V2Colors.scrim,
+                borderRadius: BorderRadius.circular(V2Radius.button),
+                child: TextField(
+                  key: const Key('map_search'),
+                  controller: _searchCtrl,
+                  textInputAction: TextInputAction.search,
+                  onChanged: _onSearchChanged,
+                  onSubmitted: _search,
+                  style: V2Text.body.copyWith(color: p.ink),
+                  decoration: InputDecoration(
+                    hintText: '장소나 주소를 검색해요',
+                    prefixIcon: const Icon(V2Icons.search),
+                    suffixIcon: _searchCtrl.text.isEmpty
+                        ? null
+                        : V2IconButton(
+                            icon: V2Icons.close,
+                            tooltip: '검색어 지우기',
+                            onPressed: () {
+                              _searchCtrl.clear();
+                              setState(() {
+                                _showResults = false;
+                                _results = [];
+                              });
+                            },
+                          ),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    filled: false,
+                  ),
                 ),
-                child: Icon(icon, color: color, size: 21),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: mainBody(
-                        size: 14,
-                        color: kMainInk,
-                        weight: FontWeight.w900,
+            ),
+            const SizedBox(width: V2Space.x2),
+            Material(
+              color: p.surface,
+              elevation: 3,
+              shadowColor: V2Colors.scrim,
+              shape: const CircleBorder(),
+              child: _locating
+                  ? const SizedBox(
+                      width: V2Space.tap,
+                      height: V2Space.tap,
+                      child: Padding(
+                        padding: EdgeInsets.all(12),
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       ),
+                    )
+                  : V2IconButton(
+                      key: const Key('map_locate'),
+                      icon: V2Icons.myLocation,
+                      tooltip: '내 위치로 이동',
+                      onPressed: _locate,
                     ),
-                    const SizedBox(height: 2),
+            ),
+          ],
+        ),
+        if (_showResults) ...[
+          const SizedBox(height: V2Space.x2),
+          _resultsPanel(p),
+        ] else ...[
+          const SizedBox(height: V2Space.x2),
+          SizedBox(
+            height: 44,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                V2Chip(
+                  key: const Key('map_chip_all'),
+                  label: '전체 ${_pins.length}',
+                  selected: _status == 'all',
+                  onTap: () => setState(() => _status = 'all'),
+                ),
+                const SizedBox(width: V2Space.x2),
+                V2Chip(
+                  key: const Key('map_chip_visited'),
+                  label: '다녀온 곳 ${_count('visited')}',
+                  selected: _status == 'visited',
+                  onTap: () => setState(() => _status = 'visited'),
+                ),
+                const SizedBox(width: V2Space.x2),
+                V2Chip(
+                  key: const Key('map_chip_wishlist'),
+                  label: '가고 싶은 곳 ${_count('wishlist')}',
+                  selected: _status == 'wishlist',
+                  onTap: () => setState(() => _status = 'wishlist'),
+                ),
+                const SizedBox(width: V2Space.x2),
+                V2Chip(
+                  key: const Key('map_chip_category'),
+                  label: _category == null
+                      ? '분류'
+                      : '${mapCategoryEmojis[_category]} $_category',
+                  selected: _category != null,
+                  icon: V2Icons.filter,
+                  onTap: _pickCategory,
+                ),
+              ],
+            ),
+          ),
+        ],
+        if (_locationNotice != null) ...[
+          const SizedBox(height: V2Space.x2),
+          V2Banner(
+            tone: V2BannerTone.warn,
+            message: _locationNotice!,
+            actionLabel: '설정 열기',
+            onAction: () => Geolocator.openAppSettings(),
+            onDismiss: () => setState(() => _locationNotice = null),
+          ),
+        ],
+        if (_tileError) ...[
+          const SizedBox(height: V2Space.x2),
+          V2Banner(
+            tone: V2BannerTone.warn,
+            message: '지도 이미지를 모두 불러오지 못했어요',
+            actionLabel: '다시 시도',
+            onAction: () => _load(),
+            onDismiss: () => setState(() => _tileError = false),
+          ),
+        ],
+        if (_error != null && _pins.isNotEmpty) ...[
+          const SizedBox(height: V2Space.x2),
+          V2Banner(
+            tone: V2BannerTone.warn,
+            message: '최신 장소를 불러오지 못했어요',
+            actionLabel: '다시 시도',
+            onAction: () => _load(),
+          ),
+        ],
+        if (_pins.isEmpty && !_showResults) ...[
+          const SizedBox(height: V2Space.x2),
+          const V2Banner(
+            key: Key('map_empty_hint'),
+            tone: V2BannerTone.info,
+            title: '아직 저장한 장소가 없어요',
+            message: '검색하거나 지도를 눌러 첫 장소를 남겨 보세요.',
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _resultsPanel(V2Palette p) {
+    final Widget content;
+    if (_searching) {
+      content = const Padding(
+        padding: EdgeInsets.all(V2Space.x4),
+        child: V2Shimmer(child: V2SkeletonLine(width: 220)),
+      );
+    } else if (_searchFailed) {
+      content = V2Banner(
+        tone: V2BannerTone.err,
+        message: '검색하지 못했어요. 연결을 확인해 주세요.',
+        actionLabel: '다시 시도',
+        onAction: () => _search(_searchCtrl.text),
+      );
+    } else if (_results.isEmpty) {
+      content = Padding(
+        padding: const EdgeInsets.all(V2Space.x4),
+        child: Text(
+          '검색 결과가 없어요. 지도를 눌러 직접 고를 수도 있어요.',
+          style: V2Text.cap.copyWith(color: p.sub),
+        ),
+      );
+    } else {
+      content = ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * .4,
+        ),
+        child: ListView(
+          shrinkWrap: true,
+          padding: EdgeInsets.zero,
+          children: [
+            for (final r in _results.take(8))
+              V2ListTile(
+                icon: V2Icons.location,
+                tone: V2Tone.sage,
+                title: '${r['name'] ?? ''}',
+                subtitle: [
+                  if ('${r['address'] ?? ''}'.trim().isNotEmpty)
+                    '${r['address']}',
+                  ?formatDistanceMeters(r['distanceMeters']),
+                ].join(' · '),
+                showChevron: false,
+                onTap: () => _pickResult(r),
+              ),
+          ],
+        ),
+      );
+    }
+    return Material(
+      color: p.surface,
+      elevation: 3,
+      shadowColor: V2Colors.scrim,
+      borderRadius: BorderRadius.circular(V2Radius.card),
+      clipBehavior: Clip.antiAlias,
+      child: content,
+    );
+  }
+
+  Widget _listHandle(int count) {
+    final p = V2Palette.of(context);
+    return Semantics(
+      button: true,
+      label: '장소 목록 $count곳 보기',
+      onTap: _showList,
+      child: ExcludeSemantics(
+        child: Material(
+          color: p.surface,
+          elevation: 4,
+          shadowColor: V2Colors.scrim,
+          shape: const StadiumBorder(),
+          child: InkWell(
+            key: const Key('map_list_handle'),
+            customBorder: const StadiumBorder(),
+            onTap: _showList,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: V2Space.tap),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: V2Space.x5),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.list_rounded, color: p.ink, size: 20),
+                    const SizedBox(width: V2Space.x2),
                     Text(
-                      subtitle,
-                      style: mainBody(
-                        size: 11.5,
-                        color: kMainMuted,
-                        height: 1.2,
-                      ),
+                      '장소 $count곳 보기',
+                      style: V2Text.bodyStrong.copyWith(color: p.ink),
                     ),
                   ],
                 ),
               ),
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: kMainMuted,
-                size: 18,
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -3748,316 +1149,73 @@ class _MapAppTile extends StatelessWidget {
   }
 }
 
-class _MemoryDot extends StatelessWidget {
-  final Color color;
-  final IconData icon;
+class _PinMarker extends StatelessWidget {
+  final String label;
+  final String emoji;
+  final bool visited;
+  final bool active;
+  final VoidCallback onTap;
 
-  const _MemoryDot({required this.color, required this.icon});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 34,
-      height: 34,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Icon(icon, size: 16, color: kMainInk.withAlpha(170)),
-    );
-  }
-}
-
-class _ListTilePin extends StatelessWidget {
-  final Map<String, dynamic> pin;
-
-  const _ListTilePin({required this.pin});
-
-  @override
-  Widget build(BuildContext context) {
-    final category = pin['category'] ?? '기타';
-    final emoji = _categoryEmojis[category] ?? '📍';
-    final status = _pinStatus(pin);
-    final isVisited = status == 'visited';
-    final memo = _cleanMemo(pin['memo']);
-
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: kMainPaperSoft,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: kMainLine),
-      ),
-      child: Row(
-        children: [
-          _PinBubble(emoji: emoji, status: status, active: true, size: 44),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  pin['place_name'] ?? '',
-                  style: mainBody(
-                    size: 14,
-                    color: kMainInk,
-                    weight: FontWeight.w900,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${isVisited ? '다녀온 곳' : '가고 싶은 곳'} · $category${memo.isNotEmpty ? ' · $memo' : ''}',
-                  style: mainBody(size: 11.5, color: kMainMuted),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          const Icon(Icons.chevron_right_rounded, color: kMainMuted, size: 18),
-        ],
-      ),
-    );
-  }
-}
-
-enum _DirectionsProvider { naver, kakao, tmap, web }
-
-String _pinStatus(Map<String, dynamic> pin) {
-  final status = pin['status'];
-  if (status == 'wishlist' || status == 'visited') return '$status';
-  final visitDate = pin['visit_date'];
-  return visitDate == null || '$visitDate'.trim().isEmpty
-      ? 'wishlist'
-      : 'visited';
-}
-
-List<String> _extractTags(Map<String, dynamic> pin) {
-  final rawTags = pin['emotion_tags'];
-  if (rawTags is List) {
-    return rawTags
-        .map((tag) => '$tag')
-        .where((tag) => tag.trim().isNotEmpty)
-        .toList();
-  }
-
-  final memo = '${pin['memo'] ?? ''}';
-  final firstLine = memo.split('\n').firstOrNull ?? '';
-  if (!firstLine.startsWith('#')) return const [];
-  return firstLine
-      .split(' ')
-      .where((part) => part.startsWith('#') && part.length > 1)
-      .map((part) => part.substring(1).replaceAll('_', ' '))
-      .where((tag) => tag.trim().isNotEmpty)
-      .toList();
-}
-
-String _cleanMemo(dynamic memoValue) {
-  final memo = '${memoValue ?? ''}'.trim();
-  if (memo.isEmpty) return '';
-  final lines = memo.split('\n');
-  if (lines.isNotEmpty && lines.first.startsWith('#')) {
-    return lines.skip(1).join('\n').trim();
-  }
-  return memo;
-}
-
-String _composeMemo(String memo, List<String> tags) {
-  final cleanMemo = memo.trim();
-  if (tags.isEmpty) return cleanMemo;
-  final tagLine = tags.map((tag) => '#${tag.replaceAll(' ', '_')}').join(' ');
-  return cleanMemo.isEmpty ? tagLine : '$tagLine\n$cleanMemo';
-}
-
-String _dateValue(DateTime date) {
-  return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-}
-
-DateTime? _parseDateString(dynamic value) {
-  final str = _dateKey(value);
-  if (str == null) return null;
-  try {
-    return DateTime.parse(str);
-  } catch (_) {
-    return null;
-  }
-}
-
-String _dateLabel(DateTime date) {
-  return '${date.year}.${date.month.toString().padLeft(2, '0')}.${date.day.toString().padLeft(2, '0')}';
-}
-
-String? _formattedDate(dynamic value) {
-  if (value == null) return null;
-  final text = '$value';
-  if (text.trim().isEmpty) return null;
-  return text.split('T').first.replaceAll('-', '.');
-}
-
-String? _dateKey(dynamic value) {
-  if (value == null) return null;
-  final text = '$value'.trim();
-  if (text.isEmpty) return null;
-  return text.split(RegExp(r'[T ]')).first;
-}
-
-String _matchText(dynamic value) {
-  return '$value'.toLowerCase().replaceAll(RegExp(r'\s+'), '');
-}
-
-List<Map<String, dynamic>> linkedSetlogPostsForMap(
-  Map<String, dynamic> pin,
-  List<Map<String, dynamic>> posts,
-) {
-  final pinId = '${pin['id'] ?? ''}';
-  final directlyLinked = pinId.isEmpty
-      ? <Map<String, dynamic>>[]
-      : posts.where((post) => '${post['map_pin_id'] ?? ''}' == pinId).toList();
-  if (directlyLinked.isNotEmpty) {
-    directlyLinked.sort((a, b) {
-      final aDate = '${a['captured_at'] ?? a['taken_at'] ?? ''}';
-      final bDate = '${b['captured_at'] ?? b['taken_at'] ?? ''}';
-      return bDate.compareTo(aDate);
-    });
-    return directlyLinked;
-  }
-
-  final pinDate = _dateKey(pin['visit_date']);
-  final placeName = _matchText(pin['place_name']);
-
-  final dateMatched = posts.where((post) {
-    final postDate =
-        _dateKey(post['taken_at']) ?? _dateKey(post['captured_at']);
-    if (pinDate != null) return postDate == pinDate;
-
-    if (placeName.isEmpty) return false;
-    final caption = _matchText(post['caption']);
-    return caption.contains(placeName);
-  }).toList();
-
-  final placeMatched = placeName.isEmpty
-      ? <Map<String, dynamic>>[]
-      : dateMatched
-            .where((post) => _matchText(post['caption']).contains(placeName))
-            .toList();
-
-  final matched = placeMatched.isNotEmpty ? placeMatched : dateMatched;
-
-  matched.sort((a, b) {
-    final aCaption = _matchText(a['caption']);
-    final bCaption = _matchText(b['caption']);
-    final aPlaceMatch = placeName.isNotEmpty && aCaption.contains(placeName);
-    final bPlaceMatch = placeName.isNotEmpty && bCaption.contains(placeName);
-    if (aPlaceMatch != bPlaceMatch) return aPlaceMatch ? -1 : 1;
-
-    final aDate = '${a['captured_at'] ?? a['taken_at'] ?? ''}';
-    final bDate = '${b['captured_at'] ?? b['taken_at'] ?? ''}';
-    return bDate.compareTo(aDate);
+  const _PinMarker({
+    super.key,
+    required this.label,
+    required this.emoji,
+    required this.visited,
+    required this.active,
+    required this.onTap,
   });
 
-  return matched;
-}
-
-String? _formatDistanceMeters(dynamic value) {
-  final meters = placeDoubleForMap(value)?.round();
-  if (meters == null || meters < 0) return null;
-  if (meters < 1000) return '${meters}m';
-  final km = meters / 1000;
-  return km < 10 ? '${km.toStringAsFixed(1)}km' : '${km.round()}km';
-}
-
-String _placeProviderLabel(dynamic value) {
-  return switch ('${value ?? ''}'.toLowerCase()) {
-    'kakao' => '카카오',
-    'naver' => '네이버',
-    'naver_maps' => '네이버 지도',
-    'osm' => 'OSM',
-    _ => '',
-  };
-}
-
-Map<String, dynamic> normalizePlaceResultForMap(Map<String, dynamic> place) {
-  final lat = placeDoubleForMap(place['latitude']) ?? 37.5665;
-  final lng = placeDoubleForMap(place['longitude']) ?? 126.9780;
-  final name = '${place['name'] ?? ''}'.trim();
-  final distanceMeters = placeDoubleForMap(place['distanceMeters']);
-  final categoryText = [
-    place['categoryCode'],
-    place['category'],
-  ].where((value) => value != null && '$value'.trim().isNotEmpty).join(' ');
-
-  return {
-    ...place,
-    'display_name': name,
-    'name': name,
-    'lat': lat,
-    'lon': lng,
-    'distanceMeters': distanceMeters,
-    'category': _mapPlaceCategory(categoryText),
-  };
-}
-
-double? placeDoubleForMap(dynamic value) {
-  if (value is num) return value.toDouble();
-  if (value is String) return double.tryParse(value);
-  return null;
-}
-
-int? placeIntForMap(dynamic value) {
-  final parsed = placeDoubleForMap(value);
-  return parsed?.round();
-}
-
-String _mapPlaceCategory(String categoryText) {
-  final text = categoryText.toLowerCase();
-  if (text.contains('fd6') ||
-      text.contains('음식') ||
-      text.contains('식당') ||
-      text.contains('맛집') ||
-      text.contains('한식') ||
-      text.contains('중식') ||
-      text.contains('일식') ||
-      text.contains('양식') ||
-      text.contains('분식') ||
-      text.contains('술집')) {
-    return '식당';
+  @override
+  Widget build(BuildContext context) {
+    final tone = V2ToneColors.of(visited ? V2Tone.ok : V2Tone.lilac);
+    final size = active ? 52.0 : 42.0;
+    return Semantics(
+      button: true,
+      label: label,
+      onTap: onTap,
+      child: ExcludeSemantics(
+        child: GestureDetector(
+          onTap: onTap,
+          behavior: HitTestBehavior.opaque,
+          child: Center(
+            child: AnimatedContainer(
+              duration: V2Motion.of(context, V2Motion.fast),
+              width: size,
+              height: size,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: tone.soft,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: active ? V2Colors.rose600 : tone.base,
+                  width: active ? 3 : 2,
+                ),
+                boxShadow: V2Shadow.level1,
+              ),
+              child: Text(emoji, style: TextStyle(fontSize: active ? 24 : 20)),
+            ),
+          ),
+        ),
+      ),
+    );
   }
-  if (text.contains('ce7') ||
-      text.contains('카페') ||
-      text.contains('커피') ||
-      text.contains('디저트') ||
-      text.contains('베이커리')) {
-    return '카페';
+}
+
+class _UserDot extends StatelessWidget {
+  const _UserDot();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: '내 위치',
+      child: Container(
+        decoration: BoxDecoration(
+          color: V2Colors.skyText,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 3),
+          boxShadow: V2Shadow.level1,
+        ),
+      ),
+    );
   }
-  if (text.contains('at4') ||
-      text.contains('ct1') ||
-      text.contains('문화') ||
-      text.contains('공연') ||
-      text.contains('영화') ||
-      text.contains('전시') ||
-      text.contains('체험') ||
-      text.contains('스포츠') ||
-      text.contains('놀이')) {
-    return '활동';
-  }
-  if (text.contains('ad5') ||
-      text.contains('숙박') ||
-      text.contains('호텔') ||
-      text.contains('펜션') ||
-      text.contains('여행') ||
-      text.contains('관광') ||
-      text.contains('명소')) {
-    return '여행';
-  }
-  if (text.contains('mt1') ||
-      text.contains('쇼핑') ||
-      text.contains('백화점') ||
-      text.contains('마트') ||
-      text.contains('편집샵') ||
-      text.contains('소품샵')) {
-    return '쇼핑';
-  }
-  return '기타';
 }

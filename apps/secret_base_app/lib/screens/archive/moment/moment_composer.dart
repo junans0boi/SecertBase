@@ -10,7 +10,8 @@ import '../../../core/auth_service.dart';
 import '../../../features/moment_loop/application/moment_loop_controller.dart';
 import '../../../features/moment_loop/application/upload_outbox.dart';
 import '../../../features/moment_loop/data/moment_image_compressor.dart';
-import '../../../features/moment_loop/data/media_upload_service.dart' show MomentLoopException;
+import '../../../features/moment_loop/data/media_upload_service.dart'
+    show MomentLoopException;
 import '../../../features/moment_loop/domain/moment.dart';
 import '../../../features/moment_loop/domain/moment_edit.dart';
 import '../../../features/moment_loop/domain/photo_date.dart';
@@ -321,7 +322,11 @@ class _MomentComposerPageState extends State<MomentComposerPage> {
           continue;
         }
         added.add(
-          PickedMoment(name: _jpegName(file.name), bytes: bytes, isVideo: false),
+          PickedMoment(
+            name: _jpegName(file.name),
+            bytes: bytes,
+            isVideo: false,
+          ),
         );
       }
     }
@@ -407,7 +412,9 @@ class _MomentComposerPageState extends State<MomentComposerPage> {
             .where((p) => !before.contains(p.id))
             .toList();
         if (fresh.isNotEmpty) {
-          setState(() => _place = _Place(id: fresh.last.id, name: fresh.last.name));
+          setState(
+            () => _place = _Place(id: fresh.last.id, name: fresh.last.name),
+          );
           return;
         }
         continue;
@@ -471,13 +478,18 @@ class _MomentComposerPageState extends State<MomentComposerPage> {
         todayMoment: !_editing && _todayMoment && _isToday,
         mapPinId: _place?.id,
         tags: _initial?.tags ?? const ['#momentloop'],
-        media: _media.where((m) => m.post == null).map((m) => m.toMedia()).toList(),
+        media: _media
+            .where((m) => m.post == null)
+            .map((m) => m.toMedia())
+            .toList(),
       );
       if (widget.draftId != null) {
         await widget.outbox.replace(
           widget.draftId!,
           draft,
-          editItems: _editing ? _media.map((m) => m.toEditItem()).toList() : null,
+          editItems: _editing
+              ? _media.map((m) => m.toEditItem()).toList()
+              : null,
         );
       } else if (_editing) {
         await widget.outbox.enqueueEdit(
@@ -555,7 +567,8 @@ class _MomentComposerPageState extends State<MomentComposerPage> {
                       const Padding(
                         padding: EdgeInsets.only(bottom: V2Space.x3),
                         child: V2Banner(
-                          message: '열린 오늘의 순간은 사진과 날짜를 바꿀 수 없어요. 글과 장소는 고칠 수 있어요.',
+                          message:
+                              '열린 오늘의 순간은 사진과 날짜를 바꿀 수 없어요. 글과 장소는 고칠 수 있어요.',
                         ),
                       ),
                     if (_media.isEmpty)
@@ -764,7 +777,10 @@ class _ActionTile extends StatelessWidget {
                 Container(
                   width: 44,
                   height: 44,
-                  decoration: BoxDecoration(color: c.soft, shape: BoxShape.circle),
+                  decoration: BoxDecoration(
+                    color: c.soft,
+                    shape: BoxShape.circle,
+                  ),
                   child: Icon(icon, color: c.text, size: 24),
                 ),
                 const SizedBox(height: 6),
@@ -961,7 +977,10 @@ class _MoreCard extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: V2Space.x2),
                   child: Row(
                     children: [
-                      Text('더 보기', style: V2Text.bodyStrong.copyWith(color: p.ink)),
+                      Text(
+                        '더 보기',
+                        style: V2Text.bodyStrong.copyWith(color: p.ink),
+                      ),
                       const SizedBox(width: V2Space.x2),
                       Expanded(
                         child: Text(

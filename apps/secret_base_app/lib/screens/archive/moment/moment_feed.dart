@@ -203,7 +203,9 @@ class MomentWeekToolbar extends StatelessWidget {
           ),
           V2IconButton(
             key: const Key('moment_view_toggle'),
-            icon: gridView ? Icons.view_agenda_rounded : Icons.grid_view_rounded,
+            icon: gridView
+                ? Icons.view_agenda_rounded
+                : Icons.grid_view_rounded,
             tooltip: gridView ? '목록으로 보기' : '격자로 보기',
             onPressed: onToggleView,
           ),
@@ -262,12 +264,15 @@ class MomentDaySection extends StatelessWidget {
                       ),
                     TextSpan(
                       text: dateText,
-                      style: (rel == '오늘' || rel == '어제'
-                              ? V2Text.cap
-                              : V2Text.bodyStrong)
-                          .copyWith(
-                            color: rel == '오늘' || rel == '어제' ? p.sub : p.ink,
-                          ),
+                      style:
+                          (rel == '오늘' || rel == '어제'
+                                  ? V2Text.cap
+                                  : V2Text.bodyStrong)
+                              .copyWith(
+                                color: rel == '오늘' || rel == '어제'
+                                    ? p.sub
+                                    : p.ink,
+                              ),
                     ),
                   ],
                 ),
