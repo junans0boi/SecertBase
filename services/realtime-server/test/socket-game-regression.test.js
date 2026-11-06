@@ -102,27 +102,7 @@ test('claiming the last tourist property emits the monopoly win reason through s
   assert.deepEqual(ended, [{ winner: 'ALPHA-code', winReason: 'tourist_monopoly', finalScores: null }]);
 });
 
-test('socket yut move consumes a capture extra turn once, then hands over the next turn', async t => {
-  const f = await fixture(t);
-  const state = createYutGameState('ALPHA-code', 'BETA-code');
-  state.currentTurn = 'ALPHA-code';
-  state.phase = 'moving';
-  state.pendingMoves = [1];
-  state.players['ALPHA-code'].pieces[0].position = 1;
-  state.players['BETA-code'].pieces[0].position = 2;
-  await f.redis.set(`yut:${f.roomCode}:game`, JSON.stringify(state));
-  const capture = await f.call(0, 'game:yut:move', { pieceId: 0 });
-  assert.equal(capture.ok, true);
-  assert.equal(capture.event.capturedCount, 1);
-  assert.equal(capture.event.currentTurn, 'ALPHA-code');
-  const afterCapture = JSON.parse(await f.redis.get(`yut:${f.roomCode}:game`));
-  afterCapture.phase = 'moving';
-  afterCapture.pendingMoves = [1];
-  await f.redis.set(`yut:${f.roomCode}:game`, JSON.stringify(afterCapture));
-  assert.equal((await f.call(0, 'game:yut:move', { pieceId: 0 })).ok, true);
-  const restored = await f.call(0, 'session:restore', {});
-  assert.equal(restored.activeGames.yut.currentTurn, 'BETA-code');
-});
+// 윷놀이 잡기 추가 던지기·복원 소켓 회귀는 test/yut-socket.test.js로 옮겼다(게임 2.0).
 
 test('bowling completion grants winner/loser XP once through its socket handler', async t => {
   const f = await fixture(t);
@@ -361,7 +341,4 @@ test('equipped item stats already parsed by the driver do not break game creatio
   const event = await started;
   assert.deepEqual(event.equippedItems['ALPHA-code'].onecard_cardback.stats, { coin_bonus_pct: 3 });
   assert.deepEqual(event.equippedItems['BETA-code'].onecard_cardback.stats, { coin_bonus_pct: 5 });
-  const yut = await f.call(0, 'game:yut:new', {});
-  assert.equal(yut.ok, true);
-  assert.deepEqual(yut.gameState.equippedItems['ALPHA-code'].onecard_cardback.stats, { coin_bonus_pct: 3 });
 });

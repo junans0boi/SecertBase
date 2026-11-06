@@ -16,19 +16,6 @@ import { transferGameReward, getBalance, getEquippedStats, getEquippedItemsInfo 
 import { isValidLobbyOption, normalizeLobbyOptions } from "./lobby-options.js";
 import { grantXp, updateMissionProgress } from "./level-engine.js";
 import {
-  throwYut,
-  createYutGameState,
-  checkWin,
-  resolveYutMove,
-  hasBackdoMove,
-  getNextPlayer as getNextYutPlayer,
-  settleTurnAfterMove,
-  recordYutThrow,
-  resetYutTurnThrows,
-  serializeYutGame,
-  pruneUnusableBackdo,
-} from "./yut-engine.js";
-import {
   createMarbleGameState,
   rollDice as rollMarbleDice,
   movePiece as moveMarblePiece,
@@ -218,15 +205,6 @@ const lobbyCharacterSchema = z.union([
   }),
 ]);
 
-const yutNewSchema = z
-  .object({
-    characters: z.record(z.string(), z.enum(yutCharacters)).optional().default({}),
-    bgm: z.enum(["yut1.mp3", "yut2.mp3", "yut3.mp3"]).optional().nullable(),
-    stake: z.number().int().min(0).max(10000).optional().default(0),
-  })
-  .optional()
-  .default({ characters: {}, bgm: null, stake: 0 });
-
 const rouletteSchema = z.object({
   options: z.array(z.string().min(1).max(100)).min(2).max(12),
 });
@@ -241,12 +219,6 @@ const rpsStartSchema = z.object({
 
 const rpsPickSchema = z.object({
   choice: z.enum(["rock", "paper", "scissors"]).optional(),
-});
-
-const yutMoveSchema = z.object({
-  pieceId: z.number().int().min(0).max(3),
-  moveIndex: z.number().int().min(0).max(20).optional().default(0),
-  backdoDir: z.number().int().optional(),
 });
 
 const chatMessageSchema = z.object({
@@ -439,7 +411,6 @@ const withLobbyLock = (key, fn) => {
 };
 
 const roomKey = (roomCode) => `room:${roomCode}:state`;
-const yutGameKey = (roomCode) => `yut:${roomCode}:game`;
 const gostopGameKey = (roomCode) => `gostop:${roomCode}:game`;
 const bombGameKey = (roomCode) => `bomb:${roomCode}:game`;
 const gameLobbyKey = (roomCode, gameType) => `lobby:${roomCode}:${gameType}`;
@@ -451,7 +422,7 @@ const restartKey = (roomCode) => `restart:${roomCode}`;
 export const STAKE_GAME_TYPES = new Set(["yut", "uno", "uno_classic", "uno_go_wild", "tank", "gostop"]);
 const stakeFamily = (gameType) => (String(gameType).startsWith("uno") ? "uno" : gameType);
 // 재시작(재대결)을 지원하는 게임.
-export const RESTARTABLE_GAME_TYPES = new Set(["yut", "bomb", "marble", "tank"]);
+export const RESTARTABLE_GAME_TYPES = new Set(["bomb", "marble", "tank"]);
 for (const mod of GAME_MODULES) if (mod.restart) RESTARTABLE_GAME_TYPES.add(mod.gameType);
 const GAME_MODULE_BY_TYPE = new Map(GAME_MODULES.map((mod) => [mod.gameType, mod]));
 // 로비 종류(예: 제로의 로비는 'zero') → 모듈.
@@ -635,13 +606,6 @@ const getOrderedPlayers = async (roomCode, presence) => {
   }
 
   return presence.slice(0, 2);
-};
-
-const emitYutState = (io, roomCode, eventName, gameState, extra = {}) => {
-  io.to(roomCode).emit(eventName, {
-    ...serializeYutGame(gameState),
-    ...extra,
-  });
 };
 
 const emitMarbleState = (io, roomCode, eventName, gameState, extra = {}) => {
@@ -828,23 +792,6 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
     await redis.del(key);
   };
   const afkAdapters = {
-    yut: {
-      key: yutGameKey,
-      playersOf: (s) => s.playersOrder ?? [],
-      waitingOn: (s) => {
-        if (s.winner) return null;
-        if (s.phase === "roll_order") return notPicked(s.startRolls, s.playersOrder ?? []);
-        if (s.phase === "order_countdown") return null;
-        return s.currentTurn ?? null;
-      },
-      forfeit: async (roomCode, s, loser, winner) => {
-        io.to(roomCode).emit("game:yut:ended", { winner, reason: "forfeit" });
-        await settleForfeit(roomCode, {
-          gameType: "yut", missionKey: "yut", key: yutGameKey(roomCode), winner, loser,
-          stake: s.stake ?? 0, gameId: s.gameId ?? s.id,
-        });
-      },
-    },
     marble: {
       key: marbleGameKey,
       playersOf: (s) => s.playersOrder ?? [],
@@ -1323,6 +1270,8 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
           host: lobby.host,
           lobbyType: gameType,
           startsAt: Date.now() + LOBBY_COUNTDOWN_MS,
+          characterSelections: lobby.characterSelections,
+          metadata,
         });
       }
       ack({ ok: true });
@@ -1339,13 +1288,11 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
 
       try {
         // 활성 게임 세션 확인
-        const yutKey = `yut:${roomCode}:game`;
         const gostopKey = gostopGameKey(roomCode);
         const bombKey = `bomb:${roomCode}:game`;
         const marbleKey = marbleGameKey(roomCode);
 
-        const [yutGame, gostopGame, bombGame, marbleGame] = await Promise.all([
-          redis.get(yutKey),
+        const [gostopGame, bombGame, marbleGame] = await Promise.all([
           redis.get(gostopKey),
           redis.get(bombKey),
           redis.get(marbleKey),
@@ -1353,13 +1300,6 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
 
         const activeGames = {};
         
-        if (yutGame) {
-          const game = JSON.parse(yutGame);
-          if (game.players) {
-            activeGames.yut = serializeYutGame(game);
-          }
-        }
-
         if (gostopGame) {
           const game = JSON.parse(gostopGame);
           if (game.players?.includes(socket.data.userId)) {
@@ -1393,7 +1333,7 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         // session:restore itself must reserve the viewer room. Otherwise a
         // reconnecting socket can render the game but the old viewer's
         // disconnect immediately deletes the last active Redis state.
-        const restoredGameType = ['yut', 'marble', 'gostop']
+        const restoredGameType = ['marble', 'gostop']
           .find((type) => activeGames[type]);
         if (restoredGameType) {
           sessionScheduler.cancel(`${roomCode}:${restoredGameType}`);
@@ -1770,395 +1710,6 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         io.to(roomCode).emit("game:rps:reset_done");
         ack({ ok: true });
       });
-    });
-
-    socket.on("game:yut:new", async (payload, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const roomCode = socket.data.roomCode;
-      const userId = socket.data.userId;
-      if (!roomCode || !userId) {
-        ack({ ok: false, reason: "not_joined" });
-        return;
-      }
-
-      await withRoomLock(roomCode, async () => {
-        const presence = getPresence(io, roomCode);
-        if (presence.length !== 2) {
-          ack({ ok: false, reason: "need_two_players" });
-          return;
-        }
-
-        const existing = await redis.get(yutGameKey(roomCode));
-        if (existing) {
-          ack({ ok: false, reason: "game_in_progress" });
-          return;
-        }
-
-        const [player1, player2] = await getOrderedPlayers(roomCode, presence);
-        if (!player1 || !player2) {
-          ack({ ok: false, reason: "need_two_players" });
-          return;
-        }
-
-        const parsed = yutNewSchema.safeParse(payload);
-        if (!parsed.success) {
-          ack({ ok: false, reason: "invalid_payload" });
-          return;
-        }
-        const gameState = createYutGameState(player1, player2);
-        const pendingYut = await consumePendingGame(roomCode, "yut");
-        gameState.characters = parsed.data.characters ?? {};
-        gameState.bgm = parsed.data.bgm ?? null;
-        gameState.stake = pendingYut.stake; // payload의 stake는 무시한다.
-        gameState.gameId = pendingYut.gameId;
-
-        // 양 플레이어의 장착 아이템 정보 포함 (상대방 표시용)
-        const { rows: p1Rows } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [player1]);
-        const { rows: p2Rows } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [player2]);
-        const [p1Info, p2Info, p1Stats, p2Stats] = await Promise.all([
-          p1Rows[0]?.UserId ? getEquippedItemsInfo(p1Rows[0].UserId) : Promise.resolve({}),
-          p2Rows[0]?.UserId ? getEquippedItemsInfo(p2Rows[0].UserId) : Promise.resolve({}),
-          p1Rows[0]?.UserId ? getEquippedStats(p1Rows[0].UserId) : Promise.resolve({}),
-          p2Rows[0]?.UserId ? getEquippedStats(p2Rows[0].UserId) : Promise.resolve({}),
-        ]);
-        gameState.equippedItems = { [player1]: p1Info, [player2]: p2Info };
-        gameState.playerStats = { [player1]: p1Stats, [player2]: p2Stats };
-        gameState.catchCoinBonus = {};
-        gameState.winCoinBonus = {};
-
-        await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
-
-        emitYutState(io, roomCode, "game:yut:started", gameState);
-        ack({ ok: true, gameState: serializeYutGame(gameState) });
-      });
-    });
-
-    socket.on("game:yut:roll_start", async (_, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const roomCode = socket.data.roomCode;
-      const userId = socket.data.userId;
-      if (!roomCode || !userId) {
-        ack({ ok: false, reason: "not_joined" });
-        return;
-      }
-
-      let doCountdown = false;
-      await withRoomLock(roomCode, async () => {
-        const gameText = await redis.get(yutGameKey(roomCode));
-        if (!gameText) {
-          ack({ ok: false, reason: "no_game" });
-          return;
-        }
-
-        const gameState = JSON.parse(gameText);
-        if (gameState.phase !== "roll_order") {
-          ack({ ok: false, reason: "invalid_phase" });
-          return;
-        }
-        if (gameState.startRolls?.[userId] != null) {
-          ack({ ok: false, reason: "already_rolled" });
-          return;
-        }
-
-        gameState.startRolls = {
-          ...(gameState.startRolls ?? {}),
-          [userId]: Math.floor(Math.random() * 6) + 1,
-        };
-
-        const [player1, player2] = gameState.playersOrder;
-        const p1Roll = gameState.startRolls[player1];
-        const p2Roll = gameState.startRolls[player2];
-        if (p1Roll != null && p2Roll != null) {
-          if (p1Roll === p2Roll) {
-            gameState.startRolls = {};
-          } else {
-            gameState.currentTurn = p1Roll > p2Roll ? player1 : player2;
-            gameState.phase = "order_countdown";
-            gameState.orderCountdownUntil = Date.now() + 3000;
-          }
-        }
-
-        await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
-        emitYutState(io, roomCode, "game:yut:start_roll", gameState, { by: userId });
-        ack({ ok: true, gameState: serializeYutGame(gameState) });
-        if (gameState.phase === "order_countdown") doCountdown = true;
-      });
-
-      if (doCountdown) {
-        setTimeout(async () => {
-          try {
-            await withRoomLock(roomCode, async () => {
-              const latestText = await redis.get(yutGameKey(roomCode));
-              if (!latestText) return;
-              const latestState = JSON.parse(latestText);
-              if (latestState.phase !== "order_countdown") return;
-              latestState.phase = "throwing";
-              latestState.orderCountdownUntil = null;
-              await redis.set(yutGameKey(roomCode), JSON.stringify(latestState), "EX", 3600);
-              emitYutState(io, roomCode, "game:yut:started", latestState, {
-                orderReady: true,
-              });
-            });
-          } catch (err) {
-            console.error(`yut order countdown error: ${err.message}`);
-          }
-        }, 3000);
-      }
-    });
-
-    socket.on("game:yut:throw", async (_, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const roomCode = socket.data.roomCode;
-      const userId = socket.data.userId;
-      if (!roomCode || !userId) {
-        ack({ ok: false, reason: "not_joined" });
-        return;
-      }
-
-      await withRoomLock(roomCode, async () => {
-      const gameText = await redis.get(yutGameKey(roomCode));
-      if (!gameText) {
-        ack({ ok: false, reason: "no_game" });
-        return;
-      }
-
-      const gameState = JSON.parse(gameText);
-      if (gameState.currentTurn !== userId) {
-        ack({ ok: false, reason: "not_your_turn" });
-        return;
-      }
-      // Allow throw during moving phase only when bonus throw is available
-      const canThrow = gameState.phase === "throwing" ||
-        (gameState.phase === "moving" && gameState.hasBonusThrow);
-      if (!canThrow) {
-        ack({ ok: false, reason: "must_move_first" });
-        return;
-      }
-
-      // Consume bonus throw if it was used
-      if (gameState.hasBonusThrow) {
-        gameState.hasBonusThrow = false;
-      }
-
-      // 게임 시작 시 캐시된 stats 재사용 (DB 재조회 불필요)
-      const stats = gameState.playerStats?.[userId] ?? {};
-
-      // 지고 있는지 판단 (상대보다 골인 말이 적으면 losing)
-      const opponentCode = gameState.playersOrder.find((p) => p !== userId);
-      const myFinished = gameState.players[userId]?.pieces.filter((p) => p.finished).length ?? 0;
-      const oppFinished = opponentCode
-        ? (gameState.players[opponentCode]?.pieces.filter((p) => p.finished).length ?? 0)
-        : 0;
-      const isLosing = myFinished < oppFinished;
-
-      const throwResult = throwYut({
-        yutControlPct: stats.yut_control_pct ?? 0,
-        yutMoRatePct: stats.yut_mo_rate_pct ?? 0,
-        yutOverturnPct: stats.yut_overturn_pct ?? 0,
-        isLosing,
-      });
-
-      // yut_win_coin_pct: 윷(4)/모(5) 투척 시 스테이크 % 보너스 코인 누적
-      if (throwResult.result === 4 || throwResult.result === 5) {
-        const winCoinPct = Math.min(stats.yut_win_coin_pct ?? 0, 15);
-        if (winCoinPct > 0 && (gameState.stake ?? 0) > 0) {
-          const bonus = Math.floor(gameState.stake * winCoinPct / 100);
-          gameState.winCoinBonus = gameState.winCoinBonus ?? {};
-          gameState.winCoinBonus[userId] = (gameState.winCoinBonus[userId] ?? 0) + bonus;
-          socket.emit("game:item_effect", { stat: "yut_win_coin_pct", amount: bonus });
-        }
-      }
-
-      // 아직 둘 이동(윷/모 등)이 남아 있으면, 그 이동으로 말이 판에 올라온 뒤
-      // 빽도를 쓸 수 있으므로 지금 낙 처리하지 않는다.
-      const isNak = throwResult.result === -1 &&
-        gameState.pendingMoves.length === 0 &&
-        !gameState.hasBonusThrow &&
-        !hasBackdoMove(gameState.players[userId].pieces);
-      throwResult.nak = isNak;
-      recordYutThrow(gameState, throwResult);
-
-      if (!isNak) {
-        gameState.pendingMoves.push(throwResult.result);
-      }
-
-      // New 윷/모 grants another bonus throw
-      if (throwResult.bonusThrow) {
-        gameState.hasBonusThrow = true;
-      }
-
-      if (isNak && gameState.pendingMoves.length === 0) {
-        gameState.hasBonusThrow = false;
-        gameState.caughtOpponentThisTurn = false;
-        gameState.captureBonusThrows = 0;
-        gameState.currentTurn = getNextYutPlayer(gameState, userId);
-        gameState.phase = "throwing";
-        resetYutTurnThrows(gameState);
-      } else {
-        gameState.phase = "moving";
-      }
-
-      await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
-
-      emitYutState(io, roomCode, "game:yut:throw_result", gameState, {
-        by: userId,
-        throwResult,
-        at: Date.now(),
-      });
-      ack({ ok: true, throwResult, gameState: serializeYutGame(gameState) });
-      }); // withRoomLock
-    });
-
-    socket.on("game:yut:move", async (payload, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const roomCode = socket.data.roomCode;
-      const userId = socket.data.userId;
-      if (!roomCode || !userId) {
-        ack({ ok: false, reason: "not_joined" });
-        return;
-      }
-
-      const parsed = yutMoveSchema.safeParse(payload);
-      if (!parsed.success) {
-        ack({ ok: false, reason: "invalid_payload" });
-        return;
-      }
-
-      await withRoomLock(roomCode, async () => {
-      const gameText = await redis.get(yutGameKey(roomCode));
-      if (!gameText) {
-        ack({ ok: false, reason: "no_game" });
-        return;
-      }
-
-      const gameState = JSON.parse(gameText);
-      const { pieceId, moveIndex, backdoDir } = parsed.data;
-      const moverStats = gameState.playerStats?.[userId] ?? {};
-      const opponentId = getNextYutPlayer(gameState, userId);
-      const defenderStats = gameState.playerStats?.[opponentId] ?? {};
-      const moveResolution = resolveYutMove(gameState, userId, {
-        pieceId,
-        moveIndex,
-        backdoDir,
-        moverStats,
-        defenderStats,
-      });
-      if (!moveResolution.ok) {
-        ack({ ok: false, reason: moveResolution.reason });
-        return;
-      }
-
-      const {
-        piece,
-        steps,
-        preMovePos,
-        carriedPieces,
-        stackedPieces,
-        capturedPieces,
-        captureBlockedPieces,
-      } = moveResolution;
-
-      // A protected piece is intentionally left on the landing square. The
-      // count is included in move_result so a failed capture is not ambiguous.
-      // piece_catch_resist_pct + piece_safe_zone_pct are applied in the engine.
-
-      // piece_catch_coin_bonus: 잡은 말 1개당 플랫 코인 (최대 25)
-      const catchCoinPer = Math.min(Math.floor(moverStats.piece_catch_coin_bonus ?? 0), 25);
-      if (catchCoinPer > 0 && capturedPieces.length > 0) {
-        gameState.catchCoinBonus = gameState.catchCoinBonus ?? {};
-        gameState.catchCoinBonus[userId] = (gameState.catchCoinBonus[userId] ?? 0) + catchCoinPer * capturedPieces.length;
-        socket.emit("game:item_effect", { stat: "piece_catch_coin_bonus", amount: catchCoinPer * capturedPieces.length });
-      }
-
-      // yut_catch_bonus: 잡기 이벤트당 플랫 코인, 잡은 말 수 무관 (최대 300)
-      const catchFlatBonus = Math.min(Math.floor(moverStats.yut_catch_bonus ?? 0), 300);
-      if (catchFlatBonus > 0 && capturedPieces.length > 0) {
-        gameState.catchCoinBonus = gameState.catchCoinBonus ?? {};
-        gameState.catchCoinBonus[userId] = (gameState.catchCoinBonus[userId] ?? 0) + catchFlatBonus;
-        socket.emit("game:item_effect", { stat: "yut_catch_bonus", amount: catchFlatBonus });
-      }
-
-      // yut_backdo_bonus_pct: 유리한 백도 위치에서 추가 던지기 확률
-      // - 날백도 (위치 1→골인): 스탯값 ×2 확률 (최대 50%)
-      // - 대각선 백도 (위치 23→22/25): 스탯값 % 확률 (최대 25%)
-      if (steps === -1) {
-        const backdoBonus = Math.min(moverStats.yut_backdo_bonus_pct ?? 0, 25);
-        if (backdoBonus > 0) {
-          let triggerPct = 0;
-          if (preMovePos === 1) triggerPct = Math.min(backdoBonus * 2, 50); // 날백도
-          else if (preMovePos === 23) triggerPct = backdoBonus;              // 대각선
-          if (triggerPct > 0 && Math.random() * 100 < triggerPct) {
-            gameState.hasBonusThrow = true;
-            socket.emit("game:item_effect", { stat: "yut_backdo_bonus_pct", amount: 0 });
-          }
-        }
-      }
-
-      const won = checkWin(gameState.players[userId]);
-      // 남은 결과가 빽도뿐인데 판 위에 말이 없으면 쓸 수 없으므로 버린다(소프트락 방지).
-      const discardedBackdo = won ? 0 : pruneUnusableBackdo(gameState, userId);
-      if (won) {
-        gameState.winner = userId;
-      } else {
-        settleTurnAfterMove(gameState, userId);
-        if (gameState.currentTurn !== userId) {
-          resetYutTurnThrows(gameState);
-        }
-      }
-
-      await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
-
-      const event = {
-        by: userId,
-        pieceId,
-        newPosition: piece.position,
-        finished: piece.finished,
-        discardedBackdo,
-        movedPieceIds: carriedPieces.map((carriedPiece) => carriedPiece.id),
-        capturedPieceIds: capturedPieces.map((capturedPiece) => capturedPiece.id),
-        capturedCount: capturedPieces.length,
-        captureBlockedCount: captureBlockedPieces.length,
-        carriedCount: carriedPieces.length,
-        stackedCount: stackedPieces.length,
-        winner: gameState.winner,
-        at: Date.now(),
-        ...serializeYutGame(gameState),
-      };
-
-      io.to(roomCode).emit("game:yut:move_result", event);
-      if (captureBlockedPieces.length > 0) {
-        // A defensive item affects both players' understanding of the move.
-        // Broadcast the effect instead of notifying only the defender so both
-        // clients can show why the landing piece was not reset.
-        io.to(roomCode).emit("game:item_effect", {
-          stat: "yut_capture_protection",
-          amount: captureBlockedPieces.length,
-          at: event.at,
-        });
-      }
-      ack({ ok: true, event });
-
-      if (gameState.winner) {
-        const yutLoserId = gameState.playersOrder.find(p => p !== gameState.winner);
-        io.to(roomCode).emit("game:yut:ended", { winner: gameState.winner });
-        const [{ rows: winnerRows }, { rows: loserRows }] = await Promise.all([
-          query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [gameState.winner]),
-          query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [yutLoserId]),
-        ]);
-        const winnerExtraBonus = (gameState.catchCoinBonus?.[gameState.winner] ?? 0)
-          + (gameState.winCoinBonus?.[gameState.winner] ?? 0);
-        const yutPreStreak = await _getWinStreak(roomCode, gameState.winner);
-        // 정산 → 결과 기록 → 상태 삭제. ref가 판마다 고정이라 재처리돼도 한 번만 정산된다.
-        const yutGameId = gameState.gameId ?? gameState.id;
-        const yutWallet = await settleAndEmitWallet(io, roomCode, gameState.winner, yutLoserId, gameState.stake ?? 0, `yut:${yutGameId}`, winnerRows[0]?.UserId, winnerExtraBonus, loserRows[0]?.UserId, yutPreStreak);
-        if (!yutWallet.ok) io.to(roomCode).emit("wallet:settle_failed", { gameType: "yut", reason: yutWallet.reason });
-        await Promise.all([
-          saveGameResult(roomCode, gameState.winner, yutLoserId, 'yut', gameState.stake ?? 0, { gameId: yutGameId }),
-          grantGameXpAndMissions(gameState.winner, yutLoserId, 'yut'),
-        ]);
-        await redis.del(yutGameKey(roomCode));
-      }
-      }); // withRoomLock
     });
 
     // ─── 마블 게임 핸들러 ────────────────────────────────────────────────────────
@@ -2684,41 +2235,6 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       }); // withRoomLock
     });
 
-    socket.on("game:yut:chat", async (payload, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const roomCode = socket.data.roomCode;
-      const userId = socket.data.userId;
-      if (!roomCode || !userId) {
-        ack({ ok: false, reason: "not_joined" });
-        return;
-      }
-
-      const parsed = chatMessageSchema.safeParse(payload);
-      if (!parsed.success) {
-        ack({ ok: false, reason: "invalid_message" });
-        return;
-      }
-
-      const gameText = await redis.get(yutGameKey(roomCode));
-      if (!gameText) {
-        ack({ ok: false, reason: "no_game" });
-        return;
-      }
-      const gameState = JSON.parse(gameText);
-      if (!gameState.playersOrder?.includes(userId)) {
-        ack({ ok: false, reason: "not_a_player" });
-        return;
-      }
-
-      const event = {
-        by: userId,
-        message: parsed.data.message,
-        at: Date.now(),
-      };
-      io.to(roomCode).emit("game:yut:chat", event);
-      ack({ ok: true, event });
-    });
-
     socket.on("game:marble:chat", async (payload, ackRaw) => {
       const ack = normalizeAck(ackRaw);
       const roomCode = socket.data.roomCode;
@@ -2988,32 +2504,6 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
           ack(restarted);
           return;
         }
-      } else if (gameType === "yut") {
-        const previousText = await redis.get(yutGameKey(roomCode));
-        const previous = previousText ? JSON.parse(previousText) : {};
-        const gameState = createYutGameState(p1, p2, {
-          characters: previous.characters ?? {},
-          bgm: previous.bgm ?? null,
-        });
-        gameState.stake = previous.stake ?? 0;
-        gameState.gameId = randomUUID();
-        gameState.catchCoinBonus = {};
-        gameState.winCoinBonus = {};
-
-        // 아이템 스탯/표시 정보 재적재
-        const { rows: rp1 } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [p1]);
-        const { rows: rp2 } = await query('SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1', [p2]);
-        const [p1Info, p2Info, p1Stats, p2Stats] = await Promise.all([
-          rp1[0]?.UserId ? getEquippedItemsInfo(rp1[0].UserId) : Promise.resolve({}),
-          rp2[0]?.UserId ? getEquippedItemsInfo(rp2[0].UserId) : Promise.resolve({}),
-          rp1[0]?.UserId ? getEquippedStats(rp1[0].UserId) : Promise.resolve({}),
-          rp2[0]?.UserId ? getEquippedStats(rp2[0].UserId) : Promise.resolve({}),
-        ]);
-        gameState.equippedItems = { [p1]: p1Info, [p2]: p2Info };
-        gameState.playerStats = { [p1]: p1Stats, [p2]: p2Stats };
-
-        await redis.set(yutGameKey(roomCode), JSON.stringify(gameState), "EX", 3600);
-        emitYutState(io, roomCode, "game:yut:started", gameState);
       } else if (gameType === "marble") {
         const previousText = await redis.get(marbleGameKey(roomCode));
         const previous = previousText ? JSON.parse(previousText) : {};

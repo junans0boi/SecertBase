@@ -17,6 +17,9 @@ export const LOBBY_OPTIONS = Object.freeze({
     rounds: Object.freeze({ values: Object.freeze([10, 5, 15]), default: 10 }),
     spicy: Object.freeze({ values: Object.freeze(["off", "on"]), default: "off" }),
   }),
+  yut: Object.freeze({
+    pieces: Object.freeze({ values: Object.freeze([4, 3, 2]), default: 4 }),
+  }),
 });
 
 const specFor = (gameType) => LOBBY_OPTIONS[String(gameType).startsWith("uno") ? "uno" : gameType];

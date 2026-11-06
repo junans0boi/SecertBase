@@ -42,3 +42,11 @@ test('telepathy offers 10|5|15 questions and a spicy switch that is off by defau
   assert.deepEqual(normalizeLobbyOptions('telepathy', { rounds: 5, spicy: 'on' }), { rounds: 5, spicy: 'on' });
   assert.deepEqual(normalizeLobbyOptions('telepathy', { rounds: '5' }), { rounds: 10, spicy: 'off' });
 });
+
+test('yut piece count option: 4 (default), 3 or 2', () => {
+  assert.deepEqual(defaultLobbyOptions('yut'), { pieces: 4 });
+  for (const n of [4, 3, 2]) assert.equal(isValidLobbyOption('yut', 'pieces', n), true);
+  assert.equal(isValidLobbyOption('yut', 'pieces', 5), false);
+  assert.equal(isValidLobbyOption('yut', 'pieces', '3'), false);
+  assert.deepEqual(normalizeLobbyOptions('yut', { pieces: 1 }), { pieces: 4 });
+});
