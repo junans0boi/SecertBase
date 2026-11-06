@@ -134,6 +134,31 @@ Future<BirthProfile?> showBirthInfoSheet(
   );
 }
 
+/// Loads the saved profile (if any), opens the sheet, and reports whether the
+/// user saved. Safe to call from any screen without callbacks.
+Future<bool> editBirthProfile(
+  BuildContext context, {
+  BirthProfileApi? api,
+}) async {
+  final auth = AuthService();
+  final client =
+      api ?? BirthProfileApi(baseUrl: auth.baseUrl, token: auth.token ?? '');
+  BirthProfile? existing;
+  try {
+    existing = await client.fetch();
+  } catch (_) {
+    existing = null; // first time: prefill from the signup birthday
+  }
+  if (!context.mounted) return false;
+  final saved = await showBirthInfoSheet(
+    context,
+    api: client,
+    existing: existing,
+  );
+  if (api == null) client.close();
+  return saved != null;
+}
+
 class BirthInfoForm extends StatefulWidget {
   const BirthInfoForm({
     super.key,
