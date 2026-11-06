@@ -68,63 +68,211 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     final p = V2Palette.of(context);
     final googleOn = _auth.isGoogleLoginConfigured;
-    return AuthFrame(
-      hero: true,
-      body: Column(
-        children: [
-          const SizedBox(height: V2Space.x10),
-          const AuthEmblem(size: 104),
-          const SizedBox(height: V2Space.x5),
-          Text('비밀기지', style: V2Text.display),
-          const SizedBox(height: V2Space.x2),
-          Text('우리 둘만의 아지트', style: V2Text.head.copyWith(color: p.primary)),
-          const SizedBox(height: V2Space.x2),
-          Text(
-            V2Text.keepAll('로그인하고 서로의 하루를 이어 가요'),
-            textAlign: TextAlign.center,
-            style: V2Text.cap,
-          ),
-        ],
-      ),
-      footer: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (googleOn) ...[
-            if (kIsWeb)
-              buildGoogleSignInButton(
-                onPressed: () => _auth.loginWithGoogle(),
-                loading: _auth.googleLoading,
-              )
-            else
-              V2Button(
-                label: 'Google로 계속하기',
-                loading: _auth.googleLoading,
-                onPressed: () => _auth.loginWithGoogle(),
+    final heroHeight = (MediaQuery.sizeOf(context).height * 0.42).clamp(
+      260.0,
+      420.0,
+    );
+    return V2Theme(
+      child: Scaffold(
+        backgroundColor: p.bg,
+        body: CustomScrollView(
+          slivers: [
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Column(
+                children: [
+                  SizedBox(
+                    height: heroHeight,
+                    width: double.infinity,
+                    child: AuthHeroBlock(
+                      expand: true,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const AuthHeartKey(size: 112),
+                          const SizedBox(height: V2Space.x3),
+                          Semantics(
+                            header: true,
+                            child: Text(
+                              '비밀기지',
+                              style: V2Text.display.copyWith(
+                                color: Colors.white,
+                                fontSize: 36,
+                                height: 1.2,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 440),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          V2Space.page,
+                          V2Space.x5,
+                          V2Space.page,
+                          0,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              '우리 둘만의 아지트',
+                              textAlign: TextAlign.center,
+                              style: V2Text.head.copyWith(fontSize: 20),
+                            ),
+                            const SizedBox(height: V2Space.x1),
+                            Text(
+                              V2Text.keepAll('로그인하고 서로의 하루를 이어 가요'),
+                              textAlign: TextAlign.center,
+                              style: V2Text.cap,
+                            ),
+                            const SizedBox(height: V2Space.x6),
+                            if (googleOn) ...[
+                              if (kIsWeb)
+                                buildGoogleSignInButton(
+                                  onPressed: () => _auth.loginWithGoogle(),
+                                  loading: _auth.googleLoading,
+                                )
+                              else
+                                _GoogleButton(
+                                  loading: _auth.googleLoading,
+                                  onPressed: () => _auth.loginWithGoogle(),
+                                ),
+                              if (_auth.googleError != null)
+                                AuthErrorLine(_auth.googleError!),
+                              const SizedBox(height: V2Space.x3),
+                            ],
+                            V2Button(
+                              label: '이메일로 로그인',
+                              icon: V2Icons.mail,
+                              variant: googleOn
+                                  ? V2ButtonVariant.ghost
+                                  : V2ButtonVariant.primary,
+                              onPressed: _auth.googleLoading
+                                  ? null
+                                  : _openLogin,
+                            ),
+                            const SizedBox(height: V2Space.x4),
+                            Wrap(
+                              alignment: WrapAlignment.center,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Text('처음이세요? ', style: V2Text.cap),
+                                InkWell(
+                                  onTap: _auth.googleLoading
+                                      ? null
+                                      : _openRegister,
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      minHeight: V2Space.tap,
+                                    ),
+                                    child: Center(
+                                      widthFactor: 1,
+                                      child: Text(
+                                        '이메일로 가입하기',
+                                        style: V2Text.bodyStrong.copyWith(
+                                          color: p.primary,
+                                          decoration: TextDecoration.underline,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      V2Space.page,
+                      V2Space.x2,
+                      V2Space.page,
+                      V2Space.x4,
+                    ),
+                    child: SafeArea(top: false, child: LegalLinks()),
+                  ),
+                ],
               ),
-            if (_auth.googleError != null) AuthErrorLine(_auth.googleError!),
-            const SizedBox(height: V2Space.x3),
+            ),
           ],
-          V2Button(
-            label: '이메일로 로그인',
-            variant: googleOn ? V2ButtonVariant.soft : V2ButtonVariant.primary,
-            onPressed: _auth.googleLoading ? null : _openLogin,
+        ),
+      ),
+    );
+  }
+}
+
+/// 어두운 'Google로 계속하기' 버튼(앱). 웹은 Google이 그리는 버튼을 쓴다.
+class _GoogleButton extends StatelessWidget {
+  const _GoogleButton({required this.onPressed, this.loading = false});
+  final VoidCallback onPressed;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = V2Palette.of(context);
+    return Semantics(
+      button: true,
+      label: 'Google로 계속하기',
+      excludeSemantics: true,
+      child: Material(
+        color: p.ink,
+        borderRadius: V2Radius.buttonAll,
+        child: InkWell(
+          borderRadius: V2Radius.buttonAll,
+          onTap: loading ? null : onPressed,
+          child: SizedBox(
+            height: 52,
+            child: Center(
+              child: loading
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 28,
+                          height: 28,
+                          alignment: Alignment.center,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white,
+                          ),
+                          child: Text(
+                            'G',
+                            textScaler: TextScaler.noScaling,
+                            style: V2Text.sans(
+                              size: 16,
+                              weight: FontWeight.w800,
+                              color: V2Colors.skyText,
+                              height: 1,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: V2Space.x3),
+                        Text(
+                          'Google로 계속하기',
+                          style: V2Text.button.copyWith(color: Colors.white),
+                        ),
+                      ],
+                    ),
+            ),
           ),
-          const SizedBox(height: V2Space.x1),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text('처음이세요?', style: V2Text.cap),
-              V2Button(
-                label: '이메일로 가입하기',
-                variant: V2ButtonVariant.text,
-                size: V2ButtonSize.sm,
-                onPressed: _auth.googleLoading ? null : _openRegister,
-              ),
-            ],
-          ),
-          const LegalLinks(),
-        ],
+        ),
       ),
     );
   }

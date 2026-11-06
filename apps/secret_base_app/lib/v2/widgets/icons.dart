@@ -34,6 +34,7 @@ abstract final class V2Icons {
   static const filter = Icons.tune_rounded;
   static const download = Icons.download_rounded;
   static const logout = Icons.logout_rounded;
+  static const mail = Icons.mail_outline_rounded;
 
   // Media / content
   static const camera = Icons.photo_camera_rounded;

@@ -59,6 +59,11 @@ Future<V2PermissionChoice> showV2PermissionSheet(
   bool denied = false,
   String? purpose,
   List<String> points = const [],
+  List<IconData>? pointIcons,
+  String? title,
+  String? allowLabel,
+  String? laterLabel,
+  String? footnote,
 }) async {
   final result = await showV2Sheet<V2PermissionChoice>(
     context,
@@ -67,6 +72,11 @@ Future<V2PermissionChoice> showV2PermissionSheet(
       denied: denied,
       purpose: purpose,
       points: points,
+      pointIcons: pointIcons,
+      title: title,
+      allowLabel: allowLabel,
+      laterLabel: laterLabel,
+      footnote: footnote,
       onChoice: (c) => Navigator.of(ctx).pop(c),
     ),
   );
@@ -83,6 +93,11 @@ class V2PermissionSheet extends StatelessWidget {
     this.denied = false,
     this.purpose,
     this.points = const [],
+    this.pointIcons,
+    this.title,
+    this.allowLabel,
+    this.laterLabel,
+    this.footnote,
   });
 
   final V2PermissionKind kind;
@@ -93,17 +108,32 @@ class V2PermissionSheet extends StatelessWidget {
   /// Extra reassurance bullets, e.g. '서윤에게만 보여요'.
   final List<String> points;
 
+  /// One icon per [points] entry. When given, the sheet uses the 2.0 mockup
+  /// layout: art tile, one title, icon rows in a soft list, no paragraph.
+  final List<IconData>? pointIcons;
+
+  /// Overrides the default "…권한이 필요해요" title.
+  final String? title;
+
+  /// Overrides the allow / later button labels.
+  final String? allowLabel;
+  final String? laterLabel;
+
+  /// Small centered note under the buttons.
+  final String? footnote;
+
   @override
   Widget build(BuildContext context) {
     final p = V2Palette.of(context);
-    final title = denied
+    final heading = denied
         ? '설정에서 ${kind.label} 권한을 켜 주세요'
-        : '${kind.label} 권한이 필요해요';
+        : (title ?? '${kind.label} 권한이 필요해요');
+    final rich = !denied && pointIcons != null && points.isNotEmpty;
     final body = denied
         ? '${kind.label} 권한이 꺼져 있어서 이 기능을 쓸 수 없어요. '
               '설정 → 비밀기지 → ${kind.label}에서 허용으로 바꿔 주세요.'
         : (purpose ?? kind.defaultPurpose);
-    final bullets = [...points, if (!denied) '언제든 설정에서 바꿀 수 있어요.'];
+    final bullets = [...points, if (!denied && !rich) '언제든 설정에서 바꿀 수 있어요.'];
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -119,18 +149,67 @@ class V2PermissionSheet extends StatelessWidget {
         Semantics(
           header: true,
           child: Text(
-            title,
+            heading,
             textAlign: TextAlign.center,
-            style: V2Text.title.copyWith(color: p.ink),
+            style: V2Text.title.copyWith(color: p.ink, fontSize: 20),
           ),
         ),
-        const SizedBox(height: 8),
-        Text(
-          body,
-          textAlign: TextAlign.center,
-          style: V2Text.body.copyWith(color: p.sub),
-        ),
-        if (bullets.isNotEmpty) ...[
+        if (!rich) ...[
+          const SizedBox(height: 8),
+          Text(
+            body,
+            textAlign: TextAlign.center,
+            style: V2Text.body.copyWith(color: p.sub),
+          ),
+        ],
+        if (rich) ...[
+          const SizedBox(height: 16),
+          Container(
+            decoration: BoxDecoration(
+              color: p.soft,
+              borderRadius: V2Radius.cardAll,
+            ),
+            child: Column(
+              children: [
+                for (var i = 0; i < points.length; i++) ...[
+                  if (i > 0) Divider(height: 1, thickness: 1, color: p.line),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: p.surface,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(
+                            i < pointIcons!.length
+                                ? pointIcons![i]
+                                : V2Icons.check,
+                            size: 20,
+                            color: p.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            points[i],
+                            style: V2Text.bodyStrong.copyWith(color: p.ink),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ] else if (bullets.isNotEmpty) ...[
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(14),
@@ -171,7 +250,7 @@ class V2PermissionSheet extends StatelessWidget {
         ],
         const SizedBox(height: 24),
         V2Button(
-          label: denied ? '설정 열기' : '허용하기',
+          label: denied ? '설정 열기' : (allowLabel ?? '허용하기'),
           icon: denied ? V2Icons.settings : null,
           onPressed: () => onChoice(
             denied ? V2PermissionChoice.openSettings : V2PermissionChoice.allow,
@@ -179,10 +258,18 @@ class V2PermissionSheet extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         V2Button(
-          label: denied ? '닫기' : '나중에',
+          label: denied ? '닫기' : (laterLabel ?? '나중에'),
           variant: V2ButtonVariant.text,
           onPressed: () => onChoice(V2PermissionChoice.later),
         ),
+        if (footnote != null && !denied) ...[
+          const SizedBox(height: 4),
+          Text(
+            footnote!,
+            textAlign: TextAlign.center,
+            style: V2Text.cap.copyWith(color: p.sub),
+          ),
+        ],
       ],
     );
   }

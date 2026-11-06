@@ -199,20 +199,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 Navigator.maybePop(context);
               }
             },
-            actions: [
-              Padding(
-                padding: const EdgeInsets.only(right: V2Space.x4),
-                child: Center(
-                  child: Semantics(
-                    label: '2단계 중 ${_step + 1}단계',
-                    child: Text(
-                      '${_step + 1}/2',
-                      style: V2Text.cap.copyWith(color: p.primary),
-                    ),
-                  ),
-                ),
-              ),
-            ],
           ),
           body: SafeArea(
             child: Center(
@@ -220,9 +206,39 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 constraints: const BoxConstraints(maxWidth: 440),
                 child: Column(
                   children: [
-                    V2ProgressBar(
-                      value: (_step + 1) / 2,
-                      semanticLabel: '2단계 중 ${_step + 1}단계',
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        V2Space.page,
+                        V2Space.x1,
+                        V2Space.page,
+                        0,
+                      ),
+                      child: Semantics(
+                        label: '2단계 중 ${_step + 1}단계',
+                        child: ExcludeSemantics(
+                          child: Row(
+                            children: [
+                              for (var i = 0; i < 2; i++) ...[
+                                Expanded(
+                                  child: Container(
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      color: i <= _step ? p.primary : p.soft2,
+                                      borderRadius: BorderRadius.circular(99),
+                                    ),
+                                  ),
+                                ),
+                                if (i == 0) const SizedBox(width: V2Space.x2),
+                              ],
+                              const SizedBox(width: V2Space.x3),
+                              Text(
+                                '${_step + 1}/2',
+                                style: V2Text.bodyStrong.copyWith(color: p.ink),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
                     Expanded(
                       child: SingleChildScrollView(
