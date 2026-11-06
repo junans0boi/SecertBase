@@ -65,6 +65,27 @@ const kLobbyOptions = <String, List<LobbyOptionDef>>{
       ],
     ),
   ],
+  'telepathy': [
+    LobbyOptionDef(
+      key: 'rounds',
+      title: '문제 수',
+      icon: '💫',
+      choices: [
+        LobbyChoice(10, '10문제', '딱 좋은 한 판'),
+        LobbyChoice(5, '5문제', '가볍게 빨리'),
+        LobbyChoice(15, '15문제', '오래오래 맞춰 봐요'),
+      ],
+    ),
+    LobbyOptionDef(
+      key: 'spicy',
+      title: '살짝 매운맛',
+      icon: '🌶️',
+      choices: [
+        LobbyChoice('off', '끄기', '편하게 즐기는 질문만'),
+        LobbyChoice('on', '켜기', '조금 짓궂은 연애 질문도'),
+      ],
+    ),
+  ],
 };
 
 List<LobbyOptionDef> lobbyOptionsFor(String gameType) =>
