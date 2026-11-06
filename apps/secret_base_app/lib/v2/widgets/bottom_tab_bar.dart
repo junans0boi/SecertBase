@@ -37,17 +37,25 @@ class V2BottomTabBar extends StatelessWidget {
 
   /// 홈 · 기록 · 지도 · 놀이 · 더보기
   static const defaultItems = [
-    V2TabItem(label: '홈', icon: Icons.home_outlined, activeIcon: V2Icons.home),
+    V2TabItem(
+      label: '홈',
+      icon: Icons.home_outlined,
+      activeIcon: Icons.home_rounded,
+    ),
     V2TabItem(
       label: '기록',
       icon: Icons.auto_stories_outlined,
-      activeIcon: V2Icons.record,
+      activeIcon: Icons.auto_stories_rounded,
     ),
-    V2TabItem(label: '지도', icon: Icons.map_outlined, activeIcon: V2Icons.map),
+    V2TabItem(
+      label: '지도',
+      icon: Icons.map_outlined,
+      activeIcon: Icons.map_rounded,
+    ),
     V2TabItem(
       label: '놀이',
       icon: Icons.sports_esports_outlined,
-      activeIcon: V2Icons.play,
+      activeIcon: Icons.sports_esports_rounded,
     ),
     V2TabItem(label: '더보기', icon: V2Icons.more, activeIcon: V2Icons.more),
   ];
@@ -68,9 +76,20 @@ class V2BottomTabBar extends StatelessWidget {
     final duration = V2Motion.of(context, V2Motion.fast);
     return Material(
       color: p.surface,
+      elevation: 0,
+      shadowColor: Colors.transparent,
       child: DecoratedBox(
         decoration: BoxDecoration(
           border: Border(top: BorderSide(color: p.line)),
+          boxShadow: p.dark
+              ? null
+              : const [
+                  BoxShadow(
+                    color: Color(0x0F3C1428),
+                    blurRadius: 16,
+                    offset: Offset(0, -4),
+                  ),
+                ],
         ),
         child: SafeArea(
           top: false,
@@ -150,34 +169,38 @@ class _Tab extends StatelessWidget {
           child: Stack(
             alignment: Alignment.topCenter,
             children: [
-              AnimatedContainer(
-                duration: duration,
-                width: selected ? 28 : 0,
-                height: 3,
-                decoration: BoxDecoration(
-                  color: p.primary,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
               Padding(
-                padding: const EdgeInsets.only(top: 7),
+                padding: const EdgeInsets.only(top: 5),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Stack(
                       clipBehavior: Clip.none,
+                      alignment: Alignment.center,
                       children: [
-                        icon,
+                        AnimatedContainer(
+                          duration: duration,
+                          width: 56,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: selected
+                                ? p.primarySoft
+                                : Colors.transparent,
+                            borderRadius: V2Radius.pillAll,
+                          ),
+                          alignment: Alignment.center,
+                          child: icon,
+                        ),
                         if (hasBadge)
                           Positioned(
-                            top: -4,
-                            left: 16,
+                            top: -3,
+                            left: 32,
                             child: V2Badge(count: badge),
                           )
                         else if (dot)
                           Positioned(
-                            top: -1,
-                            right: -3,
+                            top: 2,
+                            right: 12,
                             child: V2Badge.dot(borderColor: p.surface),
                           ),
                       ],

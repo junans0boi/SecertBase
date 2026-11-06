@@ -31,7 +31,7 @@ abstract final class V2Text {
   static final TextStyle display = _sans(
     28,
     34,
-    FontWeight.w800,
+    FontWeight.w700,
     letterSpacing: -0.56,
   );
 
@@ -39,7 +39,7 @@ abstract final class V2Text {
   static final TextStyle title = _sans(
     22,
     28,
-    FontWeight.w800,
+    FontWeight.w700,
     letterSpacing: -0.33,
   );
 
@@ -50,7 +50,7 @@ abstract final class V2Text {
   static final TextStyle body = _sans(15, 22, FontWeight.w500);
 
   /// 15/20 w600. List-row titles, emphasized body.
-  static final TextStyle bodyStrong = _sans(15, 20, FontWeight.w600);
+  static final TextStyle bodyStrong = _sans(15, 20, FontWeight.w700);
 
   /// 13/18 w500 in [V2Colors.sub]. Captions, help text, subtitles.
   static final TextStyle cap = _sans(
@@ -138,7 +138,7 @@ abstract final class V2Text {
       headlineSmall: title.copyWith(color: ink),
       titleLarge: head.copyWith(color: ink),
       titleMedium: bodyStrong.copyWith(color: ink),
-      titleSmall: cap.copyWith(color: ink, fontWeight: FontWeight.w600),
+      titleSmall: cap.copyWith(color: ink, fontWeight: FontWeight.w700),
       bodyLarge: body.copyWith(color: ink),
       bodyMedium: body.copyWith(color: ink),
       bodySmall: cap.copyWith(color: s),

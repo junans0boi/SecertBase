@@ -125,7 +125,7 @@ class AuthFrame extends StatelessWidget {
   }
 }
 
-/// 하트 열쇠구멍 문 엠블럼.
+/// 하트 열쇠구멍 문 엠블럼(옅은 배경 위).
 class AuthEmblem extends StatelessWidget {
   const AuthEmblem({super.key, this.size = 96});
   final double size;
@@ -135,17 +135,141 @@ class AuthEmblem extends StatelessWidget {
     child: Container(
       width: size,
       height: size,
+      alignment: Alignment.center,
       decoration: BoxDecoration(
-        gradient: V2Gradients.berry,
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(size / 2),
-          bottom: Radius.circular(size * 0.26),
-        ),
-        boxShadow: V2Shadow.level2,
+        gradient: V2Gradients.hero,
+        borderRadius: BorderRadius.circular(size * 0.28),
+        boxShadow: [
+          BoxShadow(
+            color: V2Colors.rose.withValues(alpha: 0.35),
+            blurRadius: size * 0.3,
+            offset: Offset(0, size * 0.08),
+          ),
+        ],
       ),
-      child: Icon(V2Icons.heart, size: size * 0.46, color: Colors.white),
+      child: AuthHeartKey(size: size * 0.58),
     ),
   );
+}
+
+/// 하트 안에 열쇠구멍이 있는 흰색 엠블럼(장미빛 [AuthHeroBlock] 위).
+class AuthHeartKey extends StatelessWidget {
+  const AuthHeartKey({super.key, this.size = 112});
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = V2Palette.of(context);
+    final arch = size * 0.42;
+    return ExcludeSemantics(
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Icon(Icons.favorite_rounded, size: size, color: Colors.white),
+            Positioned(
+              top: size * 0.3,
+              child: Container(
+                width: arch,
+                height: arch * 1.05,
+                alignment: Alignment.center,
+                padding: EdgeInsets.only(top: arch * 0.12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(arch / 2),
+                    bottom: const Radius.circular(2),
+                  ),
+                  border: Border.all(color: V2Colors.roseSoft, width: 3),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: arch * 0.3,
+                      height: arch * 0.3,
+                      decoration: BoxDecoration(
+                        color: p.primary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    Container(
+                      width: arch * 0.17,
+                      height: arch * 0.26,
+                      color: p.primary,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 장미빛 그라데이션 상단 블록(아래쪽 모서리가 둥글다). 로그인·온보딩·축하가 함께 쓴다.
+/// [expand]가 true면 부모 높이를 채우고 [child]는 가운데에 놓인다.
+class AuthHeroBlock extends StatelessWidget {
+  const AuthHeroBlock({
+    super.key,
+    required this.child,
+    this.expand = false,
+    this.padding = EdgeInsets.zero,
+  });
+  final Widget child;
+  final bool expand;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget bubble({
+      double? left,
+      double? right,
+      double? top,
+      double? bottom,
+      required double size,
+    }) => Positioned(
+      left: left,
+      right: right,
+      top: top,
+      bottom: bottom,
+      child: ExcludeSemantics(
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.white.withValues(alpha: 0.14),
+          ),
+        ),
+      ),
+    );
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: V2Gradients.hero,
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(36)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        fit: expand ? StackFit.expand : StackFit.loose,
+        children: [
+          bubble(left: -24, top: 36, size: 92),
+          bubble(right: -36, bottom: 48, size: 124),
+          bubble(right: 40, top: 70, size: 44),
+          SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: padding,
+              child: expand ? Center(child: child) : child,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// 이용약관·개인정보처리방침 링크(항상 보인다).
