@@ -116,34 +116,64 @@ class AuthService extends ChangeNotifier {
     return _googleInitFuture!;
   }
 
+  /// 이메일 가입. 성공하면 null, 실패하면 서버 오류 코드(없으면 `network_error`).
+  Future<String?> registerAccount({
+    required String email,
+    required String password,
+    required String fullName,
+    required String nickname,
+    required String birthDate,
+    required Map<String, bool> consents,
+  }) async {
+    try {
+      await _apiClient.postJson(
+        '/api/auth/register',
+        body: {
+          'email': email,
+          // 비밀번호는 다듬지 않는다(공백도 비밀번호의 일부).
+          'password': password,
+          'user_name': nickname,
+          'full_name': fullName,
+          'nickname': nickname,
+          'birth_date': birthDate,
+          'consents': consents,
+        },
+      );
+      return null;
+    } on ApiException catch (e) {
+      debugPrint('[Auth] Register error: ${e.code}');
+      return e.code;
+    } catch (e) {
+      debugPrint('[Auth] Register error: $e');
+      return 'network_error';
+    }
+  }
+
+  /// 1.x 호환: 항목별 동의 없이 가입(서버가 약관·개인정보 동의만 기록).
   Future<bool> register(
     String email,
     String password,
     String fullName,
     String nickname,
     String birthDate,
-  ) async {
-    try {
-      await _apiClient.postJson(
-        '/api/auth/register',
-        body: {
-          'email': email,
-          'password': password,
-          'user_name': nickname,
-          'full_name': fullName,
-          'nickname': nickname,
-          'birth_date': birthDate,
+  ) async => await registerAccount(
+        email: email,
+        password: password,
+        fullName: fullName,
+        nickname: nickname,
+        birthDate: birthDate,
+        consents: const {
+          'terms': true,
+          'privacy': true,
+          'age14': true,
+          'marketing': false,
         },
-      );
+      ) ==
+      null;
 
-      return true;
-    } catch (e) {
-      debugPrint('[Auth] Register error: $e');
-      return false;
-    }
-  }
-
-  Future<bool> login(String email, String password) async {
+  /// 이메일 로그인. 성공하면 null, 실패하면 오류 코드
+  /// (`invalid_credentials`, `network_error`, `timeout` …).
+  Future<String?> loginWithEmail(String email, String password) async {
     try {
       final data = _jsonObject(
         await _apiClient.postJson(
@@ -152,10 +182,89 @@ class AuthService extends ChangeNotifier {
         ),
       );
       await _storeAuthData(data);
-      return true;
+      return null;
+    } on ApiException catch (e) {
+      debugPrint('[Auth] Login error: ${e.code}');
+      return e.code;
     } catch (e) {
       debugPrint('[Auth] Login error: $e');
-      return false;
+      return 'network_error';
+    }
+  }
+
+  Future<bool> login(String email, String password) async =>
+      await loginWithEmail(email, password) == null;
+
+  /// 가입이 끝나기 전(Google 첫 로그인: 닉네임·생일·동의 없음)인지.
+  bool get signupRequired => _user?['SignupRequired'] == true;
+
+  /// Google 첫 로그인 마무리. 성공하면 null, 실패하면 오류 코드.
+  Future<String?> completeSignup({
+    required String nickname,
+    required String birthDate,
+    required Map<String, bool> consents,
+  }) async {
+    if (_token == null) return 'unauthorized';
+    try {
+      await _apiClient.postJson(
+        '/api/auth/complete-signup',
+        body: {
+          'nickname': nickname,
+          'birth_date': birthDate,
+          'consents': consents,
+        },
+      );
+      await getProfile();
+      return null;
+    } on ApiException catch (e) {
+      debugPrint('[Auth] Complete signup error: ${e.code}');
+      if (e.code == 'signup_already_completed') {
+        await getProfile();
+        return null;
+      }
+      return e.code;
+    } catch (e) {
+      debugPrint('[Auth] Complete signup error: $e');
+      return 'network_error';
+    }
+  }
+
+  /// 비밀번호 재설정 메일(코드+링크) 요청. 성공하면 null, 실패하면 오류 코드
+  /// (`mail_unavailable`, `invalid_email`, `rate_limited`, `network_error`).
+  Future<String?> requestPasswordReset(String email) =>
+      _resetCall('/api/auth/password-reset/request', {'email': email});
+
+  /// 메일로 받은 6자리 코드가 맞는지 확인(비밀번호는 아직 바꾸지 않는다).
+  Future<String?> verifyPasswordResetCode(String email, String code) =>
+      _resetCall('/api/auth/password-reset/verify', {
+        'email': email,
+        'code': code,
+      });
+
+  /// 코드와 새 비밀번호로 재설정을 마친다.
+  Future<String?> confirmPasswordReset({
+    required String email,
+    required String code,
+    required String password,
+  }) => _resetCall('/api/auth/password-reset/confirm', {
+    'email': email,
+    'code': code,
+    'password': password,
+  });
+
+  Future<String?> _resetCall(String path, Map<String, dynamic> body) async {
+    try {
+      await _apiClient.postJson(path, body: body);
+      return null;
+    } on ApiException catch (e) {
+      debugPrint('[Auth] Reset error: ${e.code}');
+      if (e.statusCode == 429 && e.code != 'too_many_attempts') {
+        return 'rate_limited';
+      }
+      return e.code;
+    } catch (e) {
+      debugPrint('[Auth] Reset error: $e');
+      return 'network_error';
     }
   }
 
@@ -176,7 +285,7 @@ class AuthService extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('[Auth] Review login error: $e');
-      _reviewAutoLoginError = '심사용 자동 입장 중 오류가 발생했습니다.';
+      _reviewAutoLoginError = '자동으로 입장하지 못했어요. 다시 시도해 주세요.';
       return false;
     } finally {
       _reviewAutoLoginLoading = false;
@@ -226,7 +335,7 @@ class AuthService extends ChangeNotifier {
 
       if (idToken == null || idToken.isEmpty) {
         _googleLoading = false;
-        _googleError = 'Google 인증 토큰을 받지 못했습니다.';
+        _googleError = 'Google 로그인을 마치지 못했어요. 다시 시도해 주세요.';
         notifyListeners();
         return false;
       }
@@ -243,7 +352,7 @@ class AuthService extends ChangeNotifier {
       return true;
     } catch (e) {
       _googleLoading = false;
-      _googleError = 'Google 로그인 중 오류가 발생했습니다.';
+      _googleError = 'Google 로그인을 마치지 못했어요. 잠시 후 다시 시도해 주세요.';
       debugPrint('[Auth] Google login error: $e');
       notifyListeners();
       return false;
@@ -316,8 +425,25 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  /// 연결 요청을 보내고 성공하면 null, 실패하면 서버 오류 코드를 돌려준다.
+  Future<String?> requestPairing(String recipientCode) async {
+    if (_token == null) return 'unauthorized';
+    try {
+      await _apiClient.postJson(
+        '/api/pairing/requests',
+        body: {'recipientCode': recipientCode},
+      );
+      return null;
+    } on ApiException catch (error) {
+      return error.code;
+    } catch (e) {
+      debugPrint('[Auth] Request pairing error: $e');
+      return 'network_error';
+    }
+  }
+
   Future<String?> sendPairingRequest(String recipientCode) async {
-    if (_token == null) return '로그인이 필요합니다.';
+    if (_token == null) return '로그인이 필요해요.';
     try {
       await _apiClient.postJson(
         '/api/pairing/requests',
@@ -326,10 +452,10 @@ class AuthService extends ChangeNotifier {
       return null;
     } on ApiException catch (error) {
       return switch (error.code) {
-        'recipient_not_found' => '상대방 코드를 찾지 못했어요.',
-        'request_already_pending' => '이미 두 분 사이에 대기 중인 요청이 있어요.',
-        'active_couple_exists' => '이미 연결된 사용자는 새 요청을 받을 수 없어요.',
-        'cannot_pair_with_self' => '내 코드로는 요청할 수 없어요.',
+        'recipient_not_found' => '없는 코드예요. 상대의 코드를 다시 확인해 주세요.',
+        'request_already_pending' => '이미 대기 중인 연결 요청이 있어요.',
+        'active_couple_exists' => '이 코드의 주인은 지금 다른 상대와 연결되어 있어요.',
+        'cannot_pair_with_self' => '내 코드로는 요청할 수 없어요. 상대의 코드를 입력해 주세요.',
         _ => '요청을 보내지 못했어요.',
       };
     } catch (e) {
@@ -452,7 +578,7 @@ class AuthService extends ChangeNotifier {
     required String currentPassword,
     required String newPassword,
   }) async {
-    if (_token == null || _user == null) return '로그인이 필요합니다.';
+    if (_token == null || _user == null) return '로그인이 필요해요.';
     final uid = _user!['UserId'] ?? _user!['id'];
     try {
       await _apiClient.patchJson(
@@ -462,31 +588,31 @@ class AuthService extends ChangeNotifier {
       return null;
     } on ApiException catch (error) {
       return switch (error.code) {
-        'invalid_current_password' => '현재 비밀번호가 맞지 않습니다.',
-        'weak_password' => '새 비밀번호는 6자 이상이어야 합니다.',
-        'password_login_not_enabled' => '소셜 로그인 계정에는 아직 비밀번호가 없습니다.',
-        _ => '비밀번호 변경에 실패했습니다.',
+        'invalid_current_password' => '현재 비밀번호가 맞지 않아요.',
+        'weak_password' => '새 비밀번호는 8자 이상, 영문과 숫자를 함께 써 주세요.',
+        'password_login_not_enabled' => 'Google로 가입한 계정에는 비밀번호가 없어요.',
+        _ => '비밀번호를 바꾸지 못했어요. 다시 시도해 주세요.',
       };
     } catch (e) {
       debugPrint('[Auth] Update password error: $e');
-      return '비밀번호 변경 중 오류가 발생했습니다.';
+      return '비밀번호를 바꾸지 못했어요. 잠시 후 다시 시도해 주세요.';
     }
   }
 
   String _googleErrorMessage(Object error) {
     if (error is GoogleSignInException) {
       return switch (error.code) {
-        GoogleSignInExceptionCode.canceled => 'Google 로그인이 취소되었습니다.',
-        GoogleSignInExceptionCode.interrupted => 'Google 로그인이 중단되었습니다.',
+        GoogleSignInExceptionCode.canceled => 'Google 로그인을 취소했어요.',
+        GoogleSignInExceptionCode.interrupted => 'Google 로그인이 중단됐어요. 다시 시도해 주세요.',
         GoogleSignInExceptionCode.clientConfigurationError =>
-          'Google 로그인 설정이 필요합니다.',
+          '지금은 Google 로그인을 쓸 수 없어요. 이메일로 로그인해 주세요.',
         GoogleSignInExceptionCode.providerConfigurationError =>
-          'Google OAuth 설정을 확인해주세요.',
+          '지금은 Google 로그인을 쓸 수 없어요. 이메일로 로그인해 주세요.',
         GoogleSignInExceptionCode.uiUnavailable =>
-          '현재 환경에서 Google 로그인 UI를 열 수 없습니다.',
-        _ => 'Google 로그인에 실패했습니다.',
+          '이 기기에서는 Google 로그인 창을 열 수 없어요.',
+        _ => 'Google 로그인을 하지 못했어요. 다시 시도해 주세요.',
       };
     }
-    return 'Google 로그인에 실패했습니다.';
+    return 'Google 로그인을 하지 못했어요. 다시 시도해 주세요.';
   }
 }

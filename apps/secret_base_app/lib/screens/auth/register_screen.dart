@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth_service.dart';
-import '../../core/legal_urls.dart';
-import 'auth_layout.dart';
+import '../../v2/v2.dart';
+import 'auth_parts.dart';
+import 'password_reset_screen.dart';
 
+/// 이메일 가입(2단계). 1/2 이름·닉네임·생일, 2/2 이메일·비밀번호·동의.
+/// 가입이 끝나면 바로 로그인한다. 자동 로그인에 실패했을 때만 이메일을 돌려준다.
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
@@ -14,354 +16,357 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  final _emailCtrl = TextEditingController();
-  final _passwordCtrl = TextEditingController();
+  static const _nicknameMax = 10;
+
   final _nameCtrl = TextEditingController();
   final _nicknameCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
+  final _birthCtrl = TextEditingController();
   DateTime? _birthDate;
+  ConsentValue _consent = const ConsentValue();
   int _step = 0;
   bool _loading = false;
-  bool _showPassword = false;
-  bool _agreed = false;
-  String? _error;
+  bool _welcome = false;
+
+  String? _nameError;
+  String? _nicknameError;
+  String? _birthError;
+  String? _emailError;
+  bool _emailTaken = false;
+  String? _passwordError;
+  String? _formError;
 
   final _auth = AuthService();
 
-  bool _validateProfile() {
-    if (_nameCtrl.text.trim().isEmpty) {
-      setState(() => _error = '이름을 입력해주세요.');
-      return false;
-    }
-    if (_nicknameCtrl.text.trim().isEmpty) {
-      setState(() => _error = '닉네임을 입력해주세요.');
-      return false;
-    }
-    if (_birthDate == null) {
-      setState(() => _error = '생년월일을 선택해주세요.');
-      return false;
-    }
-    return true;
-  }
-
-  void _nextStep() {
-    if (_loading) return;
-    FocusScope.of(context).unfocus();
-    if (!_validateProfile()) return;
-    setState(() {
-      _step = 1;
-      _error = null;
-    });
-  }
-
-  Future<void> _register() async {
-    if (_loading) return;
-    if (!_agreed) {
-      setState(() => _error = '개인정보 처리방침과 이용약관에 동의해주세요.');
-      return;
-    }
-    final emailError = validateAuthEmail(_emailCtrl.text);
-    if (emailError != null) {
-      setState(() => _error = emailError);
-      return;
-    }
-    if (_passwordCtrl.text.trim().isEmpty) {
-      setState(() => _error = '비밀번호를 입력해주세요.');
-      return;
-    }
-
-    FocusScope.of(context).unfocus();
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
-    final success = await _auth.register(
-      _emailCtrl.text.trim(),
-      _passwordCtrl.text.trim(),
-      _nameCtrl.text.trim(),
-      _nicknameCtrl.text.trim(),
-      _dateOnly(_birthDate),
-    );
-
-    if (!mounted) return;
-    if (success) {
-      TextInput.finishAutofillContext();
-      Navigator.pop(context, _emailCtrl.text.trim());
-      return;
-    }
-
-    setState(() {
-      _loading = false;
-      _error = '회원가입에 실패했습니다. 이미 사용 중인 이메일일 수 있습니다.';
-    });
-  }
-
   @override
   void dispose() {
-    _emailCtrl.dispose();
-    _passwordCtrl.dispose();
     _nameCtrl.dispose();
     _nicknameCtrl.dispose();
+    _emailCtrl.dispose();
+    _passwordCtrl.dispose();
+    _birthCtrl.dispose();
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return AuthTheme(
-      child: Scaffold(
-        body: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 480),
-              child: SingleChildScrollView(
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _topBar(),
-                      const SizedBox(height: 40),
-                      AuthHeading(
-                        title: _step == 0
-                            ? '가입을 축하해요!\n어떻게 불러드릴까요?'
-                            : '로그인 정보를\n만들어볼게요.',
-                        description: _step == 0
-                            ? '두 분만의 기록을 시작하기 전에\n간단한 정보를 알려주세요.'
-                            : '다음부터 이메일과 비밀번호로\n안전하게 입장할 수 있어요.',
-                      ),
-                      const SizedBox(height: 34),
-                      _step == 0 ? _profileForm() : _accountForm(),
-                      if (_step == 1) _consentRow(),
-                      if (_error != null) AuthError(_error!),
-                      const SizedBox(height: 22),
-                      AuthButton(
-                        label: _step == 0 ? '다음' : '회원가입',
-                        loading: _loading,
-                        onPressed: _step == 0
-                            ? _nextStep
-                            : (_agreed ? _register : null),
-                      ),
-                      if (_step == 1) ...[
-                        const SizedBox(height: 8),
-                        TextButton(
-                          onPressed: _loading
-                              ? null
-                              : () => setState(() {
-                                  _step = 0;
-                                  _error = null;
-                                }),
-                          child: Text(
-                            '이전 단계',
-                            style: authText(size: 14, color: authSecondary),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _topBar() {
-    return Row(
-      children: [
-        IconButton(
-          tooltip: '뒤로가기',
-          onPressed: _loading ? null : () => Navigator.pop(context),
-          padding: EdgeInsets.zero,
-          alignment: Alignment.centerLeft,
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-        ),
-        const SizedBox(width: 8),
-        Expanded(child: AuthProgress(current: _step + 1, total: 2)),
-        const SizedBox(width: 14),
-        Text(
-          '${_step + 1}/2',
-          style: authText(size: 14, color: authMuted, weight: FontWeight.w700),
-        ),
-      ],
-    );
-  }
-
-  Widget _profileForm() {
-    return AutofillGroup(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          AuthField(
-            label: '이름',
-            child: TextField(
-              controller: _nameCtrl,
-              enabled: !_loading,
-              textInputAction: TextInputAction.next,
-              textCapitalization: TextCapitalization.words,
-              style: authText(),
-              decoration: const InputDecoration(hintText: '이름을 입력해주세요'),
-            ),
-          ),
-          const SizedBox(height: 20),
-          AuthField(
-            label: '닉네임',
-            child: TextField(
-              controller: _nicknameCtrl,
-              enabled: !_loading,
-              textInputAction: TextInputAction.next,
-              style: authText(),
-              decoration: const InputDecoration(hintText: '앱에서 사용할 이름을 입력해주세요'),
-            ),
-          ),
-          const SizedBox(height: 20),
-          AuthField(
-            label: '생년월일',
-            child: InkWell(
-              onTap: _loading ? null : _pickBirthDate,
-              borderRadius: BorderRadius.circular(16),
-              child: InputDecorator(
-                decoration: const InputDecoration(
-                  hintText: '생년월일을 선택해주세요',
-                  suffixIcon: Icon(Icons.calendar_today_outlined, size: 20),
-                ),
-                child: Text(
-                  _birthDate == null ? '' : _dateOnly(_birthDate),
-                  style: authText(
-                    color: _birthDate == null ? authMuted : authInk,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _consentRow() {
-    Widget link(String label, String url) => InkWell(
-      onTap: () =>
-          launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
-      child: Text(
-        label,
-        style: authText(
-          size: 13,
-          color: authPrimary,
-        ).copyWith(decoration: TextDecoration.underline),
-      ),
-    );
-    return Padding(
-      padding: const EdgeInsets.only(top: 16),
-      child: Row(
-        children: [
-          Checkbox(
-            value: _agreed,
-            onChanged: _loading
-                ? null
-                : (v) => setState(() => _agreed = v ?? false),
-          ),
-          Expanded(
-            child: Wrap(
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 4,
-              children: [
-                link('개인정보 처리방침', kPrivacyUrl),
-                Text('및', style: authText(size: 13, color: authSecondary)),
-                link('이용약관', kTermsUrl),
-                Text(
-                  '에 동의합니다 (필수)',
-                  style: authText(size: 13, color: authSecondary),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _accountForm() {
-    return AutofillGroup(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          AuthField(
-            label: '이메일',
-            child: TextField(
-              controller: _emailCtrl,
-              enabled: !_loading,
-              style: authText(),
-              keyboardType: TextInputType.emailAddress,
-              textInputAction: TextInputAction.next,
-              autofillHints: const [AutofillHints.username],
-              autocorrect: false,
-              decoration: const InputDecoration(hintText: '이메일 주소를 입력해주세요'),
-            ),
-          ),
-          const SizedBox(height: 20),
-          AuthField(
-            label: '비밀번호',
-            child: TextField(
-              controller: _passwordCtrl,
-              enabled: !_loading,
-              style: authText(),
-              obscureText: !_showPassword,
-              enableSuggestions: false,
-              autocorrect: false,
-              autofillHints: const [AutofillHints.newPassword],
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _register(),
-              decoration: InputDecoration(
-                hintText: '비밀번호를 입력해주세요',
-                suffixIcon: IconButton(
-                  tooltip: _showPassword ? '비밀번호 숨기기' : '비밀번호 보기',
-                  onPressed: () =>
-                      setState(() => _showPassword = !_showPassword),
-                  icon: Icon(
-                    _showPassword
-                        ? Icons.visibility_off_outlined
-                        : Icons.visibility_outlined,
-                    size: 21,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            '입력한 이메일은 로그인과 계정 안내에 사용돼요.',
-            style: authText(size: 12, color: authMuted),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _dateOnly(DateTime? value) {
-    if (value == null) return '';
-    return '${value.year}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
-  }
-
-  Future<void> _pickBirthDate() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _birthDate ?? DateTime(now.year - 20, now.month, now.day),
-      firstDate: DateTime(1900),
-      lastDate: now,
-      helpText: '생년월일 선택',
-      cancelText: '취소',
-      confirmText: '선택',
-    );
+  Future<void> _pickBirth() async {
+    final picked = await pickBirthDate(context, _birthDate);
     if (picked != null && mounted) {
       setState(() {
         _birthDate = picked;
-        _error = null;
+        _birthCtrl.text = formatBirthDate(picked);
+        _birthError = null;
       });
     }
   }
+
+  void _next() {
+    FocusScope.of(context).unfocus();
+    final name = _nameCtrl.text.trim();
+    final nickname = _nicknameCtrl.text.trim();
+    setState(() {
+      _nameError = name.isEmpty ? '이름을 입력해 주세요.' : null;
+      _nicknameError = nickname.isEmpty ? '닉네임을 입력해 주세요.' : null;
+      _birthError = _birthDate == null
+          ? '생일을 선택해 주세요.'
+          : (isAtLeast14(_birthDate!) ? null : '만 14세 이상만 가입할 수 있어요.');
+    });
+    if (_nameError == null && _nicknameError == null && _birthError == null) {
+      setState(() => _step = 1);
+    }
+  }
+
+  bool get _canSubmit =>
+      !_loading &&
+      isValidEmail(_emailCtrl.text) &&
+      isStrongPassword(_passwordCtrl.text) &&
+      _consent.requiredOk;
+
+  Future<void> _register() async {
+    if (_loading) return;
+    FocusScope.of(context).unfocus();
+    final email = _emailCtrl.text.trim();
+    final password = _passwordCtrl.text;
+    setState(() {
+      _emailTaken = false;
+      _emailError = isValidEmail(email) ? null : '이메일 주소를 확인해 주세요.';
+      _passwordError = isStrongPassword(password)
+          ? null
+          : '비밀번호는 8자 이상, 영문과 숫자를 함께 써 주세요.';
+      _formError = _consent.requiredOk ? null : '필수 항목에 동의하면 가입할 수 있어요.';
+    });
+    if (_emailError != null || _passwordError != null || _formError != null) {
+      return;
+    }
+    setState(() => _loading = true);
+    final code = await _auth.registerAccount(
+      email: email,
+      password: password,
+      fullName: _nameCtrl.text.trim(),
+      nickname: _nicknameCtrl.text.trim(),
+      birthDate: isoDate(_birthDate!),
+      consents: _consent.toJson(),
+    );
+    if (!mounted) return;
+    if (code != null) {
+      setState(() {
+        _loading = false;
+        switch (code) {
+          case 'email_already_exists':
+            _emailError = '이미 가입된 이메일이에요.';
+            _emailTaken = true;
+          case 'weak_password':
+            _passwordError = authErrorMessage(code);
+          case 'under_age':
+          case 'invalid_birth_date':
+            _step = 0;
+            _birthError = authErrorMessage(code);
+          default:
+            _formError = authErrorMessage(code);
+        }
+      });
+      return;
+    }
+    TextInput.finishAutofillContext();
+    setState(() => _welcome = true);
+    final loginCode = await _auth.loginWithEmail(email, password);
+    if (!mounted) return;
+    if (loginCode == null) {
+      // 메인 화면이 바뀐 뒤 위에 쌓인 가입/로그인 화면을 걷어 낸다.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) Navigator.of(context).popUntil((r) => r.isFirst);
+      });
+    } else {
+      Navigator.pop(context, email);
+    }
+  }
+
+  void _toLogin() => Navigator.pop(context, _emailCtrl.text.trim());
+
+  void _toReset() => Navigator.pushReplacement(
+    context,
+    MaterialPageRoute(
+      builder: (_) => PasswordResetScreen(initialEmail: _emailCtrl.text.trim()),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    if (_welcome) {
+      final nick = _nicknameCtrl.text.trim();
+      return AuthFrame(
+        hero: true,
+        body: Padding(
+          padding: const EdgeInsets.only(top: V2Space.x12),
+          child: Column(
+            children: [
+              const AuthEmblem(size: 96),
+              const SizedBox(height: V2Space.x6),
+              Text('$nick님, 환영해요!', style: V2Text.title),
+              const SizedBox(height: V2Space.x2),
+              Text(
+                V2Text.keepAll('로그인하는 중이에요. 곧 상대와 연결할 수 있어요.'),
+                textAlign: TextAlign.center,
+                style: V2Text.cap,
+              ),
+              const SizedBox(height: V2Space.x6),
+              const SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(strokeWidth: 3),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final p = V2Palette.of(context);
+    return PopScope(
+      canPop: _step == 0 && !_loading,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && !_loading && _step == 1) setState(() => _step = 0);
+      },
+      child: V2Theme(
+        child: Scaffold(
+          appBar: V2Header(
+            title: '가입하기',
+            onBack: () {
+              if (_loading) return;
+              if (_step == 1) {
+                setState(() => _step = 0);
+              } else {
+                Navigator.maybePop(context);
+              }
+            },
+            actions: [
+              Padding(
+                padding: const EdgeInsets.only(right: V2Space.x4),
+                child: Center(
+                  child: Semantics(
+                    label: '2단계 중 ${_step + 1}단계',
+                    child: Text(
+                      '${_step + 1}/2',
+                      style: V2Text.cap.copyWith(color: p.primary),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          body: SafeArea(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: Column(
+                  children: [
+                    V2ProgressBar(
+                      value: (_step + 1) / 2,
+                      semanticLabel: '2단계 중 ${_step + 1}단계',
+                    ),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(V2Space.page),
+                        child: AutofillGroup(
+                          child: _step == 0 ? _stepProfile() : _stepAccount(),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        V2Space.page,
+                        V2Space.x2,
+                        V2Space.page,
+                        V2Space.x5,
+                      ),
+                      child: _step == 0
+                          ? V2Button(label: '다음', onPressed: _next)
+                          : V2Button(
+                              label: _loading ? '가입하는 중이에요' : '가입하기',
+                              loading: _loading,
+                              onPressed: _canSubmit ? _register : null,
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _stepProfile() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text('먼저 나를 소개해 주세요', style: V2Text.title),
+      const SizedBox(height: V2Space.x1),
+      Text('상대에게 보이는 이름과 운세에 쓰는 생일이에요.', style: V2Text.cap),
+      const SizedBox(height: V2Space.x6),
+      V2TextField(
+        label: '이름',
+        hint: '이름',
+        controller: _nameCtrl,
+        error: _nameError,
+        textInputAction: TextInputAction.next,
+        autofillHints: const [AutofillHints.name],
+        onChanged: (_) => setState(() => _nameError = null),
+      ),
+      const SizedBox(height: V2Space.x4),
+      V2TextField(
+        label: '닉네임',
+        hint: '상대에게 보여질 이름',
+        controller: _nicknameCtrl,
+        error: _nicknameError,
+        maxLength: _nicknameMax,
+        help: '상대에게 이 이름으로 보여요. 나중에 바꿀 수 있어요.',
+        textInputAction: TextInputAction.next,
+        onChanged: (_) => setState(() => _nicknameError = null),
+      ),
+      const SizedBox(height: V2Space.x4),
+      V2TextField(
+        label: '생일',
+        hint: '생일을 선택해 주세요',
+        controller: _birthCtrl,
+        readOnly: true,
+        onTap: _pickBirth,
+        error: _birthError,
+        help: '사주와 운세를 계산하는 데만 써요.',
+        prefixIcon: V2Icons.calendar,
+      ),
+    ],
+  );
+
+  Widget _stepAccount() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      V2TextField(
+        label: '이메일',
+        hint: 'name@example.com',
+        controller: _emailCtrl,
+        enabled: !_loading,
+        error: _emailError,
+        keyboardType: TextInputType.emailAddress,
+        textInputAction: TextInputAction.next,
+        autofillHints: const [AutofillHints.newUsername],
+        onChanged: (_) => setState(() {
+          _emailError = null;
+          _emailTaken = false;
+        }),
+      ),
+      if (_emailTaken)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Row(
+            children: [
+              V2Button(
+                label: '로그인',
+                variant: V2ButtonVariant.text,
+                size: V2ButtonSize.sm,
+                onPressed: _toLogin,
+              ),
+              Text('·', style: V2Text.cap),
+              V2Button(
+                label: '비밀번호 재설정',
+                variant: V2ButtonVariant.text,
+                size: V2ButtonSize.sm,
+                onPressed: _toReset,
+              ),
+            ],
+          ),
+        ),
+      const SizedBox(height: V2Space.x4),
+      V2TextField(
+        label: '비밀번호',
+        hint: '비밀번호',
+        controller: _passwordCtrl,
+        enabled: !_loading,
+        password: true,
+        error: _passwordError,
+        textInputAction: TextInputAction.done,
+        autofillHints: const [AutofillHints.newPassword],
+        onChanged: (_) => setState(() => _passwordError = null),
+        onSubmitted: (_) {
+          if (_canSubmit) _register();
+        },
+      ),
+      PasswordChecklist(_passwordCtrl.text),
+      const SizedBox(height: V2Space.x6),
+      ConsentChecks(
+        value: _consent,
+        enabled: !_loading,
+        onChanged: (v) => setState(() {
+          _consent = v;
+          _formError = null;
+        }),
+      ),
+      if (_formError != null) AuthErrorLine(_formError!),
+      if (!_consent.requiredOk && _formError == null)
+        Padding(
+          padding: const EdgeInsets.only(top: V2Space.x2),
+          child: Text('필수 항목에 동의하면 가입할 수 있어요', style: V2Text.cap),
+        ),
+    ],
+  );
 }

@@ -8,7 +8,9 @@ void main() {
     await tester.pumpWidget(const SecretBaseApp());
 
     expect(find.text('이메일로 로그인'), findsOneWidget);
-    expect(find.text('아직 계정이 없나요?  회원가입', findRichText: true), findsOneWidget);
+    expect(find.text('이메일로 가입하기'), findsOneWidget);
+    expect(find.text('이용약관'), findsOneWidget);
+    expect(find.text('개인정보처리방침'), findsOneWidget);
   });
 
   testWidgets('public arcade exposes restored games without UNO branding', (
