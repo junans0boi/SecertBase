@@ -53,6 +53,24 @@ enum GameSound {
   penaltyDraw,
   skip,
   reverse,
+  // 윷놀이
+  yutToss,
+  yutClack,
+  yutDrum,
+  yutGong,
+  yutKkwaeng,
+  yutCapture,
+  yutGoal,
+  yutStack,
+  yutStep,
+  // 고스톱
+  hwatuSlap,
+  hwatuFlip,
+  hwatuCapture,
+  ppeok,
+  sseul,
+  goCall,
+  coins,
 }
 
 /// 소리 레시피. [render]는 -1..1 PCM 샘플을 돌려준다.
@@ -102,6 +120,22 @@ class GameSoundRecipes {
     GameSound.penaltyDraw => _penaltyDraw(),
     GameSound.skip => _skip(),
     GameSound.reverse => _reverse(),
+    GameSound.yutToss => _yutToss(),
+    GameSound.yutClack => _yutClack(),
+    GameSound.yutDrum => _yutDrum(),
+    GameSound.yutGong => _yutGong(),
+    GameSound.yutKkwaeng => _yutKkwaeng(),
+    GameSound.yutCapture => _yutCapture(),
+    GameSound.yutGoal => _yutGoal(),
+    GameSound.yutStack => _yutStack(),
+    GameSound.yutStep => _yutStep(),
+    GameSound.hwatuSlap => _hwatuSlap(),
+    GameSound.hwatuFlip => _hwatuFlip(),
+    GameSound.hwatuCapture => _hwatuCapture(),
+    GameSound.ppeok => _ppeok(),
+    GameSound.sseul => _sseul(),
+    GameSound.goCall => _goCall(),
+    GameSound.coins => _coins(),
   };
 
   // ── 공통 ────────────────────────────────────────────────────────────────
@@ -737,5 +771,353 @@ class GameSoundRecipes {
       wave: Wave.triangle,
     );
     return Synth.finish(o, 0.36);
+  }
+
+  // ── 윷놀이: 나무 윷가락, 북, 꽹과리, 징 ───────────────────────────────────
+  /// 나무 한 번 "딱" (높이·길이를 달리해 윷가락마다 다른 소리를 낸다).
+  static void _woodKnock(
+    Float64List o,
+    double start,
+    double pitch, {
+    double gain = 0.8,
+    int seed = 1,
+  }) {
+    Synth.noise(
+      o,
+      seed: seed,
+      fc0: 3200,
+      fc1: 900,
+      attack: 0.0006,
+      decay: 0.012,
+      gain: gain,
+      start: start,
+      length: 0.05,
+    );
+    Synth.tone(
+      o,
+      f0: pitch * 1.5,
+      f1: pitch,
+      attack: 0.0008,
+      decay: 0.03,
+      gain: gain * 0.7,
+      start: start,
+      length: 0.09,
+      wave: Wave.triangle,
+    );
+  }
+
+  static Float64List _yutToss() {
+    final o = Synth.buffer(0.7);
+    Synth.noise(
+      o,
+      seed: 301,
+      fc0: 500,
+      fc1: 2600,
+      attack: 0.1,
+      decay: 0.1,
+      gain: 0.35,
+      length: 0.3,
+    );
+    // 윷가락 네 개가 서로 부딪히는 소리.
+    for (int i = 0; i < 4; i++) {
+      _woodKnock(o, 0.16 + i * 0.045, 820 + i * 90, gain: 0.55, seed: 310 + i);
+    }
+    return Synth.finish(o, 0.5);
+  }
+
+  static Float64List _yutClack() {
+    final o = Synth.buffer(0.2);
+    _woodKnock(o, 0, 700, gain: 0.9, seed: 320);
+    _woodKnock(o, 0.045, 940, gain: 0.5, seed: 321);
+    return Synth.finish(o, 0.55);
+  }
+
+  /// 북: 낮은 울림.
+  static void _drumHit(
+    Float64List o,
+    double start, {
+    double gain = 0.9,
+    double pitch = 120,
+  }) {
+    Synth.tone(
+      o,
+      f0: pitch * 1.8,
+      f1: pitch * 0.55,
+      attack: 0.002,
+      decay: 0.12,
+      gain: gain,
+      start: start,
+      length: 0.35,
+      wave: Wave.triangle,
+    );
+    Synth.noise(
+      o,
+      seed: 330 + (start * 100).round(),
+      fc0: 900,
+      fc1: 200,
+      attack: 0.001,
+      decay: 0.025,
+      gain: gain * 0.5,
+      start: start,
+      length: 0.08,
+    );
+  }
+
+  static Float64List _yutDrum() {
+    final o = Synth.buffer(0.5);
+    _drumHit(o, 0);
+    return Synth.finish(o, 0.62);
+  }
+
+  static Float64List _yutGong() {
+    final o = Synth.buffer(2.0);
+    Synth.bell(o, 150, 0, length: 1.9, decay: 0.9, gain: 0.55);
+    Synth.tone(
+      o,
+      f0: 210,
+      f1: 175,
+      attack: 0.004,
+      decay: 0.7,
+      gain: 0.35,
+      length: 1.9,
+      vibratoHz: 6,
+      vibratoDepth: 0.01,
+    );
+    return Synth.finish(o, 0.5);
+  }
+
+  /// 꽹과리: 밝고 짧은 쇳소리 연타.
+  static Float64List _yutKkwaeng() {
+    final o = Synth.buffer(0.9);
+    const hits = [0.0, 0.11, 0.22, 0.36];
+    for (int i = 0; i < hits.length; i++) {
+      Synth.bell(
+        o,
+        1180 + i * 40,
+        hits[i],
+        length: 0.3,
+        decay: 0.07,
+        gain: 0.5,
+      );
+      Synth.noise(
+        o,
+        seed: 340 + i,
+        fc0: 6000,
+        fc1: 3000,
+        attack: 0.0005,
+        decay: 0.01,
+        gain: 0.35,
+        start: hits[i],
+        length: 0.04,
+        highpass: true,
+      );
+    }
+    _drumHit(o, 0, gain: 0.6);
+    _drumHit(o, 0.36, gain: 0.7);
+    return Synth.finish(o, 0.6);
+  }
+
+  static Float64List _yutCapture() {
+    final o = Synth.buffer(1.3);
+    Synth.bell(o, 1250, 0, length: 0.4, decay: 0.09, gain: 0.55);
+    Synth.bell(o, 1250, 0.09, length: 0.4, decay: 0.09, gain: 0.55);
+    _drumHit(o, 0.02, gain: 0.8, pitch: 100);
+    _drumHit(o, 0.2, gain: 0.8, pitch: 90);
+    Synth.bell(o, 150, 0.22, length: 1.0, decay: 0.5, gain: 0.5);
+    Synth.noise(
+      o,
+      seed: 350,
+      fc0: 3500,
+      fc1: 400,
+      attack: 0.002,
+      decay: 0.12,
+      gain: 0.35,
+      start: 0.03,
+      length: 0.3,
+    );
+    return Synth.finish(o, 0.6);
+  }
+
+  static Float64List _yutGoal() {
+    final o = Synth.buffer(1.6);
+    for (int i = 0; i < 3; i++) {
+      _drumHit(o, i * 0.14, gain: 0.7 + i * 0.1, pitch: 110 + i * 14);
+    }
+    const notes = [587.33, 739.99, 880.0, 1174.66];
+    for (int i = 0; i < notes.length; i++) {
+      Synth.note(
+        o,
+        notes[i],
+        0.42 + i * 0.08,
+        0.5,
+        Wave.triangle,
+        decay: 0.2,
+        gain: 0.45,
+      );
+    }
+    Synth.bell(o, 1174.66, 0.75, length: 0.8, decay: 0.4, gain: 0.35);
+    Synth.bell(o, 146.8, 0.45, length: 1.1, decay: 0.55, gain: 0.35);
+    return Synth.finish(o, 0.55);
+  }
+
+  static Float64List _yutStack() {
+    final o = Synth.buffer(0.3);
+    _woodKnock(o, 0, 520, gain: 0.7, seed: 360);
+    _woodKnock(o, 0.08, 620, gain: 0.7, seed: 361);
+    Synth.note(o, 880, 0.1, 0.18, Wave.sine, decay: 0.08, gain: 0.25);
+    return Synth.finish(o, 0.45);
+  }
+
+  /// 말이 한 칸 가는 소리(바둑돌 놓는 소리처럼).
+  static Float64List _yutStep() {
+    final o = Synth.buffer(0.12);
+    Synth.tone(
+      o,
+      f0: 1500,
+      f1: 700,
+      attack: 0.0008,
+      decay: 0.02,
+      gain: 0.55,
+      wave: Wave.triangle,
+      length: 0.07,
+    );
+    Synth.noise(
+      o,
+      seed: 370,
+      fc0: 3000,
+      fc1: 1200,
+      attack: 0.0005,
+      decay: 0.008,
+      gain: 0.3,
+      length: 0.03,
+    );
+    return Synth.finish(o, 0.34);
+  }
+
+  // ── 고스톱 ──────────────────────────────────────────────────────────────
+  // 두꺼운 화투를 판에 "탁" 내리치는 소리: 낮은 몸통 + 짧은 마찰.
+  static Float64List _hwatuSlap() {
+    final o = Synth.buffer(0.16);
+    Synth.tone(o, f0: 210, f1: 90, attack: 0.001, decay: 0.045, gain: 1);
+    Synth.noise(o, seed: 71, fc0: 2400, fc1: 700, attack: 0.001, decay: 0.02);
+    Synth.noise(
+      o,
+      seed: 72,
+      fc0: 5200,
+      fc1: 3000,
+      attack: 0.001,
+      decay: 0.008,
+      gain: 0.5,
+      highpass: true,
+    );
+    return Synth.finish(o, 0.62);
+  }
+
+  // 더미에서 뒤집는 소리: 얇은 스치는 소리 뒤에 가벼운 착지.
+  static Float64List _hwatuFlip() {
+    final o = Synth.buffer(0.24);
+    Synth.noise(
+      o,
+      seed: 73,
+      fc0: 1800,
+      fc1: 4800,
+      attack: 0.04,
+      decay: 0.05,
+      gain: 0.7,
+      highpass: true,
+    );
+    Synth.tone(
+      o,
+      f0: 240,
+      f1: 130,
+      attack: 0.001,
+      decay: 0.03,
+      gain: 0.7,
+      start: 0.1,
+    );
+    Synth.noise(
+      o,
+      seed: 74,
+      fc0: 1600,
+      fc1: 600,
+      attack: 0.001,
+      decay: 0.014,
+      start: 0.1,
+    );
+    return Synth.finish(o, 0.5);
+  }
+
+  // 먹는 소리: 두 번 맑게 울리는 짝 소리.
+  static Float64List _hwatuCapture() {
+    final o = Synth.buffer(0.55);
+    Synth.tone(o, f0: 190, f1: 100, attack: 0.001, decay: 0.04, gain: 0.8);
+    Synth.bell(o, 1046.5, 0.03, decay: 0.2, gain: 0.45);
+    Synth.bell(o, 1568, 0.11, decay: 0.28, gain: 0.4);
+    return Synth.finish(o, 0.5);
+  }
+
+  // 뻑: 어긋나는 낮은 두 음.
+  static Float64List _ppeok() {
+    final o = Synth.buffer(0.7);
+    Synth.tone(
+      o,
+      f0: 300,
+      f1: 90,
+      attack: 0.002,
+      decay: 0.2,
+      gain: 0.8,
+      wave: Wave.saw,
+    );
+    Synth.note(o, 196, 0.12, 0.28, Wave.squareSoft, decay: 0.16, gain: 0.45);
+    Synth.note(o, 185, 0.26, 0.34, Wave.squareSoft, decay: 0.2, gain: 0.45);
+    return Synth.finish(o, 0.5);
+  }
+
+  // 쓸: 위로 쓸어 올리는 반짝임.
+  static Float64List _sseul() {
+    final o = Synth.buffer(0.9);
+    Synth.noise(
+      o,
+      seed: 75,
+      fc0: 500,
+      fc1: 4200,
+      attack: 0.18,
+      decay: 0.1,
+      gain: 0.5,
+    );
+    const notes = [880.0, 1175.0, 1568.0, 2093.0];
+    for (int i = 0; i < notes.length; i++) {
+      Synth.bell(o, notes[i], 0.12 + i * 0.07, decay: 0.3, gain: 0.35);
+    }
+    return Synth.finish(o, 0.5);
+  }
+
+  // "고!": 힘 있게 올라가는 두 음 + 긴 종소리.
+  static Float64List _goCall() {
+    final o = Synth.buffer(1.1);
+    Synth.note(o, 392, 0, 0.16, Wave.triangle, decay: 0.09, gain: 0.7);
+    Synth.note(o, 587.3, 0.12, 0.2, Wave.triangle, decay: 0.1, gain: 0.7);
+    Synth.bell(o, 1174.7, 0.26, decay: 0.5, gain: 0.55);
+    Synth.bell(o, 1568, 0.3, decay: 0.5, gain: 0.3);
+    return Synth.finish(o, 0.52);
+  }
+
+  // 정산 동전: 짧은 쨍 소리 여러 번.
+  static Float64List _coins() {
+    final o = Synth.buffer(1.0);
+    const starts = [0.0, 0.07, 0.13, 0.22, 0.29, 0.4];
+    const freqs = [2600.0, 3100.0, 2800.0, 3300.0, 2700.0, 3500.0];
+    for (int i = 0; i < starts.length; i++) {
+      Synth.bell(
+        o,
+        freqs[i],
+        starts[i],
+        length: 0.16,
+        decay: 0.035,
+        gain: 0.45,
+      );
+    }
+    Synth.bell(o, 1568, 0.45, decay: 0.3, gain: 0.25);
+    return Synth.finish(o, 0.4);
   }
 }

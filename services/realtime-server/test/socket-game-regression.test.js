@@ -9,131 +9,13 @@ import {
   getUserLevel,
 } from './support/socket-harness.js';
 
-const options = ['tea', 'coffee'];
-test('telepathy publishes choices at its 60 second deadline without waiting forever', async t => {
-  const f = await fixture(t);
-  t.mock.timers.enable({ apis: ['Date'], now: 100_000 });
-  assert.equal((await f.call(0, 'game:telepathy:select', { choice: 'tea', options })).waiting, true);
-  f.tick(59_999);
-  await flush();
-  assert.equal(f.events.length, 0);
-  f.tick(1);
-  await flush();
-  assert.equal(f.events.length, 1, 'expiry must emit a result through the real socket handler');
-  assert.deepEqual(f.events[0].choices, { 'ALPHA-code': 'tea' });
-  assert.equal(f.events[0].success, false, 'one answer alone cannot count as a match');
-  assert.equal(f.events[0].selected, null);
-});
-
-test('late telepathy answer completes the retained round and retries do not broadcast another result', async t => {
-  const f = await fixture(t);
-  t.mock.timers.enable({ apis: ['Date'], now: 100_000 });
-  await f.call(0, 'game:telepathy:select', { choice: 'tea', options });
-  f.tick(61_000);
-  await flush();
-  const late = await f.call(1, 'game:telepathy:select', { choice: 'tea', options });
-  assert.equal(late.result?.success, true);
-  assert.deepEqual(late.result.choices, { 'ALPHA-code': 'tea', 'BETA-code': 'tea' });
-  assert.equal(late.result.sessionId, f.events[0].sessionId, 'late result belongs to the expired session');
-  await flush();
-  const retry = await f.call(1, 'game:telepathy:select', { choice: 'tea', options, sessionId: late.result.sessionId });
-  assert.deepEqual(retry.result, late.result, 'retry must return the completed result rather than create an orphaned session');
-  await flush();
-  assert.equal(f.events.length, 2, 'one expiry and one completion, never a duplicate room result');
-  f.tick(60_000);
-  await flush();
-  assert.equal(f.events.length, 2);
-});
-
-test('reselecting does not extend the deadline and a new question cannot receive an old expiry', async t => {
-  const f = await fixture(t);
-  t.mock.timers.enable({ apis: ['Date'], now: 100_000 });
-  const first = await f.call(0, 'game:telepathy:select', { choice: 'tea', options });
-  f.tick(30_000);
-  const duplicate = await f.call(0, 'game:telepathy:select', { choice: 'tea', options });
-  assert.equal(duplicate.deadlineAt, first.deadlineAt);
-  f.tick(10_000);
-  const next = await f.call(0, 'game:telepathy:select', { choice: 'sea', options: ['sea', 'mountain'] });
-  f.tick(20_000);
-  await flush();
-  assert.equal(f.events.length, 0);
-  const stale = await f.call(1, 'game:telepathy:select', { choice: 'tea', options, sessionId: first.sessionId });
-  assert.equal(stale.reason, 'stale_session');
-  f.tick(40_000);
-  await flush();
-  assert.equal(f.events.length, 1);
-  assert.equal(f.events[0].sessionId, next.sessionId);
-  assert.deepEqual(f.events[0].choices, { 'ALPHA-code': 'sea' });
-});
-
-test('legacy telepathy clients can start another completed question with identical options', async t => {
-  const f = await fixture(t);
-  await f.call(0, 'game:telepathy:select', { choice: 'tea', options });
-  const first = await f.call(1, 'game:telepathy:select', { choice: 'tea', options });
-  const next = await f.call(0, 'game:telepathy:select', { choice: 'coffee', options });
-  assert.equal(next.waiting, true);
-  const second = await f.call(1, 'game:telepathy:select', { choice: 'coffee', options });
-  assert.equal(second.result.selected, 'coffee');
-  assert.notEqual(second.result.sessionId, first.result.sessionId);
-});
-
-test('simultaneous telepathy answers complete once and the cancelled expiry never broadcasts', async t => {
-  const f = await fixture(t);
-  t.mock.timers.enable({ apis: ['Date'], now: 100_000 });
-  const responses = await Promise.all([
-    f.call(0, 'game:telepathy:select', { choice: 'tea', options }),
-    f.call(1, 'game:telepathy:select', { choice: 'coffee', options }),
-  ]);
-  assert.equal(responses.filter(response => response.waiting).length, 1);
-  assert.equal(responses.filter(response => response.result).length, 1);
-  await flush();
-  assert.equal(f.events.length, 1);
-  assert.deepEqual(f.events[0].choices, { 'ALPHA-code': 'tea', 'BETA-code': 'coffee' });
-  assert.equal(f.events[0].success, false);
-  f.tick(60_000);
-  await flush();
-  assert.equal(f.events.length, 1);
-});
-
-test('telepathy retains the first answer when its player disconnects before the late partner responds', async t => {
-  const f = await fixture(t);
-  t.mock.timers.enable({ apis: ['Date'], now: 100_000 });
-  await f.call(0, 'game:telepathy:select', { choice: 'tea', options });
-  f.clients[0].disconnect();
-  await flush();
-  const partnerEvents = [];
-  f.clients[1].on('game:telepathy:result', event => partnerEvents.push(event));
-  f.tick(61_000);
-  await flush();
-  assert.deepEqual(partnerEvents[0].choices, { 'ALPHA-code': 'tea' });
-  const late = await f.call(1, 'game:telepathy:select', { choice: 'tea', options });
-  assert.equal(late.result.success, true);
-  assert.deepEqual(late.result.choices, { 'ALPHA-code': 'tea', 'BETA-code': 'tea' });
-});
-
-test('joining re-arms a persisted telepathy deadline after a server restart', async t => {
-  const f = await fixture(t);
-  t.mock.timers.enable({ apis: ['Date'], now: 100_000 });
-  // Pre-deadline deployment state: choices exist, but no in-process timer does.
-  await f.redis.set(`telepathy:${f.roomCode}:session`, JSON.stringify({
-    choices: { 'ALPHA-code': 'tea' }, options, revealed: false, updatedAt: 40_000,
-  }), 'EX', 3600);
-  assert.equal((await f.call(0, 'session:join', {})).ok, true);
-  f.tick(1);
-  await flush();
-  assert.equal(f.events.length, 1);
-  assert.deepEqual(f.events[0].choices, { 'ALPHA-code': 'tea' });
-  const late = await f.call(1, 'game:telepathy:select', { choice: 'tea', options });
-  assert.equal(late.result.success, true);
-});
-
 test('legacy RPS still discards an unanswered choice after 60 seconds', async t => {
   const f = await fixture(t);
   t.mock.timers.enable({ apis: ['Date'], now: 100_000 });
   await f.call(0, 'game:rps:select', { choice: 'rock' });
   f.tick(60_001);
   const late = await f.call(1, 'game:rps:select', { choice: 'paper' });
-  assert.equal(late.waiting, true, 'RPS must not inherit the retained telepathy lifetime');
+  assert.equal(late.waiting, true, 'RPS keeps its own 60 second lifetime');
 });
 
 test('lobby invite uses JWT numeric identity and supplies the game and room destination', async t => {
@@ -220,27 +102,7 @@ test('claiming the last tourist property emits the monopoly win reason through s
   assert.deepEqual(ended, [{ winner: 'ALPHA-code', winReason: 'tourist_monopoly', finalScores: null }]);
 });
 
-test('socket yut move consumes a capture extra turn once, then hands over the next turn', async t => {
-  const f = await fixture(t);
-  const state = createYutGameState('ALPHA-code', 'BETA-code');
-  state.currentTurn = 'ALPHA-code';
-  state.phase = 'moving';
-  state.pendingMoves = [1];
-  state.players['ALPHA-code'].pieces[0].position = 1;
-  state.players['BETA-code'].pieces[0].position = 2;
-  await f.redis.set(`yut:${f.roomCode}:game`, JSON.stringify(state));
-  const capture = await f.call(0, 'game:yut:move', { pieceId: 0 });
-  assert.equal(capture.ok, true);
-  assert.equal(capture.event.capturedCount, 1);
-  assert.equal(capture.event.currentTurn, 'ALPHA-code');
-  const afterCapture = JSON.parse(await f.redis.get(`yut:${f.roomCode}:game`));
-  afterCapture.phase = 'moving';
-  afterCapture.pendingMoves = [1];
-  await f.redis.set(`yut:${f.roomCode}:game`, JSON.stringify(afterCapture));
-  assert.equal((await f.call(0, 'game:yut:move', { pieceId: 0 })).ok, true);
-  const restored = await f.call(0, 'session:restore', {});
-  assert.equal(restored.activeGames.yut.currentTurn, 'BETA-code');
-});
+// 윷놀이 잡기 추가 던지기·복원 소켓 회귀는 test/yut-socket.test.js로 옮겼다(게임 2.0).
 
 test('bowling completion grants winner/loser XP once through its socket handler', async t => {
   const f = await fixture(t);
@@ -479,7 +341,4 @@ test('equipped item stats already parsed by the driver do not break game creatio
   const event = await started;
   assert.deepEqual(event.equippedItems['ALPHA-code'].onecard_cardback.stats, { coin_bonus_pct: 3 });
   assert.deepEqual(event.equippedItems['BETA-code'].onecard_cardback.stats, { coin_bonus_pct: 5 });
-  const yut = await f.call(0, 'game:yut:new', {});
-  assert.equal(yut.ok, true);
-  assert.deepEqual(yut.gameState.equippedItems['ALPHA-code'].onecard_cardback.stats, { coin_bonus_pct: 3 });
 });

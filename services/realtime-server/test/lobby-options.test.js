@@ -11,6 +11,7 @@ test('each option game has defaults that are among its allowed values', () => {
   assert.deepEqual(defaultLobbyOptions('penalty'), { cells: 3 });
   assert.deepEqual(defaultLobbyOptions('pirate'), { holes: 8 });
   assert.deepEqual(defaultLobbyOptions('uno'), { mode: 'go_wild' });
+  assert.deepEqual(defaultLobbyOptions('catch'), { rounds: 6 });
   assert.deepEqual(defaultLobbyOptions('blackjack'), {});
 });
 
@@ -20,6 +21,8 @@ test('only listed values pass validation, with no type coercion', () => {
   assert.equal(isValidLobbyOption('penalty', 'cells', '6'), false);
   assert.equal(isValidLobbyOption('pirate', 'holes', 7), false);
   assert.equal(isValidLobbyOption('uno', 'mode', 'classic'), true);
+  assert.equal(isValidLobbyOption('catch', 'rounds', 8), true);
+  assert.equal(isValidLobbyOption('catch', 'rounds', 5), false);
   assert.equal(isValidLobbyOption('uno', 'cells', 3), false);
   assert.equal(isValidLobbyOption('blackjack', 'cells', 3), false);
   assert.equal(isValidLobbyOption('penalty', '__proto__', 3), false, 'prototype keys are not options');
@@ -31,4 +34,22 @@ test('normalizing keeps valid values, drops unknown keys and fills defaults', ()
   assert.deepEqual(normalizeLobbyOptions('penalty', { cells: 9 }), { cells: 3 });
   assert.deepEqual(normalizeLobbyOptions('pirate', null), { holes: 8 });
   assert.deepEqual(normalizeLobbyOptions('blackjack', { cells: 3 }), {});
+});
+
+test('telepathy offers 10|5|15 questions and a spicy switch that is off by default', () => {
+  assert.deepEqual(defaultLobbyOptions('telepathy'), { rounds: 10, spicy: 'off' });
+  assert.equal(isValidLobbyOption('telepathy', 'rounds', 15), true);
+  assert.equal(isValidLobbyOption('telepathy', 'rounds', 20), false);
+  assert.equal(isValidLobbyOption('telepathy', 'spicy', 'on'), true);
+  assert.equal(isValidLobbyOption('telepathy', 'spicy', true), false);
+  assert.deepEqual(normalizeLobbyOptions('telepathy', { rounds: 5, spicy: 'on' }), { rounds: 5, spicy: 'on' });
+  assert.deepEqual(normalizeLobbyOptions('telepathy', { rounds: '5' }), { rounds: 10, spicy: 'off' });
+});
+
+test('yut piece count option: 4 (default), 3 or 2', () => {
+  assert.deepEqual(defaultLobbyOptions('yut'), { pieces: 4 });
+  for (const n of [4, 3, 2]) assert.equal(isValidLobbyOption('yut', 'pieces', n), true);
+  assert.equal(isValidLobbyOption('yut', 'pieces', 5), false);
+  assert.equal(isValidLobbyOption('yut', 'pieces', '3'), false);
+  assert.deepEqual(normalizeLobbyOptions('yut', { pieces: 1 }), { pieces: 4 });
 });

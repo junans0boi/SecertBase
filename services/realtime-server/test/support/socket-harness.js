@@ -112,7 +112,6 @@ export async function fixture(t, { players = 2 } = {}) {
     assert.equal((await client.timeout(2000).emitWithAck('session:join', {})).ok, true);
   }
   const events = [];
-  clients[0].on('game:telepathy:result', event => events.push(event));
   const call = (index, event, payload) => clients[index].timeout(2000).emitWithAck(event, payload);
   return { redis, roomCode, clients, events, invites, results, call, tick };
 }

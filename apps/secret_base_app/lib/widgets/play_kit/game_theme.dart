@@ -4,7 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 /// 게임 화면의 바탕 질감.
-enum GameTexture { felt, paper, stage, deck, stadium, velvet }
+enum GameTexture {
+  felt,
+  paper,
+  stage,
+  deck,
+  stadium,
+  velvet,
+  starlight,
+  hanji,
+  table,
+  atelier,
+}
 
 /// 게임 2.0 테마 토큰. 게임마다 그 게임에 맞는 고급 테마를 쓰고(01-grilling Q6),
 /// 공용 부품은 하드코딩 색 없이 이 토큰만 쓴다.
@@ -102,6 +113,17 @@ class GameTheme {
     fontSize: size,
     color: color,
     fontWeight: weight,
+    height: 1.15,
+  );
+
+  static TextStyle _brush({
+    double size = 24,
+    Color? color,
+    FontWeight weight = FontWeight.w400,
+  }) => GoogleFonts.gowunBatang(
+    fontSize: size,
+    color: color,
+    fontWeight: FontWeight.w700,
     height: 1.15,
   );
 
@@ -225,6 +247,84 @@ class GameTheme {
     displayFont: _batang,
   );
 
+  /// 텔레파시: 별빛 편지(밤하늘 남보라 + 별가루).
+  static const starlight = GameTheme(
+    id: 'starlight',
+    texture: GameTexture.starlight,
+    dark: true,
+    backdrop: [Color(0xFF0C0B2E), Color(0xFF1B1950), Color(0xFF0A0A24)],
+    surface: Color(0xFF1F1D57),
+    surfaceBorder: Color(0x55CDBEFF),
+    accent: Color(0xFFFFB6D5),
+    accentSoft: Color(0x33FFB6D5),
+    gold: Color(0xFFF6D98E),
+    ink: Color(0xFFF6F3FF),
+    subInk: Color(0xCCCFCAF2),
+    me: Color(0xFF8FD6FF),
+    opponent: Color(0xFFFFA9CB),
+    displayFont: _batang,
+  );
+
+  /// 윷놀이: 한지 마당(한지 질감 바탕, 먹빛 글자, 오방색 포인트).
+  static const hanji = GameTheme(
+    id: 'hanji',
+    texture: GameTexture.hanji,
+    dark: false,
+    backdrop: [Color(0xFFF7F0DF), Color(0xFFF1E7D0), Color(0xFFE6D8B8)],
+    surface: Color(0xFFFBF6E9),
+    surfaceBorder: Color(0x662A2623),
+    accent: Color(0xFFB5412F),
+    accentSoft: Color(0x1FB5412F),
+    gold: Color(0xFFC49A3E),
+    ink: Color(0xFF2A2623),
+    subInk: Color(0xFF6D6254),
+    me: Color(0xFF2F5D8A),
+    opponent: Color(0xFFB5412F),
+    displayFont: _brush,
+  );
+
+  /// 고스톱: 초록 펠트 판(화투 상). 깊은 초록 위에 올이 보이는 천 질감과 따뜻한 금빛 조명.
+  static const felt = GameTheme(
+    id: 'felt',
+    texture: GameTexture.table,
+    dark: true,
+    backdrop: [Color(0xFF0F4A2A), Color(0xFF14602F), Color(0xFF0A3A20)],
+    surface: Color(0xFF0E4025),
+    surfaceBorder: Color(0x66E8C97A),
+    accent: Color(0xFFE0A93B),
+    accentSoft: Color(0x33E0A93B),
+    gold: Color(0xFFEBC66F),
+    ink: Color(0xFFFDF6E3),
+    subInk: Color(0xCCDDE8CC),
+    me: Color(0xFF9BE8B7),
+    opponent: Color(0xFFF4A9A0),
+    displayFont: _batang,
+  );
+
+  static TextStyle _jua({
+    double size = 24,
+    Color? color,
+    FontWeight weight = FontWeight.w400,
+  }) => GoogleFonts.jua(fontSize: size, color: color, height: 1.12);
+
+  /// 그림 맞히기: 아틀리에 스케치북(리넨 벽 위에 크림 종이와 파란 테두리).
+  static const atelier = GameTheme(
+    id: 'atelier',
+    texture: GameTexture.atelier,
+    dark: false,
+    backdrop: [Color(0xFFF4ECDD), Color(0xFFEBE0CB), Color(0xFFDFD1B8)],
+    surface: Color(0xFFFFFAEE),
+    surfaceBorder: Color(0x662B5FD6),
+    accent: Color(0xFF2B5FD6),
+    accentSoft: Color(0x1F2B5FD6),
+    gold: Color(0xFFB98B3A),
+    ink: Color(0xFF2A2B3D),
+    subInk: Color(0xFF6B6A7C),
+    me: Color(0xFF2B5FD6),
+    opponent: Color(0xFFE2625A),
+    displayFont: _jua,
+  );
+
   static const all = [
     lounge,
     storybook,
@@ -232,6 +332,10 @@ class GameTheme {
     pirateNight,
     sunsetStadium,
     salon,
+    starlight,
+    hanji,
+    felt,
+    atelier,
   ];
 }
 
@@ -295,6 +399,14 @@ class _BackdropPainter extends CustomPainter {
         _stadium(canvas, size);
       case GameTexture.velvet:
         _velvet(canvas, size);
+      case GameTexture.starlight:
+        _starlight(canvas, size);
+      case GameTexture.hanji:
+        _hanji(canvas, size);
+      case GameTexture.table:
+        _table(canvas, size);
+      case GameTexture.atelier:
+        _atelier(canvas, size);
     }
     // 비네트: 가장자리를 살짝 눌러 시선을 가운데로.
     canvas.drawRect(
@@ -655,6 +767,55 @@ class _BackdropPainter extends CustomPainter {
     _grain(canvas, size, const Color(0x0CFFFFFF), (w * h / 1600).round(), 29);
   }
 
+  void _table(Canvas canvas, Size size) {
+    _spotlight(
+      canvas,
+      size,
+      Offset(size.width / 2, size.height * 0.46),
+      size.longestSide * 0.62,
+      const Color(0x4458D68F),
+    );
+    // 천의 올: 가로·세로로 아주 옅은 선을 촘촘히.
+    final weave = Paint()
+      ..strokeWidth = 0.5
+      ..color = const Color(0x0DFFFFFF);
+    for (double y = 0; y < size.height; y += 3) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), weave);
+    }
+    final warp = Paint()
+      ..strokeWidth = 0.5
+      ..color = const Color(0x0A000000);
+    for (double x = 0; x < size.width; x += 3) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), warp);
+    }
+    _grain(
+      canvas,
+      size,
+      const Color(0x10FFFFFF),
+      (size.width * size.height / 1000).round(),
+      19,
+    );
+    // 판 가장자리 레일: 어두운 나무 테를 안쪽으로 한 겹.
+    final rail = RRect.fromRectAndRadius(
+      Rect.fromLTWH(4, 4, size.width - 8, size.height - 8),
+      const Radius.circular(26),
+    );
+    canvas.drawRRect(
+      rail,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 7
+        ..color = const Color(0xCC2A170C),
+    );
+    canvas.drawRRect(
+      rail.deflate(4),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..color = theme.gold.withValues(alpha: 0.45),
+    );
+  }
+
   void _velvet(Canvas canvas, Size size) {
     _spotlight(
       canvas,
@@ -692,6 +853,245 @@ class _BackdropPainter extends CustomPainter {
       13,
     );
     _goldFrame(canvas, size, 10, 0.45);
+  }
+
+  void _starlight(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    // 성운: 보라·파랑·장밋빛 안개.
+    _spotlight(
+      canvas,
+      size,
+      Offset(w * 0.18, h * 0.16),
+      w * 0.75,
+      const Color(0x4D5B3FC4),
+    );
+    _spotlight(
+      canvas,
+      size,
+      Offset(w * 0.9, h * 0.52),
+      w * 0.7,
+      const Color(0x3A2F67D8),
+    );
+    _spotlight(
+      canvas,
+      size,
+      Offset(w * 0.45, h * 1.02),
+      w * 0.8,
+      const Color(0x33C0508F),
+    );
+    // 은하수: 대각선 띠를 따라 촘촘한 별가루.
+    final rnd = math.Random(41);
+    final dust = Paint();
+    final band = (w * h / 260).round();
+    for (int i = 0; i < band; i++) {
+      final t = rnd.nextDouble();
+      final spread = (rnd.nextDouble() + rnd.nextDouble() - 1) * h * 0.11;
+      final x = -w * 0.1 + t * w * 1.2;
+      final y = h * 0.7 - t * h * 0.55 + spread;
+      dust.color = Color.fromRGBO(
+        225,
+        215,
+        255,
+        0.08 + rnd.nextDouble() * 0.22,
+      );
+      canvas.drawCircle(Offset(x, y), 0.3 + rnd.nextDouble() * 0.7, dust);
+    }
+    // 흩어진 별.
+    final stars = (w * h / 1500).round();
+    for (int i = 0; i < stars; i++) {
+      final c = Offset(rnd.nextDouble() * w, rnd.nextDouble() * h);
+      final r = 0.35 + math.pow(rnd.nextDouble(), 3).toDouble() * 1.5;
+      final warm = rnd.nextDouble() > 0.82;
+      dust.color = (warm ? const Color(0xFFFFE9B8) : const Color(0xFFF2EEFF))
+          .withValues(alpha: 0.35 + rnd.nextDouble() * 0.6);
+      canvas.drawCircle(c, r, dust);
+    }
+    // 반짝이는 큰 별 몇 개: 십자 빛 + 번짐.
+    for (int i = 0; i < 9; i++) {
+      final c = Offset(rnd.nextDouble() * w, rnd.nextDouble() * h * 0.92);
+      final len = 4.0 + rnd.nextDouble() * 6;
+      _spotlight(canvas, size, c, len * 2.4, const Color(0x55F6D98E));
+      final ray = Paint()
+        ..strokeWidth = 1
+        ..strokeCap = StrokeCap.round
+        ..color = const Color(0xCCFFF4D6);
+      canvas.drawLine(c.translate(-len, 0), c.translate(len, 0), ray);
+      canvas.drawLine(c.translate(0, -len), c.translate(0, len), ray);
+      canvas.drawCircle(c, 1.3, Paint()..color = Colors.white);
+    }
+    _goldFrame(canvas, size, 10, 0.32);
+  }
+
+  /// 한지 마당: 닥종이 섬유 + 아주 옅은 먹 번짐(먼 산) + 가장자리 얼룩.
+  void _hanji(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    // 먼 산 먹 번짐(아래쪽, 아주 옅게).
+    for (final layer in [
+      (0.82, 0.10, const Color(0x142A2623), 3),
+      (0.88, 0.07, const Color(0x1A2A2623), 5),
+    ]) {
+      final base = h * layer.$1;
+      final amp = h * layer.$2;
+      final path = Path()..moveTo(0, h);
+      final rnd = math.Random(layer.$4);
+      path.lineTo(0, base);
+      for (double x = 0; x <= w; x += w / 8) {
+        path.quadraticBezierTo(
+          x + w / 16,
+          base - amp * (0.4 + rnd.nextDouble() * 0.9),
+          x + w / 8,
+          base - amp * (rnd.nextDouble() * 0.3),
+        );
+      }
+      path
+        ..lineTo(w, h)
+        ..close();
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = layer.$3
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
+      );
+    }
+    // 오방색 번짐 두 점(청·적)을 구석에 아주 옅게.
+    _spotlight(
+      canvas,
+      size,
+      Offset(w * 0.08, h * 0.1),
+      size.shortestSide * 0.55,
+      const Color(0x142F5D8A),
+    );
+    _spotlight(
+      canvas,
+      size,
+      Offset(w * 0.95, h * 0.9),
+      size.shortestSide * 0.55,
+      const Color(0x12B5412F),
+    );
+    // 닥나무 섬유: 짧은 곡선 가닥.
+    final rnd = math.Random(41);
+    final fiber = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    final count = (w * h / 520).round();
+    for (int i = 0; i < count; i++) {
+      final x = rnd.nextDouble() * w;
+      final y = rnd.nextDouble() * h;
+      final len = 4 + rnd.nextDouble() * 12;
+      final a = rnd.nextDouble() * math.pi;
+      final dark = rnd.nextBool();
+      fiber
+        ..strokeWidth = 0.4 + rnd.nextDouble() * 0.5
+        ..color = dark ? const Color(0x143A2E1C) : const Color(0x33FFFFFF);
+      final path = Path()
+        ..moveTo(x, y)
+        ..quadraticBezierTo(
+          x + math.cos(a) * len * 0.5,
+          y + math.sin(a) * len * 0.5 + 1.5,
+          x + math.cos(a) * len,
+          y + math.sin(a) * len,
+        );
+      canvas.drawPath(path, fiber);
+    }
+    _grain(canvas, size, const Color(0x0C5A4630), (w * h / 1500).round(), 43);
+    _goldFrame(canvas, size, 10, 0.55);
+  }
+
+  void _atelier(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    // 위쪽 창가에서 들어오는 따뜻한 빛.
+    _spotlight(
+      canvas,
+      size,
+      Offset(w * 0.5, h * 0.1),
+      math.max(w, h) * 0.7,
+      const Color(0x66FFF6DC),
+    );
+    // 리넨 직조 무늬: 가는 가로·세로선.
+    final weave = Paint()
+      ..strokeWidth = 0.5
+      ..color = const Color(0x0F6B5A3C);
+    for (double y = 0; y < h; y += 6) {
+      canvas.drawLine(Offset(0, y), Offset(w, y), weave);
+    }
+    for (double x = 0; x < w; x += 6) {
+      canvas.drawLine(Offset(x, 0), Offset(x, h), weave);
+    }
+    // 가장자리에 흩어진 연필 낙서(별·하트·물결). 판 뒤라서 아주 옅게.
+    final rnd = math.Random(41);
+    final doodle = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.3
+      ..strokeCap = StrokeCap.round
+      ..color = theme.accent.withValues(alpha: 0.10);
+    for (int i = 0; i < 16; i++) {
+      final left = i.isEven;
+      final cx = left
+          ? rnd.nextDouble() * w * 0.12 + 8
+          : w - rnd.nextDouble() * w * 0.12 - 8;
+      final cy = (i / 16) * h + rnd.nextDouble() * 24;
+      final r = 6 + rnd.nextDouble() * 8;
+      switch (i % 4) {
+        case 0:
+          final p = Path();
+          for (int k = 0; k < 10; k++) {
+            final a = -math.pi / 2 + k * math.pi / 5;
+            final rr = k.isEven ? r : r * 0.45;
+            final o = Offset(cx + math.cos(a) * rr, cy + math.sin(a) * rr);
+            k == 0 ? p.moveTo(o.dx, o.dy) : p.lineTo(o.dx, o.dy);
+          }
+          canvas.drawPath(p..close(), doodle);
+        case 1:
+          final p = Path()
+            ..moveTo(cx, cy + r * 0.9)
+            ..cubicTo(
+              cx - r * 1.6,
+              cy - r * 0.2,
+              cx - r * 0.5,
+              cy - r * 1.1,
+              cx,
+              cy - r * 0.2,
+            )
+            ..cubicTo(
+              cx + r * 0.5,
+              cy - r * 1.1,
+              cx + r * 1.6,
+              cy - r * 0.2,
+              cx,
+              cy + r * 0.9,
+            );
+          canvas.drawPath(p, doodle);
+        case 2:
+          final p = Path()..moveTo(cx - r * 1.3, cy);
+          for (int k = 0; k < 3; k++) {
+            p.relativeQuadraticBezierTo(r * 0.4, -r * 0.8, r * 0.8, 0);
+            p.relativeQuadraticBezierTo(r * 0.4, r * 0.8, r * 0.8, 0);
+          }
+          canvas.drawPath(p, doodle);
+        default:
+          canvas.drawCircle(Offset(cx, cy), r * 0.7, doodle);
+          canvas.drawLine(
+            Offset(cx - r, cy + r),
+            Offset(cx + r, cy - r),
+            doodle,
+          );
+      }
+    }
+    // 아래쪽 책상 나무결이 살짝 보이는 띠.
+    final desk = Rect.fromLTRB(0, h - 14, w, h);
+    canvas.drawRect(
+      desk,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0x00B58B5A), Color(0x33B58B5A)],
+        ).createShader(desk),
+    );
+    _grain(canvas, size, const Color(0x0C5A3A2A), (w * h / 1500).round(), 43);
   }
 
   @override

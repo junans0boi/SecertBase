@@ -13,6 +13,10 @@ void main() {
   testWidgets(
     'GameLobbyScreen navigates to game screen immediately on resumed result',
     (tester) async {
+      // 윷놀이 로비는 옵션(말 개수) 카드가 있어 기본 800x600보다 높아야 한다.
+      tester.view.physicalSize = const Size(800, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
       final socket = SocketService();
 
       // Simulate the server returning { ok: true, status: 'resumed', gameType: 'yut' }
@@ -60,6 +64,9 @@ void main() {
   testWidgets('GameLobbyScreen shows lobby UI when not resumed', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(800, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     // null onJoinLobby → defaults to SocketService.joinGameLobby (no-op without a real socket)
     await tester.pumpWidget(
       MaterialApp(

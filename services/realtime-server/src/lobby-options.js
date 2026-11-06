@@ -4,6 +4,9 @@
 // apps/secret_base_app/lib/screens/arcade/lobby_options.dart와 같아야 한다.
 
 export const LOBBY_OPTIONS = Object.freeze({
+  catch: Object.freeze({
+    rounds: Object.freeze({ values: Object.freeze([6, 4, 8]), default: 6 }),
+  }),
   penalty: Object.freeze({
     cells: Object.freeze({ values: Object.freeze([3, 6]), default: 3 }),
   }),
@@ -12,6 +15,13 @@ export const LOBBY_OPTIONS = Object.freeze({
   }),
   uno: Object.freeze({
     mode: Object.freeze({ values: Object.freeze(["go_wild", "classic"]), default: "go_wild" }),
+  }),
+  telepathy: Object.freeze({
+    rounds: Object.freeze({ values: Object.freeze([10, 5, 15]), default: 10 }),
+    spicy: Object.freeze({ values: Object.freeze(["off", "on"]), default: "off" }),
+  }),
+  yut: Object.freeze({
+    pieces: Object.freeze({ values: Object.freeze([4, 3, 2]), default: 4 }),
   }),
 });
 

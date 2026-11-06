@@ -31,6 +31,18 @@ class LobbyOptionDef {
 }
 
 const kLobbyOptions = <String, List<LobbyOptionDef>>{
+  'catch': [
+    LobbyOptionDef(
+      key: 'rounds',
+      title: '라운드 수',
+      icon: '🎨',
+      choices: [
+        LobbyChoice(6, '보통 6', '한 사람이 세 번씩 그려요'),
+        LobbyChoice(4, '짧게 4', '한 사람이 두 번씩, 금방 끝나요'),
+        LobbyChoice(8, '길게 8', '한 사람이 네 번씩 느긋하게'),
+      ],
+    ),
+  ],
   'penalty': [
     LobbyOptionDef(
       key: 'cells',
@@ -54,6 +66,18 @@ const kLobbyOptions = <String, List<LobbyOptionDef>>{
       ],
     ),
   ],
+  'yut': [
+    LobbyOptionDef(
+      key: 'pieces',
+      title: '말 개수',
+      icon: '🐎',
+      choices: [
+        LobbyChoice(4, '4개', '정석 · 약 10분'),
+        LobbyChoice(3, '3개', '조금 짧게'),
+        LobbyChoice(2, '2개', '빠른 판 · 약 5분'),
+      ],
+    ),
+  ],
   'uno': [
     LobbyOptionDef(
       key: 'mode',
@@ -62,6 +86,27 @@ const kLobbyOptions = <String, List<LobbyOptionDef>>{
       choices: [
         LobbyChoice('go_wild', '고와일드', '+2·+4 이어받기, 같은 색 모두 버리기'),
         LobbyChoice('classic', '클래식', '기본 원카드 규칙'),
+      ],
+    ),
+  ],
+  'telepathy': [
+    LobbyOptionDef(
+      key: 'rounds',
+      title: '문제 수',
+      icon: '💫',
+      choices: [
+        LobbyChoice(10, '10문제', '딱 좋은 한 판'),
+        LobbyChoice(5, '5문제', '가볍게 빨리'),
+        LobbyChoice(15, '15문제', '오래오래 맞춰 봐요'),
+      ],
+    ),
+    LobbyOptionDef(
+      key: 'spicy',
+      title: '살짝 매운맛',
+      icon: '🌶️',
+      choices: [
+        LobbyChoice('off', '끄기', '편하게 즐기는 질문만'),
+        LobbyChoice('on', '켜기', '조금 짓궂은 연애 질문도'),
       ],
     ),
   ],
