@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 /// 게임 화면의 바탕 질감.
-enum GameTexture { felt, paper, stage, deck, stadium, velvet }
+enum GameTexture { felt, paper, stage, deck, stadium, velvet, table }
 
 /// 게임 2.0 테마 토큰. 게임마다 그 게임에 맞는 고급 테마를 쓰고(01-grilling Q6),
 /// 공용 부품은 하드코딩 색 없이 이 토큰만 쓴다.
@@ -225,6 +225,24 @@ class GameTheme {
     displayFont: _batang,
   );
 
+  /// 고스톱: 초록 펠트 판(화투 상). 깊은 초록 위에 올이 보이는 천 질감과 따뜻한 금빛 조명.
+  static const felt = GameTheme(
+    id: 'felt',
+    texture: GameTexture.table,
+    dark: true,
+    backdrop: [Color(0xFF0F4A2A), Color(0xFF14602F), Color(0xFF0A3A20)],
+    surface: Color(0xFF0E4025),
+    surfaceBorder: Color(0x66E8C97A),
+    accent: Color(0xFFE0A93B),
+    accentSoft: Color(0x33E0A93B),
+    gold: Color(0xFFEBC66F),
+    ink: Color(0xFFFDF6E3),
+    subInk: Color(0xCCDDE8CC),
+    me: Color(0xFF9BE8B7),
+    opponent: Color(0xFFF4A9A0),
+    displayFont: _batang,
+  );
+
   static const all = [
     lounge,
     storybook,
@@ -232,6 +250,7 @@ class GameTheme {
     pirateNight,
     sunsetStadium,
     salon,
+    felt,
   ];
 }
 
@@ -295,6 +314,8 @@ class _BackdropPainter extends CustomPainter {
         _stadium(canvas, size);
       case GameTexture.velvet:
         _velvet(canvas, size);
+      case GameTexture.table:
+        _table(canvas, size);
     }
     // 비네트: 가장자리를 살짝 눌러 시선을 가운데로.
     canvas.drawRect(
@@ -653,6 +674,55 @@ class _BackdropPainter extends CustomPainter {
       canvas.drawCircle(c, 3.2, Paint()..color = Colors.white);
     }
     _grain(canvas, size, const Color(0x0CFFFFFF), (w * h / 1600).round(), 29);
+  }
+
+  void _table(Canvas canvas, Size size) {
+    _spotlight(
+      canvas,
+      size,
+      Offset(size.width / 2, size.height * 0.46),
+      size.longestSide * 0.62,
+      const Color(0x4458D68F),
+    );
+    // 천의 올: 가로·세로로 아주 옅은 선을 촘촘히.
+    final weave = Paint()
+      ..strokeWidth = 0.5
+      ..color = const Color(0x0DFFFFFF);
+    for (double y = 0; y < size.height; y += 3) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), weave);
+    }
+    final warp = Paint()
+      ..strokeWidth = 0.5
+      ..color = const Color(0x0A000000);
+    for (double x = 0; x < size.width; x += 3) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), warp);
+    }
+    _grain(
+      canvas,
+      size,
+      const Color(0x10FFFFFF),
+      (size.width * size.height / 1000).round(),
+      19,
+    );
+    // 판 가장자리 레일: 어두운 나무 테를 안쪽으로 한 겹.
+    final rail = RRect.fromRectAndRadius(
+      Rect.fromLTWH(4, 4, size.width - 8, size.height - 8),
+      const Radius.circular(26),
+    );
+    canvas.drawRRect(
+      rail,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 7
+        ..color = const Color(0xCC2A170C),
+    );
+    canvas.drawRRect(
+      rail.deflate(4),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..color = theme.gold.withValues(alpha: 0.45),
+    );
   }
 
   void _velvet(Canvas canvas, Size size) {

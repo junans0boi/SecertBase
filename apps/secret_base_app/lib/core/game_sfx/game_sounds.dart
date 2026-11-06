@@ -53,6 +53,14 @@ enum GameSound {
   penaltyDraw,
   skip,
   reverse,
+  // 고스톱
+  hwatuSlap,
+  hwatuFlip,
+  hwatuCapture,
+  ppeok,
+  sseul,
+  goCall,
+  coins,
 }
 
 /// 소리 레시피. [render]는 -1..1 PCM 샘플을 돌려준다.
@@ -102,6 +110,13 @@ class GameSoundRecipes {
     GameSound.penaltyDraw => _penaltyDraw(),
     GameSound.skip => _skip(),
     GameSound.reverse => _reverse(),
+    GameSound.hwatuSlap => _hwatuSlap(),
+    GameSound.hwatuFlip => _hwatuFlip(),
+    GameSound.hwatuCapture => _hwatuCapture(),
+    GameSound.ppeok => _ppeok(),
+    GameSound.sseul => _sseul(),
+    GameSound.goCall => _goCall(),
+    GameSound.coins => _coins(),
   };
 
   // ── 공통 ────────────────────────────────────────────────────────────────
@@ -737,5 +752,132 @@ class GameSoundRecipes {
       wave: Wave.triangle,
     );
     return Synth.finish(o, 0.36);
+  }
+
+  // ── 고스톱 ──────────────────────────────────────────────────────────────
+  // 두꺼운 화투를 판에 "탁" 내리치는 소리: 낮은 몸통 + 짧은 마찰.
+  static Float64List _hwatuSlap() {
+    final o = Synth.buffer(0.16);
+    Synth.tone(o, f0: 210, f1: 90, attack: 0.001, decay: 0.045, gain: 1);
+    Synth.noise(o, seed: 71, fc0: 2400, fc1: 700, attack: 0.001, decay: 0.02);
+    Synth.noise(
+      o,
+      seed: 72,
+      fc0: 5200,
+      fc1: 3000,
+      attack: 0.001,
+      decay: 0.008,
+      gain: 0.5,
+      highpass: true,
+    );
+    return Synth.finish(o, 0.62);
+  }
+
+  // 더미에서 뒤집는 소리: 얇은 스치는 소리 뒤에 가벼운 착지.
+  static Float64List _hwatuFlip() {
+    final o = Synth.buffer(0.24);
+    Synth.noise(
+      o,
+      seed: 73,
+      fc0: 1800,
+      fc1: 4800,
+      attack: 0.04,
+      decay: 0.05,
+      gain: 0.7,
+      highpass: true,
+    );
+    Synth.tone(
+      o,
+      f0: 240,
+      f1: 130,
+      attack: 0.001,
+      decay: 0.03,
+      gain: 0.7,
+      start: 0.1,
+    );
+    Synth.noise(
+      o,
+      seed: 74,
+      fc0: 1600,
+      fc1: 600,
+      attack: 0.001,
+      decay: 0.014,
+      start: 0.1,
+    );
+    return Synth.finish(o, 0.5);
+  }
+
+  // 먹는 소리: 두 번 맑게 울리는 짝 소리.
+  static Float64List _hwatuCapture() {
+    final o = Synth.buffer(0.55);
+    Synth.tone(o, f0: 190, f1: 100, attack: 0.001, decay: 0.04, gain: 0.8);
+    Synth.bell(o, 1046.5, 0.03, decay: 0.2, gain: 0.45);
+    Synth.bell(o, 1568, 0.11, decay: 0.28, gain: 0.4);
+    return Synth.finish(o, 0.5);
+  }
+
+  // 뻑: 어긋나는 낮은 두 음.
+  static Float64List _ppeok() {
+    final o = Synth.buffer(0.7);
+    Synth.tone(
+      o,
+      f0: 300,
+      f1: 90,
+      attack: 0.002,
+      decay: 0.2,
+      gain: 0.8,
+      wave: Wave.saw,
+    );
+    Synth.note(o, 196, 0.12, 0.28, Wave.squareSoft, decay: 0.16, gain: 0.45);
+    Synth.note(o, 185, 0.26, 0.34, Wave.squareSoft, decay: 0.2, gain: 0.45);
+    return Synth.finish(o, 0.5);
+  }
+
+  // 쓸: 위로 쓸어 올리는 반짝임.
+  static Float64List _sseul() {
+    final o = Synth.buffer(0.9);
+    Synth.noise(
+      o,
+      seed: 75,
+      fc0: 500,
+      fc1: 4200,
+      attack: 0.18,
+      decay: 0.1,
+      gain: 0.5,
+    );
+    const notes = [880.0, 1175.0, 1568.0, 2093.0];
+    for (int i = 0; i < notes.length; i++) {
+      Synth.bell(o, notes[i], 0.12 + i * 0.07, decay: 0.3, gain: 0.35);
+    }
+    return Synth.finish(o, 0.5);
+  }
+
+  // "고!": 힘 있게 올라가는 두 음 + 긴 종소리.
+  static Float64List _goCall() {
+    final o = Synth.buffer(1.1);
+    Synth.note(o, 392, 0, 0.16, Wave.triangle, decay: 0.09, gain: 0.7);
+    Synth.note(o, 587.3, 0.12, 0.2, Wave.triangle, decay: 0.1, gain: 0.7);
+    Synth.bell(o, 1174.7, 0.26, decay: 0.5, gain: 0.55);
+    Synth.bell(o, 1568, 0.3, decay: 0.5, gain: 0.3);
+    return Synth.finish(o, 0.52);
+  }
+
+  // 정산 동전: 짧은 쨍 소리 여러 번.
+  static Float64List _coins() {
+    final o = Synth.buffer(1.0);
+    const starts = [0.0, 0.07, 0.13, 0.22, 0.29, 0.4];
+    const freqs = [2600.0, 3100.0, 2800.0, 3300.0, 2700.0, 3500.0];
+    for (int i = 0; i < starts.length; i++) {
+      Synth.bell(
+        o,
+        freqs[i],
+        starts[i],
+        length: 0.16,
+        decay: 0.035,
+        gain: 0.45,
+      );
+    }
+    Synth.bell(o, 1568, 0.45, decay: 0.3, gain: 0.25);
+    return Synth.finish(o, 0.4);
   }
 }
