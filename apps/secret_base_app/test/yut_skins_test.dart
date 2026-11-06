@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:secret_base_app/core/socket_service.dart';
+import 'package:secret_base_app/screens/arcade/game_lobby_screen.dart';
 import 'package:secret_base_app/screens/arcade/games/yut/yut_character_picker.dart';
 import 'package:secret_base_app/screens/arcade/games/yut/yut_controller.dart';
 import 'package:secret_base_app/screens/arcade/games/yut/yut_figures.dart';
@@ -183,7 +184,9 @@ void main() {
         expect(find.textContaining('번개 윷'), findsOneWidget);
         expect(find.text('윷 컨트롤 +2.1%'), findsOneWidget);
         expect(find.text('잡힘 방어 10%'), findsOneWidget);
-        expect(find.text('윷·모 코인 10%'), findsOneWidget);
+        // 카드에는 앞의 둘만, 나머지는 "+N"(전체는 장비 창).
+        expect(find.text('윷·모 코인 10%'), findsNothing);
+        expect(find.text('+1'), findsOneWidget);
         // 상대 카드도 같은 정보를 보여 준다.
         expect(find.textContaining('은하수 말 · 대기 4'), findsOneWidget);
         expect(find.textContaining('우주의 윷'), findsOneWidget);
@@ -244,9 +247,38 @@ void main() {
       expect(find.textContaining('말: 용 말 (S등급)'), findsOneWidget);
       expect(find.textContaining('윷: 기본'), findsOneWidget);
       expect(find.text('이 판에 적용되는 효과'), findsOneWidget);
+      expect(find.text('잡힘 방어 7%'), findsWidgets);
       await tester.tapAt(const Offset(10, 10));
       await settle(tester);
     });
+
+    testWidgets(
+      'collapsed effect chips are all listed in the equipment sheet',
+      (tester) async {
+        await pumpScreen(tester);
+        c.debugApplyState(
+          yutState(
+            stake: 100,
+            effects: {
+              yutMe: {
+                ...zeroEffects,
+                'controlPct': 2.1,
+                'defensePct': 10,
+                'winCoinPct': 10,
+              },
+            },
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 600));
+        expect(find.text('윷·모 코인 10%'), findsNothing);
+        await tester.tap(find.textContaining('대기 4 · 도착 0/4').last);
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(find.text('윷·모 코인 10%'), findsOneWidget);
+        expect(find.text('잡힘 방어 10%'), findsWidgets);
+        await tester.tapAt(const Offset(10, 10));
+        await settle(tester);
+      },
+    );
 
     testWidgets(
       'the same character figure shows on the card and in the waiting area',
@@ -323,6 +355,43 @@ void main() {
         socket.lobbyCharacterSelections = {};
       },
     );
+  });
+
+  testWidgets('lobby avatar circles show the picked character faces', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    socket.userId = 'ME';
+    socket.lobbyGameType = 'yut';
+    socket.lobbyHost = 'ME';
+    socket.lobbyPlayers = ['ME', 'YOU'];
+    socket.lobbyCharacterSelections = {'ME': 'honggilldong', 'YOU': 'miho'};
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GameLobbyScreen(
+          gameType: 'yut',
+          title: '윷놀이',
+          description: '테스트',
+          emoji: '🎲',
+          color: Colors.orange,
+          backgroundColor: Colors.orange.shade50,
+          gameScreen: const SizedBox(),
+          onJoinLobby: (_) {},
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    final faces = tester
+        .widgetList<YutCharacterAvatar>(find.byType(YutCharacterAvatar))
+        .map((f) => f.character)
+        .toList();
+    expect(faces, ['honggilldong', 'miho']);
+    socket.lobbyCharacterSelections = {};
+    socket.lobbyGameType = null;
+    socket.lobbyPlayers = [];
+    await tester.pumpWidget(const SizedBox());
   });
 
   test(

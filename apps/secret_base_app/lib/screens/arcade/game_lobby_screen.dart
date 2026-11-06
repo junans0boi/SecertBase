@@ -6,6 +6,7 @@ import '../../core/main_design.dart';
 import '../../core/socket_service.dart';
 import '../../core/yut_audio.dart';
 import 'games/yut/yut_character_picker.dart';
+import 'games/yut/yut_figures.dart';
 import 'lobby_options.dart';
 
 const _kStakeOptions = [0, 500, 1000, 3000];
@@ -274,6 +275,9 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
                                     host: _socket.lobbyHost,
                                     profileEmojis: profileEmojis,
                                     nicknames: nicknames,
+                                    characters: widget.gameType == 'yut'
+                                        ? _socket.lobbyCharacterSelections
+                                        : const {},
                                   ),
                                 ),
                                 const SizedBox(width: 18),
@@ -285,6 +289,9 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
                                     host: _socket.lobbyHost,
                                     profileEmojis: profileEmojis,
                                     nicknames: nicknames,
+                                    characters: widget.gameType == 'yut'
+                                        ? _socket.lobbyCharacterSelections
+                                        : const {},
                                   ),
                                 ),
                               ],
@@ -506,6 +513,9 @@ class _PlayerSlot extends StatelessWidget {
   final Map<String, String> profileEmojis;
   final Map<String, String> nicknames;
 
+  /// 고른 캐릭터(윷놀이). 있으면 프로필 이모지 대신 그 캐릭터 얼굴을 보여 준다.
+  final Map<String, String> characters;
+
   const _PlayerSlot({
     required this.index,
     required this.color,
@@ -513,6 +523,7 @@ class _PlayerSlot extends StatelessWidget {
     required this.host,
     required this.profileEmojis,
     required this.nicknames,
+    this.characters = const {},
   });
 
   @override
@@ -544,13 +555,18 @@ class _PlayerSlot extends StatelessWidget {
                   ),
                 ),
                 child: Center(
-                  child: Text(
-                    emoji,
-                    style: TextStyle(
-                      fontSize: player == null ? 24 : 38,
-                      color: kMainMuted,
-                    ),
-                  ),
+                  child: player != null && characters[player] != null
+                      ? YutCharacterAvatar(
+                          character: characters[player]!,
+                          size: 76,
+                        )
+                      : Text(
+                          emoji,
+                          style: TextStyle(
+                            fontSize: player == null ? 24 : 38,
+                            color: kMainMuted,
+                          ),
+                        ),
                 ),
               ),
               if (isHost)

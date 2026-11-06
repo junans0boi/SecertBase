@@ -254,6 +254,9 @@ class _YutBoardViewState extends State<YutBoardView>
                       ),
                     ),
                   ),
+                // 목적지 링은 말 뒤에(잡을 상대 말이 가려지지 않게), 누르는 자리는 말 위에.
+                for (final m in widget.preview)
+                  _destination(m, pt, figH, ringOnly: true),
                 for (final tk in tokens) _positionedToken(tk, figH),
                 for (final m in widget.preview) _destination(m, pt, figH),
               ],
@@ -399,7 +402,12 @@ class _YutBoardViewState extends State<YutBoardView>
     );
   }
 
-  Widget _destination(YutLegalMove m, Offset Function(int) pt, double figH) {
+  Widget _destination(
+    YutLegalMove m,
+    Offset Function(int) pt,
+    double figH, {
+    bool ringOnly = false,
+  }) {
     final at = pt(m.to);
     final hit = math.max(figH * 0.8, 48.0);
     final isChosen =
@@ -414,13 +422,63 @@ class _YutBoardViewState extends State<YutBoardView>
     final label = m.finish
         ? '도착'
         : m.captures > 0
-        ? '잡기'
+        ? '× 잡기'
         : m.stacks > 0
         ? '업기'
         : null;
     final desc = m.finish
         ? '참먹이로 골인'
         : '${yutSquareName(m.to) ?? '${m.to}번 칸'}으로 옮기기${m.captures > 0 ? ', 상대 말 잡기' : ''}';
+    final danger = m.captures > 0;
+    final ringColor = isChosen
+        ? const Color(0xFFEF4F2B)
+        : danger
+        ? const Color(0xFFE5534B)
+        : const Color(0xFFFFB000);
+    if (ringOnly) {
+      // 칸 둘레의 링(말 뒤). 잡기면 붉은 두 겹 링 + 발밑 붉은 빛.
+      return Positioned(
+        left: at.dx - hit / 2,
+        top: at.dy - hit / 2,
+        width: hit,
+        height: hit,
+        child: IgnorePointer(
+          child: AnimatedBuilder(
+            animation: _pulse,
+            builder: (context, _) {
+              final k = 0.5 + 0.5 * _pulse.value;
+              final d = hit * (0.8 + 0.12 * k);
+              return Center(
+                child: Container(
+                  width: d,
+                  height: d,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: ringColor.withValues(alpha: danger ? 0.28 : 0.16),
+                    border: Border.all(
+                      color: ringColor,
+                      width: isChosen || danger ? 3.4 : 2.6,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color:
+                            (danger
+                                    ? const Color(0xFFFF6B5E)
+                                    : const Color(0xFFFFE066))
+                                .withValues(alpha: 0.85 * k),
+                        blurRadius: 14,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+    }
+    // 누르는 자리(말 위, 투명) + 갈림길 화살표 + 머리 위 깃발.
+    final flagTop = -(figH * 0.98 + 16);
     return Positioned(
       left: at.dx - hit / 2,
       top: at.dy - hit / 2,
@@ -433,58 +491,49 @@ class _YutBoardViewState extends State<YutBoardView>
           key: ValueKey('yut_dest_${m.to}_${m.backdoDir ?? 'f'}'),
           behavior: HitTestBehavior.opaque,
           onTap: () => widget.onTapDestination(m),
-          child: AnimatedBuilder(
-            animation: _pulse,
-            builder: (context, _) {
-              final k = 0.5 + 0.5 * _pulse.value;
-              return Stack(
-                clipBehavior: Clip.none,
-                alignment: Alignment.center,
-                children: [
-                  Container(
-                    width: hit * (0.78 + 0.12 * k),
-                    height: hit * (0.78 + 0.12 * k),
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              if (fork)
+                Transform.rotate(
+                  angle: angle,
+                  child: const Icon(
+                    Icons.arrow_forward_rounded,
+                    size: 26,
+                    color: Color(0xFF263A2A),
+                  ),
+                ),
+              if (label != null)
+                Positioned(
+                  top: flagTop,
+                  child: _FlagLabel(
+                    text: label,
+                    color: danger
+                        ? const Color(0xFFE5534B)
+                        : const Color(0xFF2F82DE),
+                  ),
+                ),
+              if (danger)
+                Positioned(
+                  bottom: -4,
+                  child: Container(
+                    width: 22,
+                    height: 22,
+                    alignment: Alignment.center,
                     decoration: BoxDecoration(
+                      color: const Color(0xFFE5534B),
                       shape: BoxShape.circle,
-                      color: Colors.white.withValues(alpha: 0.1),
-                      border: Border.all(
-                        color: isChosen
-                            ? const Color(0xFFEF4F2B)
-                            : const Color(0xFFFFB000),
-                        width: isChosen ? 3.4 : 2.6,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(
-                            0xFFFFE066,
-                          ).withValues(alpha: 0.85 * k),
-                          blurRadius: 14,
-                        ),
-                      ],
+                      border: Border.all(color: Colors.white, width: 1.6),
+                    ),
+                    child: const Icon(
+                      Icons.close_rounded,
+                      size: 15,
+                      color: Colors.white,
                     ),
                   ),
-                  if (fork)
-                    Transform.rotate(
-                      angle: angle,
-                      child: const Icon(
-                        Icons.arrow_forward_rounded,
-                        size: 26,
-                        color: Color(0xFF263A2A),
-                      ),
-                    ),
-                  if (label != null)
-                    Positioned(
-                      top: -hit * 0.4,
-                      child: _FlagLabel(
-                        text: label,
-                        color: m.captures > 0
-                            ? const Color(0xFFE5534B)
-                            : const Color(0xFF2F82DE),
-                      ),
-                    ),
-                ],
-              );
-            },
+                ),
+            ],
           ),
         ),
       ),

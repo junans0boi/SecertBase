@@ -546,11 +546,12 @@ class _YutGameScreenState extends State<YutGameScreen>
                     children: [
                       Positioned.fill(child: _body()),
                       Positioned(
-                        top: 96,
+                        top: 190,
                         left: 0,
                         right: 0,
                         child: GameTurnBanner(
                           theme: t,
+                          hold: const Duration(milliseconds: 500),
                           id: _bannerId,
                           text: _bannerText,
                           sub: _bannerSub,
@@ -998,7 +999,7 @@ class _YutGameScreenState extends State<YutGameScreen>
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   SizedBox(
-                    height: 56,
+                    height: 58,
                     child: shown.isEmpty
                         ? Center(
                             child: Text(
@@ -1013,11 +1014,12 @@ class _YutGameScreenState extends State<YutGameScreen>
                         : ListView(
                             scrollDirection: Axis.horizontal,
                             shrinkWrap: true,
+                            padding: const EdgeInsets.only(top: 6),
                             children: [
                               for (var i = 0; i < shown.length; i++)
                                 Padding(
                                   padding: const EdgeInsets.symmetric(
-                                    horizontal: 3,
+                                    horizontal: 2,
                                   ),
                                   child: _ThrowChip(
                                     steps: shown[i],
@@ -1030,7 +1032,7 @@ class _YutGameScreenState extends State<YutGameScreen>
                             ],
                           ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Row(
                     children: [
                       Expanded(
@@ -1307,6 +1309,10 @@ class _PlayerCard extends StatelessWidget {
     final t = theme;
     final charName = yutCharacterNames[spec.character] ?? '';
     final who = spec.isSkin ? (spec.skinName ?? '동물 말') : charName;
+    // 효과 칩은 가장 앞의 둘만 보이고 나머지는 "+N"(전체는 카드를 눌러 장비 창에서).
+    final compact = MediaQuery.sizeOf(context).height < 720;
+    final shownEffects = effects.take(compact ? 1 : 2).toList();
+    final hidden = effects.length - shownEffects.length;
     final chips = <Widget>[
       if (stick != null)
         _chip(
@@ -1318,14 +1324,13 @@ class _PlayerCard extends StatelessWidget {
       if (effects.isNotEmpty)
         Padding(
           padding: const EdgeInsets.only(right: 4),
-          child: Center(
-            child: Text(
-              '효과',
-              style: t.body(size: 12, weight: FontWeight.w900, color: t.accent),
-            ),
+          child: Text(
+            '효과',
+            style: t.body(size: 12, weight: FontWeight.w900, color: t.accent),
           ),
         ),
-      for (final e in effects) _chip(e),
+      for (final e in shownEffects) _chip(e),
+      if (hidden > 0) _chip('+$hidden', color: t.subInk),
     ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 2, 8, 2),
@@ -1354,91 +1359,102 @@ class _PlayerCard extends StatelessWidget {
                   ),
               ],
             ),
-            child: Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Stack(
-                  clipBehavior: Clip.none,
+                Row(
                   children: [
-                    YutFigure(
-                      key: ValueKey('yut_card_figure_${isMe ? 'me' : 'opp'}'),
-                      height: 58,
-                      team: team,
-                      spec: spec,
-                      badge: false,
-                    ),
-                    Positioned(left: 44, top: -12, child: bubble),
-                  ],
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        isMe && name != '나' ? '$name (나)' : name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: t.body(size: 13.5, weight: FontWeight.w800),
-                      ),
-                      Text(
-                        '$who · 대기 $waiting · 도착 $finished/$total',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: t.body(
-                          size: 12,
-                          color: t.subInk,
-                          weight: FontWeight.w700,
-                        ),
-                      ),
-                      if (chips.isNotEmpty)
-                        SizedBox(
-                          height: 24,
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: Row(children: chips),
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        YutFigure(
+                          key: ValueKey(
+                            'yut_card_figure_${isMe ? 'me' : 'opp'}',
                           ),
+                          height: 58,
+                          team: team,
+                          spec: spec,
+                          badge: false,
                         ),
-                    ],
-                  ),
-                ),
-                if (deadline != null) ...[
-                  TurnTimerRing(
-                    theme: t,
-                    deadline: deadline,
-                    size: 40,
-                    tickSound: isMe,
-                  ),
-                  const SizedBox(width: 6),
-                ],
-                SizedBox(
-                  width: 54,
-                  height: 58,
-                  child: waiting <= 0
-                      ? const SizedBox.shrink()
-                      : Semantics(
-                          button: selectableWaiting,
-                          label: '대기 말 $waiting개',
-                          child: GestureDetector(
-                            key: isMe
-                                ? const ValueKey('yut_waiting_piece')
-                                : null,
-                            behavior: HitTestBehavior.opaque,
-                            onTap: selectableWaiting ? onTapWaiting : null,
-                            child: Align(
-                              alignment: Alignment.bottomCenter,
-                              child: YutFigure(
-                                height: 52,
-                                team: team,
-                                spec: spec,
-                                count: waiting,
-                                selected: waitingSelected,
-                                glow: selectableWaiting && !waitingSelected,
-                              ),
+                        Positioned(left: 44, top: -12, child: bubble),
+                      ],
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            isMe && name != '나' ? '$name (나)' : name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: t.body(size: 13.5, weight: FontWeight.w800),
+                          ),
+                          Text(
+                            '$who · 대기 $waiting · 도착 $finished/$total',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: t.body(
+                              size: 12,
+                              color: t.subInk,
+                              weight: FontWeight.w700,
                             ),
                           ),
-                        ),
+                        ],
+                      ),
+                    ),
+                    if (deadline != null) ...[
+                      TurnTimerRing(
+                        theme: t,
+                        deadline: deadline,
+                        size: 40,
+                        tickSound: isMe,
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    SizedBox(
+                      width: 54,
+                      height: 58,
+                      child: waiting <= 0
+                          ? const SizedBox.shrink()
+                          : Semantics(
+                              button: selectableWaiting,
+                              label: '대기 말 $waiting개',
+                              child: GestureDetector(
+                                key: isMe
+                                    ? const ValueKey('yut_waiting_piece')
+                                    : null,
+                                behavior: HitTestBehavior.opaque,
+                                onTap: selectableWaiting ? onTapWaiting : null,
+                                child: Align(
+                                  alignment: Alignment.bottomCenter,
+                                  child: YutFigure(
+                                    height: 52,
+                                    team: team,
+                                    spec: spec,
+                                    count: waiting,
+                                    selected: waitingSelected,
+                                    glow: selectableWaiting && !waitingSelected,
+                                  ),
+                                ),
+                              ),
+                            ),
+                    ),
+                  ],
                 ),
+                if (chips.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Wrap(
+                        runSpacing: 3,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: chips,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -1483,8 +1499,8 @@ class _ThrowChip extends StatelessWidget {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
           transform: Matrix4.translationValues(0, selected ? -4 : 0, 0),
-          constraints: const BoxConstraints(minWidth: 52, minHeight: 52),
-          padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+          constraints: const BoxConstraints(minWidth: 46, minHeight: 50),
+          padding: const EdgeInsets.fromLTRB(5, 2, 5, 2),
           decoration: BoxDecoration(
             color: const Color(0xFFFDF8EA),
             borderRadius: BorderRadius.circular(10),
@@ -1521,10 +1537,10 @@ class _ThrowChip extends StatelessWidget {
               Text(
                 name,
                 style: GoogleFonts.gowunBatang(
-                  fontSize: 20,
+                  fontSize: 19,
                   fontWeight: FontWeight.w800,
                   color: Obangsaek.black,
-                  height: 1.1,
+                  height: 1.0,
                 ),
               ),
               Text(
@@ -1533,7 +1549,7 @@ class _ThrowChip extends StatelessWidget {
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                   color: const Color(0xFF6D6254),
-                  height: 1.1,
+                  height: 1.0,
                 ),
               ),
             ],

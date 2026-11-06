@@ -313,3 +313,47 @@ class _SparklePainter extends CustomPainter {
   bool shouldRepaint(covariant _SparklePainter old) =>
       old.t != t || old.tier != tier;
 }
+
+/// 로비 아바타 원 안에 고른 캐릭터의 얼굴(머리 부분)을 보여 준다.
+class YutCharacterAvatar extends StatelessWidget {
+  final String character;
+  final double size;
+
+  const YutCharacterAvatar({
+    super.key,
+    required this.character,
+    required this.size,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final aspect = yutCharacterAspect(character);
+    // 전신 그림의 위쪽(머리·상체)만 원 안에 맞춘다.
+    final w = size * 1.12;
+    final h = w / aspect;
+    return ClipOval(
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: OverflowBox(
+          alignment: Alignment.topCenter,
+          minWidth: w,
+          maxWidth: w,
+          minHeight: h,
+          maxHeight: h,
+          child: Transform.translate(
+            offset: Offset(0, size * 0.02),
+            child: Image.asset(
+              yutCharacterAsset(character),
+              width: w,
+              height: h,
+              fit: BoxFit.fill,
+              filterQuality: FilterQuality.medium,
+              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
