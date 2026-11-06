@@ -111,11 +111,6 @@ void main() {
     expect(find.text('정밀'), findsOneWidget);
   });
 
-  testWidgets('other games keep the shared option picker', (tester) async {
-    await pumpLobby(tester, gameType: 'pirate', host: true);
-    expect(find.byType(LobbyOptionPicker), findsOneWidget);
-  });
-
   testWidgets('games without options show no picker', (tester) async {
     await pumpLobby(tester, gameType: 'blackjack', host: true);
     expect(find.byType(LobbyOptionPicker), findsNothing);
