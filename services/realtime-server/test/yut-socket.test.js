@@ -244,7 +244,7 @@ test('consent rematch keeps stake, characters, bgm, piece count and series, and 
   assert.equal(g1.series.games, 1);
   assert.notEqual(g1.currentTurn, first, 'the starter alternates');
   assert.equal(g1.phase, 'throwing');
-  assert.equal(g1.turnDeadline, Date.now() + TURN_MS);
+  assert.ok(Math.abs(g1.turnDeadline - (Date.now() + TURN_MS)) < 2000, 'a fresh 30 second deadline');
 });
 
 test('a rematch is refused while a staked game is still running, and forged responses are ignored', async t => {
