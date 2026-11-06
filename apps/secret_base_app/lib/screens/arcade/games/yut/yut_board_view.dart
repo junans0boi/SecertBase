@@ -83,8 +83,8 @@ class YutBoardGeometry {
   // 판 밖으로 나가지 않게 위쪽에 여유를 둔다.
   static const double gridLeft = 0.10;
   static const double gridWidth = 0.80;
-  static const double gridTop = 0.17;
-  static const double gridHeight = 0.69;
+  static const double gridTop = 0.195;
+  static const double gridHeight = 0.665;
 
   static Offset point(int pos, double side) {
     final l = logical(pos);

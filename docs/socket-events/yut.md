@@ -37,7 +37,9 @@
   legalMoves: [{ moveIndex, steps, pieceId, pieceIds, backdoDir, from, to, path, finish, captures, stacks }],
   characters: { [user]: 'honggilldong'|'nolbu'|'miho' }, bgm,
   stake, coinBonus: { [user]: n }, coinBonusCap,
-  equippedItems, series: { wins, draws, games }, winner,
+  equippedItems,            // 두 사람 모두: { [user]: { yut_piece: { name, icon, grade, stats }, yut_yut: {...} } }
+  effects,                  // 두 사람 모두: 이 판에 실제로 적용되는 효과(상한 적용 후) — 아래 참고
+  series: { wins, draws, games }, winner,
   turnDeadline, turnMs: 30000, serverNow,   // GameDeadline.fromServer로 시계 보정
   lastAction,                                // 연출·소리 근거(아래)
 }
@@ -63,6 +65,15 @@
 영수증: `transferred` = 진 사람에게서 실제로 옮겨진 판돈(잔액이 모자라면 `stake`보다 작다 → `capped`), `winnerGain` = 이긴 사람이 실제로 받은 코인(보너스 포함), 정산이 실패하면 `failed`와 0. 화면은 `stake`가 아니라 이 값을 보여 준다.
 
 판돈은 기존 `wallet:updated`로 반영되고, 실패하면 `wallet:settle_failed`. 정산 ref는 `yut:<gameId>`(멱등), 결과 저장은 `recordGameOutcome(gameId)`.
+
+## 상점 아이템 표시
+
+- `equippedItems[user].yut_piece` — 말 스킨(동물). 있으면 화면이 그 사람의 말 그림을 캐릭터 대신 `icon` 이모지 동물 말(등급 `grade`별 테두리·빛)로 그린다. `yut_yut` — 윷가락 스킨(이름·아이콘·등급으로 윷가락 모양을 고름).
+- `effects[user] = { controlPct, moRatePct, overturnPct, backdoBonusPct, defensePct, winCoinPct, catchCoinPer, catchFlat }` — 서버가 합산 상한(throw 계열 3%, 방어 10%)을 적용한 **실제 값**. 화면의 "효과" 칩은 원시 아이템 수치가 아니라 이 값을 보여 준다(판돈이 없는 판에서는 코인 효과를 감춘다).
+
+## 캐릭터
+
+- 로비에서 `game:lobby:select_character { gameType: 'yut', character }`(홍길동 `honggilldong`·놀부 `nolbu`·미호 `miho`)로 고른다. 이미 상대가 고른 캐릭터는 `character_taken`으로 거부된다. 고르지 않은 사람은 서버가 겹치지 않는 캐릭터를 배정한다(`state.characters`).
 
 ## 규칙·균형
 
