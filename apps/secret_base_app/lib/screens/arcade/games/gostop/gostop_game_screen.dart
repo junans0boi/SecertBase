@@ -1198,6 +1198,7 @@ class _GostopGameScreenState extends State<GostopGameScreen>
         'choice' when !myTurn => '$who님이 패를 고르는 중…',
         'choice' => '위 패널에서 가져올 패를 고르세요',
         'go_stop' => '고 or 스톱?',
+        _ when v.ended || c.result != null => '판이 끝났어요',
         _ => myTurn ? '연출이 끝나면 낼 수 있어요' : '${c.displayName(v.current)}님의 차례',
       };
       main.add(

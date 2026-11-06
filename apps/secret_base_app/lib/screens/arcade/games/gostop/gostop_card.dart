@@ -16,7 +16,7 @@ enum GostopCardSize {
   field(40),
 
   /// 딴 패 묶음.
-  capture(28);
+  capture(26);
 
   final double width;
   const GostopCardSize(this.width);

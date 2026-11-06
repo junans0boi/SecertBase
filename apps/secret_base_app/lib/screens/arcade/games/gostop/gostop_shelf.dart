@@ -23,7 +23,7 @@ class GostopShelf extends StatelessWidget {
     required this.theme,
     required this.cards,
     this.hiddenIds = const {},
-    this.cardWidth = 28,
+    this.cardWidth = 26,
     this.semanticsLabel = '딴 패',
   });
 

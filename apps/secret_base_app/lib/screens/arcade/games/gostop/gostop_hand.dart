@@ -38,8 +38,8 @@ class GostopHandFan extends StatelessWidget {
     this.hiddenIds = const {},
   });
 
-  static const double lift = 18;
-  static const double _maxDrop = 12;
+  static const double lift = 14;
+  static const double _maxDrop = 8;
 
   @override
   Widget build(BuildContext context) {
@@ -61,7 +61,7 @@ class GostopHandFan extends StatelessWidget {
           final maxStep = w * 0.9;
           final step = n <= 1
               ? 0.0
-              : math.min(maxStep, (box.maxWidth - w - 8) / (n - 1));
+              : math.min(maxStep, (box.maxWidth - w - 22) / (n - 1));
           final total = (n - 1) * step + w;
           final start = (box.maxWidth - total) / 2;
           final mid = (n - 1) / 2;
@@ -70,7 +70,7 @@ class GostopHandFan extends StatelessWidget {
             final selected = c.id == selectedId;
             final dist = i - mid;
             final angle = selected ? 0.0 : dist * 0.034;
-            final drop = selected ? 0.0 : dist * dist * 0.55;
+            final drop = selected ? 0.0 : dist * dist * 0.4;
             final capturable = capturableMonths.contains(c.month);
             final recommended = c.id == recommendedId && !selected;
             return AnimatedPositioned(

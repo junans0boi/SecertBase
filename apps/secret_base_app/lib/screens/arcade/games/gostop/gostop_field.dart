@@ -132,7 +132,7 @@ class _Slot extends StatelessWidget {
   });
 
   static const _dx = 4.0;
-  static const _dy = 7.0;
+  static const _dy = 6.0;
 
   @override
   Widget build(BuildContext context) {
@@ -141,7 +141,7 @@ class _Slot extends StatelessWidget {
     final h = gostopCardHeight(w);
     return Container(
       key: slotKey,
-      height: h + 3 * _dy + 14,
+      height: h + 3 * _dy + 12,
       margin: const EdgeInsets.all(1.5),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
@@ -179,7 +179,7 @@ class _Slot extends StatelessWidget {
               for (var i = 0; i < cards.length; i++)
                 Positioned(
                   left: left + i.clamp(0, 3) * dx,
-                  top: 13 + i.clamp(0, 3) * _dy,
+                  top: 11 + i.clamp(0, 3) * _dy,
                   child: Opacity(
                     opacity: hiddenIds.contains(cards[i].id) ? 0 : 1,
                     child: GostopCard(

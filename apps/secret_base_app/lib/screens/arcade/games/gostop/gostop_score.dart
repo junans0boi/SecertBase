@@ -24,7 +24,7 @@ class MultiplierBadge extends StatelessWidget {
     super.key,
     required this.theme,
     required this.multiplier,
-    this.size = 54,
+    this.size = 46,
   });
 
   @override
@@ -107,7 +107,7 @@ class GostopScoreBoard extends StatelessWidget {
     final oppScore = view.scoreOf(opp).total;
     final staked = view.perPointBet > 0;
     return Container(
-      padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+      padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(18),
@@ -142,7 +142,7 @@ class GostopScoreBoard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Row(
             children: [
               Expanded(
@@ -206,6 +206,29 @@ class _Side extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = theme;
     final right = align == CrossAxisAlignment.end;
+    final chips = <Widget>[
+      if (go > 0)
+        GameChip(
+          theme: t,
+          label: '$go고',
+          color: const Color(0xFFFF8A5B),
+          emphasized: true,
+        ),
+      if (multiplier != null)
+        GameChip(theme: t, label: '×$multiplier', color: t.gold),
+    ];
+    final number = Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        Text(
+          '$score',
+          style: t.display(size: 28, color: color, weight: FontWeight.w900),
+        ),
+        Text('점', style: t.body(size: 12, color: color)),
+      ],
+    );
     return Column(
       crossAxisAlignment: align,
       mainAxisSize: MainAxisSize.min,
@@ -217,31 +240,18 @@ class _Side extends StatelessWidget {
           style: t.body(size: 10.5, color: t.subInk),
         ),
         Row(
-          mainAxisSize: MainAxisSize.min,
-          textDirection: right ? TextDirection.rtl : TextDirection.ltr,
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
+          mainAxisAlignment: right
+              ? MainAxisAlignment.end
+              : MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text(
-              '$score',
-              style: t.display(size: 30, color: color, weight: FontWeight.w900),
-            ),
-            Text('점', style: t.body(size: 12, color: color)),
-          ],
-        ),
-        Wrap(
-          spacing: 3,
-          alignment: right ? WrapAlignment.end : WrapAlignment.start,
-          children: [
-            if (go > 0)
-              GameChip(
-                theme: t,
-                label: '$go고',
-                color: const Color(0xFFFF8A5B),
-                emphasized: true,
-              ),
-            if (multiplier != null)
-              GameChip(theme: t, label: '×$multiplier', color: t.gold),
+            if (right) ...[
+              for (final c in chips) ...[c, const SizedBox(width: 3)],
+              number,
+            ] else ...[
+              number,
+              for (final c in chips) ...[const SizedBox(width: 3), c],
+            ],
           ],
         ),
       ],
@@ -262,16 +272,29 @@ class GostopHintChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hints = nearMissHints([for (final c in captures) c.coach]);
-    if (hints.isEmpty) return const SizedBox.shrink();
-    return Wrap(
-      spacing: 5,
-      runSpacing: 3,
-      alignment: WrapAlignment.center,
-      children: [
-        for (final h in hints)
-          GameChip(theme: theme, label: h, leading: '✦', color: theme.me),
-      ],
+    final hints = nearMissHints([for (final c in captures) c.coach], max: 2);
+    // 칸을 늘 비워 두어 힌트가 생기고 사라져도 화면이 출렁이지 않는다.
+    return SizedBox(
+      height: 26,
+      child: hints.isEmpty
+          ? null
+          : FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < hints.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 5),
+                    GameChip(
+                      theme: theme,
+                      label: hints[i],
+                      leading: '✦',
+                      color: theme.me,
+                    ),
+                  ],
+                ],
+              ),
+            ),
     );
   }
 }
