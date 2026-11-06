@@ -100,6 +100,9 @@ class MomentLoopScreen extends StatefulWidget {
   final String? initialDraftId;
   final Future<List<MomentMedia>> Function()? mediaPicker;
 
+  /// Opens the composer right away with 오늘의 순간 switched on.
+  final bool openComposer;
+
   const MomentLoopScreen({
     super.key,
     this.client,
@@ -110,6 +113,7 @@ class MomentLoopScreen extends StatefulWidget {
     this.initialPostId,
     this.initialDraftId,
     this.mediaPicker,
+    this.openComposer = false,
   });
 
   @override
@@ -192,6 +196,11 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     unawaited(_loadViewMode());
     unawaited(_initializeOutbox());
     _loadPosts(initial: true);
+    if (widget.openComposer && widget.initialDraftId == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_startCreatePostFlow(todayMoment: true));
+      });
+    }
   }
 
   @override
@@ -360,7 +369,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     }
   }
 
-  Future<void> _startCreatePostFlow() async {
+  Future<void> _startCreatePostFlow({bool todayMoment = false}) async {
     final created = await Navigator.of(context).push<Object?>(
       MaterialPageRoute(
         fullscreenDialog: true,
@@ -369,6 +378,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
           outbox: _outbox,
           initialMedia: const [],
           mediaPicker: widget.mediaPicker,
+          startWithTodayMoment: todayMoment,
         ),
       ),
     );
@@ -3311,6 +3321,7 @@ class _CreateMomentPage extends StatefulWidget {
   final MomentEdit? edit;
   final String? draftId;
   final Future<List<MomentMedia>> Function()? mediaPicker;
+  final bool startWithTodayMoment;
   const _CreateMomentPage({
     required this.controller,
     required this.outbox,
@@ -3319,6 +3330,7 @@ class _CreateMomentPage extends StatefulWidget {
     this.edit,
     this.draftId,
     this.mediaPicker,
+    this.startWithTodayMoment = false,
   });
 
   @override
@@ -3351,6 +3363,7 @@ class _CreateMomentPageState extends State<_CreateMomentPage> {
   void initState() {
     super.initState();
     final initial = _initial;
+    if (initial == null) _todayMoment = widget.startWithTodayMoment;
     _pickedMedia = widget.edit != null
         ? widget.edit!.items
               .map(
