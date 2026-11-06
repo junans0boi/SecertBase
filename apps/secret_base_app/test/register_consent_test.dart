@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:secret_base_app/core/auth_service.dart';
-import 'package:secret_base_app/screens/settings/settings_screen.dart';
+import 'package:secret_base_app/screens/settings/app_info_screens.dart';
 
 void main() {
   final requests = <http.Request>[];
@@ -34,12 +34,10 @@ void main() {
         );
   });
 
-  testWidgets('my space opens all three canonical legal links', (tester) async {
+  testWidgets('app info opens all three canonical legal links', (tester) async {
     tester.view.physicalSize = const Size(1200, 4800);
     addTearDown(tester.view.resetPhysicalSize);
-    await tester.pumpWidget(
-      const MaterialApp(home: Scaffold(body: MySpaceScreen())),
-    );
+    await tester.pumpWidget(const MaterialApp(home: AppInfoScreen()));
     await tester.pump();
     for (final label in ['개인정보 처리방침', '이용약관', '계정 삭제 안내']) {
       expect(find.text(label), findsOneWidget);
@@ -47,10 +45,10 @@ void main() {
       await tester.tap(find.text(label));
       await tester.pump();
     }
-    expect(launched, [
+    expect(launched.toSet(), {
       'https://secretbase.cloud/privacy',
       'https://secretbase.cloud/terms',
       'https://secretbase.cloud/delete-account',
-    ]);
+    });
   });
 }

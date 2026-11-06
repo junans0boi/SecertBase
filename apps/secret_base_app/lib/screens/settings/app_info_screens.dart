@@ -1,153 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/app_changelog.dart';
 import '../../core/app_info.dart';
-import '../../core/main_design.dart';
+import '../../core/auth_service.dart';
+import '../../v2/v2.dart';
+import 'permission_probe.dart';
+import 'settings_common.dart';
 
-typedef LinkOpener = Future<void> Function(Uri uri);
-
-Future<void> openExternalLink(Uri uri) async {
-  try {
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  } catch (_) {
-    // 열 수 있는 앱이 없을 때는 조용히 넘어간다.
-  }
-}
-
-/// 업데이트 내역: [kChangelog]를 최신순으로 보여 준다.
-class ChangelogScreen extends StatelessWidget {
-  const ChangelogScreen({
-    super.key,
-    this.entries = kChangelog,
-    this.currentVersion = '',
-  });
-
-  final List<ChangelogEntry> entries;
-
-  /// 지금 설치된 버전. 같은 항목에 "현재 버전" 표시가 붙는다.
-  final String currentVersion;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: kMainBg,
-      appBar: AppBar(
-        title: Text('업데이트 내역', style: mainTitle(size: 22)),
-        backgroundColor: kMainBg,
-        elevation: 0,
-      ),
-      body: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(18, 8, 18, 32),
-        itemCount: entries.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 14),
-        itemBuilder: (context, index) => _ChangelogCard(
-          entry: entries[index],
-          isCurrent: entries[index].version == currentVersion,
-        ),
-      ),
-    );
-  }
-}
-
-class _ChangelogCard extends StatelessWidget {
-  const _ChangelogCard({required this.entry, required this.isCurrent});
-
-  final ChangelogEntry entry;
-  final bool isCurrent;
-
-  @override
-  Widget build(BuildContext context) {
-    return MainCard(
-      radius: 26,
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Wrap(
-                  spacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text('v${entry.version}', style: mainTitle(size: 24)),
-                    if (isCurrent)
-                      DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: kMainRoseSoft,
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 9,
-                            vertical: 4,
-                          ),
-                          child: Text(
-                            '현재 버전',
-                            style: mainBody(
-                              size: 11,
-                              color: kMainRose,
-                              weight: FontWeight.w800,
-                              height: 1,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text(
-                  entry.date,
-                  style: mainBody(size: 12, color: kMainMuted),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 2),
-          Text(
-            entry.title,
-            style: mainBody(size: 14, color: kMainInk, weight: FontWeight.w800),
-          ),
-          const SizedBox(height: 10),
-          for (final item in entry.items)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(top: 7, right: 8),
-                    child: Container(
-                      width: 5,
-                      height: 5,
-                      decoration: const BoxDecoration(
-                        color: kMainRose,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(item, style: mainBody(size: 13, height: 1.5)),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 개발자 정보: 앱 이름, 개발자/팀, 문의, 약관·정책 링크, 저작권, 오픈소스 라이선스.
+/// 앱 정보·약관: 버전, 업데이트 내역, 약관, 개발자 정보, 라이선스.
 ///
-/// 값이 비어 있는 항목([AppInfoConstants]에서 빈 문자열)은 줄째 숨긴다.
-class DeveloperInfoScreen extends StatelessWidget {
-  const DeveloperInfoScreen({
+/// 버전 줄을 7번 누르면 개발자용 진단 화면이 열려요(일반 화면에는 디버그 값이 없어요).
+class AppInfoScreen extends StatefulWidget {
+  const AppInfoScreen({
     super.key,
     this.info,
     this.onOpenLink = openExternalLink,
@@ -166,242 +31,349 @@ class DeveloperInfoScreen extends StatelessWidget {
   final String supportEmail;
   final String websiteUrl;
 
-  void _showLicenses(BuildContext context) {
+  @override
+  State<AppInfoScreen> createState() => _AppInfoScreenState();
+}
+
+class _AppInfoScreenState extends State<AppInfoScreen> {
+  AppInfo? _info;
+  int _taps = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _info = widget.info;
+    if (_info == null) {
+      AppInfo.load()
+          .then((v) {
+            if (mounted) setState(() => _info = v);
+          })
+          .catchError((_) {});
+    }
+  }
+
+  void _versionTap() {
+    _taps++;
+    if (_taps >= 7) {
+      _taps = 0;
+      pushMorePage<void>(context, DiagnosticsScreen(info: _info));
+    }
+  }
+
+  Future<void> _mail(String email) async {
+    final ok = await widget.onOpenLink(Uri(scheme: 'mailto', path: email));
+    if (!ok) {
+      await Clipboard.setData(ClipboardData(text: email));
+      if (mounted) {
+        showV2Snack(context, '메일 앱을 열 수 없어요. 주소를 복사했어요.');
+      }
+    }
+  }
+
+  void _showLicenses() {
     showLicensePage(
       context: context,
       applicationName: AppInfoConstants.appNameKo,
-      applicationVersion: info?.fullVersion,
+      applicationVersion: _info?.fullVersion,
       applicationLegalese: AppInfoConstants.copyrightLine,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final email = supportEmail.trim();
-    final site = websiteUrl.trim();
-    final details = <(IconData, Color, String, String)>[
-      (
-        Icons.favorite_rounded,
-        kMainRose,
-        '앱 이름',
-        '${AppInfoConstants.appNameKo} / ${AppInfoConstants.appNameEn}',
-      ),
-      if (info != null && info!.hasVersion)
-        (Icons.tag_rounded, kMainLilac, '버전', info!.fullVersion),
-      (Icons.person_outline_rounded, kMainSky, '개발자', developerName),
-      (Icons.groups_outlined, kMainSage, '팀', teamName),
-      (Icons.business_outlined, kMainHoney, '운영자', legalOperatorName),
-    ].where((row) => row.$4.trim().isNotEmpty).toList();
-
-    return Scaffold(
-      backgroundColor: kMainBg,
-      appBar: AppBar(
-        title: Text('개발자 정보', style: mainTitle(size: 22)),
-        backgroundColor: kMainBg,
-        elevation: 0,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(18, 8, 18, 32),
-        children: [
-          _InfoSection(
-            title: '앱과 개발자',
-            children: [
-              for (final (icon, color, label, value) in details)
-                _DetailRow(
-                  icon: icon,
-                  color: color,
-                  label: label,
-                  value: value,
-                ),
-              if (email.isNotEmpty)
-                _LinkTile(
-                  icon: Icons.mail_outline_rounded,
-                  color: kMainPeach,
-                  title: '문의',
-                  subtitle: email,
-                  onTap: () => onOpenLink(Uri(scheme: 'mailto', path: email)),
-                ),
-              if (site.isNotEmpty)
-                _LinkTile(
-                  icon: Icons.public_rounded,
-                  color: kMainSky,
-                  title: '팀 홈페이지',
-                  subtitle: site,
-                  onTap: () => onOpenLink(Uri.parse(site)),
-                ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          _InfoSection(
-            title: '약관과 정책',
-            children: [
-              _LinkTile(
-                icon: Icons.shield_outlined,
-                color: kMainSage,
-                title: '개인정보 처리방침',
-                onTap: () => onOpenLink(Uri.parse(AppInfoConstants.privacyUrl)),
-              ),
-              _LinkTile(
-                icon: Icons.description_outlined,
-                color: kMainSky,
-                title: '이용약관',
-                onTap: () => onOpenLink(Uri.parse(AppInfoConstants.termsUrl)),
-              ),
-              _LinkTile(
-                icon: Icons.person_remove_outlined,
-                color: kMainPeach,
-                title: '회원 탈퇴 안내',
-                onTap: () =>
-                    onOpenLink(Uri.parse(AppInfoConstants.deleteAccountUrl)),
-              ),
-              _LinkTile(
-                icon: Icons.article_outlined,
-                color: kMainLilac,
-                title: '오픈소스 라이선스',
-                onTap: () => _showLicenses(context),
-              ),
-            ],
-          ),
-          const SizedBox(height: 22),
-          Center(
-            child: Text(
-              AppInfoConstants.copyrightLine,
-              style: mainBody(size: 11, color: kMainMuted),
-              textAlign: TextAlign.center,
+    final info = _info;
+    final p = V2Palette.of(context);
+    final email = widget.supportEmail.trim();
+    final site = widget.websiteUrl.trim();
+    final operator = widget.legalOperatorName.trim();
+    final version = info != null && info.hasVersion
+        ? info.version
+        : '확인할 수 없어요';
+    return V2Theme(
+      child: Scaffold(
+        appBar: const V2Header(title: '앱 정보·약관'),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
+          children: [
+            Column(
+              children: [
+                const V2Art(icon: V2Icons.base),
+                const SizedBox(height: 12),
+                Text(AppInfoConstants.appNameKo, style: V2Text.title),
+                const SizedBox(height: 2),
+                Text('버전 $version', style: V2Text.cap),
+              ],
             ),
+            const SizedBox(height: 24),
+            V2List(
+              children: [
+                V2ListTile(
+                  icon: V2Icons.sparkle,
+                  tone: V2Tone.honey,
+                  title: '업데이트 내역',
+                  subtitle: '${kChangelog.first.version} 새로워진 점',
+                  onTap: () => pushMorePage<void>(
+                    context,
+                    ChangelogScreen(currentVersion: info?.version ?? ''),
+                  ),
+                ),
+                V2ListTile(
+                  icon: V2Icons.text,
+                  tone: V2Tone.sky,
+                  title: '이용약관',
+                  onTap: () =>
+                      widget.onOpenLink(Uri.parse(AppInfoConstants.termsUrl)),
+                ),
+                V2ListTile(
+                  icon: V2Icons.shield,
+                  tone: V2Tone.sage,
+                  title: '개인정보 처리방침',
+                  onTap: () =>
+                      widget.onOpenLink(Uri.parse(AppInfoConstants.privacyUrl)),
+                ),
+                V2ListTile(
+                  icon: V2Icons.delete,
+                  tone: V2Tone.peach,
+                  title: '계정 삭제 안내',
+                  onTap: () => widget.onOpenLink(
+                    Uri.parse(AppInfoConstants.deleteAccountUrl),
+                  ),
+                ),
+                V2ListTile(
+                  icon: V2Icons.info,
+                  tone: V2Tone.lilac,
+                  title: '오픈소스 라이선스',
+                  onTap: _showLicenses,
+                ),
+              ],
+            ),
+            V2Section(
+              title: '개발자 정보',
+              padding: EdgeInsets.zero,
+              child: MoreInfoGroup(
+                children: [
+                  MoreInfoRow(label: '개발자', value: widget.developerName),
+                  MoreInfoRow(label: '팀', value: widget.teamName),
+                  if (operator.isNotEmpty)
+                    MoreInfoRow(label: '운영자', value: operator),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _versionTap,
+                    child: MoreInfoRow(
+                      label: '버전',
+                      value: info != null && info.hasVersion
+                          ? info.fullVersion.replaceFirst('v', '')
+                          : '확인할 수 없어요',
+                    ),
+                  ),
+                  if (email.isNotEmpty)
+                    MoreInfoRow(
+                      label: '문의',
+                      value: email,
+                      trailing: V2IconButton(
+                        icon: V2Icons.send,
+                        tooltip: '메일 보내기',
+                        onPressed: () => _mail(email),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (site.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              V2Button(
+                label: '팀 홈페이지',
+                icon: V2Icons.link,
+                variant: V2ButtonVariant.soft,
+                onPressed: () => widget.onOpenLink(Uri.parse(site)),
+              ),
+            ],
+            const SizedBox(height: 24),
+            Center(
+              child: Text(
+                AppInfoConstants.copyrightLine,
+                style: V2Text.cap.copyWith(color: p.muted),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 업데이트 내역: [kChangelog]를 최신순으로 보여 줘요.
+class ChangelogScreen extends StatelessWidget {
+  const ChangelogScreen({
+    super.key,
+    this.entries = kChangelog,
+    this.currentVersion = '',
+  });
+
+  final List<ChangelogEntry> entries;
+
+  /// 지금 설치된 버전. 같은 항목에 "현재 버전" 표시가 붙어요.
+  final String currentVersion;
+
+  @override
+  Widget build(BuildContext context) {
+    return V2Theme(
+      child: Scaffold(
+        appBar: const V2Header(title: '업데이트 내역'),
+        body: ListView.separated(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
+          itemCount: entries.length,
+          separatorBuilder: (_, _) => const SizedBox(height: 12),
+          itemBuilder: (context, index) => _ChangelogCard(
+            entry: entries[index],
+            isCurrent: entries[index].version == currentVersion,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChangelogCard extends StatelessWidget {
+  const _ChangelogCard({required this.entry, required this.isCurrent});
+
+  final ChangelogEntry entry;
+  final bool isCurrent;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = V2Palette.of(context);
+    return V2Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(entry.version, style: V2Text.head),
+              const SizedBox(width: 8),
+              if (isCurrent) const V2Chip(label: '현재 버전', tone: V2Tone.rose),
+              const Spacer(),
+              Text(entry.date.replaceAll('-', '.'), style: V2Text.cap),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(entry.title, style: V2Text.bodyStrong),
+          const SizedBox(height: 10),
+          for (final item in entry.items)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8, right: 8),
+                    child: Container(
+                      width: 5,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: p.primary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                  Expanded(child: Text(item, style: V2Text.body)),
+                ],
+              ),
+            ),
         ],
       ),
     );
   }
 }
 
-class _InfoSection extends StatelessWidget {
-  const _InfoSection({required this.title, required this.children});
-
-  final String title;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: mainTitle(size: 22)),
-        const SizedBox(height: 9),
-        MainCard(
-          radius: 26,
-          padding: EdgeInsets.zero,
-          child: Column(children: children),
-        ),
-      ],
-    );
-  }
-}
-
-class _DetailRow extends StatelessWidget {
-  const _DetailRow({
-    required this.icon,
-    required this.color,
-    required this.label,
-    required this.value,
+/// 개발자용 진단(앱 정보의 버전을 7번 눌러야 열려요). 사용자에게 보이는 일반
+/// 화면에는 넣지 않는 값(서버 주소, 사용자 ID, 권한 상태)을 모아 둬요.
+class DiagnosticsScreen extends StatefulWidget {
+  const DiagnosticsScreen({
+    super.key,
+    this.info,
+    this.probe = const DevicePermissionProbe(),
   });
 
-  final IconData icon;
-  final Color color;
-  final String label;
-  final String value;
+  final AppInfo? info;
+  final PermissionProbe probe;
 
   @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      container: true,
-      label: '$label: $value',
-      child: ExcludeSemantics(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-          child: Row(
-            children: [
-              Icon(icon, color: color, size: 20),
-              const SizedBox(width: 12),
-              Text(label, style: mainBody(size: 13, color: kMainMuted)),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  value,
-                  textAlign: TextAlign.end,
-                  style: mainBody(
-                    size: 14,
-                    color: kMainInk,
-                    weight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  State<DiagnosticsScreen> createState() => _DiagnosticsScreenState();
 }
 
-class _LinkTile extends StatelessWidget {
-  const _LinkTile({
-    required this.icon,
-    required this.color,
-    required this.title,
-    required this.onTap,
-    this.subtitle,
-  });
+class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
+  String _permissions = '확인하는 중';
 
-  final IconData icon;
-  final Color color;
-  final String title;
-  final String? subtitle;
-  final VoidCallback onTap;
+  @override
+  void initState() {
+    super.initState();
+    _readPermissions();
+  }
+
+  static String _label(OsPermission p) => switch (p) {
+    OsPermission.granted => '허용',
+    OsPermission.denied => '꺼짐',
+    OsPermission.notAsked => '묻기 전',
+    OsPermission.unknown => '알 수 없음',
+  };
+
+  Future<void> _readPermissions() async {
+    final location = await widget.probe.location();
+    final notification = await widget.probe.notification();
+    if (mounted) {
+      setState(() {
+        _permissions = '위치 ${_label(location)} · 알림 ${_label(notification)}';
+      });
+    }
+  }
+
+  List<(String, String)> get _rows {
+    final auth = AuthService();
+    final info = widget.info;
+    final id = '${auth.user?['UserId'] ?? auth.user?['id'] ?? '-'}';
+    return [
+      ('앱 버전 / 빌드', info?.detailVersion ?? '-'),
+      ('서버', auth.baseUrl),
+      ('로그인', auth.token == null ? '로그아웃 상태' : '로그인됨'),
+      ('사용자 ID', id),
+      ('권한', _permissions),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      label: subtitle == null ? title : '$title: $subtitle',
-      button: true,
-      onTap: onTap,
-      child: ExcludeSemantics(
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
-              child: Row(
-                children: [
-                  Icon(icon, color: color, size: 20),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          style: mainBody(
-                            size: 14,
-                            color: kMainInk,
-                            weight: FontWeight.w700,
-                          ),
-                        ),
-                        if (subtitle != null)
-                          Text(
-                            subtitle!,
-                            style: mainBody(size: 11, color: kMainMuted),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const Icon(Icons.chevron_right_rounded, color: kMainMuted),
-                ],
-              ),
+    final rows = _rows;
+    return V2Theme(
+      dark: true,
+      child: Scaffold(
+        appBar: const V2Header(title: '진단'),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
+          children: [
+            Text('개발자 전용 화면이에요.', style: V2Text.cap),
+            const SizedBox(height: 12),
+            MoreInfoGroup(
+              children: [
+                for (final r in rows) MoreInfoRow(label: r.$1, value: r.$2),
+              ],
             ),
-          ),
+            const SizedBox(height: 16),
+            V2Button(
+              label: '진단 정보 복사',
+              icon: V2Icons.copy,
+              variant: V2ButtonVariant.soft,
+              onPressed: () async {
+                await Clipboard.setData(
+                  ClipboardData(
+                    text: rows.map((r) => '${r.$1}: ${r.$2}').join('\n'),
+                  ),
+                );
+                if (context.mounted) showV2Snack(context, '진단 정보를 복사했어요');
+              },
+            ),
+          ],
         ),
       ),
     );

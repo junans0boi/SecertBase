@@ -114,8 +114,8 @@ void main() {
       await tester.tap(find.byKey(const Key('shop_item_110')));
       await tester.pumpAndSettle();
       expect(find.text('+0.4'), findsOneWidget);
-      expect(find.text('🎯 윷·모 확률 +%p'), findsOneWidget);
-      expect(find.text('🪙 1.5K 구매'), findsOneWidget);
+      expect(find.text('윷·모 확률 +%p'), findsOneWidget);
+      expect(find.text('1,500 코인으로 사기'), findsOneWidget);
     },
   );
 
