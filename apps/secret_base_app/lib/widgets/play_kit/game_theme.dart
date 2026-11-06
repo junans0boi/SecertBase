@@ -719,12 +719,27 @@ class _BackdropPainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
     // 성운: 보라·파랑·장밋빛 안개.
-    _spotlight(canvas, size, Offset(w * 0.18, h * 0.16), w * 0.75,
-        const Color(0x4D5B3FC4));
-    _spotlight(canvas, size, Offset(w * 0.9, h * 0.52), w * 0.7,
-        const Color(0x3A2F67D8));
-    _spotlight(canvas, size, Offset(w * 0.45, h * 1.02), w * 0.8,
-        const Color(0x33C0508F));
+    _spotlight(
+      canvas,
+      size,
+      Offset(w * 0.18, h * 0.16),
+      w * 0.75,
+      const Color(0x4D5B3FC4),
+    );
+    _spotlight(
+      canvas,
+      size,
+      Offset(w * 0.9, h * 0.52),
+      w * 0.7,
+      const Color(0x3A2F67D8),
+    );
+    _spotlight(
+      canvas,
+      size,
+      Offset(w * 0.45, h * 1.02),
+      w * 0.8,
+      const Color(0x33C0508F),
+    );
     // 은하수: 대각선 띠를 따라 촘촘한 별가루.
     final rnd = math.Random(41);
     final dust = Paint();
