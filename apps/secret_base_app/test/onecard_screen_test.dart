@@ -6,6 +6,8 @@ import 'package:secret_base_app/core/socket_service.dart';
 import 'package:secret_base_app/screens/arcade/games/onecard/onecard_cards.dart';
 import 'package:secret_base_app/screens/arcade/games/onecard/onecard_controller.dart';
 import 'package:secret_base_app/screens/arcade/games/onecard/onecard_hand.dart';
+import 'package:secret_base_app/screens/arcade/games/onecard/onecard_lobby.dart';
+import 'package:secret_base_app/screens/arcade/games/onecard/onecard_panels.dart';
 import 'package:secret_base_app/screens/arcade/games/onecard/onecard_models.dart';
 import 'package:secret_base_app/screens/arcade/games/uno_screen.dart';
 
@@ -244,9 +246,12 @@ void main() {
     await settle(tester);
     expect(find.text('기권패'), findsOneWidget);
     expect(find.textContaining('시간 초과가 이어져 기권패'), findsOneWidget);
-    expect(find.textContaining('남은 손패'), findsNWidgets(2));
-    expect(find.text('판돈 300코인을 잃었어요'), findsOneWidget);
-    expect(find.text('한 판 더!'), findsOneWidget);
+    // 진 쪽(나)의 남은 손패 한 줄, 잃은 코인, 재대결 버튼.
+    expect(find.text('내 남은 손패'), findsOneWidget);
+    expect(find.text('5장'), findsOneWidget);
+    expect(find.text('-300'), findsOneWidget);
+    expect(find.text('DEFEAT'), findsOneWidget);
+    expect(find.text('한 판 더'), findsOneWidget);
     expect(find.text('이번 방 전적'), findsOneWidget);
     await settle(tester);
   });
@@ -301,6 +306,137 @@ void main() {
     }
     await settle(tester);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'my turn shows the turn pill; an attack shows badge, label and alert',
+    (tester) async {
+      await pumpScreen(tester);
+      c.debugApplyState(state());
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('내 차례'), findsOneWidget);
+      expect(find.textContaining('낼 수 있음'), findsOneWidget);
+      expect(find.text('뽑기'), findsOneWidget);
+      await settle(tester);
+
+      final atk = state(
+        top: card('red', 'draw2', 't'),
+        playable: ['red-draw2-p'],
+        seq: 4,
+        myHand: [card('red', 'draw2', 'p'), ...hand(5)],
+      )..['drawStack'] = 4;
+      atk['lastAction'] = {'type': 'pass', 'by': opp, 'seq': 4};
+      c.debugApplyState(atk);
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('+4'), findsWidgets);
+      expect(find.text('쌓인 벌칙 4장'), findsOneWidget);
+      expect(find.text('벌칙 4장 받기'), findsOneWidget);
+      expect(find.textContaining('+2 공격'), findsOneWidget);
+      expect(
+        find.text('내 차례'),
+        findsNothing,
+        reason: 'alert replaces the pill',
+      );
+      expect(find.textContaining('막을 수 있음 1장'), findsOneWidget);
+      await settle(tester);
+    },
+  );
+
+  testWidgets('color sheet: recommended color is on, pick another, confirm', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    String? result = 'unset';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () async {
+                result = await showModalBottomSheet<String>(
+                  context: context,
+                  backgroundColor: Colors.transparent,
+                  isScrollControlled: true,
+                  builder: (_) => const OneCardColorSheet(
+                    counts: {'red': 1, 'blue': 4},
+                    initial: 'blue',
+                  ),
+                );
+              },
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('어떤 색으로 바꿀까요?'), findsOneWidget);
+    expect(find.text('스카이로 바꾸기, 손에 4장'), findsOneWidget);
+    // 목업 순서: 로즈 · 허니 · 스카이 · 세이지.
+    final xs = [
+      for (final n in ['로즈', '허니', '스카이', '세이지'])
+        tester.getCenter(find.text(n).first).dx,
+    ];
+    expect(xs, [...xs]..sort());
+    await tester.tap(find.text('로즈').first);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('로즈로 바꾸기, 손에 1장'), findsOneWidget);
+    await tester.tap(find.text('로즈로 바꾸기, 손에 1장'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(result, 'red');
+  });
+
+  testWidgets('lobby: host picks stake and mode; guest agrees to the stake', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    int? stake;
+    String? mode;
+    bool? ready;
+    var started = false;
+    Widget lobby({required bool host, int stakeNow = 1000}) => MaterialApp(
+      home: OneCardLobby(
+        players: const [me, opp],
+        host: host ? me : opp,
+        me: me,
+        nicknames: const {me: '준', opp: '하늘'},
+        ready: const {},
+        stake: stakeNow,
+        mode: 'go_wild',
+        isHost: host,
+        canStart: host,
+        startLabel: '게임 시작',
+        onBack: () {},
+        onStart: () => started = true,
+        onStake: (v) => stake = v,
+        onMode: (v) => mode = v,
+        onReady: (v) => ready = v,
+      ),
+    );
+    await tester.pumpWidget(lobby(host: true));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('대기실'), findsOneWidget);
+    expect(find.text('방장'), findsOneWidget);
+    expect(find.text('하늘'), findsOneWidget);
+    await tester.tap(find.text('3,000'));
+    await tester.tap(find.text('클래식'));
+    await tester.tap(find.text('게임 시작'));
+    expect((stake, mode, started), (3000, 'classic', true));
+
+    await tester.pumpWidget(lobby(host: false));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('게임 시작'), findsNothing);
+    await tester.tap(find.text('3,000'));
+    expect(stake, 3000, reason: 'guest cannot change the stake');
+    await tester.tap(find.text('준비 완료').last);
+    expect(ready, isTrue);
   });
 
   test('card faces use symbols and Korean only', () {

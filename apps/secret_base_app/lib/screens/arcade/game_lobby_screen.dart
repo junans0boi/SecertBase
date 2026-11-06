@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/main_design.dart';
 import '../../core/socket_service.dart';
 import '../../core/yut_audio.dart';
+import 'games/onecard/onecard_lobby.dart';
 import 'games/yut/yut_character_picker.dart';
 import 'games/yut/yut_figures.dart';
 import 'lobby_options.dart';
@@ -233,6 +234,28 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
     final lobbyPlayers = List<String>.from(_socket.lobbyPlayers);
     final profileEmojis = Map<String, String>.from(_socket.profileEmojis);
     final nicknames = Map<String, String>.from(_socket.presenceNicknames);
+
+    // 원카드는 쇼타임 디자인의 전용 대기실을 쓴다(상태·동작은 이 화면 그대로).
+    if (widget.gameType == 'uno') {
+      return OneCardLobby(
+        players: lobbyPlayers,
+        host: _socket.lobbyHost,
+        me: _socket.userId,
+        nicknames: nicknames,
+        ready: _socket.lobbyReady,
+        stake: _socket.lobbyStake,
+        mode: '${_socket.lobbyOptions['mode'] ?? 'go_wild'}',
+        isHost: isHost,
+        canStart: canStart,
+        startLabel: startLabel,
+        stakeOptions: _kStakeOptions,
+        onBack: () => Navigator.of(context).pop(),
+        onStart: () => _socket.startGameLobby(widget.gameType),
+        onStake: (stake) => _socket.setLobbyStake(widget.gameType, stake),
+        onMode: (mode) => _socket.setLobbyOption(widget.gameType, 'mode', mode),
+        onReady: (ready) => _socket.setLobbyReady(widget.gameType, ready),
+      );
+    }
 
     return Scaffold(
       backgroundColor: kMainBg,
