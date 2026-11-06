@@ -20,6 +20,34 @@ ON DUPLICATE KEY UPDATE
   category=VALUES(category), game=VALUES(game), slot=VALUES(slot), grade=VALUES(grade),
   name=VALUES(name), description=VALUES(description), price=VALUES(price), icon=VALUES(icon), active=VALUES(active);
 
+-- 2-0. 달빛 윷의 효과 키 'yut_backdo_shield_pct'는 0019에서 ENUM에서 빠졌다. 다시 허용 목록에 넣는다(기존 값은 그대로).
+ALTER TABLE item_stats
+  MODIFY COLUMN stat_key ENUM(
+    'yut_control_pct',
+    'coin_bonus_pct',
+    'shop_discount_pct',
+    'daily_bonus_add',
+    'lose_refund_pct',
+    'onecard_draw_reduce',
+    'yut_catch_bonus',
+    'gacha_rate_up',
+    'daily_bonus_cooldown',
+    'win_streak_bonus',
+    'yut_mo_rate_pct',
+    'yut_backdo_bonus_pct',
+    'yut_win_coin_pct',
+    'yut_overturn_pct',
+    'piece_catch_resist_pct',
+    'piece_catch_coin_bonus',
+    'piece_safe_zone_pct',
+    'piece_group_pct',
+    'card_shield_pct',
+    'card_lucky_draw_pct',
+    'card_uno_protect_pct',
+    'card_reverse_bonus',
+    'yut_backdo_shield_pct'
+  ) NOT NULL;
+
 -- 2. 효과: 스킨마다 하나. 값은 서버 합산 상한 안에서 캐릭터 능력치와 함께 쓰인다(yut-engine.js).
 DELETE FROM item_stats WHERE item_id BETWEEN 110 AND 118;
 INSERT INTO item_stats (item_id, stat_key, stat_value) VALUES
