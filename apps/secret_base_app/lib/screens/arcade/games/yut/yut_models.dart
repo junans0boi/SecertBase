@@ -280,6 +280,9 @@ class YutView {
   final List<YutLegalMove> legalMoves;
   final Map<String, String> characters;
   final String? bgm;
+
+  /// 낮/밤 화면 테마(서버가 판마다 정한다).
+  final String theme;
   final int stake;
   final Map<String, int> coinBonus;
   final int coinBonusCap;
@@ -313,6 +316,7 @@ class YutView {
     required this.legalMoves,
     required this.characters,
     required this.bgm,
+    required this.theme,
     required this.stake,
     required this.coinBonus,
     required this.coinBonusCap,
@@ -363,6 +367,7 @@ class YutView {
         for (final e in _map(m['characters']).entries) e.key: '${e.value}',
       },
       bgm: m['bgm'] as String?,
+      theme: m['theme'] == 'night' ? 'night' : 'day',
       stake: _int(m['stake']),
       coinBonus: {for (final e in coin.entries) e.key: _int(e.value)},
       coinBonusCap: _int(m['coinBonusCap']),

@@ -1,10 +1,10 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'yut_figures.dart';
 import 'yut_models.dart';
+import 'yut_palette.dart';
 
 /// 판 위 칸 좌표(0..1). 대기(0)와 참먹이(20)는 같은 오른쪽 아래 모서리.
 /// 말은 오른쪽 아래에서 시계 반대 방향으로(오른쪽 → 위 → 왼쪽 → 아래) 한 바퀴 돈다.
@@ -69,30 +69,36 @@ class YutBoardGeometry {
 
   static const corners = [5, 10, 15, 20, 23];
 
-  /// 모서리 동전 안쪽 색(오방색 표시).
-  static Color cornerColor(int pos) => switch (pos) {
-    5 => Obangsaek.blue,
-    10 => Obangsaek.red,
-    15 => Obangsaek.white,
-    20 => Obangsaek.black,
-    23 => Obangsaek.yellow,
-    _ => Obangsaek.black,
+  /// 다섯 자리의 색 이름(청·적·백·흑·황). 낮·밤 팔레트에서 윗면/옆면 색을 찾는다.
+  static String stationColor(int pos) => switch (pos) {
+    5 => 'blue',
+    10 => 'red',
+    15 => 'white',
+    20 => 'black',
+    23 => 'yellow',
+    _ => 'white',
   };
 
-  // 판 안에서 격자가 놓이는 자리(판 한 변 S에 대한 비율). 말이 머리 위로 솟아도
-  // 판 밖으로 나가지 않게 위쪽에 여유를 둔다.
-  static const double gridLeft = 0.10;
-  static const double gridWidth = 0.80;
-  static const double gridTop = 0.195;
-  static const double gridHeight = 0.665;
+  // 2.5D 타일: 위가 살짝 좁은 사다리꼴(판 한 변 S에 대한 비율).
+  static const double tileTop = 0.05;
+  static const double tileBottom = 0.885;
+  static const double topHalf = 0.452;
+  static const double bottomHalf = 0.488;
+  static const double thickness = 0.045;
 
+  /// 칸 위치(타일 안 비율 → 화면). 위쪽일수록 조금 좁고 작게 보인다.
   static Offset point(int pos, double side) {
     final l = logical(pos);
-    return Offset(
-      side * (gridLeft + l.dx * gridWidth),
-      side * (gridTop + l.dy * gridHeight),
-    );
+    final v = 0.13 + l.dy * 0.74;
+    final u = 0.095 + l.dx * 0.81;
+    final y = side * (tileTop + v * (tileBottom - tileTop));
+    final half = side * (topHalf + (bottomHalf - topHalf) * v);
+    return Offset(side * 0.5 + (u - 0.5) * 2 * half, y);
   }
+
+  /// 말·칸의 원근 크기(위 0.96 → 아래 1.0).
+  static double scaleAt(int pos) =>
+      0.96 + 0.04 * (0.13 + logical(pos).dy * 0.74);
 }
 
 enum YutEffectKind { capture, stack, block }
@@ -202,8 +208,9 @@ class _YutBoardViewState extends State<YutBoardView>
     return LayoutBuilder(
       builder: (context, box) {
         final side = math.min(box.maxWidth, box.maxHeight);
+        final pal = YutPalette.of(context);
         Offset pt(int pos) => YutBoardGeometry.point(pos, side);
-        final figH = side * 0.165;
+        final figH = side * 0.17;
         final tokens = _tokens(pt, figH);
         // 아래 줄 말이 위 줄 말 앞에 오도록 y 순으로 그린다.
         tokens.sort((a, b) => a.at.dy.compareTo(b.at.dy));
@@ -218,7 +225,7 @@ class _YutBoardViewState extends State<YutBoardView>
                   child: RepaintBoundary(
                     child: CustomPaint(
                       key: const ValueKey('yut_board_surface'),
-                      painter: _BoardPainter(),
+                      painter: _BoardPainter(pal),
                     ),
                   ),
                 ),
@@ -233,6 +240,8 @@ class _YutBoardViewState extends State<YutBoardView>
                           chosen: widget.chosen,
                           point: pt,
                           brush: Curves.easeOut.transform(_brush.value),
+                          accent: pal.acc,
+                          danger: const Color(0xFFE5483B),
                         ),
                       ),
                     ),
@@ -249,6 +258,7 @@ class _YutBoardViewState extends State<YutBoardView>
                             center: pt(widget.effect!.position),
                             t: widget.effectProgress!.value,
                             unit: side,
+                            accent: pal.acc,
                           ),
                         ),
                       ),
@@ -352,19 +362,21 @@ class _YutBoardViewState extends State<YutBoardView>
         widget.selectedPieceId != null &&
         tk.ids.contains(widget.selectedPieceId);
     final scale = tk.shrink.clamp(0.0, 1.0);
+    final fh = figH * YutBoardGeometry.scaleAt(tk.position);
+    final pal = YutPalette.of(context);
     final fig = YutFigure(
-      height: figH,
+      height: fh,
       team: widget.colorOf(tk.player),
       spec: widget.specOf(tk.player),
       count: tk.ids.length,
       selected: selected,
       idle: _idle,
       phase: (tk.position * 0.137 + (mine ? 0 : 0.5)) % 1.0,
-      glow: false,
+      glow: canPick && !selected,
       dimmed: tk.fading,
     );
     final hitW = math.max(fig.width, 48.0);
-    final hitH = math.max(figH, 48.0);
+    final hitH = math.max(fh, 48.0);
     // 발(원판 가운데)이 칸 중심에 오도록 맞춘다.
     final left = tk.at.dx - hitW / 2;
     final top = tk.at.dy - (hitH - fig.anchorFromBottom);
@@ -392,9 +404,21 @@ class _YutBoardViewState extends State<YutBoardView>
                 alignment: Alignment.bottomCenter,
                 child: child,
               ),
-              child: canPick && !selected
-                  ? _PickGlow(pulse: _pulse, child: fig)
-                  : fig,
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.bottomCenter,
+                children: [
+                  fig,
+                  if (selected)
+                    Positioned(
+                      top: -9,
+                      child: CustomPaint(
+                        size: const Size(16, 10),
+                        painter: _PointerPainter(pal.acc),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),
@@ -430,11 +454,8 @@ class _YutBoardViewState extends State<YutBoardView>
         ? '참먹이로 골인'
         : '${yutSquareName(m.to) ?? '${m.to}번 칸'}으로 옮기기${m.captures > 0 ? ', 상대 말 잡기' : ''}';
     final danger = m.captures > 0;
-    final ringColor = isChosen
-        ? const Color(0xFFEF4F2B)
-        : danger
-        ? const Color(0xFFE5534B)
-        : const Color(0xFFFFB000);
+    final pal = YutPalette.of(context);
+    final ringColor = danger ? const Color(0xFFE5483B) : pal.acc;
     if (ringOnly) {
       // 칸 둘레의 링(말 뒤). 잡기면 붉은 두 겹 링 + 발밑 붉은 빛.
       return Positioned(
@@ -454,18 +475,14 @@ class _YutBoardViewState extends State<YutBoardView>
                   height: d,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: ringColor.withValues(alpha: danger ? 0.28 : 0.16),
+                    color: ringColor.withValues(alpha: 0.14),
                     border: Border.all(
                       color: ringColor,
-                      width: isChosen || danger ? 3.4 : 2.6,
+                      width: isChosen || danger ? 3 : 2.2,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color:
-                            (danger
-                                    ? const Color(0xFFFF6B5E)
-                                    : const Color(0xFFFFE066))
-                                .withValues(alpha: 0.85 * k),
+                        color: ringColor.withValues(alpha: 0.55 * k),
                         blurRadius: 14,
                       ),
                     ],
@@ -478,7 +495,7 @@ class _YutBoardViewState extends State<YutBoardView>
       );
     }
     // 누르는 자리(말 위, 투명) + 갈림길 화살표 + 머리 위 깃발.
-    final flagTop = -(figH * 0.98 + 16);
+    final flagTop = hit * 0.5 + 2;
     return Positioned(
       left: at.dx - hit / 2,
       top: at.dy - hit / 2,
@@ -501,68 +518,18 @@ class _YutBoardViewState extends State<YutBoardView>
                   child: const Icon(
                     Icons.arrow_forward_rounded,
                     size: 26,
-                    color: Color(0xFF263A2A),
+                    color: Colors.white,
                   ),
                 ),
               if (label != null)
                 Positioned(
                   top: flagTop,
-                  child: _FlagLabel(
-                    text: label,
-                    color: danger
-                        ? const Color(0xFFE5534B)
-                        : const Color(0xFF2F82DE),
-                  ),
-                ),
-              if (danger)
-                Positioned(
-                  bottom: -4,
-                  child: Container(
-                    width: 22,
-                    height: 22,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE5534B),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 1.6),
-                    ),
-                    child: const Icon(
-                      Icons.close_rounded,
-                      size: 15,
-                      color: Colors.white,
-                    ),
-                  ),
+                  child: _FlagLabel(text: label, danger: danger),
                 ),
             ],
           ),
         ),
       ),
-    );
-  }
-}
-
-/// 고를 수 있는 말 뒤에서 깜빡이는 노란 빛.
-class _PickGlow extends StatelessWidget {
-  final Animation<double> pulse;
-  final Widget child;
-
-  const _PickGlow({required this.pulse, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(40),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(
-              0xFFFFE066,
-            ).withValues(alpha: 0.28 + 0.3 * pulse.value),
-            blurRadius: 16,
-          ),
-        ],
-      ),
-      child: child,
     );
   }
 }
@@ -599,127 +566,143 @@ class _Tok {
 
 class _FlagLabel extends StatelessWidget {
   final String text;
-  final Color color;
+  final bool danger;
 
-  const _FlagLabel({required this.text, required this.color});
+  const _FlagLabel({required this.text, required this.danger});
 
   @override
   Widget build(BuildContext context) {
+    final pal = YutPalette.of(context);
+    final base = danger ? const Color(0xFFE5483B) : pal.acc;
+    final edge = danger ? const Color(0xFFA82C22) : pal.acc2;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 3),
       decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white, width: 1.4),
+        color: base,
+        borderRadius: BorderRadius.circular(99),
+        boxShadow: [BoxShadow(color: edge, offset: const Offset(0, 3))],
       ),
       child: Text(
         text,
-        style: GoogleFonts.jua(fontSize: 13, color: Colors.white, height: 1.1),
+        style: pal.display(
+          size: 15,
+          color: danger ? Colors.white : pal.onAcc,
+          height: 1.2,
+        ),
       ),
     );
   }
 }
 
+class _PointerPainter extends CustomPainter {
+  final Color color;
+
+  _PointerPainter(this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(size.width / 2, size.height)
+      ..close();
+    canvas.drawPath(path, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(covariant _PointerPainter old) => old.color != color;
+}
+
 // ── 판 그림 ──────────────────────────────────────────────────────────────
 
+/// 둥근 모서리 다각형(꼭짓점을 안쪽으로 당긴 뒤 같은 색 선으로 굵게 둘러 만든다).
+void _fillRounded(Canvas canvas, List<Offset> pts, double radius, Paint paint) {
+  final c = Offset(
+    pts.fold<double>(0, (a, b) => a + b.dx) / pts.length,
+    pts.fold<double>(0, (a, b) => a + b.dy) / pts.length,
+  );
+  final inset = [
+    for (final p in pts)
+      p + (c - p) / (c - p).distance * math.min(radius, (c - p).distance * 0.5),
+  ];
+  final path = Path()..addPolygon(inset, true);
+  canvas.drawPath(path, paint..style = PaintingStyle.fill);
+  canvas.drawPath(
+    path,
+    Paint()
+      ..shader = paint.shader
+      ..color = paint.color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = radius * 2
+      ..strokeJoin = StrokeJoin.round,
+  );
+}
+
 class _BoardPainter extends CustomPainter {
+  final YutPalette p;
+
+  _BoardPainter(this.p);
+
   Offset _pt(int pos, double s) => YutBoardGeometry.point(pos, s);
+
+  List<Offset> _quad(double s, double inset, double dy) {
+    final top = s * YutBoardGeometry.tileTop + inset;
+    final bottom = s * YutBoardGeometry.tileBottom - inset;
+    return [
+      Offset(s * (0.5 - YutBoardGeometry.topHalf) + inset, top + dy),
+      Offset(s * (0.5 + YutBoardGeometry.topHalf) - inset, top + dy),
+      Offset(s * (0.5 + YutBoardGeometry.bottomHalf) - inset, bottom + dy),
+      Offset(s * (0.5 - YutBoardGeometry.bottomHalf) + inset, bottom + dy),
+    ];
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
     final s = size.width;
-    final face = RRect.fromRectAndRadius(
-      Rect.fromLTWH(s * 0.02, s * 0.07, s * 0.96, s * 0.865),
-      Radius.circular(s * 0.075),
-    );
-    final thick = s * 0.052;
-    final sideRect = face.shift(Offset(0, thick));
-    // 바닥 그림자.
-    canvas.drawRRect(
-      sideRect.shift(Offset(0, s * 0.012)).inflate(s * 0.008),
+    final thick = s * YutBoardGeometry.thickness;
+    final r = s * 0.06;
+    // 바닥 그림자(타일 아래로 길게 번짐).
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(s * 0.5, s * YutBoardGeometry.tileBottom + thick * 1.4),
+        width: s * 0.92,
+        height: s * 0.07,
+      ),
       Paint()
-        ..color = Colors.black.withValues(alpha: 0.28)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.03),
+        ..color = p.shadow
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.035),
     );
-    // 옆면: 흙(두께) 위에 풀 가장자리.
-    canvas.drawRRect(
-      sideRect,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF9C6B3C), Color(0xFF6B4524)],
-        ).createShader(sideRect.outerRect),
+    // 옆면 두께(두 겹).
+    _fillRounded(canvas, _quad(s, 0, thick), r, Paint()..color = p.tileSide2);
+    _fillRounded(
+      canvas,
+      _quad(s, 0, thick * 0.55),
+      r,
+      Paint()..color = p.tileSide,
     );
-    final soil = Paint()
-      ..color = const Color(0x40301A08)
-      ..strokeWidth = 1.4
-      ..strokeCap = StrokeCap.round;
-    final rnd = math.Random(14);
-    for (int i = 0; i < 26; i++) {
-      final x = face.left + face.width * (0.06 + rnd.nextDouble() * 0.88);
-      final y = face.bottom + thick * (0.25 + rnd.nextDouble() * 0.6);
-      canvas.drawLine(Offset(x, y), Offset(x + s * 0.02, y), soil);
+    // 윗면: 테두리 → 바탕.
+    _fillRounded(canvas, _quad(s, 0, 0), r, Paint()..color = p.tileRim);
+    _fillRounded(
+      canvas,
+      _quad(s, s * 0.016, 0),
+      r * 0.8,
+      Paint()..color = p.tileField,
+    );
+    // 안쪽 점선.
+    final dash = Path()..addPolygon(_quad(s, s * 0.045, 0), true);
+    for (final m in dash.computeMetrics()) {
+      for (double d = 0; d < m.length; d += 9) {
+        canvas.drawPath(
+          m.extractPath(d, math.min(m.length, d + 4.5)),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.4
+            ..strokeCap = StrokeCap.round
+            ..color = p.tileInner,
+        );
+      }
     }
-    // 윗면: 잔디.
-    canvas.drawRRect(
-      face,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF9AE05F), Color(0xFF66BC46)],
-        ).createShader(face.outerRect),
-    );
-    canvas.save();
-    canvas.clipRRect(face);
-    // 잔디 결(깎은 줄무늬).
-    for (int i = 0; i < 9; i++) {
-      if (i.isOdd) continue;
-      canvas.drawRect(
-        Rect.fromLTWH(
-          face.left,
-          face.top + face.height * i / 9,
-          face.width,
-          face.height / 9,
-        ),
-        Paint()..color = const Color(0x14FFFFFF),
-      );
-    }
-    final blade = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = 1.5;
-    for (int i = 0; i < 150; i++) {
-      final x = face.left + rnd.nextDouble() * face.width;
-      final y = face.top + rnd.nextDouble() * face.height;
-      blade.color = rnd.nextBool()
-          ? const Color(0x3326561E)
-          : const Color(0x33E6FFB0);
-      canvas.drawLine(
-        Offset(x, y),
-        Offset(x + 1.5, y - 4 - rnd.nextDouble() * 4),
-        blade,
-      );
-    }
-    canvas.restore();
-    // 윗면 테두리: 어두운 풀 + 안쪽 밝은 선.
-    canvas.drawRRect(
-      face,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = s * 0.012
-        ..color = const Color(0xFF3F8F34),
-    );
-    canvas.drawRRect(
-      face.deflate(s * 0.012),
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.2
-        ..color = const Color(0x66FFFFFF),
-    );
-
-    // 흙길: 바깥 길 + 지름길.
+    // 길: 바깥 길 + 지름길(굵은 둥근 선 + 윗결 하이라이트).
     final loop = Path();
     final order = [
       20,
@@ -744,216 +727,105 @@ class _BoardPainter extends CustomPainter {
       19,
     ];
     loop.moveTo(_pt(order.first, s).dx, _pt(order.first, s).dy);
-    for (final p in order.skip(1)) {
-      loop.lineTo(_pt(p, s).dx, _pt(p, s).dy);
+    for (final q in order.skip(1)) {
+      loop.lineTo(_pt(q, s).dx, _pt(q, s).dy);
     }
     loop.close();
     final diag = Path();
     for (final e in YutBoardGeometry.edges) {
-      if (e.any((p) => p >= 21) || e.contains(23)) {
+      if (e.any((q) => q >= 21) || e.contains(23)) {
         diag
           ..moveTo(_pt(e[0], s).dx, _pt(e[0], s).dy)
           ..lineTo(_pt(e[1], s).dx, _pt(e[1], s).dy);
       }
     }
-    void road(Path path, double w) {
-      Paint p(double width, Color c) => Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..strokeWidth = width
-        ..color = c;
-      canvas.drawPath(path, p(w * 1.25, const Color(0x55704A20)));
-      canvas.drawPath(path, p(w, const Color(0xFFC79A5B)));
-      canvas.drawPath(path, p(w * 0.78, const Color(0xFFE2BE82)));
-      canvas.drawPath(path, p(w * 0.28, const Color(0x40FFFFFF)));
-    }
-
-    road(diag, s * 0.048);
-    road(loop, s * 0.056);
-
-    // 풀꽃·잎: 길과 칸에서 떨어진 자리에만.
-    final spots = <Offset>[for (int p = 0; p <= 29; p++) _pt(p, s)];
-    bool free(Offset o) {
-      for (final p in spots) {
-        if ((p - o).distance < s * 0.07) return false;
-      }
-      for (final e in YutBoardGeometry.edges) {
-        final a = _pt(e[0], s), b = _pt(e[1], s);
-        final ab = b - a;
-        final t =
-            (((o - a).dx * ab.dx + (o - a).dy * ab.dy) /
-                    (ab.dx * ab.dx + ab.dy * ab.dy))
-                .clamp(0.0, 1.0);
-        if ((a + ab * t - o).distance < s * 0.05) return false;
-      }
-      return true;
-    }
-
-    final fr = math.Random(31);
-    var placed = 0;
-    for (int tries = 0; tries < 400 && placed < 14; tries++) {
-      final o = Offset(
-        face.left + s * 0.04 + fr.nextDouble() * (face.width - s * 0.08),
-        face.top + s * 0.04 + fr.nextDouble() * (face.height - s * 0.08),
+    for (final path in [diag, loop]) {
+      canvas.drawPath(
+        path,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..strokeWidth = s * 0.014
+          ..color = p.tileLine,
       );
-      if (!free(o)) continue;
-      placed++;
-      if (placed.isEven) {
-        _flower(
-          canvas,
-          o,
-          s * 0.016,
-          placed % 4 == 0 ? const Color(0xFFFFE066) : Colors.white,
-          const Color(0xFFFFB000),
-        );
-      } else if (placed % 3 == 0) {
-        _flower(
-          canvas,
-          o,
-          s * 0.014,
-          const Color(0xFFFF9EC0),
-          const Color(0xFFFFF3B0),
-        );
-      } else {
-        _tuft(canvas, o, s * 0.02);
-      }
-    }
-
-    // 칸: 일반 칸은 금 동전, 모서리·방은 큰 동전 + 오방색 안쪽 + 이름.
-    for (int p = 1; p <= 29; p++) {
-      if (YutBoardGeometry.corners.contains(p)) continue;
-      _coin(canvas, _pt(p, s), s * (p >= 21 ? 0.03 : 0.036));
-    }
-    for (final p in YutBoardGeometry.corners) {
-      _bigCoin(canvas, s, p);
-    }
-  }
-
-  void _flower(Canvas canvas, Offset c, double r, Color petal, Color center) {
-    for (int i = 0; i < 5; i++) {
-      final a = i / 5 * math.pi * 2;
-      canvas.drawCircle(
-        c + Offset(math.cos(a), math.sin(a)) * r,
-        r * 0.8,
-        Paint()..color = petal,
+      canvas.drawPath(
+        path.shift(Offset(0, -s * 0.003)),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeWidth = s * 0.004
+          ..color = p.tileLineHl.withValues(alpha: p.night ? 0.5 : 0.8),
       );
     }
-    canvas.drawCircle(c, r * 0.65, Paint()..color = center);
-  }
-
-  void _tuft(Canvas canvas, Offset c, double r) {
-    final p = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = r * 0.28
-      ..color = const Color(0xFF2F7F2A);
-    for (final dx in [-0.5, 0.0, 0.5]) {
-      canvas.drawLine(
-        c,
-        c + Offset(dx * r * 1.2, -r * (dx == 0 ? 1.5 : 1.1)),
-        p,
+    // 일반 칸: 납작한 흰 알(옆면 아래로).
+    for (int q = 1; q <= 29; q++) {
+      if (YutBoardGeometry.corners.contains(q)) continue;
+      final c = _pt(q, s);
+      final sc = YutBoardGeometry.scaleAt(q);
+      final w = s * (q >= 21 ? 0.062 : 0.068) * sc;
+      final h = w * 0.74;
+      canvas.drawOval(
+        Rect.fromCenter(center: c.translate(0, h * 0.28), width: w, height: h),
+        Paint()..color = p.pegSide,
+      );
+      canvas.drawOval(
+        Rect.fromCenter(center: c, width: w, height: h),
+        Paint()..color = p.pegTop,
       );
     }
-  }
-
-  void _coin(Canvas canvas, Offset c, double r) {
-    canvas.drawCircle(
-      c.translate(0.8, 2),
-      r,
-      Paint()..color = Colors.black.withValues(alpha: 0.25),
-    );
-    canvas.drawCircle(
-      c,
-      r,
-      Paint()
-        ..shader = const RadialGradient(
-          center: Alignment(-0.4, -0.5),
-          colors: [Color(0xFFFFE98A), Color(0xFFE2A91F)],
-        ).createShader(Rect.fromCircle(center: c, radius: r)),
-    );
-    canvas.drawCircle(
-      c,
-      r,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = r * 0.22
-        ..color = const Color(0xFFB07A10),
-    );
-    canvas.drawCircle(
-      c,
-      r * 0.66,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1
-        ..color = const Color(0x88FFF6C8),
-    );
-    // 동전 가운데 × 무늬.
-    final x = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = r * 0.2
-      ..color = const Color(0xFFB07A10);
-    final k = r * 0.3;
-    canvas.drawLine(c.translate(-k, -k), c.translate(k, k), x);
-    canvas.drawLine(c.translate(-k, k), c.translate(k, -k), x);
-  }
-
-  void _bigCoin(Canvas canvas, double s, int pos) {
-    final c = _pt(pos, s);
-    final r = s * 0.074;
-    final color = YutBoardGeometry.cornerColor(pos);
-    canvas.drawCircle(
-      c.translate(1.2, 3),
-      r,
-      Paint()
-        ..color = Colors.black.withValues(alpha: 0.3)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5),
-    );
-    canvas.drawCircle(
-      c,
-      r,
-      Paint()
-        ..shader = const RadialGradient(
-          center: Alignment(-0.4, -0.5),
-          colors: [Color(0xFFFFE98A), Color(0xFFE2A91F)],
-        ).createShader(Rect.fromCircle(center: c, radius: r)),
-    );
-    canvas.drawCircle(
-      c,
-      r,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = s * 0.011
-        ..color = const Color(0xFFB07A10),
-    );
-    // 오방색 안쪽 원판.
-    final ir = r * 0.78;
-    canvas.drawCircle(
-      c,
-      ir,
-      Paint()
-        ..shader = RadialGradient(
-          center: const Alignment(-0.4, -0.5),
-          colors: [Color.lerp(color, Colors.white, 0.28)!, color],
-        ).createShader(Rect.fromCircle(center: c, radius: ir)),
-    );
-    canvas.drawCircle(
-      c,
-      ir,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.4
-        ..color = const Color(0xFF6B4A10),
-    );
-    final dark = color.computeLuminance() < 0.4;
-    final label = yutSquareName(pos) ?? '';
+    // 다섯 자리: 큰 알 + 이름(옆면 두께).
+    for (final q in YutBoardGeometry.corners) {
+      _station(canvas, s, q);
+    }
+    // 출발·도착 안내.
     final tp = TextPainter(
       text: TextSpan(
-        text: label,
-        style: GoogleFonts.jua(
-          fontSize: math.max(12.0, s * 0.036),
-          color: dark ? Colors.white : const Color(0xFF263A2A),
+        text: '출발 · 도착',
+        style: p.body(
+          size: 12,
+          color: p.sub.withValues(alpha: 0.85),
+          weight: FontWeight.w700,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(
+      canvas,
+      Offset(s * 0.955 - tp.width, s * (YutBoardGeometry.tileBottom + 0.05)),
+    );
+  }
+
+  void _station(Canvas canvas, double s, int pos) {
+    final c = _pt(pos, s);
+    final sc = YutBoardGeometry.scaleAt(pos);
+    final w = s * 0.2 * sc;
+    final h = w * 0.74;
+    final colors = p.station[YutBoardGeometry.stationColor(pos)]!;
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: c.translate(0, h * 0.2 + 3),
+        width: w * 1.02,
+        height: h,
+      ),
+      Paint()
+        ..color = p.shadow.withValues(alpha: 0.25)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+    );
+    canvas.drawOval(
+      Rect.fromCenter(center: c.translate(0, h * 0.26), width: w, height: h),
+      Paint()..color = colors.$2,
+    );
+    canvas.drawOval(
+      Rect.fromCenter(center: c, width: w, height: h),
+      Paint()..color = colors.$1,
+    );
+    final tp = TextPainter(
+      text: TextSpan(
+        text: yutSquareName(pos) ?? '',
+        style: p.display(
+          size: math.max(13.0, s * 0.046),
+          color: p.stationLabel,
           height: 1.0,
         ),
       ),
@@ -964,21 +836,25 @@ class _BoardPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _BoardPainter old) => false;
+  bool shouldRepaint(covariant _BoardPainter old) => old.p != p;
 }
 
-/// 고른 이동 경로를 한 줄로 그어 가는 미리보기.
+/// 고른 이동 경로: 흐르는 점선 대신 앞에서부터 그어지는 굵은 선.
 class _PathPreviewPainter extends CustomPainter {
   final List<YutLegalMove> preview;
   final YutLegalMove? chosen;
   final Offset Function(int) point;
   final double brush;
+  final Color accent;
+  final Color danger;
 
   _PathPreviewPainter({
     required this.preview,
     required this.chosen,
     required this.point,
     required this.brush,
+    required this.accent,
+    required this.danger,
   });
 
   @override
@@ -989,7 +865,7 @@ class _PathPreviewPainter extends CustomPainter {
           chosen!.to == m.to &&
           chosen!.backdoDir == m.backdoDir;
       if (preview.length > 1 && !isChosen) continue;
-      final pts = [for (final p in m.path) point(p)];
+      final pts = [for (final q in m.path) point(q)];
       if (pts.length < 2) continue;
       final total = <double>[0];
       for (int i = 1; i < pts.length; i++) {
@@ -1003,11 +879,12 @@ class _PathPreviewPainter extends CustomPainter {
         } else {
           final seg = total[i] - total[i - 1];
           final k = seg == 0 ? 0.0 : (upTo - total[i - 1]) / seg;
-          final p = Offset.lerp(pts[i - 1], pts[i], k.clamp(0.0, 1.0))!;
-          path.lineTo(p.dx, p.dy);
+          final q = Offset.lerp(pts[i - 1], pts[i], k.clamp(0.0, 1.0))!;
+          path.lineTo(q.dx, q.dy);
           break;
         }
       }
+      final color = m.captures > 0 ? danger : accent;
       canvas.drawPath(
         path,
         Paint()
@@ -1015,8 +892,8 @@ class _PathPreviewPainter extends CustomPainter {
           ..strokeCap = StrokeCap.round
           ..strokeJoin = StrokeJoin.round
           ..strokeWidth = size.width * 0.03
-          ..color = Colors.white.withValues(alpha: 0.6)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
+          ..color = color.withValues(alpha: 0.3)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
       );
       canvas.drawPath(
         path,
@@ -1024,8 +901,8 @@ class _PathPreviewPainter extends CustomPainter {
           ..style = PaintingStyle.stroke
           ..strokeCap = StrokeCap.round
           ..strokeJoin = StrokeJoin.round
-          ..strokeWidth = size.width * 0.014
-          ..color = const Color(0xFFEF4F2B),
+          ..strokeWidth = size.width * 0.013
+          ..color = color,
       );
     }
   }
@@ -1034,18 +911,20 @@ class _PathPreviewPainter extends CustomPainter {
   bool shouldRepaint(covariant _PathPreviewPainter old) => true;
 }
 
-/// 잡기 별 터짐 · 업기 금빛 고리 · 방어 푸른 방패 고리.
+/// 잡기 터짐(불꽃 + 점) · 업기/방어 고리.
 class _EffectPainter extends CustomPainter {
   final YutBoardEffect effect;
   final Offset center;
   final double t;
   final double unit;
+  final Color accent;
 
   _EffectPainter({
     required this.effect,
     required this.center,
     required this.t,
     required this.unit,
+    required this.accent,
   });
 
   @override
@@ -1056,55 +935,42 @@ class _EffectPainter extends CustomPainter {
       case YutEffectKind.stack:
         _ring(canvas, const Color(0xFFFFC93C));
       case YutEffectKind.block:
-        _ring(canvas, const Color(0xFF2F82DE));
+        _ring(canvas, const Color(0xFF4F8CFF));
     }
   }
 
   void _burst(Canvas canvas) {
-    final grow = Curves.easeOutCubic.transform(t.clamp(0.0, 1.0));
-    final fade = t < 0.55 ? 1.0 : (1 - (t - 0.55) / 0.45).clamp(0.0, 1.0);
-    // 번쩍이는 별 모양 + 사방으로 튀는 조각 + 먼지 고리.
-    final star = Path();
-    const spikes = 10;
-    final outer = unit * (0.05 + 0.1 * grow);
-    final inner = outer * 0.5;
-    for (int i = 0; i < spikes * 2; i++) {
-      final a = i * math.pi / spikes - math.pi / 2;
-      final r = i.isEven ? outer : inner;
-      final p = center + Offset(math.cos(a), math.sin(a)) * r;
-      i == 0 ? star.moveTo(p.dx, p.dy) : star.lineTo(p.dx, p.dy);
+    final grow = Curves.easeOutCubic.transform((t * 1.5).clamp(0.0, 1.0));
+    final fade = t < 0.45 ? 1.0 : (1 - (t - 0.45) / 0.55).clamp(0.0, 1.0);
+    final ray = Paint()
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = unit * 0.011
+      ..color = accent.withValues(alpha: fade);
+    const n = 10;
+    for (int i = 0; i < n; i++) {
+      final a = i / n * math.pi * 2 + 0.2;
+      final d = Offset(math.cos(a), math.sin(a));
+      canvas.drawLine(
+        center + d * unit * (0.05 + 0.04 * grow),
+        center + d * unit * (0.07 + 0.1 * grow),
+        ray,
+      );
     }
-    star.close();
-    canvas.drawPath(
-      star,
-      Paint()..color = const Color(0xFFFFD23D).withValues(alpha: 0.95 * fade),
-    );
-    canvas.drawPath(
-      star,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = unit * 0.01
-        ..color = const Color(0xFFEF4F2B).withValues(alpha: fade),
-    );
-    final rnd = math.Random(77);
-    for (int i = 0; i < 12; i++) {
-      final a = i / 12 * math.pi * 2 + rnd.nextDouble() * 0.3;
-      final reach = unit * (0.1 + rnd.nextDouble() * 0.1) * grow;
+    for (int i = 0; i < 8; i++) {
+      final a = i / 8 * math.pi * 2 + 0.55;
       canvas.drawCircle(
-        center + Offset(math.cos(a), math.sin(a)) * reach,
-        unit * (0.008 + rnd.nextDouble() * 0.014) * (1 - 0.4 * grow),
-        Paint()
-          ..color = (i.isEven ? const Color(0xFFEF4F2B) : Colors.white)
-              .withValues(alpha: fade),
+        center + Offset(math.cos(a), math.sin(a)) * unit * (0.07 + 0.12 * grow),
+        unit * 0.009 * (1 - 0.4 * grow),
+        Paint()..color = const Color(0xFFFFC93C).withValues(alpha: fade),
       );
     }
     canvas.drawCircle(
       center,
-      unit * (0.06 + 0.12 * grow),
+      unit * (0.05 + 0.1 * grow),
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = unit * 0.012 * (1 - grow * 0.6)
-        ..color = Colors.white.withValues(alpha: 0.8 * fade),
+        ..strokeWidth = unit * 0.01 * (1 - grow * 0.5)
+        ..color = accent.withValues(alpha: 0.8 * fade),
     );
   }
 
@@ -1118,7 +984,7 @@ class _EffectPainter extends CustomPainter {
         unit * (0.05 + 0.1 * kk),
         Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = unit * 0.014 * (1 - kk * 0.6)
+          ..strokeWidth = unit * 0.01 * (1 - kk * 0.6)
           ..color = color.withValues(alpha: 0.9 * fade * (1 - i * 0.35)),
       );
     }

@@ -12,7 +12,8 @@ enum GameTexture {
   stadium,
   velvet,
   starlight,
-  meadow,
+  yutDay,
+  yutNight,
   table,
   atelier,
 }
@@ -260,22 +261,40 @@ class GameTheme {
     displayFont: _batang,
   );
 
-  /// 윷놀이: 햇살 가득한 풀밭(하늘색 → 연두, 구름과 나뭇잎, 밝은 낮).
-  static const meadow = GameTheme(
-    id: 'meadow',
-    texture: GameTexture.meadow,
+  /// 윷놀이 낮: 맑은 하늘과 구름, 멀리 민트빛 언덕. 주황 포인트.
+  static const yutDay = GameTheme(
+    id: 'yut_day',
+    texture: GameTexture.yutDay,
     dark: false,
-    backdrop: [Color(0xFF8FD2F2), Color(0xFFBDE8B4), Color(0xFF6FC05A)],
-    surface: Color(0xFFFFFDF2),
-    surfaceBorder: Color(0x883E7D2E),
-    accent: Color(0xFFEF8A1E),
-    accentSoft: Color(0x26EF8A1E),
-    gold: Color(0xFFE5B22E),
-    ink: Color(0xFF263A2A),
-    subInk: Color(0xFF4F6A52),
-    me: Color(0xFF2F82DE),
-    opponent: Color(0xFFE5534B),
-    displayFont: _jua,
+    backdrop: [Color(0xFF8FD0F5), Color(0xFFD3EEF9), Color(0xFF8FD1B1)],
+    surface: Color(0xFFFFFFFF),
+    surfaceBorder: Color(0x4D6E8CB9),
+    accent: Color(0xFFFF7043),
+    accentSoft: Color(0x26FF7043),
+    gold: Color(0xFFFFD35A),
+    ink: Color(0xFF26325A),
+    subInk: Color(0xFF6B7899),
+    me: Color(0xFFFF7043),
+    opponent: Color(0xFF3F8CFF),
+    displayFont: _doHyeon,
+  );
+
+  /// 윷놀이 밤: 달빛 아래 남색 마당, 등불빛과 별. 호박색 포인트.
+  static const yutNight = GameTheme(
+    id: 'yut_night',
+    texture: GameTexture.yutNight,
+    dark: true,
+    backdrop: [Color(0xFF141646), Color(0xFF22236E), Color(0xFF0F1033)],
+    surface: Color(0xFF2C2F75),
+    surfaceBorder: Color(0x29FFFFFF),
+    accent: Color(0xFFFFB347),
+    accentSoft: Color(0x26FFB347),
+    gold: Color(0xFFFFC266),
+    ink: Color(0xFFF3EEFF),
+    subInk: Color(0xFFABA9DC),
+    me: Color(0xFFFFB347),
+    opponent: Color(0xFF8FA8FF),
+    displayFont: _doHyeon,
   );
 
   /// 고스톱: 초록 펠트 판(화투 상). 깊은 초록 위에 올이 보이는 천 질감과 따뜻한 금빛 조명.
@@ -322,7 +341,8 @@ class GameTheme {
     sunsetStadium,
     salon,
     starlight,
-    meadow,
+    yutDay,
+    yutNight,
     felt,
     atelier,
   ];
@@ -390,8 +410,10 @@ class _BackdropPainter extends CustomPainter {
         _velvet(canvas, size);
       case GameTexture.starlight:
         _starlight(canvas, size);
-      case GameTexture.meadow:
-        _meadow(canvas, size);
+      case GameTexture.yutDay:
+        _yutDay(canvas, size);
+      case GameTexture.yutNight:
+        _yutNight(canvas, size);
       case GameTexture.table:
         _table(canvas, size);
       case GameTexture.atelier:
@@ -912,102 +934,113 @@ class _BackdropPainter extends CustomPainter {
     _goldFrame(canvas, size, 10, 0.32);
   }
 
-  /// 풀밭 낮: 하늘 위 구름, 먼 언덕, 흩날리는 나뭇잎, 아래쪽 잔디 결.
-  void _meadow(Canvas canvas, Size size) {
+  /// 윷놀이 낮: 햇살, 구름, 멀리 보이는 민트빛 언덕.
+  void _yutDay(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    // 햇살.
     _spotlight(
       canvas,
       size,
-      Offset(w * 0.86, h * 0.04),
-      math.max(w, h) * 0.55,
-      const Color(0x66FFF6C8),
+      Offset(w * 0.82, h * 0.05),
+      math.max(w, h) * 0.5,
+      const Color(0x66FFF8D8),
     );
-    // 구름.
-    void cloud(double cx, double cy, double s) {
-      final paint = Paint()..color = const Color(0xCCFFFFFF);
-      for (final o in const [
-        Offset(0, 0),
-        Offset(-0.9, 0.25),
-        Offset(0.95, 0.22),
-        Offset(-0.35, -0.38),
-        Offset(0.4, -0.3),
-      ]) {
-        canvas.drawCircle(
-          Offset(cx + o.dx * s, cy + o.dy * s),
-          s * 0.62,
-          paint,
-        );
-      }
+    void cloud(double cx, double cy, double sc, double alpha) {
+      final paint = Paint()..color = Colors.white.withValues(alpha: alpha);
       canvas.drawRRect(
         RRect.fromRectAndRadius(
-          Rect.fromCenter(
-            center: Offset(cx, cy + s * 0.35),
-            width: s * 3.2,
-            height: s * 0.7,
-          ),
-          Radius.circular(s * 0.35),
+          Rect.fromCenter(center: Offset(cx, cy), width: sc * 3.4, height: sc),
+          Radius.circular(sc / 2),
         ),
         paint,
       );
+      canvas.drawCircle(
+        Offset(cx - sc * 0.5, cy - sc * 0.35),
+        sc * 0.55,
+        paint,
+      );
+      canvas.drawCircle(Offset(cx + sc * 0.35, cy - sc * 0.5), sc * 0.7, paint);
     }
 
-    cloud(w * 0.2, h * 0.08, w * 0.07);
-    cloud(w * 0.72, h * 0.14, w * 0.055);
-    cloud(w * 0.46, h * 0.045, w * 0.04);
-    // 먼 언덕 두 겹.
+    cloud(w * 0.2, h * 0.16, w * 0.09, 0.85);
+    cloud(w * 0.78, h * 0.1, w * 0.07, 0.7);
+    cloud(w * 0.52, h * 0.3, w * 0.05, 0.55);
+    cloud(w * 0.9, h * 0.52, w * 0.06, 0.5);
     for (final layer in [
-      (0.74, 0.08, const Color(0x5578C26A)),
-      (0.80, 0.06, const Color(0x6658B04A)),
+      (0.74, 0.1, const Color(0x669FD8C0)),
+      (0.82, 0.07, const Color(0xCC8FD1B1)),
     ]) {
       final base = h * layer.$1;
       final path = Path()
         ..moveTo(0, h)
         ..lineTo(0, base);
-      for (double x = 0; x <= w; x += w / 6) {
-        path.quadraticBezierTo(
-          x + w / 12,
-          base - h * layer.$2,
-          x + w / 6,
-          base,
-        );
+      for (double x = 0; x <= w; x += w / 4) {
+        path.quadraticBezierTo(x + w / 8, base - h * layer.$2, x + w / 4, base);
       }
       path
         ..lineTo(w, h)
         ..close();
       canvas.drawPath(path, Paint()..color = layer.$3);
     }
-    // 잔디 결과 나뭇잎.
-    final rnd = math.Random(52);
-    final blade = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = 1.4
-      ..color = const Color(0x3326561E);
-    for (int i = 0; i < (w * h / 3600).round(); i++) {
-      final x = rnd.nextDouble() * w;
-      final y = h * (0.5 + rnd.nextDouble() * 0.5);
-      canvas.drawLine(
-        Offset(x, y),
-        Offset(x + 2, y - 5 - rnd.nextDouble() * 4),
-        blade,
+  }
+
+  /// 윷놀이 밤: 별, 달빛, 왼쪽 위 등불빛, 어두운 언덕.
+  void _yutNight(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    _spotlight(
+      canvas,
+      size,
+      Offset(w * 0.82, h * 0.03),
+      math.max(w, h) * 0.45,
+      const Color(0x44FFE6B0),
+    );
+    // 등불빛.
+    _spotlight(
+      canvas,
+      size,
+      Offset(w * 0.1, h * 0.17),
+      w * 0.34,
+      const Color(0x55FFB347),
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: Offset(w * 0.1, h * 0.17),
+          width: w * 0.045,
+          height: w * 0.075,
+        ),
+        const Radius.circular(4),
+      ),
+      Paint()..color = const Color(0xFFFFB347),
+    );
+    final rnd = math.Random(8);
+    for (int i = 0; i < 54; i++) {
+      canvas.drawCircle(
+        Offset(rnd.nextDouble() * w, rnd.nextDouble() * h * 0.55),
+        0.5 + rnd.nextDouble() * 1.2,
+        Paint()
+          ..color = Colors.white.withValues(
+            alpha: 0.25 + rnd.nextDouble() * 0.6,
+          ),
       );
     }
-    final leaf = Paint()..color = const Color(0x4439A046);
-    for (int i = 0; i < 9; i++) {
-      final x = rnd.nextDouble() * w;
-      final y = rnd.nextDouble() * h * 0.7;
-      canvas.save();
-      canvas.translate(x, y);
-      canvas.rotate(rnd.nextDouble() * math.pi);
-      canvas.drawOval(
-        Rect.fromCenter(center: Offset.zero, width: 12, height: 5),
-        leaf,
-      );
-      canvas.restore();
+    for (final layer in [
+      (0.76, 0.08, const Color(0x55262770)),
+      (0.84, 0.06, const Color(0xAA10113A)),
+    ]) {
+      final base = h * layer.$1;
+      final path = Path()
+        ..moveTo(0, h)
+        ..lineTo(0, base);
+      for (double x = 0; x <= w; x += w / 4) {
+        path.quadraticBezierTo(x + w / 8, base - h * layer.$2, x + w / 4, base);
+      }
+      path
+        ..lineTo(w, h)
+        ..close();
+      canvas.drawPath(path, Paint()..color = layer.$3);
     }
-    _grain(canvas, size, const Color(0x10FFFFFF), (w * h / 2600).round(), 53);
   }
 
   void _atelier(Canvas canvas, Size size) {

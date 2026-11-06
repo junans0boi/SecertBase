@@ -6,7 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:secret_base_app/core/socket_service.dart';
 import 'package:secret_base_app/screens/arcade/game_lobby_screen.dart';
-import 'package:secret_base_app/screens/arcade/games/yut/yut_character_picker.dart';
+import 'package:secret_base_app/screens/arcade/games/yut/yut_ui.dart';
+import 'package:secret_base_app/screens/arcade/games/yut/yut_lobby_view.dart';
 import 'package:secret_base_app/screens/arcade/games/yut/yut_controller.dart';
 import 'package:secret_base_app/screens/arcade/games/yut/yut_figures.dart';
 import 'package:secret_base_app/screens/arcade/games/yut/yut_models.dart';
@@ -212,17 +213,23 @@ void main() {
         await pumpScreen(tester);
         c.debugApplyState(yutState());
         await tester.pump(const Duration(milliseconds: 600));
+        // 카드의 상반신(YutBust)과 대기 말(YutFigure)이 같은 캐릭터 그림이다.
+        final busts = tester
+            .widgetList<YutBust>(find.byType(YutBust))
+            .map((b) => b.character)
+            .toList();
+        expect(busts, containsAll(['honggilldong', 'miho']));
         final figures = tester
             .widgetList<YutFigure>(find.byType(YutFigure))
             .toList();
         expect(
           figures.where((f) => f.spec.character == 'honggilldong').length,
-          greaterThanOrEqualTo(2),
-          reason: 'card + waiting group',
+          greaterThanOrEqualTo(1),
+          reason: 'waiting group',
         );
         expect(
           figures.where((f) => f.spec.character == 'miho').length,
-          greaterThanOrEqualTo(2),
+          greaterThanOrEqualTo(1),
         );
         await settle(tester);
       },
@@ -254,16 +261,25 @@ void main() {
         );
         await tester.pump(const Duration(milliseconds: 600));
         expect(
-          find.textContaining('홍길동 · 대기 4'),
+          find.text('홍길동'),
           findsOneWidget,
           reason: 'the card names the character, not an animal skin',
         );
-        expect(find.textContaining('번개 윷'), findsOneWidget);
+        expect(find.text('번개 윷'), findsOneWidget);
+        expect(find.text('신들의 윷'), findsOneWidget);
+        // 카드에는 "효과 N" 알약만, 자세한 수치는 눌러서 연 시트에 있다.
+        expect(find.text('효과 3'), findsOneWidget);
+        expect(find.text('효과 1'), findsOneWidget);
+        await tester.tap(find.text('효과 3'));
+        await tester.pump(const Duration(milliseconds: 500));
         expect(find.text('윷 컨트롤 +2.1%'), findsOneWidget);
         expect(find.text('빽도 방어 12%'), findsOneWidget);
-        expect(find.textContaining('신들의 윷'), findsOneWidget);
+        await tester.tapAt(const Offset(10, 10));
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.tap(find.text('효과 1'));
+        await tester.pump(const Duration(milliseconds: 500));
         expect(find.text('윷 컨트롤 +1.2%'), findsOneWidget);
-        expect(find.text('효과'), findsNWidgets(2));
+        await tester.tapAt(const Offset(10, 10));
         expect(tester.takeException(), isNull);
         await settle(tester);
       },
@@ -354,74 +370,104 @@ void main() {
         ),
       );
       await tester.pump(const Duration(milliseconds: 600));
+      // 판돈이 없으면 코인 효과는 세지도 않는다(윷·모 확률 하나만).
+      expect(find.text('효과 1'), findsOneWidget);
+      await tester.tap(find.text('효과 1'));
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.text('윷 컨트롤 +1%'), findsOneWidget);
-      expect(find.textContaining('코인'), findsNothing);
+      expect(find.text('윷·모 코인 15%'), findsNothing);
+      await tester.tapAt(const Offset(10, 10));
       await settle(tester);
     });
   });
 
   group('lobby character picker', () {
-    Future<void> pumpPicker(WidgetTester tester) async {
+    Future<void> pumpPicker(WidgetTester tester, {bool host = true}) async {
       tester.view.physicalSize = const Size(390, 900);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
+      socket.lobbyPlayers = [yutMe, yutOpp];
+      socket.lobbyHost = host ? yutMe : yutOpp;
+      socket.lobbyStake = 0;
+      socket.lobbyOptions = {'pieces': 4};
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: ListenableBuilder(
-              listenable: socket,
-              builder: (_, _) => SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: YutCharacterPicker(color: Colors.orange),
-                ),
-              ),
+          home: ListenableBuilder(
+            listenable: socket,
+            builder: (_, _) => YutLobbyView(
+              socket: socket,
+              isHost: host,
+              canStart: host,
+              startLabel: '게임 시작',
+              onStart: () {},
+              onBack: () {},
             ),
           ),
         ),
       );
-      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump(const Duration(milliseconds: 300));
     }
 
     testWidgets(
-      'each card shows its five stats; the partner pick is disabled, mine is marked',
+      'three character cards; the partner pick is disabled, mine is marked, the hero shows the five stats',
       (tester) async {
         socket.lobbyCharacterSelections = {yutOpp: 'miho'};
         await pumpPicker(tester);
         for (final id in ['honggilldong', 'nolbu', 'miho']) {
           expect(find.byKey(ValueKey('yut_pick_$id')), findsOneWidget);
         }
-        // 능력치 이름이 카드마다(3장) 보인다.
-        for (final def in kYutStatDefs) {
-          expect(find.text(def.label), findsNWidgets(3), reason: def.label);
-        }
-        expect(find.text('균형·수비형'), findsOneWidget);
         expect(find.text('상대 선택'), findsOneWidget);
-        expect(find.text('고르기'), findsNWidgets(2));
         expect(find.textContaining('자동으로 정해져요'), findsOneWidget);
+        // 고르지 않았으면 첫 캐릭터(홍길동)의 능력치가 큰 그림 옆에 보인다.
+        expect(find.byKey(const ValueKey('yut_radar')), findsOneWidget);
+        for (final def in kYutStatDefs) {
+          expect(
+            find.textContaining(def.label),
+            findsOneWidget,
+            reason: def.label,
+          );
+        }
+        expect(find.text('균형'), findsOneWidget);
+        expect(find.text('수비형'), findsOneWidget);
+        // 상대가 고른 미호는 눌러도 아무 일도 없다.
+        await tester.tap(find.byKey(const ValueKey('yut_pick_miho')));
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(socket.lobbyCharacterSelections[yutMe], isNull);
         socket.lobbyCharacterSelections = {yutOpp: 'miho', yutMe: 'nolbu'};
         // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
         socket.notifyListeners();
         await tester.pump(const Duration(milliseconds: 300));
-        expect(find.text('내 선택'), findsOneWidget);
-        await tester.tap(find.byKey(const ValueKey('yut_pick_miho')));
-        await tester.pump(const Duration(milliseconds: 200));
-        expect(socket.lobbyCharacterSelections[yutMe], 'nolbu');
-        // 놀부는 힘 5칸, 침착 1칸.
-        Color? pip(String key, int i, String id) {
-          final boxes = find.descendant(
-            of: find.byKey(ValueKey('yut_pick_$id')),
-            matching: find.byKey(ValueKey('yut_stat_${key}_$i')),
-          );
-          final box = tester.widget<Container>(boxes);
-          return (box.decoration as BoxDecoration).color;
-        }
-
-        expect(pip('power', 5, 'nolbu'), pip('power', 1, 'nolbu'));
-        expect(pip('calm', 2, 'nolbu'), isNot(pip('calm', 1, 'nolbu')));
+        expect(find.text('선택'), findsOneWidget);
+        expect(find.textContaining('상대와 겹치지 않아요'), findsOneWidget);
+        // 놀부를 고르면 큰 그림이 놀부의 능력치(힘 5)로 바뀐다.
+        expect(
+          find.text(
+            '${kYutStatDefs[0].label} ${kYutCharacterStats['nolbu']!['power']}',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          tester
+              .widget<YutFigure>(find.byKey(const ValueKey('yut_lobby_hero')))
+              .spec
+              .character,
+          'nolbu',
+        );
         socket.lobbyCharacterSelections = {};
       },
     );
+
+    testWidgets('only the host changes the piece count and the stake', (
+      tester,
+    ) async {
+      await pumpPicker(tester, host: false);
+      expect(find.text('방장이 시작할 때까지 기다려요'), findsOneWidget);
+      expect(find.text('방장이 골라요'), findsNothing);
+      expect(find.text('방장이 고른 설정'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('yut_seg_2')));
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(socket.lobbyOptions['pieces'], 4, reason: 'not host: ignored');
+    });
 
     testWidgets('lobby avatar circles show the picked character faces', (
       tester,

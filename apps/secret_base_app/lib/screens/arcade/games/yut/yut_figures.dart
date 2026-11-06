@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'yut_models.dart';
+import 'yut_palette.dart';
 
 /// 말 그림 명세: 캐릭터 전신(홍길동·미호·놀부). 말 스킨은 폐지되어 캐릭터 그림만 쓴다.
 @immutable
@@ -56,7 +57,7 @@ class YutFigure extends StatelessWidget {
   });
 
   double get width => height * 0.86;
-  double get anchorFromBottom => height * 0.115;
+  double get anchorFromBottom => height * 0.075;
 
   @override
   Widget build(BuildContext context) {
@@ -75,8 +76,8 @@ class YutFigure extends StatelessWidget {
 
   Widget _build(BuildContext context, double t) {
     final h = height;
-    final baseH = h * 0.21;
-    final baseW = h * 0.74;
+    final baseH = h * 0.15;
+    final baseW = h * 0.64;
     final figH = h * 0.86;
     final bob = math.sin(t * math.pi * 2) * h * 0.012;
     final stacked = math.min(count, 3);
@@ -86,44 +87,40 @@ class YutFigure extends StatelessWidget {
       final dy = (stacked - 1 - i) * -h * 0.015;
       return Positioned(
         left: (width - h * 0.8) / 2 + dx,
-        bottom: baseH * 0.38 + dy - bob * (i.isEven ? 1 : -1),
+        bottom: baseH * 0.4 + dy - bob * (i.isEven ? 1 : -1),
         width: h * 0.8,
         height: figH,
         child: _CharacterImage(character: spec.character),
       );
     }
 
+    final pal = YutPalette.of(context);
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        // 부드러운 그림자 + 팀 색 원판.
+        // 부드러운 타원 그림자 + 팀 색 가는 고리(그림은 그대로, 팀은 발밑에서만 구분).
         Positioned(
           left: (width - baseW) / 2,
           bottom: 0,
           width: baseW,
           height: baseH,
-          child: Container(
+          child: DecoratedBox(
             decoration: BoxDecoration(
-              shape: BoxShape.rectangle,
               borderRadius: BorderRadius.all(Radius.elliptical(baseW, baseH)),
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color.lerp(team, Colors.white, 0.35)!, team],
-              ),
+              color: team.withValues(alpha: 0.16),
               border: Border.all(
-                color: selected ? const Color(0xFFFFE066) : Colors.white,
-                width: selected ? 2.6 : 1.6,
+                color: selected ? Colors.white : team,
+                width: selected ? 2.6 : 2,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.33),
-                  blurRadius: 6,
+                  color: pal.shadow,
+                  blurRadius: 7,
                   offset: const Offset(0, 3),
                 ),
                 if (selected || glow)
                   BoxShadow(
-                    color: const Color(0xFFFFE066).withValues(alpha: 0.9),
+                    color: team.withValues(alpha: selected ? 0.75 : 0.5),
                     blurRadius: 14,
                     spreadRadius: 2,
                   ),
@@ -134,27 +131,26 @@ class YutFigure extends StatelessWidget {
         for (var i = 0; i < stacked; i++) figure(i),
         if (badge && count > 1)
           Positioned(
-            right: -h * 0.02,
-            top: h * 0.02,
+            right: -h * 0.04,
+            top: h * 0.0,
             child: Container(
               constraints: BoxConstraints(
                 minWidth: h * 0.34,
-                minHeight: h * 0.34,
+                minHeight: h * 0.3,
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 6),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: const Color(0xFF263A2A),
+                color: pal.acc,
                 borderRadius: BorderRadius.circular(99),
-                border: Border.all(color: Colors.white, width: 1.4),
+                border: Border.all(color: Colors.white, width: 1.6),
+                boxShadow: [
+                  BoxShadow(color: pal.acc2, offset: const Offset(0, 2)),
+                ],
               ),
               child: Text(
                 '×$count',
-                style: GoogleFonts.jua(
-                  color: Colors.white,
-                  fontSize: 12,
-                  height: 1.1,
-                ),
+                style: pal.display(size: 14, color: pal.onAcc, height: 1.1),
               ),
             ),
           ),

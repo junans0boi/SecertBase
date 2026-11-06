@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:secret_base_app/screens/arcade/games/yut/yut_palette.dart';
+import 'package:secret_base_app/screens/arcade/games/yut/yut_skin_shop.dart';
+import 'package:secret_base_app/widgets/play_kit/play_kit.dart';
 import 'package:secret_base_app/screens/shop/inventory_tab.dart';
 import 'package:secret_base_app/screens/shop/shop_screen.dart';
 
@@ -187,6 +190,71 @@ void main() {
       expect(find.text('호랑이 말'), findsNothing);
       expect(find.text('벚꽃 윷'), findsNothing);
       expect(find.text('기본 말'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  test(
+    'the server theme picks the day or night palette; unknown means day',
+    () {
+      expect(YutPalette.forTheme('night').night, isTrue);
+      expect(YutPalette.forTheme('night').theme, same(GameTheme.yutNight));
+      expect(YutPalette.forTheme('day').theme, same(GameTheme.yutDay));
+      expect(YutPalette.forTheme(null).night, isFalse);
+      expect(YutPalette.forTheme('whatever').night, isFalse);
+    },
+  );
+
+  testWidgets(
+    'skin shop: hero shows the equipped skin, cards by grade, tapping a card previews it',
+    (tester) async {
+      final items = [
+        _skin(113, '옥 윷', 'A', '💚', 2500, 'yut_win_coin_pct', 4),
+        _skin(110, '대나무 윷', 'B', '🎋', 1500, 'yut_control_pct', 0.4),
+        _skin(115, '번개 윷', 'S', '⚡', 0, 'yut_control_pct', 0.7),
+      ];
+      final tapped = <int>[];
+      tester.view.physicalSize = const Size(390, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ListView(
+              children: [
+                YutSkinShop(
+                  items: items,
+                  ownedIds: const {110, 113},
+                  equippedIds: const {113},
+                  formatCoins: (n) => '$n',
+                  onItemTap: (i) => tapped.add((i['id'] as num).toInt()),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      Finder inHero(String text) => find.descendant(
+        of: find.byKey(const ValueKey('yut_skin_hero')),
+        matching: find.text(text),
+      );
+      expect(inHero('옥 윷'), findsOneWidget);
+      expect(inHero('장착 중'), findsOneWidget);
+      expect(find.textContaining('윷·모 코인 보너스'), findsOneWidget);
+      // 카드는 B, A, S 순서. 뽑기 전용 스킨은 가격 대신 "뽑기 전용".
+      final order = [110, 113, 115];
+      final xs = [
+        for (final id in order)
+          tester.getTopLeft(find.byKey(ValueKey('shop_item_$id'))).dx,
+      ];
+      expect(xs[0] < xs[1] && xs[1] < xs[2], isTrue);
+      expect(find.text('뽑기 전용'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('shop_item_110')));
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(tapped, [110]);
+      expect(inHero('대나무 윷'), findsOneWidget);
+      expect(inHero('보유'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

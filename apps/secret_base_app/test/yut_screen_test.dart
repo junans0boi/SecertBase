@@ -74,8 +74,9 @@ void main() {
       c.debugApplyState(yutState());
       await tester.pump(const Duration(milliseconds: 600));
       expect(find.text('윷 던지기'), findsOneWidget);
-      expect(find.text('나'), findsOneWidget);
-      expect(find.text('하늘'), findsOneWidget);
+      // 카드에는 고른 캐릭터 이름이 보이고(나=홍길동, 상대=미호), 사용자 코드는 어디에도 없다.
+      expect(find.text('홍길동'), findsOneWidget);
+      expect(find.text('미호'), findsOneWidget);
       expect(find.textContaining('OPP-CODE'), findsNothing);
       expect(find.textContaining('ME-CODE'), findsNothing);
       expect(find.textContaining('도착 0/4'), findsNWidgets(2));
@@ -199,7 +200,7 @@ void main() {
       // 던지는 동안 새 칩은 숨겨져 있다.
       expect(find.byKey(const ValueKey('yut_chip_2')), findsNothing);
       await tester.pump(const Duration(milliseconds: 1700));
-      expect(find.text('개!'), findsWidgets);
+      expect(find.text('개'), findsWidgets);
       for (var i = 0; i < 8; i++) {
         await tester.pump(const Duration(milliseconds: 500));
       }
@@ -257,7 +258,7 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pump(const Duration(milliseconds: 1100));
-    expect(find.text('잡았다!'), findsOneWidget);
+    expect(find.textContaining('잡았다!'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await settle(tester);
   });
@@ -284,10 +285,14 @@ void main() {
       },
     });
     await tester.pump(const Duration(milliseconds: 1500));
-    expect(find.text('승리!'), findsOneWidget);
-    expect(find.text('판돈 100코인을 얻었어요'), findsOneWidget);
-    expect(find.text('아이템 보너스 +20코인'), findsOneWidget);
-    expect(find.text('한 판 더!'), findsOneWidget);
+    expect(find.text('승리'), findsWidgets); // 글자 + 그 아래 두께 그림자
+    // 영수증: 판돈 100 + 윷 스킨 효과 20 = 이긴 코인 120.
+    expect(find.text('판돈'), findsOneWidget);
+    expect(find.text('100'), findsOneWidget);
+    expect(find.text('20'), findsOneWidget);
+    expect(find.text('120'), findsOneWidget);
+    expect(find.text('이긴 코인'), findsOneWidget);
+    expect(find.text('한 판 더'), findsOneWidget);
     await settle(tester);
   });
 
@@ -313,17 +318,19 @@ void main() {
         ended({'settlement': 'capped', 'transferred': 300, 'winnerGain': 350}),
       );
       await tester.pump(const Duration(milliseconds: 1500));
-      expect(find.text('판돈 300코인을 얻었어요'), findsOneWidget);
-      expect(find.text('판돈 1000코인을 얻었어요'), findsNothing);
-      expect(find.text('아이템 보너스 +50코인'), findsOneWidget);
+      expect(find.text('300'), findsOneWidget);
+      expect(find.text('1000'), findsNothing);
+      expect(find.text('50'), findsOneWidget);
+      expect(find.text('350'), findsOneWidget);
       // 정산이 실패했다: 얻었다고 말하지 않는다.
       c.debugApplyEnded(
         ended({'settlement': 'failed', 'transferred': 0, 'winnerGain': 0}),
       );
       await tester.pump(const Duration(milliseconds: 600));
-      expect(find.textContaining('코인 정산이 지연되고 있어요'), findsOneWidget);
-      expect(find.textContaining('코인을 얻었어요'), findsNothing);
-      expect(find.textContaining('아이템 보너스'), findsNothing);
+      expect(find.text('코인 정산'), findsOneWidget);
+      expect(find.text('지연되고 있어요'), findsOneWidget);
+      expect(find.text('이긴 코인'), findsNothing);
+      expect(find.textContaining('효과'), findsNothing);
       await settle(tester);
     },
   );

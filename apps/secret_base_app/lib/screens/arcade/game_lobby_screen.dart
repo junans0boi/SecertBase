@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import '../../core/main_design.dart';
 import '../../core/socket_service.dart';
 import '../../core/yut_audio.dart';
-import 'games/yut/yut_character_picker.dart';
 import 'games/yut/yut_figures.dart';
+import 'games/yut/yut_lobby_view.dart';
 import 'lobby_options.dart';
 
 const _kStakeOptions = [0, 500, 1000, 3000];
@@ -230,6 +230,16 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
     required bool canStart,
     required String startLabel,
   }) {
+    if (widget.gameType == 'yut') {
+      return YutLobbyView(
+        socket: _socket,
+        isHost: isHost,
+        canStart: canStart,
+        startLabel: startLabel,
+        onStart: () => _socket.startGameLobby(widget.gameType),
+        onBack: () => Navigator.of(context).pop(),
+      );
+    }
     final lobbyPlayers = List<String>.from(_socket.lobbyPlayers);
     final profileEmojis = Map<String, String>.from(_socket.profileEmojis);
     final nicknames = Map<String, String>.from(_socket.presenceNicknames);
@@ -297,10 +307,6 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
                               ],
                             ),
                             const SizedBox(height: 18),
-                            if (widget.gameType == 'yut') ...[
-                              YutCharacterPicker(color: widget.color),
-                              const SizedBox(height: 18),
-                            ],
                             for (final def in lobbyOptionsFor(
                               widget.gameType,
                             )) ...[

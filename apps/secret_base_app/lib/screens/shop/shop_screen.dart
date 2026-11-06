@@ -8,6 +8,7 @@ import '../../core/app_theme.dart';
 import '../../core/auth_service.dart';
 import '../../core/main_design.dart';
 import '../../core/socket_service.dart';
+import '../arcade/games/yut/yut_skin_shop.dart';
 import 'inventory_tab.dart';
 
 // ── Grade helpers ─────────────────────────────────────────────────────────────
@@ -1558,6 +1559,14 @@ class _GameSection extends StatelessWidget {
                 style: TextStyle(color: kMainMuted, fontSize: 12),
               ),
             ),
+          )
+        else if (game == 'yut')
+          YutSkinShop(
+            items: items,
+            ownedIds: ownedIds,
+            equippedIds: equippedIds,
+            formatCoins: formatCoins,
+            onItemTap: onItemTap,
           )
         else
           for (final slot in slots) ...[
