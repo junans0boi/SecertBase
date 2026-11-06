@@ -5,6 +5,7 @@ import '../../core/auth_service.dart';
 import '../../core/legal_urls.dart';
 import '../../core/support_contact.dart';
 import '../../v2/v2.dart';
+import '../archive/personal_history_screen.dart';
 import 'auth_parts.dart';
 import 'withdraw_screen.dart';
 
@@ -32,6 +33,29 @@ Future<void> showAccountSheet(BuildContext context) {
           ].join(' · '),
         ),
         const SizedBox(height: V2Space.x2),
+        if (!paired) ...[
+          V2List(
+            children: [
+              V2ListTile(
+                icon: V2Icons.record,
+                tone: V2Tone.ok,
+                title: '개인 보관함',
+                subtitle: '연결하기 전에도 나만의 기록을 남길 수 있어요.',
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  if (!rootContext.mounted) return;
+                  Navigator.push(
+                    rootContext,
+                    MaterialPageRoute(
+                      builder: (_) => const PersonalHistoryScreen(),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: V2Space.x2),
+        ],
         V2List(
           children: [
             V2ListTile(

@@ -365,7 +365,7 @@ void main() {
       expect(find.text('내 코드를 상대에게 보내 주세요'), findsOneWidget);
       expect(find.text('K7M2QX'), findsWidgets);
       expect(find.textContaining('민지님이 비밀기지에 초대했어요'), findsOneWidget);
-      expect(find.text('개인 보관함'), findsOneWidget);
+      expect(find.text('초대 보내기'), findsOneWidget);
       expect(find.textContaining('user_code'), findsNothing);
       await teardown(tester);
     });
@@ -376,7 +376,14 @@ void main() {
       await pumpPartner(tester);
       await tester.tap(find.byTooltip('계정 메뉴'));
       await tester.pumpAndSettle();
-      for (final label in ['고객센터', '이용약관', '개인정보처리방침', '로그아웃', '회원 탈퇴']) {
+      for (final label in [
+        '개인 보관함',
+        '고객센터',
+        '이용약관',
+        '개인정보처리방침',
+        '로그아웃',
+        '회원 탈퇴',
+      ]) {
         expect(find.text(label), findsOneWidget, reason: label);
       }
       expect(find.textContaining('연결 전'), findsOneWidget);
@@ -636,10 +643,10 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
       await tester.pumpAndSettle();
       expect(
-        find.text('나중에'),
+        find.text('나중에 할게요'),
         findsOneWidget,
       ); // pre-prompt sheet, before the OS
-      await tester.tap(find.text('나중에'));
+      await tester.tap(find.text('나중에 할게요'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('홈으로 가기'));
       expect(done, 1);

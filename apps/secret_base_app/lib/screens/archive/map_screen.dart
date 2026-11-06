@@ -258,6 +258,19 @@ class _MapScreenState extends State<MapScreen> {
         final choice = await showV2PermissionSheet(
           context,
           V2PermissionKind.location,
+          title: '내 위치를 지도에 보여드릴게요',
+          points: const [
+            '‘내 위치’를 눌렀을 때만 써요',
+            '저장하거나 공유하지 않아요',
+            '설정에서 언제든 끌 수 있어요',
+          ],
+          pointIcons: const [
+            V2Icons.myLocation,
+            V2Icons.lock,
+            V2Icons.settings,
+          ],
+          allowLabel: '위치 허용하기',
+          laterLabel: '지금은 안 할래요',
         );
         if (choice != V2PermissionChoice.allow) return;
         permission = await Geolocator.requestPermission();
