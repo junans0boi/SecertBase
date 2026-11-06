@@ -280,11 +280,17 @@ class YutView {
   final List<YutLegalMove> legalMoves;
   final Map<String, String> characters;
   final String? bgm;
+
+  /// 낮/밤 화면 테마(서버가 판마다 정한다).
+  final String theme;
   final int stake;
   final Map<String, int> coinBonus;
   final int coinBonusCap;
   final Map<String, dynamic> equippedItems;
   final Map<String, YutEffects> effects;
+
+  /// 두 사람 캐릭터의 능력치 1~5(서버 값).
+  final Map<String, Map<String, int>> characterStats;
   final Map<String, dynamic>? series;
   final String? winner;
   final num? turnDeadline;
@@ -310,11 +316,13 @@ class YutView {
     required this.legalMoves,
     required this.characters,
     required this.bgm,
+    required this.theme,
     required this.stake,
     required this.coinBonus,
     required this.coinBonusCap,
     required this.equippedItems,
     required this.effects,
+    required this.characterStats,
     required this.series,
     required this.winner,
     required this.turnDeadline,
@@ -359,6 +367,7 @@ class YutView {
         for (final e in _map(m['characters']).entries) e.key: '${e.value}',
       },
       bgm: m['bgm'] as String?,
+      theme: m['theme'] == 'night' ? 'night' : 'day',
       stake: _int(m['stake']),
       coinBonus: {for (final e in coin.entries) e.key: _int(e.value)},
       coinBonusCap: _int(m['coinBonusCap']),
@@ -366,6 +375,12 @@ class YutView {
       effects: {
         for (final e in _map(m['effects']).entries)
           e.key: YutEffects.fromJson(e.value),
+      },
+      characterStats: {
+        for (final e in _map(m['characterStats']).entries)
+          e.key: {
+            for (final st in _map(e.value).entries) st.key: _int(st.value),
+          },
       },
       series: series is Map ? Map<String, dynamic>.from(series) : null,
       winner: m['winner'] as String?,
@@ -392,6 +407,10 @@ class YutView {
 
   YutEffects effectsOf(String? player) => effects[player] ?? YutEffects.none;
 
+  /// 이 사람 캐릭터의 능력치(서버 값, 없으면 캐릭터 표에서).
+  Map<String, int> statsOf(String? player) =>
+      characterStats[player] ?? yutCharacterStatsFor(characters[player] ?? '');
+
   /// 장착 아이템 한 칸(`yut_piece`·`yut_yut`).
   Map<String, dynamic>? itemOf(String? player, String slot) {
     final items = equippedItems[player];
@@ -408,6 +427,7 @@ class YutEffects {
   final double moRatePct;
   final double overturnPct;
   final double backdoBonusPct;
+  final double calmPct;
   final double defensePct;
   final double winCoinPct;
   final int catchCoinPer;
@@ -418,6 +438,7 @@ class YutEffects {
     this.moRatePct = 0,
     this.overturnPct = 0,
     this.backdoBonusPct = 0,
+    this.calmPct = 0,
     this.defensePct = 0,
     this.winCoinPct = 0,
     this.catchCoinPer = 0,
@@ -434,6 +455,7 @@ class YutEffects {
       moRatePct: d('moRatePct'),
       overturnPct: d('overturnPct'),
       backdoBonusPct: d('backdoBonusPct'),
+      calmPct: d('calmPct'),
       defensePct: d('defensePct'),
       winCoinPct: d('winCoinPct'),
       catchCoinPer: _int(m['catchCoinPer']),
@@ -453,6 +475,7 @@ class YutEffects {
     if (moRatePct > 0) '모 확률 +${_n(moRatePct)}%',
     if (overturnPct > 0) '역전 +${_n(overturnPct)}%',
     if (backdoBonusPct > 0) '빽도 보너스 ${_n(backdoBonusPct)}%',
+    if (calmPct > 0) '빽도 방어 ${_n(calmPct)}%',
     if (defensePct > 0) '잡힘 방어 ${_n(defensePct)}%',
     if (staked && winCoinPct > 0) '윷·모 코인 ${_n(winCoinPct)}%',
     if (staked && catchCoinPer > 0) '잡기 말당 +$catchCoinPer코인',
@@ -535,6 +558,41 @@ class YutResult {
     return extra > 0 ? extra : 0;
   }
 }
+
+/// 캐릭터 능력치 5가지(서버 yut-engine.js의 YUT_STAT_KEYS와 같은 순서).
+class YutStatDef {
+  final String key;
+  final String label;
+  final String hint;
+
+  const YutStatDef(this.key, this.label, this.hint);
+}
+
+const kYutStatDefs = <YutStatDef>[
+  YutStatDef('power', '던지기 힘', '윷·모가 나올 확률이 올라가요'),
+  YutStatDef('calm', '침착', '빽도가 나오면 가끔 다시 던져요'),
+  YutStatDef('guard', '방어', '말이 잡힐 확률이 줄어요'),
+  YutStatDef('luck', '행운', '윷·모 코인 보너스, 빽도 뒤 한 번 더 던지기'),
+  YutStatDef('momentum', '기세', '지고 있을 때 윷·모 확률이 올라가요'),
+];
+
+/// 캐릭터별 능력치(합계 15). 서버 `YUT_CHARACTER_STATS`와 같아야 한다(테스트가 확인).
+const kYutCharacterStats = <String, Map<String, int>>{
+  'honggilldong': {'power': 3, 'calm': 4, 'guard': 4, 'luck': 2, 'momentum': 2},
+  'miho': {'power': 3, 'calm': 2, 'guard': 2, 'luck': 5, 'momentum': 3},
+  'nolbu': {'power': 5, 'calm': 1, 'guard': 3, 'luck': 3, 'momentum': 3},
+};
+
+/// 한 줄 성격 소개.
+const kYutCharacterBlurb = <String, String>{
+  'honggilldong': '균형·수비형',
+  'miho': '기술·행운형',
+  'nolbu': '힘·욕심형',
+};
+
+Map<String, int> yutCharacterStatsFor(String character) =>
+    kYutCharacterStats[character] ??
+    const {'power': 3, 'calm': 3, 'guard': 3, 'luck': 3, 'momentum': 3};
 
 const yutCharacterNames = {'honggilldong': '홍길동', 'nolbu': '놀부', 'miho': '미호'};
 

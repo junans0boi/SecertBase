@@ -401,27 +401,66 @@ test('assignCharacters never gives both players the same character', async () =>
   assert.notEqual(kept[B], 'miho');
 });
 
-test('game:yut:state carries both players equipped items and their effective effects', async t => {
+test('game:yut:state carries both players yut skins, character stats and effective effects; stale piece skins are ignored', async t => {
   const f = await fixture(t);
   const base = boundary.query;
-  const stats = { 11: [['yut_control_pct', '15'], ['piece_catch_resist_pct', '15'], ['yut_win_coin_pct', '15']], 22: [['yut_mo_rate_pct', '8']] };
   const items = {
-    11: [{ slot: 'yut_piece', name: '호랑이 말', icon: '🐯', grade: 'A', stats: { piece_catch_resist_pct: 15 } }, { slot: 'yut_yut', name: '황금 윷', icon: '🏅', grade: 'A', stats: { yut_control_pct: 15 } }],
-    22: [{ slot: 'yut_yut', name: '우주의 윷', icon: '🌌', grade: 'SSS', stats: { yut_mo_rate_pct: 8 } }],
+    11: [
+      { slot: 'yut_piece', name: '호랑이 말', icon: '🐯', grade: 'A', stats: { piece_catch_resist_pct: 15 } },
+      { slot: 'yut_yut', name: '얼음 윷', icon: '🧊', grade: 'S', stats: { piece_catch_resist_pct: 4 } },
+    ],
+    22: [{ slot: 'yut_yut', name: '신들의 윷', icon: '✨', grade: 'SSS', stats: { yut_control_pct: 1.2 } }],
   };
   boundary.query = async (sql, params) => {
     if (sql.includes('SELECT UserId FROM Users WHERE UserCode')) return { rows: [{ UserId: params[0] === A ? 11 : 22 }] };
     if (sql.includes('JOIN shop_items si ON si.id = ei.item_id')) return { rows: items[params[0]] ?? [] };
-    if (sql.includes('FROM equipped_items ei')) return { rows: (stats[params[0]] ?? []).map(([stat_key, total]) => ({ stat_key, total })) };
     return base(sql, params);
   };
   t.after(() => { boundary.query = base; });
-  await startFromLobby(f, { stake: 100 });
+  await startFromLobby(f, { stake: 100, characters: ['honggilldong', 'nolbu'] });
   const view = (await f.call(0, 'game:yut:sync', {})).state;
-  assert.equal(view.equippedItems[A].yut_piece.name, '호랑이 말');
-  assert.equal(view.equippedItems[A].yut_yut.grade, 'A');
-  assert.equal(view.equippedItems[B].yut_yut.name, '우주의 윷', "the opponent's items are visible too");
-  assert.equal(view.effects[A].defensePct, 10, 'defense shown at its cap');
-  assert.ok(view.effects[A].controlPct <= 3 && view.effects[A].controlPct > 0);
-  assert.ok(view.effects[B].moRatePct > 0 && view.effects[B].moRatePct <= 3);
+  assert.equal(view.equippedItems[A].yut_yut.name, '얼음 윷');
+  assert.equal(view.equippedItems[A].yut_piece, undefined, 'piece skins no longer exist');
+  assert.equal(view.equippedItems[B].yut_yut.name, '신들의 윷', "the opponent's skin is visible too");
+  assert.deepEqual(view.characterStats[A], { power: 3, calm: 4, guard: 4, luck: 2, momentum: 2 });
+  assert.deepEqual(view.characterStats[B], { power: 5, calm: 1, guard: 3, luck: 3, momentum: 3 });
+  // 효과 = 캐릭터 능력치 + 윷 스킨(상한 적용). 홍길동 방어 4.5 + 얼음 4 = 8.5, 말 스킨의 15는 무시.
+  assert.equal(view.effects[A].defensePct, 8.5);
+  assert.equal(view.effects[A].calmPct, 12);
+  assert.ok(view.effects[B].controlPct > 1.2 && view.effects[B].controlPct <= 2.5);
+});
+
+test('the day/night theme is rolled by the server per game: both players get the same one, a rematch rolls again, restore keeps it', async t => {
+  const f = await fixture(t);
+  const { yutRuntime } = await import('../src/games/yut.js');
+  const original = yutRuntime.rollTheme;
+  t.after(() => { yutRuntime.rollTheme = original; });
+  const seq = ['night', 'day'];
+  yutRuntime.rollTheme = () => seq.shift() ?? 'day';
+  const pushed = [[], []];
+  f.clients.forEach((c, i) => c.on('game:yut:state', s => pushed[i].push(s.theme)));
+  const g0 = await startFromLobby(f);
+  assert.equal(g0.theme, 'night');
+  await flush();
+  assert.deepEqual([pushed[0].at(-1), pushed[1].at(-1)], ['night', 'night'], 'both players receive the same theme');
+  assert.equal((await f.call(0, 'game:yut:sync', {})).state.theme, 'night');
+  // 복원은 같은 테마.
+  const restored = [];
+  f.clients[1].on('game:yut:state', s => restored.push(s.theme));
+  assert.ok((await f.call(1, 'session:restore', {})).restored.includes('yut'));
+  await flush();
+  assert.equal(restored.at(-1), 'night');
+  // 재대결은 다시 굴린다(이번에는 낮).
+  await arrange(f, g => { g.winner = null; g.stake = 0; });
+  assert.equal((await f.call(0, 'game:restart:request', { gameType: 'yut' })).ok, true);
+  assert.equal((await f.call(1, 'game:restart:respond', { gameType: 'yut', accept: true })).accepted, true);
+  const g1 = await readGame(f);
+  assert.equal(g1.theme, 'day');
+  assert.notEqual(g1.gameId, g0.gameId);
+  // 이상한 값이 나와도 낮으로 안전하게.
+  yutRuntime.rollTheme = () => 'bogus';
+  await f.redis.del(gameKey(f));
+  assert.equal((await f.call(0, 'game:restart:request', { gameType: 'yut' })).ok, true);
+  await f.call(1, 'game:restart:respond', { gameType: 'yut', accept: true });
+  assert.equal((await readGame(f)).theme, 'day');
 });

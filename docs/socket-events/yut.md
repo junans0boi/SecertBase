@@ -36,8 +36,10 @@
   lastThrow, turnThrows: [{ result, resultName, sticks, nak, bonus, auto }],
   legalMoves: [{ moveIndex, steps, pieceId, pieceIds, backdoDir, from, to, path, finish, captures, stacks }],
   characters: { [user]: 'honggilldong'|'nolbu'|'miho' }, bgm,
+  theme: 'day'|'night',     // 판마다 서버가 무작위로 정하는 화면 테마(두 사람이 같은 값). 재대결은 다시 굴리고, 복원은 같은 값.
   stake, coinBonus: { [user]: n }, coinBonusCap,
-  equippedItems,            // 두 사람 모두: { [user]: { yut_piece: { name, icon, grade, stats }, yut_yut: {...} } }
+  equippedItems,            // 두 사람 모두: { [user]: { yut_yut: { name, icon, grade, stats } } } (말 스킨은 폐지)
+  characterStats,           // 두 사람 모두: { [user]: { power, calm, guard, luck, momentum } } 각 1~5
   effects,                  // 두 사람 모두: 이 판에 실제로 적용되는 효과(상한 적용 후) — 아래 참고
   series: { wins, draws, games }, winner,
   turnDeadline, turnMs: 30000, serverNow,   // GameDeadline.fromServer로 시계 보정
@@ -66,10 +68,12 @@
 
 판돈은 기존 `wallet:updated`로 반영되고, 실패하면 `wallet:settle_failed`. 정산 ref는 `yut:<gameId>`(멱등), 결과 저장은 `recordGameOutcome(gameId)`.
 
-## 상점 아이템 표시
+## 상점 윷 스킨과 효과
 
-- `equippedItems[user].yut_piece` — 말 스킨(동물). 있으면 화면이 그 사람의 말 그림을 캐릭터 대신 `icon` 이모지 동물 말(등급 `grade`별 테두리·빛)로 그린다. `yut_yut` — 윷가락 스킨(이름·아이콘·등급으로 윷가락 모양을 고름).
-- `effects[user] = { controlPct, moRatePct, overturnPct, backdoBonusPct, defensePct, winCoinPct, catchCoinPer, catchFlat }` — 서버가 합산 상한(throw 계열 3%, 방어 10%)을 적용한 **실제 값**. 화면의 "효과" 칩은 원시 아이템 수치가 아니라 이 값을 보여 준다(판돈이 없는 판에서는 코인 효과를 감춘다).
+- 말은 캐릭터 그림만 쓴다(홍길동·미호·놀부). **말 스킨(`yut_piece`)은 폐지**됐고 서버는 남아 있어도 무시한다.
+- `equippedItems[user].yut_yut` — 윷 스킨(9종, 이름·등급으로 윷가락 모양을 고른다). 효과는 이 스킨 하나의 `stats`에서만 온다.
+- `effects[user] = { controlPct, moRatePct, overturnPct, backdoBonusPct, calmPct, defensePct, winCoinPct, catchCoinPer, catchFlat }` — **캐릭터 능력치 + 윷 스킨**을 합치고 서버 상한을 적용한 **실제 값**. 화면의 "효과" 칩은 이 값을 보여 준다(판돈이 없는 판에서는 코인 효과를 감춘다).
+- 상세 설계·수치: `docs/plans/game-renewal-2026-11-wave2/27-yut-system.md`.
 
 ## 캐릭터
 
@@ -78,7 +82,8 @@
 ## 규칙·균형
 
 - 던지기: 막대 4개(납작 0→모, 표시 막대만 납작→빽도, 1→도, 2→개, 3→걸, 4→윷). 윷·모는 한 번 더. 잡기 1회마다 한 번 더(윷·모 보너스와 따로).
-- 아이템: 던지기 계열(`yut_control_pct`·`yut_mo_rate_pct`·`yut_overturn_pct`·`yut_backdo_bonus_pct`)은 합이 3%를 넘으면 같은 비율로 줄이고, 걸→윷·도→모만 올린다(**빽도는 올리지 않는다**). 방어(`piece_catch_resist_pct`+`piece_safe_zone_pct`)는 한 번만 굴리고 합 10% 상한. 막히면 움직이던 말이 바로 앞 칸에 멈추고(앞 칸이 대기이거나 앞 칸에도 상대 말이 있으면 방어 실패, 정상 잡기).
+- 효과 상한: 던지기를 올리는 효과(`yut_control_pct`·`yut_mo_rate_pct`·`yut_overturn_pct` + 캐릭터 힘·기세)는 합이 2.5%p를 넘으면 같은 비율로 줄이고, 걸→윷·도→모만 올린다(**빽도는 올리지 않는다**). 방어는 한 번만 굴리고 합 9% 상한(10% 이하). 침착(빽도가 나오면 다시 던질 확률)은 12%, 빽도 뒤 추가 던지기는 8%, 윷·모 코인은 판돈의 30%(판당)가 상한.
+- 침착이 발동하면 `lastAction.itemEffects`에 `{ stat: 'yut_backdo_shield_pct' }`가 실리고 막대는 다시 던진 결과 그대로다. 막히면 움직이던 말이 바로 앞 칸에 멈추고(앞 칸이 대기이거나 앞 칸에도 상대 말이 있으면 방어 실패, 정상 잡기).
 - 코인 보너스(`yut_win_coin_pct`·`piece_catch_coin_bonus`·`yut_catch_bonus`)는 판당 판돈의 30%까지 쌓고 정산 때 승자에게만 지급(무료 판은 0).
 - 한쪽만 아이템을 최대로 껴도 승률 55% 이하(`test/yut-balance.test.js`, 시드 고정 시뮬레이션).
 

@@ -1,9 +1,9 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'yut_models.dart';
+import 'yut_palette.dart';
 
 /// 윷가락 겉모습(상점 윷 스킨마다 하나). 이름이 정확히 맞는 아이템을 먼저 찾고,
 /// 모르는 이름은 아이콘, 그래도 없으면 등급으로 알맞은 모습을 고른다.
@@ -48,15 +48,15 @@ class YutStickLook {
     Color(0xFFC9A66B),
   );
 
-  // 이름 → 모습. 0018 카탈로그 18종 + 예전 5종.
+  // 이름 → 모습. 상점 윷 스킨 9종(마이그레이션 0049)마다 하나씩, 등급이 높을수록 화려하다.
   static const Map<String, YutStickLook> byName = {
-    // B
-    '벚꽃 윷': YutStickLook(
-      'cherry',
-      Color(0xFFFFE3EA),
-      Color(0xFFD9577F),
-      Color(0xFFF08AA8),
-      stripe: Color(0xFFFFFFFF),
+    // B: 소재 그대로의 소박한 모습
+    '대나무 윷': YutStickLook(
+      'bamboo',
+      Color(0xFFDDEFA8),
+      Color(0xFF3E7A2B),
+      Color(0xFF6FA84A),
+      stripe: Color(0xFF2F5E20),
     ),
     '단풍 윷': YutStickLook(
       'maple',
@@ -65,27 +65,7 @@ class YutStickLook {
       Color(0xFFD9772B),
       stripe: Color(0xFFE8892B),
     ),
-    '새싹 윷': YutStickLook(
-      'sprout',
-      Color(0xFFE2F4B6),
-      Color(0xFF4F8F2B),
-      Color(0xFF86C14A),
-      stripe: Color(0xFFB6E36B),
-    ),
-    '조약돌 윷': YutStickLook(
-      'pebble',
-      Color(0xFFDAD7CF),
-      Color(0xFF55534E),
-      Color(0xFF8A877F),
-    ),
-    '대나무 윷': YutStickLook(
-      'bamboo',
-      Color(0xFFDDEFA8),
-      Color(0xFF3E7A2B),
-      Color(0xFF6FA84A),
-      stripe: Color(0xFF2F5E20),
-    ),
-    // A
+    // A: 은은한 빛과 무늬
     '달빛 윷': YutStickLook(
       'moon',
       Color(0xFFF7F2CC),
@@ -93,52 +73,16 @@ class YutStickLook {
       Color(0xFF5967A0),
       glow: Color(0xFFFFF4B0),
     ),
-    '바람 윷': YutStickLook(
-      'wind',
-      Color(0xFFE8F8F4),
-      Color(0xFF4E9E96),
-      Color(0xFF86CBC2),
-      stripe: Color(0xFFFFFFFF),
-      glow: Color(0xFFBDEFE6),
+    '옥 윷': YutStickLook(
+      'jade',
+      Color(0xFFD6F3E3),
+      Color(0xFF2F8F63),
+      Color(0xFF6CC79B),
+      stripe: Color(0xFFEFFFF6),
+      glow: Color(0xFF9CE6C0),
+      glassy: true,
     ),
-    '눈꽃 윷': YutStickLook(
-      'snow',
-      Color(0xFFF6FBFF),
-      Color(0xFF8FC1E6),
-      Color(0xFFC9E4F6),
-      sparkle: true,
-    ),
-    '파도 윷': YutStickLook(
-      'wave',
-      Color(0xFFD2ECFC),
-      Color(0xFF1E6AA6),
-      Color(0xFF4F9AD0),
-      stripe: Color(0xFF8FD0F5),
-    ),
-    '황금 윷': YutStickLook(
-      'gold',
-      Color(0xFFFFE680),
-      Color(0xFFB8860B),
-      Color(0xFFDAA520),
-      glow: Color(0xFFFFD34D),
-    ),
-    // S
-    '번개 윷': YutStickLook(
-      'lightning',
-      Color(0xFFFFF7AA),
-      Color(0xFF55369E),
-      Color(0xFF8A62D8),
-      stripe: Color(0xFFFFE23D),
-      glow: Color(0xFFFFE23D),
-    ),
-    '태양 윷': YutStickLook(
-      'sun',
-      Color(0xFFFFE470),
-      Color(0xFFE0701C),
-      Color(0xFFFFA23C),
-      glow: Color(0xFFFFA21F),
-      sparkle: true,
-    ),
+    // S: 기운이 뚜렷한 빛
     '얼음 윷': YutStickLook(
       'ice',
       Color(0xFFE6F9FF),
@@ -147,50 +91,15 @@ class YutStickLook {
       glow: Color(0xFF9EE6FF),
       glassy: true,
     ),
-    '폭풍 윷': YutStickLook(
-      'storm',
-      Color(0xFFCBD1E2),
-      Color(0xFF353C66),
-      Color(0xFF5F69A0),
-      stripe: Color(0xFF7FE0FF),
-      glow: Color(0xFF6C7BD6),
-    ),
-    '크리스탈 윷': YutStickLook(
-      'crystal',
-      Color(0xFFD7F0F7),
-      Color(0xFF3B6FA1),
-      Color(0xFF7AA9D2),
-      glow: Color(0xFF8ED1FF),
-      glassy: true,
-    ),
-    // SS
-    '용의 윷': YutStickLook(
-      'dragon',
-      Color(0xFFB9F2C9),
-      Color(0xFF1A6B45),
-      Color(0xFF3FA874),
-      stripe: Color(0xFFFFD34D),
-      glow: Color(0xFF44E08A),
-      sparkle: true,
-    ),
-    '봉황 윷': YutStickLook(
-      'phoenix',
-      Color(0xFFFFD4A8),
-      Color(0xFFC2341F),
-      Color(0xFFF2762B),
-      stripe: Color(0xFFFFD34D),
-      glow: Color(0xFFFF8A3D),
-      sparkle: true,
-    ),
-    '천둥 윷': YutStickLook(
-      'thunder',
-      Color(0xFFDDD3FF),
-      Color(0xFF4A2D9C),
-      Color(0xFF8566DE),
+    '번개 윷': YutStickLook(
+      'lightning',
+      Color(0xFFFFF7AA),
+      Color(0xFF55369E),
+      Color(0xFF8A62D8),
       stripe: Color(0xFFFFE23D),
-      glow: Color(0xFFA27BFF),
-      sparkle: true,
+      glow: Color(0xFFFFE23D),
     ),
+    // SS: 불꽃·용의 반짝임
     '불꽃 윷': YutStickLook(
       'flame',
       Color(0xFFFFC27A),
@@ -200,168 +109,23 @@ class YutStickLook {
       glow: Color(0xFFFF6A2B),
       sparkle: true,
     ),
-    // SSS
+    '용의 윷': YutStickLook(
+      'dragon',
+      Color(0xFFB9F2C9),
+      Color(0xFF1A6B45),
+      Color(0xFF3FA874),
+      stripe: Color(0xFFFFD34D),
+      glow: Color(0xFF44E08A),
+      sparkle: true,
+    ),
+    // SSS: 신화 속 무지갯빛
     '신들의 윷': YutStickLook(
       'gods',
       Color(0xFFFFF3C4),
       Color(0xFFB8860B),
       Color(0xFFFFD34D),
+      stripe: Color(0xFFFFFFFF),
       glow: Color(0xFFFFE680),
-      sparkle: true,
-      rainbow: true,
-    ),
-    '우주의 윷': YutStickLook(
-      'cosmos',
-      Color(0xFF6A58B8),
-      Color(0xFF130E30),
-      Color(0xFF3C2F80),
-      stripe: Color(0xFFB9A8FF),
-      glow: Color(0xFF8E7BFF),
-      sparkle: true,
-      rainbow: true,
-    ),
-    '운명의 윷': YutStickLook(
-      'destiny',
-      Color(0xFFFFD8EA),
-      Color(0xFF8E1B58),
-      Color(0xFFE05AA0),
-      stripe: Color(0xFFFFD34D),
-      glow: Color(0xFFFF7BC0),
-      sparkle: true,
-      rainbow: true,
-    ),
-    '전설의 윷': YutStickLook(
-      'legend',
-      Color(0xFFE8C8F5),
-      Color(0xFF5A1D8F),
-      Color(0xFFA066D6),
-      glow: Color(0xFFD08BFF),
-      sparkle: true,
-      rainbow: true,
-    ),
-  };
-
-  // 이름을 몰라도 아이콘으로 고르는 예비 모습.
-  static const Map<String, YutStickLook> _byIcon = {
-    '🌸': YutStickLook(
-      'icon-cherry',
-      Color(0xFFFFE3EA),
-      Color(0xFFD9577F),
-      Color(0xFFF08AA8),
-    ),
-    '🍁': YutStickLook(
-      'icon-maple',
-      Color(0xFFF8D79A),
-      Color(0xFFA63F1B),
-      Color(0xFFD9772B),
-    ),
-    '🌱': YutStickLook(
-      'icon-sprout',
-      Color(0xFFE2F4B6),
-      Color(0xFF4F8F2B),
-      Color(0xFF86C14A),
-    ),
-    '🪨': YutStickLook(
-      'icon-stone',
-      Color(0xFFDAD7CF),
-      Color(0xFF55534E),
-      Color(0xFF8A877F),
-    ),
-    '🌙': YutStickLook(
-      'icon-moon',
-      Color(0xFFF7F2CC),
-      Color(0xFF34406E),
-      Color(0xFF5967A0),
-      glow: Color(0xFFFFF4B0),
-    ),
-    '💨': YutStickLook(
-      'icon-wind',
-      Color(0xFFE8F8F4),
-      Color(0xFF4E9E96),
-      Color(0xFF86CBC2),
-    ),
-    '❄️': YutStickLook(
-      'icon-snow',
-      Color(0xFFF6FBFF),
-      Color(0xFF8FC1E6),
-      Color(0xFFC9E4F6),
-      sparkle: true,
-    ),
-    '🌊': YutStickLook(
-      'icon-wave',
-      Color(0xFFD2ECFC),
-      Color(0xFF1E6AA6),
-      Color(0xFF4F9AD0),
-    ),
-    '⚡': YutStickLook(
-      'icon-bolt',
-      Color(0xFFFFF7AA),
-      Color(0xFF55369E),
-      Color(0xFF8A62D8),
-      glow: Color(0xFFFFE23D),
-    ),
-    '☀️': YutStickLook(
-      'icon-sun',
-      Color(0xFFFFE470),
-      Color(0xFFE0701C),
-      Color(0xFFFFA23C),
-      glow: Color(0xFFFFA21F),
-    ),
-    '🧊': YutStickLook(
-      'icon-ice',
-      Color(0xFFE6F9FF),
-      Color(0xFF5DB6E4),
-      Color(0xFFA9E1F8),
-      glassy: true,
-    ),
-    '🌪️': YutStickLook(
-      'icon-storm',
-      Color(0xFFCBD1E2),
-      Color(0xFF353C66),
-      Color(0xFF5F69A0),
-    ),
-    '🐉': YutStickLook(
-      'icon-dragon',
-      Color(0xFFB9F2C9),
-      Color(0xFF1A6B45),
-      Color(0xFF3FA874),
-      glow: Color(0xFF44E08A),
-    ),
-    '🦅': YutStickLook(
-      'icon-phoenix',
-      Color(0xFFFFD4A8),
-      Color(0xFFC2341F),
-      Color(0xFFF2762B),
-      glow: Color(0xFFFF8A3D),
-    ),
-    '⛈️': YutStickLook(
-      'icon-thunder',
-      Color(0xFFDDD3FF),
-      Color(0xFF4A2D9C),
-      Color(0xFF8566DE),
-      glow: Color(0xFFA27BFF),
-    ),
-    '✨': YutStickLook(
-      'icon-gods',
-      Color(0xFFFFF3C4),
-      Color(0xFFB8860B),
-      Color(0xFFFFD34D),
-      sparkle: true,
-      rainbow: true,
-    ),
-    '🌌': YutStickLook(
-      'icon-cosmos',
-      Color(0xFF6A58B8),
-      Color(0xFF130E30),
-      Color(0xFF3C2F80),
-      sparkle: true,
-      rainbow: true,
-    ),
-    '🎯': YutStickLook(
-      'icon-destiny',
-      Color(0xFFFFD8EA),
-      Color(0xFF8E1B58),
-      Color(0xFFE05AA0),
       sparkle: true,
       rainbow: true,
     ),
@@ -402,12 +166,11 @@ class YutStickLook {
   };
 
   /// 장착한 `yut_yut` 아이템(서버 `equippedItems`의 한 칸)에서 모습을 정한다.
+  /// 모르는 이름(옛 아이템 등)은 등급으로, 그래도 모르면 기본 윷으로 — 절대 실패하지 않는다.
   static YutStickLook fromItem(Map<String, dynamic>? item) {
     if (item == null) return base;
-    final byNameHit = byName['${item['name'] ?? ''}'.trim()];
-    if (byNameHit != null) return byNameHit;
-    final byIconHit = _byIcon['${item['icon'] ?? ''}'];
-    if (byIconHit != null) return byIconHit;
+    final hit = byName['${item['name'] ?? ''}'.trim()];
+    if (hit != null) return hit;
     return _byGrade['${item['grade'] ?? ''}'] ?? base;
   }
 }
@@ -423,16 +186,16 @@ String yutCallout(YutThrow t) {
   };
 }
 
-/// 둥근 통나무 단면(윷판 옆 던지는 자리)과 그 위의 윷가락 네 개.
+/// 윷판 위에 잠깐 펼치는 민트빛 돗자리와 그 위의 윷가락 네 개.
 /// 막대는 서버 `sticks`(0=납작, 1=둥근, 0번이 표시 막대)대로 멈춘다. [t]는 0..1 진행도.
-class YutSlab extends StatelessWidget {
+class YutMat extends StatelessWidget {
   final List<int> sticks;
   final int seed;
   final YutStickLook look;
   final double t;
   final bool big;
 
-  const YutSlab({
+  const YutMat({
     super.key,
     required this.sticks,
     required this.seed,
@@ -446,7 +209,7 @@ class YutSlab extends StatelessWidget {
     return AspectRatio(
       aspectRatio: 1,
       child: CustomPaint(
-        painter: _SlabPainter(),
+        painter: _MatPainter(YutPalette.of(context)),
         foregroundPainter: _SticksPainter(
           t: t,
           sticks: sticks,
@@ -524,69 +287,67 @@ class _YutSticksStageState extends State<YutSticksStage>
 
   @override
   Widget build(BuildContext context) {
+    final p = YutPalette.of(context);
     final big = widget.thrown.isBig;
-    final label = yutCallout(widget.thrown);
-    final labelColor = switch (widget.thrown.result) {
-      4 => const Color(0xFFE5534B),
-      5 => const Color(0xFF2F82DE),
-      _ => const Color(0xFF263A2A),
-    };
+    final reduce = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     return Semantics(
       label: '윷가락 던지기 결과, ${widget.thrown.resultName}',
       child: AnimatedBuilder(
         animation: _ctl,
         builder: (context, _) {
           final t = _ctl.value;
-          final zoom = big ? 1 + 0.05 * Curves.easeOut.transform(t) : 1.0;
-          final reveal = ((t - 0.86) / 0.14).clamp(0.0, 1.0);
-          return Transform.scale(
-            scale: zoom,
-            child: Stack(
-              clipBehavior: Clip.none,
-              alignment: Alignment.center,
-              children: [
-                YutSlab(
-                  sticks: widget.thrown.sticks,
-                  seed: widget.seed,
-                  look: widget.look,
-                  t: t,
-                  big: big,
-                ),
-                if (widget.throwerName != null)
-                  Positioned(
-                    top: 4,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.38),
-                        borderRadius: BorderRadius.circular(99),
-                      ),
+          final appear = Curves.easeOut.transform((t / 0.1).clamp(0.0, 1.0));
+          final reveal = ((t - 0.84) / 0.16).clamp(0.0, 1.0);
+          // 도장 쾅: 크게 시작해 눌러 앉으며 살짝 튀어 오른다(모션 줄이기면 바로 제자리).
+          final pop = reduce ? 1.0 : Curves.easeOutBack.transform(reveal);
+          final stampScale = 1.55 - 0.55 * pop;
+          return Opacity(
+            opacity: appear,
+            child: Transform.scale(
+              scale:
+                  (big && !reduce ? 1 + 0.03 * t : 1.0) *
+                  (0.95 + 0.05 * appear),
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
+                children: [
+                  YutMat(
+                    sticks: widget.thrown.sticks,
+                    seed: widget.seed,
+                    look: widget.look,
+                    t: t,
+                    big: big,
+                  ),
+                  if (widget.throwerName != null)
+                    Positioned(
+                      top: 10,
                       child: Text(
                         widget.throwerName == '내'
-                            ? '내가 던져요'
+                            ? '내가 던졌어요'
                             : '${widget.throwerName}의 윷',
-                        style: GoogleFonts.notoSans(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
+                        style: p.body(
+                          size: 13,
+                          color: p.sub,
+                          weight: FontWeight.w800,
                         ),
                       ),
                     ),
-                  ),
-                Positioned(
-                  bottom: -6,
-                  child: Opacity(
-                    opacity: reveal,
-                    child: Transform.scale(
-                      scale: 0.7 + 0.3 * Curves.easeOutBack.transform(reveal),
-                      child: _CalloutLabel(text: label, color: labelColor),
+                  if (reveal > 0)
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: Opacity(
+                        opacity: reveal.clamp(0.0, 1.0),
+                        child: Transform.scale(
+                          scale: stampScale,
+                          child: _Stamp(thrown: widget.thrown),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           );
         },
@@ -595,132 +356,220 @@ class _YutSticksStageState extends State<YutSticksStage>
   }
 }
 
-/// 흰 테두리가 둘린 통통한 결과 글자("윷이야!").
-class _CalloutLabel extends StatelessWidget {
-  final String text;
-  final Color color;
+/// 결과 도장: 살짝 기울어진 흰 판에 큰 글자, 아래에 알약 설명, 주위에 반짝이는 마름모.
+class _Stamp extends StatelessWidget {
+  final YutThrow thrown;
 
-  const _CalloutLabel({required this.text, required this.color});
+  const _Stamp({required this.thrown});
+
+  String get word => thrown.nak ? '낙' : thrown.resultName;
+
+  String get note {
+    if (thrown.nak) return '말이 없어 넘어가요';
+    if (thrown.bonus) return '한 번 더 던져요!';
+    if (thrown.result == -1) return '한 칸 뒤로';
+    return '${thrown.result}칸 가요';
+  }
 
   @override
   Widget build(BuildContext context) {
-    final fill = GoogleFonts.jua(fontSize: 40, color: color, height: 1.0);
-    final outline = fill.copyWith(
-      foreground: Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 7
-        ..strokeJoin = StrokeJoin.round
-        ..color = Colors.white,
-    );
-    return Stack(
-      children: [
-        Text(text, style: outline),
-        Text(text, style: fill),
-      ],
+    final p = YutPalette.of(context);
+    return LayoutBuilder(
+      builder: (context, box) {
+        final size = box.maxWidth * 0.42;
+        final fontSize = word.length > 1 ? size * 0.5 : size * 0.68;
+        return Align(
+          alignment: const Alignment(0, -0.5),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Transform.rotate(
+                angle: -0.1,
+                child: SizedBox(
+                  width: size + 40,
+                  height: size + 14,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Positioned.fill(
+                        child: CustomPaint(painter: _SparklePainter(p.acc)),
+                      ),
+                      Positioned(
+                        top: 10,
+                        child: Container(
+                          width: size,
+                          height: size,
+                          decoration: BoxDecoration(
+                            color: p.acc2,
+                            borderRadius: BorderRadius.circular(size * 0.22),
+                          ),
+                        ),
+                      ),
+                      Container(
+                        width: size,
+                        height: size,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: p.plate,
+                          borderRadius: BorderRadius.circular(size * 0.22),
+                          border: Border.all(color: p.acc, width: 4),
+                        ),
+                        child: CustomPaint(
+                          painter: _DashPainter(
+                            p.acc.withValues(alpha: 0.45),
+                            size * 0.22,
+                          ),
+                          child: Center(
+                            child: Text(
+                              word,
+                              style: p.display(
+                                size: fontSize,
+                                color: p.accText,
+                                height: 1.0,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: p.acc,
+                  borderRadius: BorderRadius.circular(99),
+                  boxShadow: [
+                    BoxShadow(color: p.acc2, offset: const Offset(0, 4)),
+                  ],
+                ),
+                child: Text(note, style: p.display(size: 18, color: p.onAcc)),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
 
-/// 통나무 단면: 옆면 두께 + 나이테 + 껍질 테두리 + 바닥 그림자.
-class _SlabPainter extends CustomPainter {
+class _DashPainter extends CustomPainter {
+  final Color color;
+  final double radius;
+
+  _DashPainter(this.color, this.radius);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = RRect.fromRectAndRadius(
+      (Offset.zero & size).deflate(8),
+      Radius.circular(radius * 0.8),
+    );
+    final path = Path()..addRRect(rect);
+    for (final m in path.computeMetrics()) {
+      for (double d = 0; d < m.length; d += 10) {
+        canvas.drawPath(
+          m.extractPath(d, math.min(m.length, d + 5)),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2
+            ..strokeCap = StrokeCap.round
+            ..color = color,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashPainter old) => old.color != color;
+}
+
+class _SparklePainter extends CustomPainter {
+  final Color color;
+
+  _SparklePainter(this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color;
+    for (final o in const [
+      Offset(0.02, 0.22),
+      Offset(0.98, 0.34),
+      Offset(0.08, 0.84),
+      Offset(0.94, 0.78),
+      Offset(0.5, -0.02),
+    ]) {
+      final c = Offset(size.width * o.dx, size.height * o.dy);
+      final r = 6.0;
+      canvas.drawPath(
+        Path()
+          ..moveTo(c.dx, c.dy - r)
+          ..lineTo(c.dx + r * 0.6, c.dy)
+          ..lineTo(c.dx, c.dy + r)
+          ..lineTo(c.dx - r * 0.6, c.dy)
+          ..close(),
+        paint,
+      );
+    }
+    canvas.drawCircle(Offset(size.width * 0.14, size.height * 0.08), 3, paint);
+    canvas.drawCircle(Offset(size.width * 0.9, size.height * 0.9), 3, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _SparklePainter old) => old.color != color;
+}
+
+/// 돗자리: 둥근 사각 판 + 아랫면 두께 + 옅은 격자(낮은 민트, 밤은 남색에 호박빛 격자).
+class _MatPainter extends CustomPainter {
+  final YutPalette p;
+
+  _MatPainter(this.p);
+
   @override
   void paint(Canvas canvas, Size size) {
     final s = size.width;
-    final top = Rect.fromLTWH(s * 0.04, s * 0.05, s * 0.92, s * 0.78);
-    final side = top.shift(Offset(0, s * 0.075));
-    // 바닥 그림자.
-    canvas.drawOval(
-      side.inflate(s * 0.02).shift(Offset(0, s * 0.03)),
-      Paint()
-        ..color = Colors.black.withValues(alpha: 0.3)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.035),
+    final r = s * 0.1;
+    final top = RRect.fromRectAndRadius(
+      Rect.fromLTWH(s * 0.02, s * 0.02, s * 0.96, s * 0.9),
+      Radius.circular(r),
     );
-    // 옆면(껍질).
-    canvas.drawOval(
-      side,
+    canvas.drawRRect(
+      top.shift(Offset(0, s * 0.05)).inflate(s * 0.005),
       Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF8A5A2E), Color(0xFF5C3A1C)],
-        ).createShader(side),
+        ..color = p.shadow
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.04),
     );
-    final bark = Paint()
-      ..color = const Color(0x553A2210)
-      ..strokeWidth = 1.2
-      ..style = PaintingStyle.stroke;
-    for (double a = 0.15; a < math.pi; a += 0.28) {
-      final x = top.center.dx + math.cos(a) * top.width / 2 * 0.98;
-      canvas.drawLine(
-        Offset(x, top.center.dy + math.sin(a) * top.height / 2),
-        Offset(x, top.center.dy + math.sin(a) * top.height / 2 + s * 0.07),
-        bark,
-      );
+    canvas.drawRRect(
+      top.shift(Offset(0, s * 0.03)),
+      Paint()..color = p.matEdge,
+    );
+    canvas.drawRRect(top, Paint()..color = p.mat);
+    canvas.save();
+    canvas.clipRRect(top);
+    final grid = Paint()
+      ..strokeWidth = 1
+      ..color = p.matLine;
+    for (double d = s * 0.02; d < s; d += s * 0.045) {
+      canvas.drawLine(Offset(d, 0), Offset(d, s), grid);
+      canvas.drawLine(Offset(0, d), Offset(s, d), grid);
     }
-    // 윗면(속살).
-    canvas.drawOval(
-      top,
-      Paint()
-        ..shader = const RadialGradient(
-          center: Alignment(-0.2, -0.3),
-          colors: [Color(0xFFF2D49A), Color(0xFFDDB070)],
-        ).createShader(top),
-    );
-    canvas.drawOval(
-      top,
+    canvas.restore();
+    canvas.drawRRect(
+      top.deflate(1),
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = s * 0.018
-        ..color = const Color(0xFF8A5A2E),
-    );
-    // 나이테.
-    final ring = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.1;
-    for (int i = 1; i <= 7; i++) {
-      final k = i / 8;
-      ring.color = const Color(
-        0xFF9A6A38,
-      ).withValues(alpha: i.isEven ? 0.28 : 0.16);
-      canvas.drawOval(
-        Rect.fromCenter(
-          center: top.center.translate(s * 0.012 * (4 - i) / 4, 0),
-          width: top.width * k,
-          height: top.height * k,
-        ),
-        ring,
-      );
-    }
-    // 갈라진 결 두 줄.
-    final crack = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = 1.3
-      ..color = const Color(0x553A2210);
-    canvas.drawLine(
-      top.center,
-      top.center.translate(top.width * 0.34, -top.height * 0.1),
-      crack,
-    );
-    canvas.drawLine(
-      top.center.translate(-top.width * 0.05, top.height * 0.04),
-      top.center.translate(-top.width * 0.3, top.height * 0.22),
-      crack,
-    );
-    // 윗면 하이라이트.
-    canvas.drawOval(
-      Rect.fromLTWH(
-        top.left + top.width * 0.12,
-        top.top + top.height * 0.08,
-        top.width * 0.4,
-        top.height * 0.16,
-      ),
-      Paint()..color = Colors.white.withValues(alpha: 0.2),
+        ..strokeWidth = 2
+        ..color = Colors.white.withValues(alpha: p.night ? 0.08 : 0.5),
     );
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _MatPainter old) => old.p != p;
 }
 
 class _StickMotion {
@@ -763,7 +612,7 @@ class _SticksPainter extends CustomPainter {
     final slot = (i + 0.5) / 4;
     return _StickMotion(
       endX: 0.5 + (slot - 0.5) * 0.6 + (r.nextDouble() - 0.5) * 0.03,
-      endY: 0.46 + (r.nextDouble() - 0.5) * 0.05,
+      endY: 0.7 + (r.nextDouble() - 0.5) * 0.04,
       yawEnd: (r.nextDouble() - 0.5) * 0.45 + (i.isEven ? 0.05 : -0.05),
       yawSpin:
           (r.nextBool() ? 1 : -1) * (math.pi * (2.2 + r.nextDouble() * 1.4)),
@@ -804,8 +653,8 @@ class _SticksPainter extends CustomPainter {
       );
     }
     order.sort((a, b) => states[a]!.z.compareTo(states[b]!.z));
-    final len = size.height * 0.56;
-    final thick = size.width * 0.092;
+    final len = size.height * 0.44;
+    final thick = size.width * 0.085;
     for (final i in order) {
       final s = states[i]!;
       final shadowOffset = Offset(5 + 18 * s.z, 4 + 20 * s.z);

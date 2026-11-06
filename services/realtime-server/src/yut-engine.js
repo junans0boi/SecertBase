@@ -36,12 +36,54 @@ export const GOAL_POSITION = 20;
 export const PIECE_COUNTS = [4, 3, 2];
 export const DEFAULT_PIECE_COUNT = 4;
 
-/** 던지기 계열(윷 컨트롤·모 확률·역전·빽도 보너스) 효과 합계 상한(%). 균형 테스트로 고정. */
-export const THROW_ITEM_CAP_PCT = 3;
-/** 방어 계열(잡힘 방어·안전 착지) 합계 상한(%). 한 번만 굴린다. */
-export const DEFENSE_CAP_PCT = 10;
+/** 던지기 결과를 올리는 효과(윷·모 확률, 모 확률, 역전)의 합계 상한(%). 균형 테스트로 고정. */
+export const THROW_ITEM_CAP_PCT = 2.5;
+/** 방어 계열(잡힘 방어·안전 착지) 합계 상한(%). 한 번만 굴린다(10% 이하). */
+export const DEFENSE_CAP_PCT = 9;
+/** 빽도 뒤 추가 던지기 확률 상한(%). */
+export const BACKDO_BONUS_CAP_PCT = 8;
+/** 침착(빽도가 나오면 다시 던지기) 확률 상한(%). */
+export const CALM_CAP_PCT = 12;
 /** 판당 코인 보너스 상한: 판돈 × 30%. */
 export const COIN_BONUS_CAP_RATIO = 0.3;
+
+// ── 캐릭터 능력치(1~5): 화면에 그대로 보여 주고 서버가 같은 값으로 효과를 낸다 ──────────
+// 합계는 모두 15(트레이드오프). 클라이언트 로비 표(yut_models.dart)와 같아야 한다(테스트가 확인).
+export const YUT_STAT_KEYS = ['power', 'calm', 'guard', 'luck', 'momentum'];
+export const YUT_CHARACTER_STATS = Object.freeze({
+  // 홍길동: 균형·수비 — 침착하고 단단하다.
+  honggilldong: Object.freeze({ power: 3, calm: 4, guard: 4, luck: 2, momentum: 2 }),
+  // 미호: 기술·행운 — 운이 좋고 뒤따라잡기에 강하다.
+  miho: Object.freeze({ power: 3, calm: 2, guard: 2, luck: 5, momentum: 3 }),
+  // 놀부: 힘·욕심 — 던지기가 세지만 빽도에 약하다.
+  nolbu: Object.freeze({ power: 5, calm: 1, guard: 3, luck: 3, momentum: 3 }),
+});
+const NEUTRAL_STATS = Object.freeze({ power: 3, calm: 3, guard: 3, luck: 3, momentum: 3 });
+
+export const yutCharacterStats = (character) => YUT_CHARACTER_STATS[character] ?? NEUTRAL_STATS;
+
+// 레벨 1은 0, 레벨 5가 최대. (레벨-1) × 단계 값.
+const STAT_STEP = {
+  power: 0.3, // 윷·모 확률(걸→윷, 도→모) +0.3%p / 레벨
+  calm: 4, // 빽도가 나오면 다시 던질 확률 +4%p / 레벨
+  guard: 1.5, // 잡힘 방어 +1.5%p / 레벨
+  luckBackdo: 2, // 빽도 뒤 추가 던지기 +2%p / 레벨(무료 판에서도 의미 있음)
+  luckCoin: 1, // 윷·모 코인 보너스 +1% / 레벨(판돈 판)
+  momentum: 0.4, // 지고 있을 때 윷·모 확률 +0.4%p / 레벨
+};
+
+/** 캐릭터 능력치가 만드는 효과(합산 상한을 적용하기 전 값). */
+export function characterEffects(character) {
+  const s = yutCharacterStats(character);
+  return {
+    controlPct: (s.power - 1) * STAT_STEP.power,
+    calmPct: (s.calm - 1) * STAT_STEP.calm,
+    defensePct: (s.guard - 1) * STAT_STEP.guard,
+    backdoBonusPct: (s.luck - 1) * STAT_STEP.luckBackdo,
+    winCoinPct: (s.luck - 1) * STAT_STEP.luckCoin,
+    overturnPct: (s.momentum - 1) * STAT_STEP.momentum,
+  };
+}
 
 // 아이템 한 개 효과의 옛 상한(아이템 카탈로그 기준). 합산 상한 전에 먼저 자른다.
 const RAW_CAPS = {
@@ -49,6 +91,7 @@ const RAW_CAPS = {
   yut_mo_rate_pct: 8,
   yut_overturn_pct: 10,
   yut_backdo_bonus_pct: 25,
+  yut_backdo_shield_pct: 25,
   piece_catch_resist_pct: 15,
   piece_safe_zone_pct: 15,
   yut_win_coin_pct: 15,
@@ -61,26 +104,28 @@ const num = (value) => {
   return Number.isFinite(n) && n > 0 ? n : 0;
 };
 const rawStat = (stats, key) => Math.min(num(stats?.[key]), RAW_CAPS[key]);
+const round3 = (v) => Math.round(v * 1000) / 1000;
 
 /**
- * 장착 아이템 합계(getEquippedStats) → 이 판에 실제로 적용할 효과.
- * 던지기 계열 네 가지는 합이 THROW_ITEM_CAP_PCT를 넘으면 같은 비율로 줄인다.
+ * 장착 윷 스킨 합계(getEquippedStats) + 캐릭터 능력치 → 이 판에 실제로 적용할 효과.
+ * 던지기 계열(윷·모 확률·모 확률·역전)은 합이 THROW_ITEM_CAP_PCT를 넘으면 같은 비율로 줄이고,
+ * 방어·빽도 보너스·침착·코인은 각자 상한을 따로 둔다.
  */
-export function yutItemEffects(stats = {}) {
-  const control = rawStat(stats, 'yut_control_pct');
+export function yutItemEffects(stats = {}, character = null) {
+  const ch = character ? characterEffects(character) : {};
+  const control = rawStat(stats, 'yut_control_pct') + (ch.controlPct ?? 0);
   const moRate = rawStat(stats, 'yut_mo_rate_pct');
-  const overturn = rawStat(stats, 'yut_overturn_pct');
-  const backdoBonus = rawStat(stats, 'yut_backdo_bonus_pct');
-  const sum = control + moRate + overturn + backdoBonus;
+  const overturn = rawStat(stats, 'yut_overturn_pct') + (ch.overturnPct ?? 0);
+  const sum = control + moRate + overturn;
   const scale = sum > THROW_ITEM_CAP_PCT ? THROW_ITEM_CAP_PCT / sum : 1;
-  const round = (v) => Math.round(v * scale * 1000) / 1000;
   return {
-    controlPct: round(control),
-    moRatePct: round(moRate),
-    overturnPct: round(overturn),
-    backdoBonusPct: round(backdoBonus),
-    defensePct: Math.min(DEFENSE_CAP_PCT, rawStat(stats, 'piece_catch_resist_pct') + rawStat(stats, 'piece_safe_zone_pct')),
-    winCoinPct: rawStat(stats, 'yut_win_coin_pct'),
+    controlPct: round3(control * scale),
+    moRatePct: round3(moRate * scale),
+    overturnPct: round3(overturn * scale),
+    backdoBonusPct: round3(Math.min(BACKDO_BONUS_CAP_PCT, rawStat(stats, 'yut_backdo_bonus_pct') + (ch.backdoBonusPct ?? 0))),
+    calmPct: round3(Math.min(CALM_CAP_PCT, rawStat(stats, 'yut_backdo_shield_pct') + (ch.calmPct ?? 0))),
+    defensePct: round3(Math.min(DEFENSE_CAP_PCT, rawStat(stats, 'piece_catch_resist_pct') + rawStat(stats, 'piece_safe_zone_pct') + (ch.defensePct ?? 0))),
+    winCoinPct: round3(Math.min(15, rawStat(stats, 'yut_win_coin_pct') + (ch.winCoinPct ?? 0))),
     catchCoinPer: Math.floor(rawStat(stats, 'piece_catch_coin_bonus')),
     catchFlat: Math.floor(rawStat(stats, 'yut_catch_bonus')),
   };
@@ -384,7 +429,8 @@ export function getNextPlayer(gameState, player) {
   return gameState.playersOrder.find((candidate) => candidate !== player);
 }
 
-const effectsOf = (gameState, player) => gameState.effects?.[player] ?? yutItemEffects(gameState.playerStats?.[player] ?? {});
+const effectsOf = (gameState, player) =>
+  gameState.effects?.[player] ?? yutItemEffects(gameState.playerStats?.[player] ?? {}, gameState.characters?.[player] ?? null);
 const finishedCount = (gameState, player) => (gameState.players?.[player]?.pieces ?? []).filter((p) => p.finished).length;
 
 /** 판당 코인 보너스 상한(판돈의 30%). 무료 판은 0. */
@@ -418,14 +464,20 @@ export function applyThrow(gameState, userId, { random = Math.random, auto = fal
   const effects = effectsOf(gameState, userId);
   const opponent = getNextPlayer(gameState, userId);
   const isLosing = finishedCount(gameState, userId) < finishedCount(gameState, opponent);
-  const thrown = throwYut({
+  const throwOnce = () => throwYut({
     yutControlPct: effects.controlPct,
     yutMoRatePct: effects.moRatePct,
     yutOverturnPct: effects.overturnPct,
     isLosing,
     random,
   });
+  let thrown = throwOnce();
   const itemEffects = [];
+  // 침착: 빽도가 나오면 일정 확률로 다시 던진다(막대도 새로 던진 모양 그대로).
+  if (thrown.result === YUT_RESULTS.BACKDO && effects.calmPct > 0 && random() * 100 < effects.calmPct) {
+    thrown = throwOnce();
+    itemEffects.push({ player: userId, stat: 'yut_backdo_shield_pct', amount: 0 });
+  }
   if (thrown.bonusThrow && effects.winCoinPct > 0) {
     const added = accrueCoinBonus(gameState, userId, (num(gameState.stake) * effects.winCoinPct) / 100);
     if (added > 0) itemEffects.push({ player: userId, stat: 'yut_win_coin_pct', amount: added });
@@ -734,6 +786,8 @@ export function serializeYutState(gameState, { now = Date.now() } = {}) {
     legalMoves: current && !winner && players.includes(current) ? legalMoves(gameState, current) : [],
     characters: gameState.characters ?? {},
     bgm: gameState.bgm ?? null,
+    // 낮/밤 화면 테마(서버가 판마다 정한다). 옛 판은 낮.
+    theme: gameState.theme === 'night' ? 'night' : 'day',
     stake: gameState.stake ?? 0,
     coinBonus: gameState.coinBonus ?? {},
     coinBonusCap: coinBonusCap(gameState.stake),
@@ -741,6 +795,8 @@ export function serializeYutState(gameState, { now = Date.now() } = {}) {
     equippedItems: gameState.equippedItems ?? {},
     // 이 판에서 실제로 적용되는 아이템 효과(상한을 적용한 값). 화면의 "효과" 칩이 그대로 보여 준다.
     effects: Object.fromEntries(players.map((p) => [p, effectsOf(gameState, p)])),
+    // 캐릭터 능력치 1~5(두 사람 모두). 화면의 능력치 막대와 "효과"가 같은 값에서 나온다.
+    characterStats: Object.fromEntries(players.map((p) => [p, { ...yutCharacterStats(gameState.characters?.[p]) }])),
     winner,
     turnDeadline: gameState.turnDeadline ?? null,
     turnMs: gameState.turnMs ?? null,
