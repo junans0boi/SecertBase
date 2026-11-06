@@ -142,6 +142,10 @@ class _Tab extends StatelessWidget {
       onTap: onTap,
       child: InkWell(
         onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        hoverColor: p.primary.withValues(alpha: 0.05),
+        highlightColor: p.primary.withValues(alpha: 0.08),
+        splashColor: p.primary.withValues(alpha: 0.10),
         child: ExcludeSemantics(
           child: Stack(
             alignment: Alignment.topCenter,
