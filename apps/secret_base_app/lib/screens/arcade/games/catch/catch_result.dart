@@ -396,15 +396,14 @@ class _GalleryCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  Text(
-                    r.correct ? '✓' : '✗',
-                    style: t.body(
-                      size: 12.5,
-                      color: r.correct
-                          ? const Color(0xFFB9F6CA)
-                          : const Color(0xFFFFC9C0),
-                      weight: FontWeight.w900,
-                    ),
+                  Icon(
+                    r.correct
+                        ? Icons.check_circle_rounded
+                        : Icons.timer_off_rounded,
+                    size: 15,
+                    color: r.correct
+                        ? const Color(0xFFB9F6CA)
+                        : const Color(0xFFFFC9C0),
                   ),
                 ],
               ),

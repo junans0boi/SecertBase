@@ -703,7 +703,9 @@ class CatchRevealOverlay extends StatelessWidget {
     final guesser = r.guesser;
     final lines = <String>[
       if (good && guesser != null)
-        '${c.displayName(guesser)}${josa(c.displayName(guesser), '이', '가')} 맞혔어요!'
+        guesser == c.me
+            ? '내가 맞혔어요!'
+            : '${c.displayName(guesser)}${josa(c.displayName(guesser), '이', '가')} 맞혔어요!'
       else
         '아쉽게 시간이 끝났어요',
     ];
