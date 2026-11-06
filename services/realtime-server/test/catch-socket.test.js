@@ -140,17 +140,17 @@ test('catch: only the drawer can draw, rounds are checked, bad payloads and floo
   const log = collect(f);
   await startCatch(t, f);
   const ok = stroke(1, 'x1', 0, [[0.5, 0.5]]);
-  assert.equal((await f.call(1, 'game:catch:stroke', ok)).reason, 'not_drawer');
-  assert.equal((await f.call(1, 'game:catch:undo', { round: 1 })).reason, 'not_drawer');
-  assert.equal((await f.call(1, 'game:catch:clear', { round: 1 })).reason, 'not_drawer');
-  assert.equal((await f.call(0, 'game:catch:stroke', { ...ok, round: 9 })).reason, 'stale_round');
-  assert.equal((await f.call(0, 'game:catch:stroke', { ...ok, tool: 'laser' })).reason, 'invalid_payload');
-  assert.equal((await f.call(0, 'game:catch:stroke', { ...ok, color: 12 })).reason, 'invalid_payload');
-  assert.equal((await f.call(0, 'game:catch:stroke', { ...ok, w: 0.5 })).reason, 'invalid_payload');
-  assert.equal((await f.call(0, 'game:catch:stroke', { ...ok, pts: [] })).reason, 'invalid_payload');
-  assert.equal((await f.call(0, 'game:catch:stroke', { ...ok, pts: [['a', 1]] })).reason, 'invalid_payload');
-  assert.equal((await f.call(0, 'game:catch:stroke', { ...ok, id: 'bad id!' })).reason, 'invalid_payload');
-  assert.equal((await f.call(0, 'game:catch:stroke', stroke(1, 'late', 3, [[0.1, 0.1]]))).reason, 'unknown_stroke');
+  assert.equal((await f.call(1, 'game:catch:stroke', ok)).why, 'not_drawer');
+  assert.equal((await f.call(1, 'game:catch:undo', { round: 1 })).why, 'not_drawer');
+  assert.equal((await f.call(1, 'game:catch:clear', { round: 1 })).why, 'not_drawer');
+  assert.equal((await f.call(0, 'game:catch:stroke', { ...ok, round: 9 })).why, 'stale_round');
+  assert.equal((await f.call(0, 'game:catch:stroke', { ...ok, tool: 'laser' })).why, 'invalid_payload');
+  assert.equal((await f.call(0, 'game:catch:stroke', { ...ok, color: 12 })).why, 'invalid_payload');
+  assert.equal((await f.call(0, 'game:catch:stroke', { ...ok, w: 0.5 })).why, 'invalid_payload');
+  assert.equal((await f.call(0, 'game:catch:stroke', { ...ok, pts: [] })).why, 'invalid_payload');
+  assert.equal((await f.call(0, 'game:catch:stroke', { ...ok, pts: [['a', 1]] })).why, 'invalid_payload');
+  assert.equal((await f.call(0, 'game:catch:stroke', { ...ok, id: 'bad id!' })).why, 'invalid_payload');
+  assert.equal((await f.call(0, 'game:catch:stroke', stroke(1, 'late', 3, [[0.1, 0.1]]))).why, 'unknown_stroke');
   await flush();
   assert.equal(log.strokes[1].length, 0, 'nothing invalid is relayed');
 
@@ -163,7 +163,7 @@ test('catch: only the drawer can draw, rounds are checked, bad payloads and floo
   let limited = 0;
   for (let i = 0; i < CATCH_MAX_BATCHES_PER_SEC + 5; i++) {
     const r = await f.call(0, 'game:catch:stroke', stroke(1, `f${i}`, 0, [[0.1, 0.1]]));
-    if (r.reason === 'rate_limited') limited++;
+    if (r.why === 'rate_limited') limited++;
   }
   assert.ok(limited >= 4, `flood limited (${limited})`);
   f.tick(1_500);
@@ -178,7 +178,7 @@ test('catch: round stroke caps stop a runaway drawing', async (t) => {
   for (let n = 0; n < 220 && !refused; n++) {
     if (n % 10 === 0) f.tick(1_100);
     const r = await f.call(0, 'game:catch:stroke', stroke(1, `big${Math.floor(n / 40)}`, n % 40, pts));
-    if (!r.ok) refused = r.reason;
+    if (!r.ok) refused = r.why;
   }
   assert.equal(refused, 'stroke_limit');
 });
@@ -191,11 +191,11 @@ test('catch: undo removes a stroke on both screens and in the stored record; cle
   const undone = await f.call(0, 'game:catch:undo', { round: 1 });
   assert.deepEqual(undone, { ok: true, id: 'u3' }, 'no id = the last stroke');
   assert.equal((await f.call(0, 'game:catch:undo', { round: 1, id: 'u1' })).id, 'u1');
-  assert.equal((await f.call(0, 'game:catch:undo', { round: 1, id: 'nope' })).reason, 'no_stroke');
-  assert.equal((await f.call(0, 'game:catch:undo', { round: 2 })).reason, 'stale_round');
+  assert.equal((await f.call(0, 'game:catch:undo', { round: 1, id: 'nope' })).why, 'no_stroke');
+  assert.equal((await f.call(0, 'game:catch:undo', { round: 2 })).why, 'stale_round');
   await flush();
   assert.deepEqual(log.undos[1].map((u) => u.id), ['u3', 'u1']);
-  assert.equal((await f.call(0, 'game:catch:stroke', stroke(1, 'u3', 1, [[0.9, 0.9]]))).reason, 'unknown_stroke', 'a late batch of an undone stroke is dropped');
+  assert.equal((await f.call(0, 'game:catch:stroke', stroke(1, 'u3', 1, [[0.9, 0.9]]))).why, 'unknown_stroke', 'a late batch of an undone stroke is dropped');
   await f.call(1, 'game:catch:sync', {});
   await flush();
   assert.deepEqual(log.replays[1].at(-1).strokes.map((s) => s.id), ['u2']);
@@ -230,8 +230,8 @@ test('catch: the 60 s round ends on the server, reveals the word, then the next 
   assert.equal(reveal.phase, 'reveal');
   assert.equal(reveal.word, first.word, 'the guesser now sees the word');
   assert.equal(reveal.turnDeadline, null);
-  assert.equal((await f.call(1, 'game:catch:guess', { round: 1, text: first.word })).reason, 'round_over');
-  assert.equal((await f.call(0, 'game:catch:stroke', stroke(1, 'r2', 0, [[0.1, 0.1]]))).reason, 'round_over');
+  assert.equal((await f.call(1, 'game:catch:guess', { round: 1, text: first.word })).why, 'round_over');
+  assert.equal((await f.call(0, 'game:catch:stroke', stroke(1, 'r2', 0, [[0.1, 0.1]]))).why, 'round_over');
 
   await tickTo(f, reveal.revealUntil);
   const second = log.states[0].at(-1);
@@ -287,7 +287,7 @@ test('catch: a direct hint opens one letter, is limited to once and refused to t
   const guesser = s.drawer === A ? 1 : 0;
   const drawer = 1 - guesser;
   assert.equal((await f.call(drawer, 'game:catch:hint', { round: s.round })).reason, 'drawer_cannot_hint');
-  assert.equal((await f.call(guesser, 'game:catch:hint', { round: s.round + 1 })).reason, 'stale_round');
+  assert.equal((await f.call(guesser, 'game:catch:hint', { round: s.round + 1 })).why, 'stale_round');
   const hint = await f.call(guesser, 'game:catch:hint', { round: s.round });
   assert.deepEqual(hint, { ok: true, penalty: 1 });
   await flush();
@@ -303,11 +303,11 @@ test('catch: guesses are judged, close misses say close, correct answers score 3
   const s = log.states[0].at(-1);
   const answer = s.word;
   assert.equal((await f.call(0, 'game:catch:guess', { round: 1, text: '아무말' })).reason, 'drawer_cannot_guess');
-  assert.equal((await f.call(1, 'game:catch:guess', { round: 7, text: '아무말' })).reason, 'stale_round');
+  assert.equal((await f.call(1, 'game:catch:guess', { round: 7, text: '아무말' })).why, 'stale_round');
   assert.equal((await f.call(1, 'game:catch:guess', { text: '아무말' })).reason, 'invalid_payload');
   const wrong = await f.call(1, 'game:catch:guess', { round: 1, text: '뷁뷁뷁뷁' });
   assert.deepEqual(wrong, { ok: true, verdict: 'wrong' });
-  assert.equal((await f.call(1, 'game:catch:guess', { round: 1, text: '또' })).reason, 'too_fast', '0.7 s between guesses');
+  assert.equal((await f.call(1, 'game:catch:guess', { round: 1, text: '또' })).why, 'too_fast', '0.7 s between guesses');
   f.tick(700);
   if ([...answer].length >= 3) {
     const close = await f.call(1, 'game:catch:guess', { round: 1, text: `${answer}가` });
@@ -396,7 +396,7 @@ test('catch: a full game scores, records once, shows a gallery, then a consented
   assert.equal(f.results[0][1], 'catch');
   assert.equal(f.results.at(-1).at(-1), gameId, 'recorded with the lobby gameId');
   assert.equal((await f.call(1, 'game:catch:guess', { round: 4, text: '아무' })).reason, 'game_over');
-  assert.equal((await f.call(1, 'game:catch:stroke', stroke(4, 'z', 0, [[0, 0]]))).reason, 'round_over');
+  assert.equal((await f.call(1, 'game:catch:stroke', stroke(4, 'z', 0, [[0, 0]]))).why, 'round_over');
   const seriesWins = end.series.wins;
   assert.equal(seriesWins[A] + seriesWins[B] + end.series.draws, 1);
 

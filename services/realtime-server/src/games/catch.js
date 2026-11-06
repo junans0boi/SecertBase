@@ -525,25 +525,25 @@ const catchModule = {
     socket.on("game:catch:stroke", async (payload, ackRaw) => {
       const ack = kit.normalizeAck(ackRaw);
       const { roomCode, userId } = socket.data;
-      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+      if (!roomCode || !userId) return ack({ ok: false, why: "not_joined" });
       const art = arts.get(roomCode) ?? (await ensureArt(kit, roomCode));
-      if (!art) return ack({ ok: false, reason: "no_game" });
-      if (art.drawer !== userId) return ack({ ok: false, reason: "not_drawer" });
-      if (!art.open) return ack({ ok: false, reason: "round_over" });
-      if (payload?.round !== art.round) return ack({ ok: false, reason: "stale_round", round: art.round });
+      if (!art) return ack({ ok: false, why: "no_game" });
+      if (art.drawer !== userId) return ack({ ok: false, why: "not_drawer" });
+      if (!art.open) return ack({ ok: false, why: "round_over" });
+      if (payload?.round !== art.round) return ack({ ok: false, why: "stale_round", round: art.round });
       const batch = normalizeStrokeBatch(payload);
-      if (!batch) return ack({ ok: false, reason: "invalid_payload" });
+      if (!batch) return ack({ ok: false, why: "invalid_payload" });
       const bucket = withinRate(socket);
       bucket.batches += 1;
       bucket.points += batch.pts.length;
       if (bucket.batches > CATCH_MAX_BATCHES_PER_SEC || bucket.points > CATCH_MAX_POINTS_PER_SEC) {
-        return ack({ ok: false, reason: "rate_limited" });
+        return ack({ ok: false, why: "rate_limited" });
       }
       let stroke = art.strokes.findLast((s) => s.id === batch.id);
       if (!stroke) {
         // 시작 묶음이 아닌데 모르는 획이면 취소·지우기 뒤에 늦게 온 묶음이다.
-        if (batch.seq !== 0) return ack({ ok: false, reason: "unknown_stroke" });
-        if (art.strokes.length >= CATCH_MAX_STROKES) return ack({ ok: false, reason: "stroke_limit" });
+        if (batch.seq !== 0) return ack({ ok: false, why: "unknown_stroke" });
+        if (art.strokes.length >= CATCH_MAX_STROKES) return ack({ ok: false, why: "stroke_limit" });
         stroke = { id: batch.id, tool: batch.tool, color: batch.color, w: batch.w, pts: [] };
       } else if (batch.seq <= (art.seqs.get(batch.id) ?? -1)) {
         return ack({ ok: true, duplicate: true });
@@ -552,7 +552,7 @@ const catchModule = {
         stroke.pts.length + batch.pts.length > CATCH_MAX_STROKE_POINTS ||
         art.points + batch.pts.length > CATCH_MAX_ROUND_POINTS
       ) {
-        return ack({ ok: false, reason: "stroke_limit" });
+        return ack({ ok: false, why: "stroke_limit" });
       }
       if (stroke.pts.length === 0) art.strokes.push(stroke);
       stroke.pts.push(...batch.pts);
@@ -575,15 +575,15 @@ const catchModule = {
     socket.on("game:catch:undo", async (payload, ackRaw) => {
       const ack = kit.normalizeAck(ackRaw);
       const { roomCode, userId } = socket.data;
-      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+      if (!roomCode || !userId) return ack({ ok: false, why: "not_joined" });
       const art = arts.get(roomCode) ?? (await ensureArt(kit, roomCode));
-      if (!art) return ack({ ok: false, reason: "no_game" });
-      if (art.drawer !== userId) return ack({ ok: false, reason: "not_drawer" });
-      if (!art.open) return ack({ ok: false, reason: "round_over" });
-      if (payload?.round !== art.round) return ack({ ok: false, reason: "stale_round", round: art.round });
+      if (!art) return ack({ ok: false, why: "no_game" });
+      if (art.drawer !== userId) return ack({ ok: false, why: "not_drawer" });
+      if (!art.open) return ack({ ok: false, why: "round_over" });
+      if (payload?.round !== art.round) return ack({ ok: false, why: "stale_round", round: art.round });
       const id = typeof payload?.id === "string" ? payload.id : art.strokes.at(-1)?.id;
       const index = art.strokes.findLastIndex((s) => s.id === id);
-      if (index < 0) return ack({ ok: false, reason: "no_stroke" });
+      if (index < 0) return ack({ ok: false, why: "no_stroke" });
       const [removed] = art.strokes.splice(index, 1);
       art.points -= removed.pts.length;
       art.seqs.delete(id);
@@ -595,12 +595,12 @@ const catchModule = {
     socket.on("game:catch:clear", async (payload, ackRaw) => {
       const ack = kit.normalizeAck(ackRaw);
       const { roomCode, userId } = socket.data;
-      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
+      if (!roomCode || !userId) return ack({ ok: false, why: "not_joined" });
       const art = arts.get(roomCode) ?? (await ensureArt(kit, roomCode));
-      if (!art) return ack({ ok: false, reason: "no_game" });
-      if (art.drawer !== userId) return ack({ ok: false, reason: "not_drawer" });
-      if (!art.open) return ack({ ok: false, reason: "round_over" });
-      if (payload?.round !== art.round) return ack({ ok: false, reason: "stale_round", round: art.round });
+      if (!art) return ack({ ok: false, why: "no_game" });
+      if (art.drawer !== userId) return ack({ ok: false, why: "not_drawer" });
+      if (!art.open) return ack({ ok: false, why: "round_over" });
+      if (payload?.round !== art.round) return ack({ ok: false, why: "stale_round", round: art.round });
       art.strokes = [];
       art.points = 0;
       art.seqs = new Map();
@@ -620,12 +620,12 @@ const catchModule = {
         if (!state) return ack({ ok: false, reason: "no_game" });
         if (!state.players.includes(userId)) return ack({ ok: false, reason: "not_a_player" });
         if (state.status !== "playing") return ack({ ok: false, reason: "game_over" });
-        if (state.phase !== "drawing") return ack({ ok: false, reason: "round_over" });
-        if (payload.round !== state.round) return ack({ ok: false, reason: "stale_round", round: state.round });
+        if (state.phase !== "drawing") return ack({ ok: false, why: "round_over" });
+        if (payload.round !== state.round) return ack({ ok: false, why: "stale_round", round: state.round });
         if (userId === state.drawer) return ack({ ok: false, reason: "drawer_cannot_guess" });
         const key = `${roomCode}:${userId}`;
         const now = Date.now();
-        if (now - (guessAt.get(key) ?? -Infinity) < CATCH_GUESS_GAP_MS) return ack({ ok: false, reason: "too_fast" });
+        if (now - (guessAt.get(key) ?? -Infinity) < CATCH_GUESS_GAP_MS) return ack({ ok: false, why: "too_fast" });
         guessAt.set(key, now);
 
         const verdict = judgeGuess(text, { w: state.word, aliases: state.aliases });
@@ -655,9 +655,9 @@ const catchModule = {
         const state = await loadState(kit, roomCode);
         if (!state) return ack({ ok: false, reason: "no_game" });
         if (!state.players.includes(userId)) return ack({ ok: false, reason: "not_a_player" });
-        if (state.status !== "playing" || state.phase !== "drawing") return ack({ ok: false, reason: "round_over" });
+        if (state.status !== "playing" || state.phase !== "drawing") return ack({ ok: false, why: "round_over" });
         if (payload?.round !== undefined && payload.round !== state.round) {
-          return ack({ ok: false, reason: "stale_round", round: state.round });
+          return ack({ ok: false, why: "stale_round", round: state.round });
         }
         if (userId === state.drawer) return ack({ ok: false, reason: "drawer_cannot_hint" });
         if (state.directHint) return ack({ ok: false, reason: "hint_used" });

@@ -26,6 +26,8 @@
 
 ## 획 프로토콜 v2
 
+> 획·취소·지우기와 추측의 `round_over` `stale_round` `too_fast` 거부는 사유를 `reason`이 아니라 **`why`**에 담는다. 라운드 끝 무렵의 늦은 묶음처럼 정상 동작 중에도 생기는 거부라서, 공용 안내창(`reason`을 보여 줌)이 뜨지 않게 하려는 것이다.
+
 좌표는 **고정 4:3 보드를 0~1로 정규화**한 값(x는 보드 너비, y는 보드 높이 기준), 굵기 `w`는 **보드 너비 대비 비율**(0.002~0.12; 화면은 3단계 약 0.008 / 0.016 / 0.030). 색은 팔레트 번호 0~11(서버 검증), 지우개(`eraser`)는 색 없이 같은 굵기로 흰 종이를 칠하듯 지운다.
 
 ### `game:catch:stroke` (그리는 사람 → 서버 → 상대)
@@ -37,7 +39,7 @@
 - 한 획 = `id`(영문·숫자·-_ 24자 이하) 하나. 손가락이 닿는 동안 **33ms마다 묶음(`seq` 0,1,2…)**을 보내고, 손을 떼면 **즉시** 마지막 묶음을 `end: true`로 보낸다. 탭(점)은 점 하나짜리 획.
 - 첫 묶음(`seq` 0)이 `tool` `color` `w`를 정한다(뒤 묶음의 값은 무시). 묶음당 점 80개 이하.
 - 서버는 좌표를 0~1로 자르고 소수 4자리로 줄여 상대에게 그대로 전달한다(`end` 포함, 보낸 사람에겐 안 돌려줌). `end: true`마다 Redis(`game:<room>:catch:art`)에 저장.
-- ack(보내도 안 받아도 됨): `{ ok: true }` · `{ ok: true, duplicate: true }`(같은 `seq` 재전송) · `{ ok: false, reason }` — `not_drawer` · `round_over` · `stale_round`(+`round`) · `invalid_payload` · `unknown_stroke`(취소·지우기 뒤에 늦게 온 묶음) · `rate_limited` · `stroke_limit` · `no_game` · `not_joined`
+- ack(안 받아도 됨): `{ ok: true }` · `{ ok: true, duplicate: true }`(같은 `seq` 재전송) · `{ ok: false, why }` — `not_drawer` · `round_over` · `stale_round`(+`round`) · `invalid_payload` · `unknown_stroke`(취소·지우기 뒤에 늦게 온 묶음) · `rate_limited` · `stroke_limit` · `no_game` · `not_joined`
 - 제한: 소켓당 1초에 묶음 60개·점 1,500개, 라운드당 획 400·점 12,000, 획 하나 4,000점.
 
 ### `game:catch:undo` `{ round, id? }` → 상대에게 `game:catch:undo { round, id }`
