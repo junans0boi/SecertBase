@@ -16,6 +16,7 @@ import test from 'node:test';
 import jwt from 'jsonwebtoken';
 import { Server } from 'socket.io';
 import { io as createClient } from 'socket.io-client';
+import { buildDeck, createGostopGameState } from '../src/gostop-engine.js';
 import { installSocketAuthentication } from '../src/backend-access.js';
 import {
   registerGameSessionHandlers,
@@ -81,35 +82,10 @@ const MARBLE_STATE = JSON.stringify({
   lands: {},
 });
 
-const GOSTOP_STATE = JSON.stringify({
-  gameId: 'gostop-test-1',
-  phase: 'playing',
-  players: ['user1', 'user2'],
-  currentPlayerIdx: 0,
-  firstPlayerIdx: 0,
-  deck: [{ id: 'm9_junk_1', month: 9, type: 'junk', subtype: null }],
-  field: [{ id: 'm3_junk_1', month: 3, type: 'junk', subtype: null }],
-  hands: {
-    user1: [{ id: 'm2_ribbon', month: 2, type: 'ribbon', subtype: 'red' }],
-    user2: [{ id: 'm4_animal', month: 4, type: 'animal', subtype: null }],
-  },
-  captures: { user1: [], user2: [] },
-  goCount: { user1: 0, user2: 0 },
-  baseMultiplier: 1,
-  shakeMultiplier: 1,
-  bombMultiplier: 1,
-  shakers: [],
-  shakeQueue: [],
-  shakePlayerId: null,
-  lastEvents: [],
-  pending: null,
-  scores: { user1: { total: 0 }, user2: { total: 0 } },
-  winner: null,
-  loser: null,
-  settlement: null,
-  turn: 1,
-  perPointBet: 100,
+const GOSTOP_GAME = createGostopGameState('user1', 'user2', {
+  decks: [buildDeck({})], starter: 'user1', perPointBet: 100, gameId: 'gostop-test-1',
 });
+const GOSTOP_STATE = JSON.stringify(GOSTOP_GAME);
 
 function buildServer(redis) {
   const httpServer = createServer();
@@ -364,13 +340,10 @@ test('GoStop resume exposes only the joining user hand and keeps the game state'
     const result = await lobbyJoin(cB, 'gostop');
     assert.equal(result.status, 'resumed');
     assert.equal(result.gameType, 'gostop');
-    assert.deepEqual(result.state.hands.user1, [
-      { id: 'back' },
-    ]);
-    assert.deepEqual(result.state.hands.user2, [
-      { id: 'm4_animal', month: 4, type: 'animal', subtype: null },
-    ]);
-    assert.equal(result.state.shakeQueue, undefined);
+    assert.deepEqual(result.state.hand, GOSTOP_GAME.hands.user2);
+    assert.deepEqual(result.state.handCount, { user1: 10, user2: 10 });
+    assert.equal(result.state.hands, undefined, 'the opponent hand never leaves the server');
+    assert.equal(result.state.deck, undefined);
     assert.ok(await redis.get(`gostop:${roomCode}:game`));
   } finally {
     cA.disconnect(); cB.disconnect();
