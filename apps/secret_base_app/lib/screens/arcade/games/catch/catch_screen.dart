@@ -15,7 +15,7 @@ import 'catch_widgets.dart';
 
 const _kGameType = 'catch';
 
-const _kHowToLines = [
+const kCatchHowToLines = [
   '한 사람이 제시어를 그림으로 그리고, 다른 사람이 글자로 맞혀요. 라운드마다 번갈아 그려요.',
   '한 라운드는 60초! 맞히면 맞힌 사람 3점(남은 시간 20초마다 +1점), 그린 사람 2점이에요.',
   '30초와 15초가 남으면 글자가 하나씩 저절로 열려요. 💡를 누르면 바로 한 글자를 볼 수 있지만 1점이 깎여요.',
@@ -88,7 +88,7 @@ class _CatchScreenState extends State<CatchScreen> {
         theme: theme,
         title: '그림 맞히기 규칙',
         emoji: '🎨',
-        lines: _kHowToLines,
+        lines: kCatchHowToLines,
       );
     });
   }
@@ -249,7 +249,7 @@ class _CatchScreenState extends State<CatchScreen> {
     theme: theme,
     title: '그림 맞히기 규칙',
     emoji: '🎨',
-    lines: _kHowToLines,
+    lines: kCatchHowToLines,
   );
 
   // ── 그리기 ───────────────────────────────────────────────────────────────
