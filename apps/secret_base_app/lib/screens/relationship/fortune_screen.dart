@@ -305,30 +305,49 @@ class _RelationshipFortuneScreenState extends State<RelationshipFortuneScreen> {
           Row(
             children: [
               Expanded(
-                child: Text(content.title, style: V2Text.serif(size: 24, color: p.ink)),
+                child: Text(
+                  content.title,
+                  style: V2Text.serif(size: 24, color: p.ink),
+                ),
               ),
               if (content.status == 'fallback')
                 const V2Chip(label: '기본 안내', tone: V2Tone.neutral),
             ],
           ),
           const SizedBox(height: 12),
-          Text('오늘의 한 줄', style: V2Text.label.copyWith(color: p.primary, fontSize: 13)),
+          Text(
+            '오늘의 한 줄',
+            style: V2Text.label.copyWith(color: p.primary, fontSize: 13),
+          ),
           const SizedBox(height: 4),
           Text(content.summary, style: V2Text.body.copyWith(color: p.ink)),
           if (content.signals.isNotEmpty) ...[
             const SizedBox(height: 16),
-            _insightRow(V2Icons.visibility, '조심할 흐름', content.signals.join(' '), V2Tone.peach),
+            _insightRow(
+              V2Icons.visibility,
+              '조심할 흐름',
+              content.signals.join(' '),
+              V2Tone.peach,
+            ),
           ],
           const SizedBox(height: 12),
           KeyedSubtree(
             key: Key(_actionKey(content)),
-            child: _insightRow(V2Icons.check, '힘이 되는 행동', content.suggestion, V2Tone.sage),
+            child: _insightRow(
+              V2Icons.check,
+              '힘이 되는 행동',
+              content.suggestion,
+              V2Tone.sage,
+            ),
           ),
           if (content.generatedText.isNotEmpty) ...[
             const SizedBox(height: 14),
             Text('오늘의 한 문장', style: V2Text.cap),
             const SizedBox(height: 2),
-            Text(content.generatedText, style: V2Text.body.copyWith(color: p.sub)),
+            Text(
+              content.generatedText,
+              style: V2Text.body.copyWith(color: p.sub),
+            ),
           ],
           if (content.disclaimer.isNotEmpty) ...[
             const SizedBox(height: 12),
@@ -438,7 +457,9 @@ class _RelationshipFortuneScreenState extends State<RelationshipFortuneScreen> {
   }
 
   void _share(FortuneContent c, bool isCouple) {
-    final line = c.summary.length > 100 ? '${c.summary.substring(0, 100)}…' : c.summary;
+    final line = c.summary.length > 100
+        ? '${c.summary.substring(0, 100)}…'
+        : c.summary;
     showShareCardSheet(
       context,
       fileName: 'secretbase-fortune.png',

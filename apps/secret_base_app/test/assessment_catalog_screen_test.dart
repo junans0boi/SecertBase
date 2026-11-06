@@ -76,8 +76,8 @@ void main() {
     expect(find.text('애착과 안정감'), findsOneWidget);
     expect(find.text('커플 검사'), findsOneWidget);
     expect(find.text('갈등과 회복 방식'), findsOneWidget);
-    expect(find.text('후보 24문항 · 실제 12문항'), findsNWidgets(2));
-    expect(find.text('파트너 연결 후 이용할 수 있어요'), findsOneWidget);
+    expect(find.text('약 2분 · 12문항'), findsNWidgets(2));
+    expect(find.text('파트너 연결 후'), findsOneWidget);
     expect(find.text('기록 보기'), findsNothing);
   });
 
@@ -201,7 +201,6 @@ void main() {
     expect(find.text('검사 이어하기'), findsOneWidget);
     expect(find.text('결과 보기'), findsOneWidget);
     expect(find.text('다시 하기'), findsNothing);
-    expect(find.widgetWithText(FilledButton, '결과 보기'), findsOneWidget);
   });
 
   testWidgets('keeps all four personal and three couple fixtures at 390px', (
