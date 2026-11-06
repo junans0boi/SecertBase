@@ -371,6 +371,7 @@ test('telepathy 19+: the guest must accept before the host can start, then the g
   const s = states[1].at(-1);
   assert.equal(s.heat, 'nuclear');
   assert.equal(s.question.heat, 'nuclear', 'a 19+ game is all hard questions');
+  assert.equal('tone' in s.question, false, 'the tone is data for grouping, never sent to the players');
   assert.ok(f.redis.values.get(`telepathy:${f.roomCode}:bag:nuclear`), 'the 19+ pool has its own bag');
   assert.equal(f.redis.values.get(`telepathy:${f.roomCode}:bag`), undefined, 'the mild bag is untouched');
 });

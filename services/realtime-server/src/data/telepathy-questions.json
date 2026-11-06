@@ -4293,6 +4293,7 @@
     "id": "nuc-001",
     "cat": "nuclear",
     "heat": "nuclear",
+    "tone": "both",
     "a": "위에서 리드하기",
     "emojiA": "👑",
     "b": "아래에서 즐기기",
@@ -4303,6 +4304,7 @@
     "id": "nuc-002",
     "cat": "nuclear",
     "heat": "nuclear",
+    "tone": "both",
     "a": "내가 주도하는 섹스",
     "emojiA": "🔥",
     "b": "네가 주도하는 섹스",
@@ -4333,6 +4335,7 @@
     "id": "nuc-005",
     "cat": "nuclear",
     "heat": "nuclear",
+    "tone": "both",
     "a": "야한 말 하기",
     "emojiA": "😏",
     "b": "야한 말 듣기",
@@ -4373,6 +4376,7 @@
     "id": "nuc-009",
     "cat": "nuclear",
     "heat": "nuclear",
+    "tone": "both",
     "a": "절정 참게 하기",
     "emojiA": "⏱️",
     "b": "절정 참아 보기",
@@ -4443,16 +4447,6 @@
     "id": "nuc-016",
     "cat": "nuclear",
     "heat": "nuclear",
-    "a": "다정한 섹스",
-    "emojiA": "🥰",
-    "b": "거친 섹스",
-    "emojiB": "🔥",
-    "spicy": true
-  },
-  {
-    "id": "nuc-017",
-    "cat": "nuclear",
-    "heat": "nuclear",
     "a": "느릿느릿 천천히",
     "emojiA": "🐢",
     "b": "급하게 몰아치기",
@@ -4460,7 +4454,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-018",
+    "id": "nuc-017",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "퇴근 후 급한 섹스",
@@ -4470,7 +4464,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-019",
+    "id": "nuc-018",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "절정에 이름 부르기",
@@ -4480,7 +4474,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-020",
+    "id": "nuc-019",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "먼저 절정 보내 주기",
@@ -4490,7 +4484,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-021",
+    "id": "nuc-020",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "한 번 더 졸라 보기",
@@ -4500,7 +4494,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-022",
+    "id": "nuc-021",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "야한 문자 먼저 보내기",
@@ -4510,17 +4504,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-023",
-    "cat": "nuclear",
-    "heat": "nuclear",
-    "a": "섹스 전 같이 샤워",
-    "emojiA": "🚿",
-    "b": "섹스 전 각자 샤워",
-    "emojiB": "🧼",
-    "spicy": true
-  },
-  {
-    "id": "nuc-024",
+    "id": "nuc-022",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "온몸 구석구석 칭찬",
@@ -4530,7 +4514,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-025",
+    "id": "nuc-023",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "입술로 시작하기",
@@ -4540,57 +4524,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-026",
-    "cat": "nuclear",
-    "heat": "nuclear",
-    "a": "낮에 몰래 한 번",
-    "emojiA": "☀️",
-    "b": "밤에 푹 빠져서",
-    "emojiB": "🌃",
-    "spicy": true
-  },
-  {
-    "id": "nuc-027",
-    "cat": "nuclear",
-    "heat": "nuclear",
-    "a": "분위기 음악 틀고",
-    "emojiA": "🎷",
-    "b": "아무 소리 없이",
-    "emojiB": "🤫",
-    "spicy": true
-  },
-  {
-    "id": "nuc-028",
-    "cat": "nuclear",
-    "heat": "nuclear",
-    "a": "벽에 기대서",
-    "emojiA": "🧱",
-    "b": "소파 위에서",
-    "emojiB": "🛋️",
-    "spicy": true
-  },
-  {
-    "id": "nuc-029",
-    "cat": "nuclear",
-    "heat": "nuclear",
-    "a": "샤워하면서",
-    "emojiA": "🚿",
-    "b": "욕조 안에서",
-    "emojiB": "🛁",
-    "spicy": true
-  },
-  {
-    "id": "nuc-030",
-    "cat": "nuclear",
-    "heat": "nuclear",
-    "a": "거울 앞에서",
-    "emojiA": "🪞",
-    "b": "창가에서",
-    "emojiB": "🪟",
-    "spicy": true
-  },
-  {
-    "id": "nuc-031",
+    "id": "nuc-024",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "야한 영화 따라 하기",
@@ -4600,7 +4534,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-032",
+    "id": "nuc-025",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "섹스 취향 솔직 고백",
@@ -4610,7 +4544,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-033",
+    "id": "nuc-026",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "최고였던 밤 회상",
@@ -4620,29 +4554,10 @@
     "spicy": true
   },
   {
-    "id": "nuc-034",
+    "id": "nuc-027",
     "cat": "nuclear",
     "heat": "nuclear",
-    "a": "같은 취향 평생",
-    "emojiA": "♾️",
-    "b": "매번 새로운 시도",
-    "emojiB": "🎲",
-    "spicy": true
-  },
-  {
-    "id": "nuc-035",
-    "cat": "nuclear",
-    "heat": "nuclear",
-    "a": "새로 만난 듯한 밤",
-    "emojiA": "✨",
-    "b": "익숙해서 편한 밤",
-    "emojiB": "🛋️",
-    "spicy": true
-  },
-  {
-    "id": "nuc-036",
-    "cat": "nuclear",
-    "heat": "nuclear",
+    "tone": "both",
     "a": "먼저 벗기기",
     "emojiA": "😏",
     "b": "먼저 벗겨지기",
@@ -4650,7 +4565,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-037",
+    "id": "nuc-028",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "느리게 옷 벗기",
@@ -4660,7 +4575,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-038",
+    "id": "nuc-029",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "속삭이며 하기",
@@ -4670,7 +4585,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-039",
+    "id": "nuc-030",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "속옷 입은 채로",
@@ -4680,7 +4595,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-040",
+    "id": "nuc-031",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "사랑해 말하며",
@@ -4690,7 +4605,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-041",
+    "id": "nuc-032",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "끝나고 한 번 더",
@@ -4700,7 +4615,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-042",
+    "id": "nuc-033",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "섹스 횟수 늘리기",
@@ -4710,27 +4625,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-043",
-    "cat": "nuclear",
-    "heat": "nuclear",
-    "a": "미리 약속한 밤",
-    "emojiA": "📅",
-    "b": "갑자기 시작된 밤",
-    "emojiB": "⚡",
-    "spicy": true
-  },
-  {
-    "id": "nuc-044",
-    "cat": "nuclear",
-    "heat": "nuclear",
-    "a": "내 취향대로 하는 밤",
-    "emojiA": "🙋",
-    "b": "네 취향대로 하는 밤",
-    "emojiB": "👉",
-    "spicy": true
-  },
-  {
-    "id": "nuc-045",
+    "id": "nuc-034",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "한 시간 애무만",
@@ -4740,7 +4635,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-046",
+    "id": "nuc-035",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "귓가에 신음 듣기",
@@ -4750,7 +4645,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-047",
+    "id": "nuc-036",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "절정 직전 멈추기",
@@ -4760,27 +4655,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-048",
-    "cat": "nuclear",
-    "heat": "nuclear",
-    "a": "이불 속 불타는 밤",
-    "emojiA": "🔥",
-    "b": "이불 밖 불타는 밤",
-    "emojiB": "🏠",
-    "spicy": true
-  },
-  {
-    "id": "nuc-049",
-    "cat": "nuclear",
-    "heat": "nuclear",
-    "a": "몸으로 대화하기",
-    "emojiA": "💃",
-    "b": "말로 대화하기",
-    "emojiB": "🗣️",
-    "spicy": true
-  },
-  {
-    "id": "nuc-050",
+    "id": "nuc-037",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "간호사 역할극",
@@ -4790,7 +4665,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-051",
+    "id": "nuc-038",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "비서 역할극",
@@ -4800,7 +4675,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-052",
+    "id": "nuc-039",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "의사 역할극",
@@ -4810,7 +4685,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-053",
+    "id": "nuc-040",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "바에서 처음 만난 척",
@@ -4820,7 +4695,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-054",
+    "id": "nuc-041",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "승무원 역할극",
@@ -4830,7 +4705,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-055",
+    "id": "nuc-042",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "몰래 만나는 사이 연기",
@@ -4840,7 +4715,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-056",
+    "id": "nuc-043",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "여왕과 기사 역할극",
@@ -4850,7 +4725,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-057",
+    "id": "nuc-044",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "야한 코스튬 입기",
@@ -4860,7 +4735,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-058",
+    "id": "nuc-045",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "토끼 꼬리 달기",
@@ -4870,7 +4745,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-059",
+    "id": "nuc-046",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "가죽 의상",
@@ -4880,7 +4755,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-060",
+    "id": "nuc-047",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "가면 쓰고 하기",
@@ -4890,7 +4765,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-061",
+    "id": "nuc-048",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "모르는 사람인 척",
@@ -4900,9 +4775,10 @@
     "spicy": true
   },
   {
-    "id": "nuc-062",
+    "id": "nuc-049",
     "cat": "nuclear",
     "heat": "nuclear",
+    "tone": "both",
     "a": "안대 쓰기",
     "emojiA": "🙈",
     "b": "안대 씌우기",
@@ -4910,9 +4786,10 @@
     "spicy": true
   },
   {
-    "id": "nuc-063",
+    "id": "nuc-050",
     "cat": "nuclear",
     "heat": "nuclear",
+    "tone": "both",
     "a": "수갑 차기",
     "emojiA": "⛓️",
     "b": "수갑 채우기",
@@ -4920,9 +4797,10 @@
     "spicy": true
   },
   {
-    "id": "nuc-064",
+    "id": "nuc-051",
     "cat": "nuclear",
     "heat": "nuclear",
+    "tone": "both",
     "a": "스카프로 묶기",
     "emojiA": "🧣",
     "b": "스카프로 묶이기",
@@ -4930,9 +4808,10 @@
     "spicy": true
   },
   {
-    "id": "nuc-065",
+    "id": "nuc-052",
     "cat": "nuclear",
     "heat": "nuclear",
+    "tone": "both",
     "a": "묶는 쪽",
     "emojiA": "🪢",
     "b": "묶이는 쪽",
@@ -4940,7 +4819,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-066",
+    "id": "nuc-053",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "손만 묶기",
@@ -4950,7 +4829,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-067",
+    "id": "nuc-054",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "살짝 찰싹 하기",
@@ -4960,7 +4839,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-068",
+    "id": "nuc-055",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "찰싹 소리에 웃기",
@@ -4970,9 +4849,10 @@
     "spicy": true
   },
   {
-    "id": "nuc-069",
+    "id": "nuc-056",
     "cat": "nuclear",
     "heat": "nuclear",
+    "tone": "both",
     "a": "목줄 잡기",
     "emojiA": "🦮",
     "b": "목줄 차기",
@@ -4980,7 +4860,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-070",
+    "id": "nuc-057",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "목걸이 채워 주기",
@@ -4990,9 +4870,10 @@
     "spicy": true
   },
   {
-    "id": "nuc-071",
+    "id": "nuc-058",
     "cat": "nuclear",
     "heat": "nuclear",
+    "tone": "both",
     "a": "주인님 되기",
     "emojiA": "👑",
     "b": "말 잘 듣는 애완동물",
@@ -5000,9 +4881,10 @@
     "spicy": true
   },
   {
-    "id": "nuc-072",
+    "id": "nuc-059",
     "cat": "nuclear",
     "heat": "nuclear",
+    "tone": "both",
     "a": "명령하기",
     "emojiA": "📢",
     "b": "명령받기",
@@ -5010,9 +4892,10 @@
     "spicy": true
   },
   {
-    "id": "nuc-073",
+    "id": "nuc-060",
     "cat": "nuclear",
     "heat": "nuclear",
+    "tone": "both",
     "a": "지배하기",
     "emojiA": "😈",
     "b": "복종하기",
@@ -5020,9 +4903,10 @@
     "spicy": true
   },
   {
-    "id": "nuc-074",
+    "id": "nuc-061",
     "cat": "nuclear",
     "heat": "nuclear",
+    "tone": "both",
     "a": "벌 주기",
     "emojiA": "😏",
     "b": "벌 받기",
@@ -5030,9 +4914,10 @@
     "spicy": true
   },
   {
-    "id": "nuc-075",
+    "id": "nuc-062",
     "cat": "nuclear",
     "heat": "nuclear",
+    "tone": "both",
     "a": "칭찬으로 길들이기",
     "emojiA": "🌟",
     "b": "벌로 길들이기",
@@ -5040,7 +4925,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-076",
+    "id": "nuc-063",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "촛농 떨어뜨리기",
@@ -5050,7 +4935,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-077",
+    "id": "nuc-064",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "얼음 문지르기",
@@ -5060,7 +4945,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-078",
+    "id": "nuc-065",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "깃털로 간지럽히기",
@@ -5070,7 +4955,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-079",
+    "id": "nuc-066",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "눈 가리고 맛 맞히기",
@@ -5080,7 +4965,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-080",
+    "id": "nuc-067",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "세이프워드는 과일 이름",
@@ -5090,7 +4975,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-081",
+    "id": "nuc-068",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "장난감 쓰기",
@@ -5100,7 +4985,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-082",
+    "id": "nuc-069",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "장난감 내가 고르기",
@@ -5110,7 +4995,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-083",
+    "id": "nuc-070",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "장난감 같이 쇼핑",
@@ -5120,7 +5005,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-084",
+    "id": "nuc-071",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "작은 가죽 패들",
@@ -5130,9 +5015,10 @@
     "spicy": true
   },
   {
-    "id": "nuc-085",
+    "id": "nuc-072",
     "cat": "nuclear",
     "heat": "nuclear",
+    "tone": "both",
     "a": "손목 잡혀 눌리기",
     "emojiA": "🫳",
     "b": "손목 잡고 누르기",
@@ -5140,7 +5026,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-086",
+    "id": "nuc-073",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "머리카락 살짝 잡기",
@@ -5150,9 +5036,10 @@
     "spicy": true
   },
   {
-    "id": "nuc-087",
+    "id": "nuc-074",
     "cat": "nuclear",
     "heat": "nuclear",
+    "tone": "both",
     "a": "시키는 대로 하는 하루",
     "emojiA": "🫡",
     "b": "시키는 대로 시키는 하루",
@@ -5160,7 +5047,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-088",
+    "id": "nuc-075",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "하루 종일 주인님 놀이",
@@ -5170,9 +5057,10 @@
     "spicy": true
   },
   {
-    "id": "nuc-089",
+    "id": "nuc-076",
     "cat": "nuclear",
     "heat": "nuclear",
+    "tone": "both",
     "a": "존댓말로 야한 말",
     "emojiA": "🎓",
     "b": "반말로 야한 말",
@@ -5180,9 +5068,10 @@
     "spicy": true
   },
   {
-    "id": "nuc-090",
+    "id": "nuc-077",
     "cat": "nuclear",
     "heat": "nuclear",
+    "tone": "both",
     "a": "침대에 묶여 있기",
     "emojiA": "🛏️",
     "b": "침대에 묶어 두기",
@@ -5190,9 +5079,10 @@
     "spicy": true
   },
   {
-    "id": "nuc-091",
+    "id": "nuc-078",
     "cat": "nuclear",
     "heat": "nuclear",
+    "tone": "both",
     "a": "오감 차단 놀이",
     "emojiA": "🔇",
     "b": "오감 폭발 놀이",
@@ -5200,9 +5090,10 @@
     "spicy": true
   },
   {
-    "id": "nuc-092",
+    "id": "nuc-079",
     "cat": "nuclear",
     "heat": "nuclear",
+    "tone": "both",
     "a": "허락받고 절정",
     "emojiA": "🙏",
     "b": "참으라고 명령하기",
@@ -5210,9 +5101,10 @@
     "spicy": true
   },
   {
-    "id": "nuc-093",
+    "id": "nuc-080",
     "cat": "nuclear",
     "heat": "nuclear",
+    "tone": "both",
     "a": "눈 마주치며 복종",
     "emojiA": "👁️",
     "b": "눈 마주치며 지배",
@@ -5220,7 +5112,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-094",
+    "id": "nuc-081",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "멈춤 신호 약속하기",
@@ -5230,7 +5122,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-095",
+    "id": "nuc-082",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "애프터케어 꼭 안기",
@@ -5240,7 +5132,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-096",
+    "id": "nuc-083",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "놀이 전 규칙 정하기",
@@ -5250,7 +5142,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-097",
+    "id": "nuc-084",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "놀이 후 담요 덮어 주기",
@@ -5260,27 +5152,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-098",
-    "cat": "nuclear",
-    "heat": "nuclear",
-    "a": "가죽 장갑 낀 손길",
-    "emojiA": "🧤",
-    "b": "실크 장갑 낀 손길",
-    "emojiB": "🎀",
-    "spicy": true
-  },
-  {
-    "id": "nuc-099",
-    "cat": "nuclear",
-    "heat": "nuclear",
-    "a": "벨트로 손 묶기",
-    "emojiA": "👖",
-    "b": "넥타이로 손 묶기",
-    "emojiB": "👔",
-    "spicy": true
-  },
-  {
-    "id": "nuc-100",
+    "id": "nuc-085",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "수갑 열쇠 숨기기",
@@ -5290,7 +5162,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-101",
+    "id": "nuc-086",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "말 안 들으면 간지럼",
@@ -5300,7 +5172,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-102",
+    "id": "nuc-087",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "애완동물 소리 내기",
@@ -5310,7 +5182,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-103",
+    "id": "nuc-088",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "야한 규칙표 만들기",
@@ -5320,7 +5192,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-104",
+    "id": "nuc-089",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "명령 쿠폰 쓰기",
@@ -5330,7 +5202,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-105",
+    "id": "nuc-090",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "렌터카 안 스릴",
@@ -5340,7 +5212,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-106",
+    "id": "nuc-091",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "호텔 복도 앞 스릴",
@@ -5350,7 +5222,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-107",
+    "id": "nuc-092",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "둘만 아는 영상 남기기",
@@ -5360,7 +5232,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-108",
+    "id": "nuc-093",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "거울로 보며 하기",
@@ -5370,7 +5242,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-109",
+    "id": "nuc-094",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "풀빌라 밤수영",
@@ -5380,7 +5252,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-110",
+    "id": "nuc-095",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "파티 끝난 뒤 둘이",
@@ -5390,7 +5262,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-111",
+    "id": "nuc-096",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "들킬 듯 아슬아슬",
@@ -5400,7 +5272,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-112",
+    "id": "nuc-097",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "발코니 밤바람 속",
@@ -5410,57 +5282,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-113",
-    "cat": "nuclear",
-    "heat": "nuclear",
-    "a": "발끝 입맞춤",
-    "emojiA": "🦶",
-    "b": "손끝 입맞춤",
-    "emojiB": "🤚",
-    "spicy": true
-  },
-  {
-    "id": "nuc-114",
-    "cat": "nuclear",
-    "heat": "nuclear",
-    "a": "스타킹 신은 다리",
-    "emojiA": "🧦",
-    "b": "맨다리 그대로",
-    "emojiB": "🦵",
-    "spicy": true
-  },
-  {
-    "id": "nuc-115",
-    "cat": "nuclear",
-    "heat": "nuclear",
-    "a": "유니폼 입은 모습",
-    "emojiA": "🎖️",
-    "b": "슈트 입은 모습",
-    "emojiB": "🤵",
-    "spicy": true
-  },
-  {
-    "id": "nuc-116",
-    "cat": "nuclear",
-    "heat": "nuclear",
-    "a": "하이힐 신은 모습",
-    "emojiA": "👠",
-    "b": "맨발로 걷는 모습",
-    "emojiB": "👣",
-    "spicy": true
-  },
-  {
-    "id": "nuc-117",
-    "cat": "nuclear",
-    "heat": "nuclear",
-    "a": "안경 낀 모습",
-    "emojiA": "🤓",
-    "b": "안경 벗은 모습",
-    "emojiB": "😎",
-    "spicy": true
-  },
-  {
-    "id": "nuc-118",
+    "id": "nuc-098",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "낮은 목소리 속삭임",
@@ -5470,97 +5292,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-119",
-    "cat": "nuclear",
-    "heat": "nuclear",
-    "a": "땀 맺힌 모습",
-    "emojiA": "💦",
-    "b": "샤워 직후 모습",
-    "emojiB": "🚿",
-    "spicy": true
-  },
-  {
-    "id": "nuc-120",
-    "cat": "nuclear",
-    "heat": "nuclear",
-    "a": "문신 있는 몸",
-    "emojiA": "🖋️",
-    "b": "매끈한 몸",
-    "emojiB": "✨",
-    "spicy": true
-  },
-  {
-    "id": "nuc-121",
-    "cat": "nuclear",
-    "heat": "nuclear",
-    "a": "탄탄한 몸",
-    "emojiA": "💪",
-    "b": "포근한 몸",
-    "emojiB": "🧸",
-    "spicy": true
-  },
-  {
-    "id": "nuc-122",
-    "cat": "nuclear",
-    "heat": "nuclear",
-    "a": "검정 속옷",
-    "emojiA": "🖤",
-    "b": "빨강 속옷",
-    "emojiB": "❤️",
-    "spicy": true
-  },
-  {
-    "id": "nuc-123",
-    "cat": "nuclear",
-    "heat": "nuclear",
-    "a": "실크 속옷",
-    "emojiA": "🎀",
-    "b": "레이스 속옷 세트",
-    "emojiB": "🤍",
-    "spicy": true
-  },
-  {
-    "id": "nuc-124",
-    "cat": "nuclear",
-    "heat": "nuclear",
-    "a": "가터벨트 차림",
-    "emojiA": "🎗️",
-    "b": "망사 스타킹 차림",
-    "emojiB": "🕸️",
-    "spicy": true
-  },
-  {
-    "id": "nuc-125",
-    "cat": "nuclear",
-    "heat": "nuclear",
-    "a": "손목 시계만 찬 차림",
-    "emojiA": "⌚",
-    "b": "목걸이만 한 차림",
-    "emojiB": "📿",
-    "spicy": true
-  },
-  {
-    "id": "nuc-126",
-    "cat": "nuclear",
-    "heat": "nuclear",
-    "a": "와이셔츠만 입은 모습",
-    "emojiA": "👔",
-    "b": "큰 후드티만 입은 모습",
-    "emojiB": "🧥",
-    "spicy": true
-  },
-  {
-    "id": "nuc-127",
-    "cat": "nuclear",
-    "heat": "nuclear",
-    "a": "향수 뿌린 목덜미",
-    "emojiA": "🌸",
-    "b": "샴푸 향 나는 머리",
-    "emojiB": "🧴",
-    "spicy": true
-  },
-  {
-    "id": "nuc-128",
+    "id": "nuc-099",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "등 살짝 긁기",
@@ -5570,7 +5302,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-129",
+    "id": "nuc-100",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "입에 얼음 물고 키스",
@@ -5580,7 +5312,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-130",
+    "id": "nuc-101",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "섹스 플레이리스트",
@@ -5590,7 +5322,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-131",
+    "id": "nuc-102",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "말로만 애태우기",
@@ -5600,7 +5332,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-132",
+    "id": "nuc-103",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "애태우다 한 번에 터뜨리기",
@@ -5610,7 +5342,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-133",
+    "id": "nuc-104",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "스위치 역할 바꾸기",
@@ -5620,7 +5352,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-134",
+    "id": "nuc-105",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "장난감 소리 들려주기",
@@ -5630,7 +5362,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-135",
+    "id": "nuc-106",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "섹스 소원 목록 쓰기",
@@ -5640,7 +5372,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-136",
+    "id": "nuc-107",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "주인님이라 부르며",
@@ -5650,7 +5382,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-137",
+    "id": "nuc-108",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "섹스 중 대화하기",
@@ -5660,7 +5392,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-138",
+    "id": "nuc-109",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "야한 말 미리 예고",
@@ -5670,7 +5402,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-139",
+    "id": "nuc-110",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "절정에 소리 지르기",
@@ -5680,7 +5412,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-140",
+    "id": "nuc-111",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "섹스 계획 세우기",
@@ -5690,7 +5422,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-141",
+    "id": "nuc-112",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "신음 참기 내기",
@@ -5700,7 +5432,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-142",
+    "id": "nuc-113",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "섹스 후 칭찬 듣기",
@@ -5710,7 +5442,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-143",
+    "id": "nuc-114",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "절정 여러 번 맞기",
@@ -5720,7 +5452,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-144",
+    "id": "nuc-115",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "절정 직후 안기기",
@@ -5730,7 +5462,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-145",
+    "id": "nuc-116",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "섹스하자 먼저 말하기",
@@ -5740,7 +5472,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-146",
+    "id": "nuc-117",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "섹스 전 야한 춤 추기",
@@ -5750,7 +5482,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-147",
+    "id": "nuc-118",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "야한 말 큰 소리로",
@@ -5760,7 +5492,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-148",
+    "id": "nuc-119",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "애무 오래오래",
@@ -5770,7 +5502,7 @@
     "spicy": true
   },
   {
-    "id": "nuc-149",
+    "id": "nuc-120",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "섹스 중 옷 반쯤 입기",
@@ -5780,13 +5512,1003 @@
     "spicy": true
   },
   {
-    "id": "nuc-150",
+    "id": "nuc-121",
     "cat": "nuclear",
     "heat": "nuclear",
     "a": "섹스 중 사랑 고백",
     "emojiA": "💗",
     "b": "섹스 중 야한 고백",
     "emojiB": "😈",
+    "spicy": true
+  },
+  {
+    "id": "nuc-122",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "들켜서 얼굴 빨개지기",
+    "emojiA": "😳",
+    "b": "들키고도 가만히 버티기",
+    "emojiB": "🫣",
+    "spicy": true
+  },
+  {
+    "id": "nuc-123",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "비밀 일기를 읽히기",
+    "emojiA": "📔",
+    "b": "비밀 문자를 읽히기",
+    "emojiB": "📱",
+    "spicy": true
+  },
+  {
+    "id": "nuc-124",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "귓가에서 들통나기",
+    "emojiA": "👂",
+    "b": "눈앞에서 들통나기",
+    "emojiB": "👀",
+    "spicy": true
+  },
+  {
+    "id": "nuc-125",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "시선 받으며 고백하기",
+    "emojiA": "🗣️",
+    "b": "시선 받으며 말없이 있기",
+    "emojiB": "🤐",
+    "spicy": true
+  },
+  {
+    "id": "nuc-126",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "다 아는 눈빛에 달아오르기",
+    "emojiA": "🔥",
+    "b": "다 아는 미소에 숨 가쁨",
+    "emojiB": "😮‍💨",
+    "spicy": true
+  },
+  {
+    "id": "nuc-127",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "몸이 먼저 반응해 들키기",
+    "emojiA": "🫢",
+    "b": "표정이 먼저 무너져 들키기",
+    "emojiB": "🥵",
+    "spicy": true
+  },
+  {
+    "id": "nuc-128",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "목소리 떨리는 채 대답",
+    "emojiA": "🎙️",
+    "b": "손끝 떨리는 채 대답",
+    "emojiB": "🤲",
+    "spicy": true
+  },
+  {
+    "id": "nuc-129",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "약속한 대로 고백하기",
+    "emojiA": "🤝",
+    "b": "약속한 대로 가만있기",
+    "emojiB": "🧎",
+    "spicy": true
+  },
+  {
+    "id": "nuc-130",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "얼굴 빨개진 걸 놀림받기",
+    "emojiA": "😊",
+    "b": "얼굴 빨개진 걸 못 숨기기",
+    "emojiB": "🙈",
+    "spicy": true
+  },
+  {
+    "id": "nuc-131",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "다리에 힘 풀리는 속삭임",
+    "emojiA": "🫠",
+    "b": "숨 가빠지는 눈맞춤",
+    "emojiB": "😮‍💨",
+    "spicy": true
+  },
+  {
+    "id": "nuc-132",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "이불 속에서 들통나기",
+    "emojiA": "🛏️",
+    "b": "이불 밖에서 들통나기",
+    "emojiB": "🏠",
+    "spicy": true
+  },
+  {
+    "id": "nuc-133",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "불 켜진 채 부끄러워하기",
+    "emojiA": "💡",
+    "b": "불 꺼도 부끄러워하기",
+    "emojiB": "🌑",
+    "spicy": true
+  },
+  {
+    "id": "nuc-134",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "눈 가린 채 기다리기",
+    "emojiA": "🙈",
+    "b": "손 묶인 채 기다리기",
+    "emojiB": "🪢",
+    "spicy": true
+  },
+  {
+    "id": "nuc-135",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "다음 말이 기대돼 떨리기",
+    "emojiA": "😖",
+    "b": "다음 손길이 기대돼 떨리기",
+    "emojiB": "🤲",
+    "spicy": true
+  },
+  {
+    "id": "nuc-136",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "둘만의 명령에 망설이기",
+    "emojiA": "😳",
+    "b": "둘만의 명령에 따르기",
+    "emojiB": "🙇",
+    "spicy": true
+  },
+  {
+    "id": "nuc-137",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "칭찬받다 얼굴 달아오르기",
+    "emojiA": "🥰",
+    "b": "칭찬받다 말문 막히기",
+    "emojiB": "😶",
+    "spicy": true
+  },
+  {
+    "id": "nuc-138",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "속마음을 읽혀 부끄러움",
+    "emojiA": "💭",
+    "b": "속마음을 말해 부끄러움",
+    "emojiB": "🗣️",
+    "spicy": true
+  },
+  {
+    "id": "nuc-139",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "가만있는데 다 읽히기",
+    "emojiA": "😳",
+    "b": "표정 숨기다 읽히기",
+    "emojiB": "🎭",
+    "spicy": true
+  },
+  {
+    "id": "nuc-140",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "귀까지 빨개지기",
+    "emojiA": "👂",
+    "b": "목까지 빨개지기",
+    "emojiB": "🔴",
+    "spicy": true
+  },
+  {
+    "id": "nuc-141",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "눈 못 마주치고 웃기",
+    "emojiA": "😆",
+    "b": "눈 마주친 채 굳기",
+    "emojiB": "😳",
+    "spicy": true
+  },
+  {
+    "id": "nuc-142",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "쳐다보는 눈길 느끼기",
+    "emojiA": "👀",
+    "b": "쳐다본다는 걸 알아채기",
+    "emojiB": "😳",
+    "spicy": true
+  },
+  {
+    "id": "nuc-143",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "손목 잡혀 얼어붙기",
+    "emojiA": "🫳",
+    "b": "손목 잡혀 웃음 터지기",
+    "emojiB": "🤭",
+    "spicy": true
+  },
+  {
+    "id": "nuc-144",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "속삭임에 소름 돋기",
+    "emojiA": "😮‍💨",
+    "b": "속삭임에 다리 풀리기",
+    "emojiB": "🫠",
+    "spicy": true
+  },
+  {
+    "id": "nuc-145",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "약속한 신호로 들키기",
+    "emojiA": "🤟",
+    "b": "약속한 신호에 반응하기",
+    "emojiB": "🔔",
+    "spicy": true
+  },
+  {
+    "id": "nuc-146",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "애태워져 눈빛 흔들리기",
+    "emojiA": "😵‍💫",
+    "b": "애태워져 숨소리 달라지기",
+    "emojiB": "💨",
+    "spicy": true
+  },
+  {
+    "id": "nuc-147",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "참다가 먼저 무너지기",
+    "emojiA": "🫠",
+    "b": "끝까지 버티다 들키기",
+    "emojiB": "😤",
+    "spicy": true
+  },
+  {
+    "id": "nuc-148",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "고백 시키는 시선 받기",
+    "emojiA": "🫣",
+    "b": "고백 시키는 침묵 받기",
+    "emojiB": "🤐",
+    "spicy": true
+  },
+  {
+    "id": "nuc-149",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "마음까지 발가벗겨지기",
+    "emojiA": "💞",
+    "b": "몸까지 부끄럽게 읽히기",
+    "emojiB": "🔥",
+    "spicy": true
+  },
+  {
+    "id": "nuc-150",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "들키고 싶은 척 들키기",
+    "emojiA": "🫢",
+    "b": "안 들킨 척 연기하기",
+    "emojiB": "🎭",
+    "spicy": true
+  },
+  {
+    "id": "nuc-151",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "칭찬 한마디에 무너지기",
+    "emojiA": "🥹",
+    "b": "눈빛 한 번에 무너지기",
+    "emojiB": "🥵",
+    "spicy": true
+  },
+  {
+    "id": "nuc-152",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "낮은 목소리에 얼어붙기",
+    "emojiA": "🎙️",
+    "b": "낮은 목소리에 달아오르기",
+    "emojiB": "🔥",
+    "spicy": true
+  },
+  {
+    "id": "nuc-153",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "부끄러워 이불 뒤집어쓰기",
+    "emojiA": "🛏️",
+    "b": "부끄러워 얼굴 가리기",
+    "emojiB": "🙈",
+    "spicy": true
+  },
+  {
+    "id": "nuc-154",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "들킨 비밀 큰 소리로 읽기",
+    "emojiA": "📢",
+    "b": "들킨 비밀 속삭여 읽기",
+    "emojiB": "🤫",
+    "spicy": true
+  },
+  {
+    "id": "nuc-155",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "속옷 취향 들켜서 웃기",
+    "emojiA": "🩲",
+    "b": "야한 취향 들켜서 웃기",
+    "emojiB": "😅",
+    "spicy": true
+  },
+  {
+    "id": "nuc-156",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "몸이 먼저 달아올라 당황",
+    "emojiA": "🥵",
+    "b": "마음이 먼저 달아올라 당황",
+    "emojiB": "💓",
+    "spicy": true
+  },
+  {
+    "id": "nuc-157",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "m",
+    "a": "불 꺼진 방 발소리에 설렘",
+    "emojiA": "🌑",
+    "b": "문 앞 발소리에 설렘",
+    "emojiB": "🚪",
+    "spicy": true
+  },
+  {
+    "id": "nuc-158",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "말 한마디로 얼굴 빨갛게",
+    "emojiA": "🗣️",
+    "b": "눈빛으로만 애태우기",
+    "emojiB": "👁️",
+    "spicy": true
+  },
+  {
+    "id": "nuc-159",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "천천히 한 문장 던지기",
+    "emojiA": "🐢",
+    "b": "한 문장 하고 기다리기",
+    "emojiB": "⏳",
+    "spicy": true
+  },
+  {
+    "id": "nuc-160",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "숨 달라지는 걸 알아채기",
+    "emojiA": "💨",
+    "b": "눈빛 달라지는 걸 알아채기",
+    "emojiB": "👀",
+    "spicy": true
+  },
+  {
+    "id": "nuc-161",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "몰래 웃으며 지켜보기",
+    "emojiA": "😏",
+    "b": "모른 척하며 지켜보기",
+    "emojiB": "🙄",
+    "spicy": true
+  },
+  {
+    "id": "nuc-162",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "애태우다 슬쩍 멈추기",
+    "emojiA": "⏸️",
+    "b": "애태우다 귓가에 한마디",
+    "emojiB": "👂",
+    "spicy": true
+  },
+  {
+    "id": "nuc-163",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "얼굴 빨개지길 기다리기",
+    "emojiA": "🍎",
+    "b": "귀 빨개지길 기다리기",
+    "emojiB": "👂",
+    "spicy": true
+  },
+  {
+    "id": "nuc-164",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "흔들리는 눈빛 구경하기",
+    "emojiA": "😏",
+    "b": "떨리는 목소리 듣기",
+    "emojiB": "🎧",
+    "spicy": true
+  },
+  {
+    "id": "nuc-165",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "말 없이 다가가 멈추기",
+    "emojiA": "🚶",
+    "b": "말 없이 눈만 마주치기",
+    "emojiB": "👁️",
+    "spicy": true
+  },
+  {
+    "id": "nuc-166",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "참는 표정 지켜보기",
+    "emojiA": "😶",
+    "b": "참다 터지는 웃음 지켜보기",
+    "emojiB": "🤭",
+    "spicy": true
+  },
+  {
+    "id": "nuc-167",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "반응 보려 일부러 느리게",
+    "emojiA": "🐌",
+    "b": "반응 보려 일부러 조용히",
+    "emojiB": "🤫",
+    "spicy": true
+  },
+  {
+    "id": "nuc-168",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "들킨 줄 알면서 모른 척",
+    "emojiA": "🎭",
+    "b": "들킨 걸 콕 집어 말하기",
+    "emojiB": "👆",
+    "spicy": true
+  },
+  {
+    "id": "nuc-169",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "손끝 하나로 반응 보기",
+    "emojiA": "☝️",
+    "b": "입김 하나로 반응 보기",
+    "emojiB": "💨",
+    "spicy": true
+  },
+  {
+    "id": "nuc-170",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "먼저 졸라 오길 기다리기",
+    "emojiA": "🥺",
+    "b": "먼저 다가와 주길 기다리기",
+    "emojiB": "🚶",
+    "spicy": true
+  },
+  {
+    "id": "nuc-171",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "한마디 던지고 돌아서기",
+    "emojiA": "🚶",
+    "b": "한마디 던지고 웃어 주기",
+    "emojiB": "😏",
+    "spicy": true
+  },
+  {
+    "id": "nuc-172",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "속으로 웃으며 모른 척",
+    "emojiA": "🤭",
+    "b": "겉으로도 씩 웃어 주기",
+    "emojiB": "😏",
+    "spicy": true
+  },
+  {
+    "id": "nuc-173",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "시선으로 얼어붙게 하기",
+    "emojiA": "🧊",
+    "b": "미소로 녹아내리게 하기",
+    "emojiB": "🫠",
+    "spicy": true
+  },
+  {
+    "id": "nuc-174",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "귓가에 숨만 내쉬기",
+    "emojiA": "💨",
+    "b": "귓가에 이름만 부르기",
+    "emojiB": "👂",
+    "spicy": true
+  },
+  {
+    "id": "nuc-175",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "답을 알면서 물어보기",
+    "emojiA": "🙄",
+    "b": "답을 들을 때까지 기다리기",
+    "emojiB": "⏳",
+    "spicy": true
+  },
+  {
+    "id": "nuc-176",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "얼굴 붉어지는 순간 기억",
+    "emojiA": "🧠",
+    "b": "붉어진 얼굴 지켜보기",
+    "emojiB": "👀",
+    "spicy": true
+  },
+  {
+    "id": "nuc-177",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "허락 전까지 기다리게 하기",
+    "emojiA": "⏳",
+    "b": "신호 전까지 기다리게 하기",
+    "emojiB": "🚦",
+    "spicy": true
+  },
+  {
+    "id": "nuc-178",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "약속한 말만 속삭여 주기",
+    "emojiA": "🤫",
+    "b": "약속한 눈빛만 보내 주기",
+    "emojiB": "😉",
+    "spicy": true
+  },
+  {
+    "id": "nuc-179",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "가까이 가서 일부러 멈추기",
+    "emojiA": "↔️",
+    "b": "멀리서 눈빛만 보내기",
+    "emojiB": "👁️",
+    "spicy": true
+  },
+  {
+    "id": "nuc-180",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "조용히 한 걸음씩 다가가기",
+    "emojiA": "🐾",
+    "b": "천천히 한 걸음씩 물러나기",
+    "emojiB": "🚶",
+    "spicy": true
+  },
+  {
+    "id": "nuc-181",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "들뜬 걸 알아채기",
+    "emojiA": "😏",
+    "b": "애써 참는 걸 알아채기",
+    "emojiB": "🫢",
+    "spicy": true
+  },
+  {
+    "id": "nuc-182",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "작게 속삭이고 반응 보기",
+    "emojiA": "🤫",
+    "b": "크게 말하고 반응 보기",
+    "emojiB": "📢",
+    "spicy": true
+  },
+  {
+    "id": "nuc-183",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "시계 보며 애태우기",
+    "emojiA": "⌚",
+    "b": "침묵으로 애태우기",
+    "emojiB": "🤐",
+    "spicy": true
+  },
+  {
+    "id": "nuc-184",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "다 알면서 한 번 더 묻기",
+    "emojiA": "🙄",
+    "b": "다 알면서 씩 웃기",
+    "emojiB": "😏",
+    "spicy": true
+  },
+  {
+    "id": "nuc-185",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "상대 숨소리 세어 보기",
+    "emojiA": "💨",
+    "b": "상대 심장 소리 느끼기",
+    "emojiB": "💓",
+    "spicy": true
+  },
+  {
+    "id": "nuc-186",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "쓰다듬다 갑자기 멈추기",
+    "emojiA": "🫳",
+    "b": "안아 주다 갑자기 멈추기",
+    "emojiB": "🫂",
+    "spicy": true
+  },
+  {
+    "id": "nuc-187",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "눈 가리고 맞히게 하기",
+    "emojiA": "🙈",
+    "b": "눈 뜬 채 가만있게 하기",
+    "emojiB": "👀",
+    "spicy": true
+  },
+  {
+    "id": "nuc-188",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "얼마나 참나 시간 재기",
+    "emojiA": "⏱️",
+    "b": "얼마나 참나 표정 보기",
+    "emojiB": "😶",
+    "spicy": true
+  },
+  {
+    "id": "nuc-189",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "모른 척하며 더 다가가기",
+    "emojiA": "😇",
+    "b": "아는 척하며 더 다가가기",
+    "emojiB": "😏",
+    "spicy": true
+  },
+  {
+    "id": "nuc-190",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "입꼬리만 올려 보이기",
+    "emojiA": "😏",
+    "b": "눈썹만 올려 보이기",
+    "emojiB": "🤨",
+    "spicy": true
+  },
+  {
+    "id": "nuc-191",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "짧은 한마디로 얼굴 달구기",
+    "emojiA": "🔥",
+    "b": "긴 침묵으로 얼굴 달구기",
+    "emojiB": "🕰️",
+    "spicy": true
+  },
+  {
+    "id": "nuc-192",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "칭찬으로 얼굴 빨갛게",
+    "emojiA": "🥰",
+    "b": "질문으로 얼굴 빨갛게",
+    "emojiB": "❓",
+    "spicy": true
+  },
+  {
+    "id": "nuc-193",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "s",
+    "a": "몸이 반응하는 걸 지켜보기",
+    "emojiA": "👀",
+    "b": "몸이 반응해도 모른 척하기",
+    "emojiB": "🙄",
+    "spicy": true
+  },
+  {
+    "id": "nuc-194",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "both",
+    "a": "시키는 대로 하는 쪽",
+    "emojiA": "🙇",
+    "b": "시키는 쪽",
+    "emojiB": "👑",
+    "spicy": true
+  },
+  {
+    "id": "nuc-195",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "both",
+    "a": "애태워지는 쪽",
+    "emojiA": "😵‍💫",
+    "b": "애태우는 쪽",
+    "emojiB": "😏",
+    "spicy": true
+  },
+  {
+    "id": "nuc-196",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "both",
+    "a": "들키는 쪽",
+    "emojiA": "🫣",
+    "b": "들춰내는 쪽",
+    "emojiB": "🔍",
+    "spicy": true
+  },
+  {
+    "id": "nuc-197",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "both",
+    "a": "먼저 얼굴 빨개지는 쪽",
+    "emojiA": "🍎",
+    "b": "먼저 웃어 버리는 쪽",
+    "emojiB": "😆",
+    "spicy": true
+  },
+  {
+    "id": "nuc-198",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "both",
+    "a": "속삭임을 듣는 쪽",
+    "emojiA": "👂",
+    "b": "속삭임을 건네는 쪽",
+    "emojiB": "🗣️",
+    "spicy": true
+  },
+  {
+    "id": "nuc-199",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "both",
+    "a": "가만히 기다리는 쪽",
+    "emojiA": "🧍",
+    "b": "천천히 다가가는 쪽",
+    "emojiB": "🚶",
+    "spicy": true
+  },
+  {
+    "id": "nuc-200",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "both",
+    "a": "눈빛에 무너지는 쪽",
+    "emojiA": "🥹",
+    "b": "눈빛으로 무너뜨리는 쪽",
+    "emojiB": "😈",
+    "spicy": true
+  },
+  {
+    "id": "nuc-201",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "both",
+    "a": "허락을 구하는 쪽",
+    "emojiA": "🙏",
+    "b": "허락을 내려 주는 쪽",
+    "emojiB": "👑",
+    "spicy": true
+  },
+  {
+    "id": "nuc-202",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "both",
+    "a": "참아 보라는 말 듣기",
+    "emojiA": "⛔",
+    "b": "참아 보라는 말 하기",
+    "emojiB": "🗣️",
+    "spicy": true
+  },
+  {
+    "id": "nuc-203",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "both",
+    "a": "칭찬에 달아오르는 쪽",
+    "emojiA": "🥰",
+    "b": "칭찬으로 달구는 쪽",
+    "emojiB": "🔥",
+    "spicy": true
+  },
+  {
+    "id": "nuc-204",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "both",
+    "a": "이름 불리면 심장 쿵",
+    "emojiA": "💓",
+    "b": "이름 부르며 반응 보기",
+    "emojiB": "😏",
+    "spicy": true
+  },
+  {
+    "id": "nuc-205",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "both",
+    "a": "약속한 장난에 걸리는 쪽",
+    "emojiA": "🎭",
+    "b": "약속한 장난을 거는 쪽",
+    "emojiB": "🎬",
+    "spicy": true
+  },
+  {
+    "id": "nuc-206",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "both",
+    "a": "들킨 걸 인정하는 쪽",
+    "emojiA": "🙈",
+    "b": "들켰다고 짚어 주는 쪽",
+    "emojiB": "👆",
+    "spicy": true
+  },
+  {
+    "id": "nuc-207",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "both",
+    "a": "손길을 기다리는 쪽",
+    "emojiA": "🤲",
+    "b": "손길을 아끼는 쪽",
+    "emojiB": "🫳",
+    "spicy": true
+  },
+  {
+    "id": "nuc-208",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "both",
+    "a": "몸이 먼저 반응하는 쪽",
+    "emojiA": "🥵",
+    "b": "반응을 먼저 알아채는 쪽",
+    "emojiB": "👀",
+    "spicy": true
+  },
+  {
+    "id": "nuc-209",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "both",
+    "a": "끝까지 버티는 쪽",
+    "emojiA": "😤",
+    "b": "끝까지 약 올리는 쪽",
+    "emojiB": "😜",
+    "spicy": true
+  },
+  {
+    "id": "nuc-210",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "both",
+    "a": "세이프워드 믿고 맡기기",
+    "emojiA": "🤝",
+    "b": "세이프워드 지키며 이끌기",
+    "emojiB": "🛡️",
+    "spicy": true
+  },
+  {
+    "id": "nuc-211",
+    "cat": "nuclear",
+    "heat": "nuclear",
+    "tone": "both",
+    "a": "괜찮냐고 물어봐 주길",
+    "emojiA": "💬",
+    "b": "괜찮냐고 틈틈이 묻기",
+    "emojiB": "🛡️",
     "spicy": true
   }
 ]

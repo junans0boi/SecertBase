@@ -22,6 +22,12 @@ const CATEGORY_IDS = new Set(TELEPATHY_CATEGORIES.map((c) => c.id));
 /** 문제 id 접두사: 대부분 분야 id와 같고, 은근한 분위기는 `sen-001`, 19+ 분야는 `nuc-001`. */
 export const telepathyIdPrefix = (cat) => (cat === "nuclear" ? "nuc" : cat === "sensual" ? "sen" : cat);
 
+/**
+ * 19+ 문제의 선택 성향 표시(선택): m = 부끄럽게 들키는 쪽, s = 상대 반응을 지켜보며 속으로 웃는 쪽,
+ * both = 두 사람 모두 고를 수 있고 답이 갈리면 성향이 보이는 문제. 19+ 분야에만 쓸 수 있고 화면에는 보내지 않는다.
+ */
+export const TELEPATHY_TONES = Object.freeze(["m", "s", "both"]);
+
 /** 로비 옵션 `heat` 값. */
 export const TELEPATHY_HEATS = Object.freeze(["mild", "spicy", "nuclear"]);
 /** 분야 → 수위. 19+ 분야만 nuclear, 살짝 매운맛·은근한 분위기 분야는 spicy, 나머지는 mild. */
@@ -94,6 +100,10 @@ export function validateTelepathyBank(bank) {
       }
     }
     if (q.a === q.b) errors.push(`${where}: a and b are the same`);
+    if (q.tone !== undefined) {
+      if (!TELEPATHY_TONES.includes(q.tone)) errors.push(`${where}: tone must be one of m, s, both`);
+      else if (q.cat !== "nuclear") errors.push(`${where}: tone is only allowed on nuclear questions`);
+    }
     if (q.heat !== heatOfCategory(q.cat)) errors.push(`${where}: heat must match the category`);
     if (typeof q.spicy !== "boolean") errors.push(`${where}: spicy must be boolean`);
     else if (q.spicy !== (q.heat !== "mild")) errors.push(`${where}: spicy must be true exactly for spicy and nuclear questions`);

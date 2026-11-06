@@ -63,6 +63,12 @@ test('the 19+ bank keeps real coverage: kink themes and frank sex-preference que
   const sex = hard.filter((q) => SEX_WORDS.test(text(q)));
   assert.ok(kink.length >= 25, `kink-themed questions ${kink.length}`);
   assert.ok(sex.length >= 40, `explicit sex-preference questions ${sex.length}`);
+  // 상상을 자극하는 두 성향(부끄럽게 들키는 쪽 m / 반응을 지켜보며 속으로 웃는 쪽 s)이 충분히 있다.
+  const tone = (t) => hard.filter((q) => q.tone === t).length;
+  assert.ok(tone('m') >= 30, `m-tone questions ${tone('m')}`);
+  assert.ok(tone('s') >= 30, `s-tone questions ${tone('s')}`);
+  assert.ok(tone('both') >= 10, `both-tone questions ${tone('both')}`);
+  assert.ok(hard.filter((q) => q.tone).length >= 70, 'at least 70 questions carry a tone');
   // 안전 장치도 들어 있다: 세이프워드·멈춤 신호·애프터케어.
   assert.ok(hard.some((q) => /세이프워드/.test(text(q))));
   assert.ok(hard.some((q) => /멈춤 신호|경계선|애프터케어/.test(text(q))));
@@ -119,6 +125,13 @@ test('validation rejects duplicates, long or non-Korean options and mislabelled 
   bad([sample({ heat: 'spicy' })], /spicy/);
   bad([sample({ id: 'spicy-001', cat: 'spicy', spicy: false })], /spicy/);
   bad([sample({ emojiA: '' })], /emojiA/);
+  // 선택 필드 tone: m | s | both, 19+ 문제에만.
+  const hot = { id: 'nuc-001', cat: 'nuclear', heat: 'nuclear', spicy: true };
+  for (const tone of ['m', 's', 'both']) assert.doesNotThrow(() => validateTelepathyBank([sample({ ...hot, tone })]));
+  bad([sample({ ...hot, tone: 'x' })], /tone must be one of/);
+  bad([sample({ ...hot, tone: 'M' })], /tone must be one of/);
+  bad([sample({ tone: 's' })], /only allowed on nuclear/);
+  bad([sample({ id: 'spicy-001', cat: 'spicy', heat: 'spicy', spicy: true, tone: 'm' })], /only allowed on nuclear/);
   bad([sample({ emojiB: 'B' })], /emojiB/);
 });
 
@@ -358,4 +371,13 @@ test('the legacy spicy flag still means the spicy level', () => {
   assert.ok(on.every((q) => q.heat !== 'nuclear'));
   const off = drawQuestions(emptyBag(), TELEPATHY_BANK, 10, { random: seeded(2) }).questions;
   assert.ok(off.every((q) => q.heat === 'mild'));
+});
+
+test('only 19+ questions carry a tone and the tone never reaches the players', () => {
+  for (const q of TELEPATHY_BANK) {
+    if (q.tone !== undefined) {
+      assert.equal(q.cat, 'nuclear', q.id);
+      assert.ok(['m', 's', 'both'].includes(q.tone), q.id);
+    }
+  }
 });
