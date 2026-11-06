@@ -87,6 +87,31 @@ void main() {
     expect(socket.lobbyOptions['cells'], 6, reason: '상대는 바꿀 수 없다');
   });
 
+  testWidgets('penalty lobby: host start button, guest waits, cells chip', (
+    tester,
+  ) async {
+    await pumpLobby(tester, gameType: 'penalty', host: true);
+    expect(find.text('게임 시작'), findsOneWidget);
+    expect(find.text('3칸'), findsWidgets, reason: 'title chip + option card');
+    expect(find.byType(LobbyOptionPicker), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+
+    await pumpLobby(
+      tester,
+      gameType: 'penalty',
+      host: false,
+      options: {'cells': 6},
+    );
+    expect(find.text('방장이 시작할 때까지 기다려요'), findsOneWidget);
+    expect(find.text('게임 시작'), findsNothing);
+    expect(find.text('정밀'), findsOneWidget);
+  });
+
+  testWidgets('other games keep the shared option picker', (tester) async {
+    await pumpLobby(tester, gameType: 'pirate', host: true);
+    expect(find.byType(LobbyOptionPicker), findsOneWidget);
+  });
+
   testWidgets('games without options show no picker', (tester) async {
     await pumpLobby(tester, gameType: 'blackjack', host: true);
     expect(find.byType(LobbyOptionPicker), findsNothing);

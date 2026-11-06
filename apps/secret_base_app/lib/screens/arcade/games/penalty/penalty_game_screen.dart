@@ -9,13 +9,7 @@ import 'penalty_controls.dart';
 import 'penalty_hud.dart';
 import 'penalty_models.dart';
 import 'penalty_pitch.dart';
-
-const _howToTitle = '패널티킥 하는 법';
-const _howToLines = [
-  '골대 칸 중 하나를 골라요. 키퍼가 같은 칸을 고르면 막혀요!',
-  '칸을 누르고 큰 버튼(슛!·막기!)으로 확정해요. 20초가 지나면 자동으로 골라져요.',
-  '5번씩 번갈아 차서 골이 많으면 승리! 동점이면 한 번씩 더 차요.',
-];
+import 'penalty_result.dart';
 
 /// 패널티킥 2.0 — 조명탑 아래 나이트 스타디움, TV 중계 화면처럼. 서버가 판을 만들고 이 화면은 보여 주고 고르기만 한다.
 class PenaltyGameScreen extends StatefulWidget {
@@ -86,8 +80,8 @@ class _PenaltyGameScreenState extends State<PenaltyGameScreen>
         context,
         prefKey: 'penalty_tutorial_seen',
         theme: _theme,
-        title: _howToTitle,
-        lines: _howToLines,
+        title: kPenaltyHowToTitle,
+        lines: kPenaltyHowToLines,
         emoji: '⚽',
       );
     });
@@ -230,8 +224,8 @@ class _PenaltyGameScreenState extends State<PenaltyGameScreen>
   void _showHelp() => showGameHowTo(
     context,
     theme: _theme,
-    title: _howToTitle,
-    lines: _howToLines,
+    title: kPenaltyHowToTitle,
+    lines: kPenaltyHowToLines,
     emoji: '⚽',
   );
 
@@ -242,17 +236,27 @@ class _PenaltyGameScreenState extends State<PenaltyGameScreen>
     final t = _theme;
     return Scaffold(
       backgroundColor: t.backdrop.last,
-      body: GameMenuListener(
-        gameType: 'penalty',
-        child: GameBackdrop(
-          theme: t,
-          child: SafeArea(
-            child: ListenableBuilder(
-              listenable: Listenable.merge([_c, _socket]),
-              builder: (context, _) => _body(context),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          GameMenuListener(
+            gameType: 'penalty',
+            child: GameBackdrop(
+              theme: t,
+              child: SafeArea(
+                child: ListenableBuilder(
+                  listenable: Listenable.merge([_c, _socket]),
+                  builder: (context, _) => _body(context),
+                ),
+              ),
             ),
           ),
-        ),
+          // 최종 결과는 화면 전체(상태바 영역까지)를 덮는다.
+          ListenableBuilder(
+            listenable: Listenable.merge([_c, _socket]),
+            builder: (context, _) => _resultLayer(),
+          ),
+        ],
       ),
     );
   }
@@ -314,8 +318,6 @@ class _PenaltyGameScreenState extends State<PenaltyGameScreen>
         s.playing && iAmPlayer && pb == null && !submitted && !_c.submitting;
     final visibleRounds = (_shownRounds + (pb != null && _impactFired ? 1 : 0))
         .clamp(0, s.rounds.length);
-    final showResult =
-        s.finished && pb == null && _shownRounds >= s.rounds.length;
     Color colorOf(String id) => id == me ? t.me : t.opponent;
     // 등번호는 화면 장식: 키퍼는 1번, 키커는 나 7번·상대 10번.
     PenaltyKit kitOf(String id, {required bool keeper}) => PenaltyKit(
@@ -507,13 +509,19 @@ class _PenaltyGameScreenState extends State<PenaltyGameScreen>
             child: GameToast(theme: t, id: _toastId, message: _toast),
           ),
         ),
-        if (showResult) _result(s, me),
       ],
     );
   }
 
+  Widget _resultLayer() {
+    final s = _c.state;
+    if (s == null) return const SizedBox.shrink();
+    final show =
+        s.finished && _playback == null && _shownRounds >= s.rounds.length;
+    return show ? _result(s, _c.me ?? '') : const SizedBox.shrink();
+  }
+
   Widget _result(PenaltyState s, String me) {
-    final t = _theme;
     final r = s.result;
     final outcome = r == null || r.isDraw
         ? GameOutcome.draw
@@ -536,23 +544,23 @@ class _PenaltyGameScreenState extends State<PenaltyGameScreen>
       default:
         reason = sd ? '서든데스 끝에 $score' : '최종 점수 $score';
     }
-    return Positioned.fill(
-      child: GameResultOverlay(
-        key: const Key('penalty_result'),
-        theme: t,
-        outcome: outcome,
-        title: switch (outcome) {
-          GameOutcome.win => '승리!',
-          GameOutcome.lose => '아쉬운 패배',
-          GameOutcome.draw => '무승부',
-        },
-        reason: reason,
-        series: s.series,
-        me: me,
-        resultId: s.gameId,
-        rematchWaiting: _socket.restartWaiting,
-        onRematch: () => _socket.requestRestart('penalty'),
-      ),
+    return PenaltyResultView(
+      key: const Key('penalty_result'),
+      outcome: outcome,
+      title: switch (outcome) {
+        GameOutcome.win => '승리!',
+        GameOutcome.lose => '아쉬운 패배',
+        GameOutcome.draw => '무승부',
+      },
+      reason: reason,
+      state: s,
+      me: me,
+      opponent: opp,
+      myName: '나',
+      opponentName: _c.displayName(opp),
+      rematchWaiting: _socket.restartWaiting,
+      onRematch: () => _socket.requestRestart('penalty'),
+      onHelp: _showHelp,
     );
   }
 }
