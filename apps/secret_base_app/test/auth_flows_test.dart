@@ -8,7 +8,9 @@ import 'package:http/testing.dart';
 import 'package:secret_base_app/core/auth_service.dart';
 import 'package:secret_base_app/screens/auth/auth_parts.dart';
 import 'package:secret_base_app/screens/auth/connecting_screen.dart';
+import 'package:secret_base_app/screens/auth/google_signup_screen.dart';
 import 'package:secret_base_app/screens/auth/login_screen.dart';
+import 'package:secret_base_app/screens/auth/pairing_celebrate_screen.dart';
 import 'package:secret_base_app/screens/auth/partner_screen.dart';
 import 'package:secret_base_app/screens/auth/password_reset_screen.dart';
 import 'package:secret_base_app/screens/auth/register_screen.dart';
@@ -514,6 +516,66 @@ void main() {
       await tester.tap(find.text('전체 동의'));
       await tester.pump();
       expect(v.requiredOk, isFalse);
+    });
+  });
+
+  group('google signup and celebration', () {
+    testWidgets('Google first sign-in must add birthday and consents',
+        (tester) async {
+      bigView(tester);
+      final gUser = {..._user, 'SignupRequired': true, 'AuthProvider': 'google'};
+      _routes['/api/auth/login'] = (200, {'token': 't', 'user': gUser});
+      _routes['/api/user/profile/1'] = (200, {'user': gUser});
+      _routes['/api/auth/complete-signup'] = (200, {'ok': true});
+      await AuthService().loginWithEmail('x@example.test', 'abcdefg1');
+      expect(AuthService().signupRequired, isTrue);
+      await tester.pumpWidget(const MaterialApp(home: GoogleSignupScreen()));
+      expect(find.text('Google 계정으로 가입 중이에요'), findsOneWidget);
+      expect(find.text('minji@example.test'), findsOneWidget);
+      TextButton start() =>
+          tester.widget(find.widgetWithText(TextButton, '시작하기'));
+      expect(start().onPressed, isNull);
+      await tester.tap(find.byType(TextField).at(1));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('선택'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('전체 동의'));
+      await tester.pump();
+      expect(start().onPressed, isNotNull);
+      await tester.tap(find.widgetWithText(TextButton, '시작하기'));
+      await tester.pumpAndSettle();
+      final req = _requests.firstWhere(
+        (r) => r.url.path == '/api/auth/complete-signup',
+      );
+      final body = jsonDecode(req.body) as Map;
+      expect(body['nickname'], '민지');
+      expect(body['consents']['marketing'], isTrue);
+      expect(body['birth_date'], matches(RegExp(r'^\d{4}-\d{2}-\d{2}$')));
+    });
+
+    testWidgets('celebration shows the checklist and the notification sheet',
+        (tester) async {
+      bigView(tester);
+      final paired = {..._user, 'PartnerCode': 'ZZZ999', 'PartnerName': '서윤'};
+      _routes['/api/auth/login'] = (200, {'token': 't', 'user': paired});
+      _routes['/api/user/profile/1'] = (200, {'user': paired});
+      await AuthService().loginWithEmail('minji@example.test', 'abcdefg1');
+      var done = 0;
+      await tester.pumpWidget(
+        MaterialApp(home: PairingCelebrateScreen(onDone: () => done++)),
+      );
+      await tester.pump();
+      expect(find.text('연결됐어요!'), findsOneWidget);
+      expect(find.text('서윤님과 연결하기'), findsOneWidget);
+      expect(find.text('처음 만난 날 정하기'), findsOneWidget);
+      expect(find.text('1/3'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      expect(find.text('나중에'), findsOneWidget); // pre-prompt sheet, before the OS
+      await tester.tap(find.text('나중에'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('홈으로 가기'));
+      expect(done, 1);
     });
   });
 

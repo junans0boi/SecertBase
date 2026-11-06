@@ -300,7 +300,23 @@ class _PartnerScreenState extends State<PartnerScreen> {
   Widget _codeCard({bool compact = false}) {
     final code = _myCode;
     if (code == null) {
-      return const V2SkeletonCard();
+      return V2Card(
+        variant: V2CardVariant.soft,
+        child: Column(
+          children: [
+            Text('내 코드를 불러오지 못했어요', style: V2Text.bodyStrong),
+            const SizedBox(height: V2Space.x2),
+            Text('인터넷 연결을 확인하고 다시 불러와 주세요.', style: V2Text.cap),
+            const SizedBox(height: V2Space.x3),
+            V2Button(
+              label: '다시 불러오기',
+              variant: V2ButtonVariant.soft,
+              size: V2ButtonSize.sm,
+              onPressed: () => _auth.getProfile(),
+            ),
+          ],
+        ),
+      );
     }
     return V2Card(
       gradient: V2Gradients.hero,
