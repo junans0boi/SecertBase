@@ -86,6 +86,8 @@ export const USER_DATA_PURGE = [
   { table: 'equipped_items', where: ['user_id'] },
   { table: 'user_levels', where: ['user_id'] },
   { table: 'user_missions', where: ['user_id'] },
+  // Password reset codes. (user_consents is kept: it is the record of what was agreed.)
+  { table: 'password_reset_tokens', where: ['user_id'] },
   // Pending pairing requests.
   { table: 'PairingRequests', where: ['SenderUserId', 'RecipientUserId'] },
 ];

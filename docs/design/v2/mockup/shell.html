@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>비밀기지 2.0 목업</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800;900&family=Gowun+Batang:wght@400;700&family=Gowun+Dodum&family=Nanum+Myeongjo:wght@400;800&family=Black+Han+Sans&family=Do+Hyeon&family=Gaegu:wght@400;700&family=East+Sea+Dokdo&display=swap" rel="stylesheet">
+<style>
+:root{
+  --page:#EDEBE7; --page-ink:#1C1E22; --page-sub:#6B6F76; --page-line:#D9D6D0; --page-card:#FFFFFF;
+  --sans:'Noto Sans KR',system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --page:#14161A; --page-ink:#ECEDEF; --page-sub:#9AA0A8; --page-line:#2A2D33; --page-card:#1D2025; }
+}
+:root[data-theme="dark"]{ --page:#14161A; --page-ink:#ECEDEF; --page-sub:#9AA0A8; --page-line:#2A2D33; --page-card:#1D2025; }
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--page);color:var(--page-ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+body{min-height:100vh}
+header.top{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--page) 88%,transparent);backdrop-filter:blur(14px);border-bottom:1px solid var(--page-line)}
+.top-in{max-width:1180px;margin:0 auto;padding:14px 16px 10px}
+.top h1{font-size:17px;font-weight:800;letter-spacing:-.01em}
+.top p{font-size:12.5px;color:var(--page-sub);margin-top:2px}
+.tabs{display:flex;gap:6px;overflow-x:auto;padding:10px 16px 12px;max-width:1180px;margin:0 auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:0 0 auto;border:1px solid var(--page-line);background:var(--page-card);color:var(--page-ink);font:600 13.5px var(--sans);padding:8px 14px;border-radius:999px;cursor:pointer;display:flex;align-items:center;gap:7px;white-space:nowrap;min-height:40px}
+.tab i{width:9px;height:9px;border-radius:50%;display:block;background:var(--dot,#999)}
+.tab[aria-selected="true"]{background:var(--page-ink);color:var(--page);border-color:var(--page-ink)}
+main{max-width:1180px;margin:0 auto;padding:18px 16px 60px}
+.game{display:none}
+.game.on{display:block}
+.stage{display:grid;grid-template-columns:minmax(0,430px) minmax(0,1fr);gap:28px;align-items:start}
+@media (max-width:860px){.stage{grid-template-columns:1fr}}
+.phone-col{display:flex;flex-direction:column;align-items:center;gap:14px;position:sticky;top:112px}
+@media (max-width:860px){.phone-col{position:static}}
+.phone-fit{width:100%;display:flex;justify-content:center}
+.phone-scale{transform-origin:top center}
+.phone{position:relative;width:390px;height:800px;border-radius:46px;background:#000;padding:0;box-shadow:0 0 0 9px #0d0e10,0 0 0 11px #3a3d42,0 30px 70px rgba(0,0,0,.28);overflow:hidden;isolation:isolate}
+.phone::after{content:"";position:absolute;top:9px;left:50%;transform:translateX(-50%);width:104px;height:26px;border-radius:20px;background:#000;z-index:50;pointer-events:none}
+.screen{position:absolute;inset:0;display:none;overflow:hidden;font-family:var(--sans)}
+.screen.active{display:block}
+.chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-width:430px}
+.chip{border:1px solid var(--page-line);background:var(--page-card);color:var(--page-ink);font:600 13px var(--sans);padding:7px 13px;border-radius:999px;cursor:pointer;min-height:38px}
+.chip[aria-pressed="true"]{background:var(--page-ink);color:var(--page);border-color:var(--page-ink)}
+.chips-label{font-size:11.5px;color:var(--page-sub);width:100%;text-align:center;letter-spacing:.04em;text-transform:uppercase}
+.notes{background:var(--page-card);border:1px solid var(--page-line);border-radius:20px;padding:22px 22px 26px}
+.notes h2{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.notes .tag{display:inline-block;font-size:12px;font-weight:700;color:var(--page-sub);margin-bottom:6px}
+.notes h3{font-size:12.5px;font-weight:800;color:var(--page-sub);letter-spacing:.06em;margin:20px 0 8px;text-transform:uppercase}
+.notes p,.notes li{font-size:14.5px;line-height:1.65}
+.notes ul{padding-left:18px;display:grid;gap:4px}
+.swatches{display:flex;flex-wrap:wrap;gap:10px}
+.sw{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--page-sub)}
+.sw b{width:30px;height:30px;border-radius:9px;border:1px solid rgba(0,0,0,.12);display:block}
+.fontline{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--page-sub)}
+.keep{border-left:3px solid var(--page-ink);padding-left:12px;margin-top:6px;font-size:14px;line-height:1.6}
+.legend{margin-top:22px;font-size:12.5px;color:var(--page-sub);line-height:1.6;border-top:1px solid var(--page-line);padding-top:14px}
+
+.bare header.top,.bare .notes,.bare .chips{display:none!important}
+.bare main{padding:16px 0 0}
+.bare .phone-col{position:static}
+.bare .stage{display:block}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <h1>비밀기지 2.0 — 게임 외 전체 기능 목업</h1>
+    <p>탭에서 영역을 고르고, 폰 아래 버튼으로 화면(상태)을 바꿔 보세요. 승인하시거나 고칠 점을 알려주시면 반영합니다. (구현은 승인 후)</p>
+  </div>
+  <nav class="tabs" role="tablist" id="tabs"></nav>
+</header>
+<main id="main">
+<!--GAMES-->
+</main>
+<script>
+(function(){
+  var games=[].slice.call(document.querySelectorAll('.game'));
+  var tabs=document.getElementById('tabs');
+  var fits=[];
+  function mkChips(g){
+    var phone=g.querySelector('.phone'); if(!phone) return;
+    var col=g.querySelector('.phone-col');
+    var screens=[].slice.call(phone.querySelectorAll(':scope > .screen'));
+    // variant chips
+    var vs=(g.getAttribute('data-variants')||'').split(',').filter(Boolean);
+    if(vs.length){
+      var vw=document.createElement('div'); vw.className='chips';
+      var lab=document.createElement('div'); lab.className='chips-label'; lab.textContent='스타일 안'; vw.appendChild(lab);
+      vs.forEach(function(v,i){
+        var p=v.split(':'); var b=document.createElement('button'); b.className='chip'; b.textContent=p[1]||p[0];
+        b.setAttribute('aria-pressed',i===0?'true':'false'); b.dataset.v=p[0];
+        b.onclick=function(){ phone.setAttribute('data-variant',p[0]); [].forEach.call(vw.querySelectorAll('.chip'),function(c){c.setAttribute('aria-pressed',c===b?'true':'false')}); };
+        vw.appendChild(b);
+      });
+      phone.setAttribute('data-variant',vs[0].split(':')[0]);
+      col.appendChild(vw);
+    }
+    var sw=document.createElement('div'); sw.className='chips';
+    var lab2=document.createElement('div'); lab2.className='chips-label'; lab2.textContent='화면'; sw.appendChild(lab2);
+    screens.forEach(function(s,i){
+      var b=document.createElement('button'); b.className='chip'; b.textContent=s.getAttribute('data-label')||('화면 '+(i+1));
+      b.setAttribute('aria-pressed',i===0?'true':'false');
+      b.onclick=function(){ screens.forEach(function(x){x.classList.toggle('active',x===s)}); [].forEach.call(sw.querySelectorAll('.chip'),function(c){c.setAttribute('aria-pressed',c===b?'true':'false')}); };
+      sw.appendChild(b);
+      if(i===0) s.classList.add('active'); else s.classList.remove('active');
+    });
+    col.appendChild(sw);
+  }
+  function fit(){
+    fits.forEach(function(f){
+      var w=f.box.clientWidth; var s=Math.min(1,(w-4)/410); if(s<=0) s=1;
+      f.scale.style.transform='scale('+s+')'; f.box.style.height=(820*s)+'px';
+    });
+  }
+  games.forEach(function(g,i){
+    var t=document.createElement('button'); t.className='tab'; t.setAttribute('role','tab');
+    t.innerHTML='<i style="--dot:'+(g.getAttribute('data-dot')||'#888')+'"></i>'+g.getAttribute('data-title');
+    t.dataset.id=g.id; t.onclick=function(){ show(g.id); history.replaceState(null,'','#'+g.id.replace(/^g-/,'')); };
+    tabs.appendChild(t);
+    var phone=g.querySelector('.phone');
+    if(phone){
+      var box=document.createElement('div'); box.className='phone-fit';
+      var sc=document.createElement('div'); sc.className='phone-scale';
+      phone.parentNode.insertBefore(box,phone); sc.appendChild(phone); box.appendChild(sc);
+      fits.push({box:box,scale:sc});
+    }
+    mkChips(g);
+  });
+  function show(id){
+    games.forEach(function(g){ g.classList.toggle('on',g.id===id); });
+    [].forEach.call(tabs.children,function(t){ t.setAttribute('aria-selected',t.dataset.id===id?'true':'false'); });
+    requestAnimationFrame(fit); window.scrollTo({top:0});
+  }
+  var h=(location.hash||'').replace('#','');
+  var first=games.filter(function(g){return g.id==='g-'+h})[0]||games[0];
+  if(first) show(first.id);
+  window.addEventListener('resize',fit);
+  window.addEventListener('hashchange',function(){ var h=(location.hash||'').replace('#',''); var g=games.filter(function(g){return g.id==='g-'+h})[0]; if(g) show(g.id); });
+
+  (function(){
+    var q=new URLSearchParams(location.search);
+    if(q.get('bare')) document.documentElement.classList.add('bare');
+    var cur=games.filter(function(g){return g.classList.contains('on')})[0];
+    if(!cur) return;
+    var s=q.get('s'), v=q.get('v');
+    if(v){ var vb=cur.querySelector('.chip[data-v="'+v+'"]'); if(vb) vb.click(); }
+    if(s!==null){ var chips=cur.querySelectorAll('.chips:last-of-type .chip'); var c=chips[parseInt(s,10)]; if(c) c.click(); }
+  })();
+  setTimeout(fit,50);
+})();
+</script>
+</body>
+</html>

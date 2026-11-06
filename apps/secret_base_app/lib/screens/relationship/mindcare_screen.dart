@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 
+import 'package:secret_base_app/v2/v2.dart';
+
 import '../../core/auth_service.dart';
-import '../../core/main_design.dart';
 import '../../core/mindcare_api.dart';
 import '../../core/safety_location.dart';
+import 'care_safety.dart';
+import 'care_settings_screen.dart';
 
 class MindcareScreen extends StatefulWidget {
   final MindcareApi? api;
@@ -20,6 +23,7 @@ class _MindcareScreenState extends State<MindcareScreen> {
   late final SafetyLocationProvider _locationProvider;
   late final bool _ownsApi;
   final _textController = TextEditingController();
+  final _scroll = ScrollController();
   MindcareConversation? _conversation;
   String? _error;
   bool _loading = true;
@@ -34,19 +38,36 @@ class _MindcareScreenState extends State<MindcareScreen> {
     _api =
         widget.api ??
         MindcareApi(baseUrl: auth.baseUrl, token: auth.token ?? '');
+    // Crisis moments never trigger an OS location prompt.
     _locationProvider =
-        widget.locationProvider ?? const PlatformSafetyLocationProvider();
-    _load();
+        widget.locationProvider ??
+        const PlatformSafetyLocationProvider(allowPrompt: false);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _start());
   }
 
   @override
   void dispose() {
     if (_ownsApi) _api.close();
     _textController.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
+  Future<void> _start() async {
+    final ok = await ensureCareConsent(context);
+    if (!mounted) return;
+    if (!ok) {
+      Navigator.of(context).maybePop();
+      return;
+    }
+    await _load();
+  }
+
   Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final conversation = await _api.createOrResume();
       SafetyResources? resources = conversation.safetyResources;
@@ -76,54 +97,42 @@ class _MindcareScreenState extends State<MindcareScreen> {
       await _confirmSafety(choice.key == 'safe_now');
       return;
     }
-    setState(() {
-      _sending = true;
-      _error = null;
-    });
-    try {
-      final updated = await _api.sendMessage(
-        id: conversation.session.id,
-        choiceKey: choice.key,
-      );
-      if (!mounted) return;
-      setState(() {
-        _conversation = updated;
-        _sending = false;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _sending = false;
-        _error = _messageFor(error);
-      });
-    }
+    await _run(
+      () =>
+          _api.sendMessage(id: conversation.session.id, choiceKey: choice.key),
+    );
   }
 
   Future<void> _sendText() async {
     final text = _textController.text.trim();
     final conversation = _conversation;
     if (conversation == null || text.isEmpty || _sending) return;
+    final ok = await _run(
+      () => _api.sendMessage(id: conversation.session.id, text: text),
+    );
+    if (ok) _textController.clear();
+  }
+
+  Future<bool> _run(Future<MindcareConversation> Function() call) async {
     setState(() {
       _sending = true;
       _error = null;
     });
     try {
-      final updated = await _api.sendMessage(
-        id: conversation.session.id,
-        text: text,
-      );
-      if (!mounted) return;
-      _textController.clear();
+      final updated = await call();
+      if (!mounted) return false;
       setState(() {
         _conversation = updated;
         _sending = false;
       });
+      return true;
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _sending = false;
         _error = _messageFor(error);
       });
+      return false;
     }
   }
 
@@ -137,7 +146,7 @@ class _MindcareScreenState extends State<MindcareScreen> {
     try {
       final location = safeNow
           ? const SafetyLocation.denied()
-          : await _resolveSafetyLocation();
+          : await resolvePreChosenLocation(_locationProvider);
       final updated = await _api.confirmSafety(
         id: conversation.session.id,
         safeNow: safeNow,
@@ -163,18 +172,11 @@ class _MindcareScreenState extends State<MindcareScreen> {
     }
   }
 
-  Future<SafetyLocation> _resolveSafetyLocation() async {
-    try {
-      return await _locationProvider.resolve();
-    } catch (_) {
-      return const SafetyLocation.denied();
-    }
-  }
-
   Future<SafetyResources?> _fetchSafetyResources({
     SafetyLocation? location,
   }) async {
-    final resolved = location ?? await _resolveSafetyLocation();
+    final resolved =
+        location ?? await resolvePreChosenLocation(_locationProvider);
     try {
       return await _api.fetchSafetyResources(
         permissionGranted: resolved.permissionGranted,
@@ -182,91 +184,18 @@ class _MindcareScreenState extends State<MindcareScreen> {
         adminArea: resolved.adminArea,
       );
     } catch (_) {
+      // The built-in contacts are shown either way.
       return null;
     }
   }
 
   String _messageFor(Object error) => switch (error) {
-    MindcareApiException(reason: 'network_error') => '네트워크 연결을 확인해주세요.',
+    MindcareApiException(reason: 'network_error') =>
+      '네트워크 연결을 확인해 주세요. 방금 고른 답은 다시 눌러서 보낼 수 있어요.',
     MindcareApiException(reason: 'mindcare_safety_confirmation_required') =>
-      '먼저 지금 안전한지 알려주세요.',
-    MindcareApiException() => '마음관리 요청을 처리하지 못했어요.',
-    _ => '마음관리 요청을 처리하지 못했어요.',
+      '먼저 지금 안전한지 알려 주세요.',
+    _ => '마음관리 요청을 처리하지 못했어요. 잠시 뒤 다시 시도해 주세요.',
   };
-
-  Widget _bubble(MindcareMessage message) {
-    final mine = message.role == 'user';
-    return Align(
-      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 320),
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(13),
-        decoration: BoxDecoration(
-          color: mine ? kMainRoseSoft : Colors.white,
-          borderRadius: BorderRadius.circular(22),
-        ),
-        child: Text(message.content, style: mainBody(size: 13, height: 1.5)),
-      ),
-    );
-  }
-
-  Widget _safetyResourceCard(SafetyResources resources) {
-    final heading =
-        resources.locationMode == 'region' && resources.adminArea != null
-        ? '${resources.adminArea} 기준 안내'
-        : '일반 안전 안내';
-    return Semantics(
-      container: true,
-      label: '$heading. 위치 정보는 저장하지 않아요.',
-      child: MainCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(heading, style: mainTitle(size: 17)),
-            const SizedBox(height: 6),
-            Text(
-              resources.locationMode == 'region'
-                  ? '현재 지역에 맞춘 도움 정보를 잠시 보여드려요.'
-                  : '위치 권한 없이도 바로 확인할 수 있는 도움 정보예요.',
-              style: mainBody(size: 12, color: kMainSub, height: 1.45),
-            ),
-            const SizedBox(height: 10),
-            ...resources.resources.map(
-              (resource) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      resource.title,
-                      style: mainBody(weight: FontWeight.w800),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      resource.description,
-                      style: mainBody(size: 12, color: kMainSub, height: 1.4),
-                    ),
-                    if (resource.contact != null) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        resource.contact!,
-                        style: mainBody(size: 14, weight: FontWeight.w800),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            Text(
-              '리소스 ${resources.resourceVersion} · ${resources.validUntil}까지 확인된 안내',
-              style: mainBody(size: 10, color: kMainSub),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   String _stateLabel(String state) => switch (state) {
     'emotion' || 'emotion_detail' => '감정 알아차리기',
@@ -277,145 +206,228 @@ class _MindcareScreenState extends State<MindcareScreen> {
     _ => '천천히 마음 살펴보기',
   };
 
-  Widget _flowHeader(MindcareConversation conversation) => MainCard(
-    key: const Key('mindcare_flow_header'),
-    color: conversation.session.currentState == 'safety'
-        ? kMainPeachSoft
-        : kMainLilacSoft,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(
-              conversation.session.currentState == 'safety'
-                  ? Icons.health_and_safety_outlined
-                  : Icons.route_outlined,
-              color: conversation.session.currentState == 'safety'
-                  ? kMainRose
-                  : kMainLilac,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              _stateLabel(conversation.session.currentState),
-              style: mainBody(weight: FontWeight.w800),
-            ),
+  int _stepOf(String state) => switch (state) {
+    'emotion' || 'emotion_detail' => 1,
+    'situation' || 'situation_detail' => 2,
+    'need' || 'need_detail' => 3,
+    'action' || 'action_detail' => 4,
+    _ => 0,
+  };
+
+  Widget _bubble(MindcareMessage message, V2Palette p) {
+    final mine = message.role == 'user';
+    return Align(
+      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 360),
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: mine ? p.primarySoft : p.surface,
+          borderRadius: BorderRadius.circular(V2Radius.card),
+        ),
+        child: Text(
+          message.content,
+          style: V2Text.body.copyWith(color: mine ? p.onPrimarySoft : p.ink),
+        ),
+      ),
+    );
+  }
+
+  Widget _flowHeader(MindcareConversation c, V2Palette p) {
+    final state = c.session.currentState;
+    final step = _stepOf(state);
+    final safety = state == 'safety';
+    return V2Card(
+      key: const Key('mindcare_flow_header'),
+      variant: V2CardVariant.soft,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                safety ? V2Icons.shield : V2Icons.care,
+                color: safety ? p.err : p.primary,
+                size: 22,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(_stateLabel(state), style: V2Text.bodyStrong),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            safety
+                ? '이야기를 이어가기 전에 지금 안전한지 먼저 확인할게요.'
+                : '감정, 상황, 필요한 것, 작은 행동 순서로 천천히 살펴봐요.',
+            style: V2Text.cap.copyWith(color: p.sub),
+          ),
+          if (step > 0) ...[
+            const SizedBox(height: 10),
+            V2ProgressBar(value: step / 4, semanticLabel: '4단계 중 $step단계'),
           ],
-        ),
-        const SizedBox(height: 7),
-        Text(
-          conversation.session.currentState == 'safety'
-              ? '일반적인 마음관리보다 지금 안전을 확인하는 일이 먼저예요.'
-              : '감정 → 상황 → 필요한 것 → 작은 행동 순서로 천천히 살펴봐요.',
-          style: mainBody(size: 12, color: kMainSub, height: 1.45),
-        ),
+        ],
+      ),
+    );
+  }
+
+  Widget _choiceButtons(MindcareConversation c) {
+    final safety = c.session.currentState == 'safety';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final choice in c.choices)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: V2Button(
+              label: choice.label,
+              // Same weight for every answer, including on the safety check.
+              variant: V2ButtonVariant.soft,
+              onPressed: _sending ? null : () => _choose(choice),
+              semanticLabel: safety ? '안전 확인: ${choice.label}' : null,
+            ),
+          ),
       ],
-    ),
-  );
+    );
+  }
+
+  Widget _body(V2Palette p) {
+    final conversation = _conversation;
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.all(V2Space.page),
+        child: V2SkeletonList(count: 3),
+      );
+    }
+    if (conversation == null) {
+      return V2ErrorState(
+        title: '마음관리를 열지 못했어요',
+        body: _error ?? '잠시 뒤 다시 시도해 주세요. 급하면 위의 도움이 필요하면을 눌러 주세요.',
+        onRetry: _load,
+      );
+    }
+    final question = conversation.nextQuestion;
+    final canType = question?.allowFreeText == true;
+    final supporting = conversation.session.status == 'safety_support';
+    return ListView(
+      controller: _scroll,
+      padding: const EdgeInsets.fromLTRB(V2Space.page, 4, V2Space.page, 32),
+      children: [
+        _flowHeader(conversation, p),
+        const SizedBox(height: 14),
+        if (supporting) ...[
+          Text(
+            '지금은 안전이 먼저예요. 가까운 사람이나 아래 도움받을 곳에 연락해 주세요.',
+            style: V2Text.bodyStrong.copyWith(color: p.ink),
+          ),
+          const SizedBox(height: 10),
+          CrisisContactsCard(resources: _safetyResources),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: V2Button(
+              label: '가까운 기관도 보고 싶어요',
+              variant: V2ButtonVariant.text,
+              size: V2ButtonSize.sm,
+              fullWidth: false,
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const CareSettingsScreen(),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+        for (final m in conversation.messages) _bubble(m, p),
+        if (conversation.session.status == 'completed')
+          V2Card(
+            variant: V2CardVariant.soft,
+            child: Text(
+              '오늘의 마음관리를 마쳤어요. 작은 행동 하나만 기억해 두세요. 다음에 또 와도 괜찮아요.',
+              style: V2Text.body.copyWith(color: p.ink),
+            ),
+          ),
+        if (_error != null) ...[
+          V2Banner(tone: V2BannerTone.err, message: _error!),
+          const SizedBox(height: 10),
+        ],
+        if (conversation.choices.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(
+            question?.text ?? '마음에 가까운 답을 골라 주세요.',
+            style: V2Text.head.copyWith(color: p.ink),
+          ),
+          const SizedBox(height: 10),
+          _choiceButtons(conversation),
+        ],
+        if (canType) ...[
+          const SizedBox(height: 12),
+          V2TextField(
+            label: '편한 말로 적어 주세요',
+            controller: _textController,
+            maxLines: 4,
+            hint: '짧게 적어도 괜찮아요.',
+          ),
+          const SizedBox(height: 10),
+          V2Button(
+            label: '다음으로',
+            loading: _sending,
+            onPressed: _sending ? null : _sendText,
+          ),
+        ],
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final conversation = _conversation;
-    final question = conversation?.nextQuestion;
-    final canType = question?.allowFreeText == true;
-    return Scaffold(
-      backgroundColor: kMainBg,
-      appBar: AppBar(
-        backgroundColor: kMainBg,
-        title: Text('마음관리', style: mainTitle(size: 24, color: kMainRose)),
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: kMainRose))
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(18, 12, 18, 28),
-              children: [
-                MainCard(
-                  child: Text(
-                    '따뜻한 질문을 따라 내 마음과 작은 행동을 정리해봐요. 파트너와 자동으로 공유되지 않아요.',
-                    style: mainBody(size: 13, color: kMainSub, height: 1.5),
+    return V2Theme(
+      dark: true,
+      child: Builder(
+        builder: (context) {
+          final p = V2Palette.of(context);
+          return Scaffold(
+            backgroundColor: p.bg,
+            appBar: V2Header(
+              title: '마음관리',
+              actions: [
+                V2IconButton(
+                  icon: V2Icons.settings,
+                  tooltip: '돌봄 설정',
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const CareSettingsScreen(),
+                    ),
                   ),
                 ),
-                if (_error != null) ...[
-                  const SizedBox(height: 10),
-                  Text(_error!, style: mainBody(size: 13, color: kMainRose)),
-                ],
-                if (conversation == null) ...[
-                  const SizedBox(height: 28),
-                  Text('마음관리 세션을 열 수 없어요.', style: mainTitle(size: 20)),
-                ] else ...[
-                  const SizedBox(height: 16),
-                  _flowHeader(conversation),
-                  const SizedBox(height: 12),
-                  if (conversation.session.status == 'safety_support') ...[
-                    Text(
-                      '지금은 안전을 먼저 챙겨주세요. 가까운 사람이나 즉시 도움을 받을 곳에 연락해 주세요.',
-                      style: mainBody(size: 13, color: kMainRose, height: 1.5),
-                    ),
-                    if (_safetyResources != null) ...[
-                      const SizedBox(height: 12),
-                      _safetyResourceCard(_safetyResources!),
-                    ],
-                    const SizedBox(height: 12),
-                  ],
-                  ...conversation.messages.map(_bubble),
-                  if (conversation.session.status == 'completed')
-                    Text(
-                      '오늘의 마음관리를 마쳤어요. 작은 행동 하나만 기억해두세요.',
-                      style: mainBody(size: 13, color: kMainSub, height: 1.5),
-                    ),
-                  if (conversation.choices.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      question?.text ?? '마음에 가까운 답을 골라주세요.',
-                      style: mainBody(weight: FontWeight.w800, height: 1.4),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: conversation.choices
-                          .map(
-                            (choice) => OutlinedButton(
-                              onPressed: _sending
-                                  ? null
-                                  : () => _choose(choice),
-                              child: Text(choice.label),
-                            ),
-                          )
-                          .toList(growable: false),
-                    ),
-                  ],
-                  if (canType) ...[
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _textController,
-                      minLines: 2,
-                      maxLines: 5,
-                      decoration: InputDecoration(
-                        hintText: '편한 말로 적어주셔도 괜찮아요.',
-                        filled: true,
-                        fillColor: Colors.white,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    FilledButton(
-                      onPressed: _sending ? null : _sendText,
-                      child: _sending
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('다음으로'),
-                    ),
-                  ],
-                ],
               ],
             ),
+            body: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    V2Space.page,
+                    0,
+                    V2Space.page,
+                    8,
+                  ),
+                  child: Row(
+                    children: [
+                      CareHelpChip(resources: _safetyResources),
+                      const SizedBox(width: 10),
+                      const Expanded(child: CareAiNotice()),
+                    ],
+                  ),
+                ),
+                Expanded(child: _body(p)),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }

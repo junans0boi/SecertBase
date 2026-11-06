@@ -3,66 +3,15 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-import '../../core/app_theme.dart';
 import '../../core/auth_service.dart';
-import '../../core/main_design.dart';
 import '../../core/socket_service.dart';
+import '../../v2/v2.dart';
+import 'shop_common.dart';
 
-// ── Shared grade helpers (공개) ───────────────────────────────────────────────
+export 'shop_common.dart'
+    show formatStatValue, statLabels, gradeOrder, gradeColor;
 
-const gradeOrder = ['B', 'A', 'S', 'SS', 'SSS'];
-
-Color gradeColor(String grade) => switch (grade) {
-  'B' => kMainMuted,
-  'A' => kMainSage,
-  'S' => kMainSky,
-  'SS' => kMainLilac,
-  'SSS' => kMainHoney,
-  _ => kMainMuted,
-};
-
-/// 아이템 효과 수치를 읽기 좋게(0.4 → "0.4", 8.0 → "8").
-String formatStatValue(num value) {
-  final v = value.toDouble();
-  if (v == v.roundToDouble()) return v.toInt().toString();
-  return v
-      .toStringAsFixed(2)
-      .replaceFirst(RegExp(r'0+$'), '')
-      .replaceFirst(RegExp(r'\.$'), '');
-}
-
-const statLabels = {
-  // 기존
-  'coin_bonus_pct': '🪙 승리 코인 +%',
-  'shop_discount_pct': '🏷️ 상점 할인 %',
-  'daily_bonus_add': '📅 데일리 추가 코인',
-  'lose_refund_pct': '🔁 패배 환급 %',
-  'yut_control_pct': '🎯 윷·모 확률 +%p',
-  'yut_catch_bonus': '⚡ 말 잡기 보너스 코인',
-  'gacha_rate_up': '🎰 뽑기 S등급 확률 +%',
-  'daily_bonus_cooldown': '⏱️ 데일리 쿨타임 감소',
-  'win_streak_bonus': '🔥 연승 추가 코인',
-  'onecard_draw_reduce': '🃏 +카드 1장 감소',
-  // 윷 전용
-  'yut_mo_rate_pct': '🎲 모(5칸) 확률 +%p',
-  'yut_backdo_bonus_pct': '🎲 유리한 백도 추가 던지기 %',
-  'yut_win_coin_pct': '💰 윷·모 코인 보너스(판돈 %)',
-  'yut_overturn_pct': '🔥 지고 있을 때 윷·모 확률 +%p',
-  'yut_backdo_shield_pct': '🧘 빽도 방어(다시 던질 확률 %)',
-  // 말 전용
-  'piece_catch_resist_pct': '🛡️ 잡힘 방어 %',
-  'piece_catch_coin_bonus': '💥 상대 잡기 추가 코인',
-  'piece_safe_zone_pct': '🏠 잡힐 확률 추가 감소 %',
-  'piece_group_pct': '🤝 업은 말 분리 방지 %',
-  // 원카드 전용
-  'card_shield_pct': '🛡️ 공격 카드 무효화 %',
-  'card_lucky_draw_pct': '🍀 원하는 카드 뽑기 %',
-  'card_uno_protect_pct': '🔒 원카드 선언 보호 %',
-  'card_reverse_bonus': '↩️ 리버스/스킵 추가 코인',
-};
-
-// ── InventoryTab ──────────────────────────────────────────────────────────────
-
+/// 내 아이템: 상점과 같은 카테고리 필터 · 같은 보유/장착 뱃지를 써요.
 class InventoryTab extends StatefulWidget {
   final VoidCallback onBalanceChanged;
   final http.Client? client;
@@ -87,12 +36,10 @@ class _InventoryTabState extends State<InventoryTab> {
 
   List<Map<String, dynamic>> _owned = [];
   Set<int> _equippedIds = {};
-  Map<String, dynamic> _equippedBySlot =
-      {}; // slot → {item_id, name, icon, grade, stats:{}}
-  int _balance = 0;
+  Map<String, dynamic> _equippedBySlot = {};
   bool _loading = true;
-  String? _error;
-  String? _filterGame; // 인벤토리 필터 (null=전체)
+  bool _failed = false;
+  String? _filterGame;
 
   late final http.Client _client;
   late final bool _ownsClient;
@@ -103,49 +50,42 @@ class _InventoryTabState extends State<InventoryTab> {
     _ownsClient = widget.client == null;
     _client = widget.client ?? http.Client();
     _load();
-    _socket.addListener(_onWallet);
   }
 
   @override
   void dispose() {
-    _socket.removeListener(_onWallet);
     if (_ownsClient) _client.close();
     super.dispose();
   }
 
   String get _baseUrl => widget.baseUrl ?? _socket.serverUrl ?? '';
 
-  void _onWallet() {
-    final b = _socket.walletBalance;
-    if (b != null && b != _balance) setState(() => _balance = b);
-  }
+  Map<String, String> get _headers => {
+    'Authorization': 'Bearer ${_auth.token}',
+    'Content-Type': 'application/json',
+  };
 
   Future<void> _load() async {
     if (!mounted) return;
     setState(() {
       _loading = true;
-      _error = null;
+      _failed = false;
     });
     try {
-      final headers = {'Authorization': 'Bearer ${_auth.token}'};
       final results = await Future.wait([
-        _client.get(Uri.parse('$_baseUrl/api/shop/owned'), headers: headers),
-        _client.get(Uri.parse('$_baseUrl/api/shop/equipped'), headers: headers),
+        _client.get(Uri.parse('$_baseUrl/api/shop/owned'), headers: _headers),
         _client.get(
-          Uri.parse('$_baseUrl/api/wallet/balance'),
-          headers: headers,
+          Uri.parse('$_baseUrl/api/shop/equipped'),
+          headers: _headers,
         ),
       ]);
-      if (!mounted) return;
       final ownedData = jsonDecode(results[0].body) as Map;
       final equippedData = jsonDecode(results[1].body) as Map;
-      final walletData = jsonDecode(results[2].body) as Map;
-
       final slots = (equippedData['slots'] as Map? ?? {})
           .cast<String, dynamic>();
-
+      if (!mounted) return;
       setState(() {
-        // 폐지된 말 스킨·은퇴한 옛 윷은 보여 주지 않는다(서버도 거르지만 옛 응답에도 안전하게).
+        // 폐지된 말 스킨·은퇴한 옛 윷은 보여 주지 않아요.
         _owned = (ownedData['owned'] as List? ?? [])
             .cast<Map<String, dynamic>>()
             .where((i) => i['slot'] != 'yut_piece' && i['game'] != 'yut_legacy')
@@ -154,13 +94,12 @@ class _InventoryTabState extends State<InventoryTab> {
             .map((v) => ((v as Map)['item_id'] as num).toInt())
             .toSet();
         _equippedBySlot = Map<String, dynamic>.from(slots);
-        _balance = (walletData['balance'] as num?)?.toInt() ?? _balance;
         _loading = false;
       });
     } catch (_) {
       if (mounted) {
         setState(() {
-          _error = '인벤토리를 불러오지 못했어요.';
+          _failed = true;
           _loading = false;
         });
       }
@@ -171,21 +110,21 @@ class _InventoryTabState extends State<InventoryTab> {
     try {
       final res = await _client.post(
         Uri.parse('$_baseUrl/api/shop/equip'),
-        headers: {
-          'Authorization': 'Bearer ${_auth.token}',
-          'Content-Type': 'application/json',
-        },
+        headers: _headers,
         body: jsonEncode({'item_id': item['item_id']}),
       );
       final body = jsonDecode(res.body) as Map;
-      if (body['ok'] == true && mounted) {
-        _showSnack('${item['name']} 장착 완료 ✅');
+      if (!mounted) return;
+      if (body['ok'] == true) {
+        showV2Snack(context, '${item['name']}을 장착했어요');
         await _load();
       } else {
-        _showSnack('장착 실패');
+        showV2Snack(context, '장착하지 못했어요. 다시 시도해 주세요.', tone: V2Tone.err);
       }
     } catch (_) {
-      _showSnack('오류가 발생했어요');
+      if (mounted) {
+        showV2Snack(context, '장착하지 못했어요. 네트워크를 확인해 주세요.', tone: V2Tone.err);
+      }
     }
   }
 
@@ -193,19 +132,21 @@ class _InventoryTabState extends State<InventoryTab> {
     try {
       final res = await _client.post(
         Uri.parse('$_baseUrl/api/shop/unequip'),
-        headers: {
-          'Authorization': 'Bearer ${_auth.token}',
-          'Content-Type': 'application/json',
-        },
+        headers: _headers,
         body: jsonEncode({'slot': slot}),
       );
       final body = jsonDecode(res.body) as Map;
-      if (body['ok'] == true && mounted) {
-        _showSnack('기본 아이템으로 변경됨');
+      if (!mounted) return;
+      if (body['ok'] == true) {
+        showV2Snack(context, '기본 아이템으로 바꿨어요');
         await _load();
+      } else {
+        showV2Snack(context, '바꾸지 못했어요. 다시 시도해 주세요.', tone: V2Tone.err);
       }
     } catch (_) {
-      _showSnack('오류가 발생했어요');
+      if (mounted) {
+        showV2Snack(context, '바꾸지 못했어요. 네트워크를 확인해 주세요.', tone: V2Tone.err);
+      }
     }
   }
 
@@ -216,7 +157,6 @@ class _InventoryTabState extends State<InventoryTab> {
       'slot': 'yut_yut',
       'game': 'yut',
       'grade': 'B',
-      'icon': '🎲',
       'stats': <String, dynamic>{},
     },
     {
@@ -225,7 +165,6 @@ class _InventoryTabState extends State<InventoryTab> {
       'slot': 'onecard_cardback',
       'game': 'onecard',
       'grade': 'B',
-      'icon': '🃏',
       'stats': <String, dynamic>{},
     },
   ];
@@ -255,311 +194,112 @@ class _InventoryTabState extends State<InventoryTab> {
     'onecard_draw_reduce': 2,
   };
 
+  Map<String, dynamic> _statsOf(Map<String, dynamic> item) {
+    final raw = item['stats'];
+    if (raw is String && raw.isNotEmpty && raw != 'null') {
+      try {
+        return Map<String, dynamic>.from(jsonDecode(raw) as Map);
+      } catch (_) {}
+    } else if (raw is Map) {
+      return Map<String, dynamic>.from(raw);
+    }
+    return {};
+  }
+
   void _showItemDetail(Map<String, dynamic> item) {
     final grade = item['grade'] as String? ?? 'B';
-    final gc = gradeColor(grade);
     final slot = item['slot'] as String? ?? '';
     final id = (item['item_id'] as num).toInt();
     final equipped = _equippedIds.contains(id);
     final usable = item['usable'] != false;
     final description = item['description'] as String?;
-
-    // 이 아이템의 스탯
-    Map<String, dynamic> itemStats = {};
-    final rawStats = item['stats'];
-    if (rawStats is String && rawStats.isNotEmpty && rawStats != 'null') {
-      try {
-        itemStats = Map<String, dynamic>.from(jsonDecode(rawStats) as Map);
-      } catch (_) {}
-    } else if (rawStats is Map) {
-      itemStats = Map<String, dynamic>.from(rawStats);
-    }
-
-    // 같은 슬롯에 장착된 다른 아이템의 스탯
-    Map<String, dynamic> equippedStats = {};
+    final stats = _statsOf(item);
     final equippedInSlot = _equippedBySlot[slot] as Map?;
-    if (equippedInSlot != null &&
-        (equippedInSlot['item_id'] as num?)?.toInt() != id) {
-      final es = equippedInSlot['stats'] as Map?;
-      if (es != null) equippedStats = Map<String, dynamic>.from(es);
-    }
+    final equippedStats =
+        equippedInSlot != null &&
+            (equippedInSlot['item_id'] as num?)?.toInt() != id
+        ? Map<String, dynamic>.from((equippedInSlot['stats'] as Map?) ?? {})
+        : <String, dynamic>{};
 
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        minChildSize: 0.4,
-        maxChildSize: 0.9,
-        builder: (_, ctrl) => Container(
-          decoration: const BoxDecoration(
-            color: kSurface,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-          ),
-          child: ListView(
-            controller: ctrl,
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-            children: [
-              // 핸들바
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: kMainLine,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              // 헤더
-              Row(
-                children: [
-                  Text(
-                    item['icon'] as String? ?? '🎁',
-                    style: const TextStyle(fontSize: 44),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item['name'] as String? ?? '',
-                          style: mainTitle(size: 17),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 7,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: gc.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(5),
-                              ),
-                              child: Text(
-                                grade,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w800,
-                                  color: gc,
-                                ),
-                              ),
-                            ),
-                            if (equipped) ...[
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 7,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: kMainSage.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(5),
-                                ),
-                                child: Text(
-                                  '장착 중',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    color: kMainSage,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (!equipped)
-                    ElevatedButton(
-                      key: const Key('inventory_use_cta'),
-                      onPressed: usable
-                          ? () {
-                              Navigator.pop(ctx);
-                              _equip(item);
-                            }
-                          : null,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: usable ? kMainRose : kMainMuted,
-                        shape: const StadiumBorder(),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 8,
-                        ),
-                      ),
-                      child: Text(
-                        usable ? '장착하기' : '사용할 수 없음',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              if (description != null && description.trim().isNotEmpty)
-                Container(
-                  key: const Key('inventory_item_description'),
-                  margin: const EdgeInsets.only(top: 16),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: kMainLilac.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    description,
-                    style: mainBody(size: 13, color: kMainSub),
-                  ),
-                ),
-              if (itemStats.isNotEmpty) ...[
-                const SizedBox(height: 20),
-                if (equippedStats.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 10,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: gc,
-                            borderRadius: BorderRadius.circular(3),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '이 아이템',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: gc,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Container(
-                          width: 10,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: kMainMuted.withValues(alpha: 0.5),
-                            borderRadius: BorderRadius.circular(3),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '장착 중',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: kMainMuted,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                for (final entry in itemStats.entries) ...[
-                  _buildStatBar(
-                    key: entry.key,
-                    value: (entry.value as num).toDouble(),
-                    compareValue: equippedStats[entry.key] != null
-                        ? (equippedStats[entry.key] as num).toDouble()
-                        : null,
-                    gc: gc,
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              ] else ...[
-                const SizedBox(height: 12),
-                Text('스탯 정보 없음', style: mainBody(size: 12, color: kMainMuted)),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatBar({
-    required String key,
-    required double value,
-    double? compareValue,
-    required Color gc,
-  }) {
-    final maxV = (_statMaxValues[key] ?? value).toDouble();
-    final fraction = maxV > 0 ? (value / maxV).clamp(0.0, 1.0) : 0.0;
-    final cFraction = compareValue != null && maxV > 0
-        ? (compareValue / maxV).clamp(0.0, 1.0)
-        : null;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+    showV2Sheet<void>(
+      context,
+      title: item['name'] as String? ?? '',
+      builder: (ctx) {
+        final p = V2Palette.of(ctx);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              child: Text(
-                statLabels[key] ?? key,
-                style: const TextStyle(fontSize: 12, color: kMainSub),
-              ),
-            ),
-            Text(
-              '+${formatStatValue(value)}',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: gc,
-              ),
-            ),
-            if (compareValue != null) ...[
-              Text(
-                ' vs +${formatStatValue(compareValue)}',
-                style: TextStyle(fontSize: 10, color: kMainMuted),
-              ),
-            ],
-          ],
-        ),
-        const SizedBox(height: 4),
-        LayoutBuilder(
-          builder: (_, constraints) {
-            final w = constraints.maxWidth;
-            return Stack(
+            Row(
               children: [
-                Container(
-                  height: 8,
-                  width: w,
-                  decoration: BoxDecoration(
-                    color: Colors.white10,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-                if (cFraction != null)
-                  Container(
-                    height: 8,
-                    width: w * cFraction,
-                    decoration: BoxDecoration(
-                      color: kMainMuted.withValues(alpha: 0.45),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                Container(
-                  height: 8,
-                  width: w * fraction,
-                  decoration: BoxDecoration(
-                    color: gc,
-                    borderRadius: BorderRadius.circular(4),
+                ItemArt(game: item['game'], grade: grade, size: 64),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      GradeChip(grade: grade),
+                      ?ownershipChip(owned: true, equipped: equipped),
+                    ],
                   ),
                 ),
               ],
-            );
-          },
-        ),
-      ],
+            ),
+            if (description != null && description.trim().isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Container(
+                key: const Key('inventory_item_description'),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: p.soft,
+                  borderRadius: BorderRadius.circular(V2Radius.ctl),
+                ),
+                child: Text(description, style: V2Text.body),
+              ),
+            ],
+            const SizedBox(height: 16),
+            if (stats.isEmpty)
+              Text('능력치가 없는 아이템이에요.', style: V2Text.cap)
+            else ...[
+              Text(
+                equippedStats.isEmpty ? '능력치' : '능력치 (장착 중인 아이템과 비교)',
+                style: V2Text.bodyStrong,
+              ),
+              const SizedBox(height: 8),
+              for (final e in stats.entries)
+                _StatBar(
+                  label: statLabels[e.key] ?? e.key,
+                  value: (e.value as num).toDouble(),
+                  compare: equippedStats[e.key] == null
+                      ? null
+                      : (equippedStats[e.key] as num).toDouble(),
+                  max: (_statMaxValues[e.key] ?? (e.value as num)).toDouble(),
+                  grade: grade,
+                ),
+            ],
+            const SizedBox(height: 16),
+            if (!equipped)
+              SizedBox(
+                key: const Key('inventory_use_cta'),
+                child: V2Button(
+                  label: usable ? '장착하기' : '지금은 쓸 수 없어요',
+                  onPressed: usable
+                      ? () {
+                          Navigator.pop(ctx);
+                          _equip(item);
+                        }
+                      : null,
+                ),
+              )
+            else
+              V2Button(
+                label: '닫기',
+                variant: V2ButtonVariant.soft,
+                onPressed: () => Navigator.pop(ctx),
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -568,859 +308,359 @@ class _InventoryTabState extends State<InventoryTab> {
     try {
       final res = await _client.get(
         Uri.parse('$_baseUrl/api/shop/catalog$gameParam'),
-        headers: {'Authorization': 'Bearer ${_auth.token}'},
+        headers: _headers,
       );
       final body = jsonDecode(res.body) as Map;
       if (!mounted) return;
-      if (body['ok'] == true) {
-        final items = (body['items'] as List? ?? [])
-            .cast<Map<String, dynamic>>();
-        await showModalBottomSheet(
-          context: context,
-          isScrollControlled: true,
-          backgroundColor: Colors.transparent,
-          builder: (ctx) => _CompendiumSheet(items: items),
-        );
-      }
+      if (body['ok'] != true) throw StateError('catalog');
+      final items = (body['items'] as List? ?? []).cast<Map<String, dynamic>>();
+      await showV2Sheet<void>(
+        context,
+        title: '도감',
+        builder: (_) => _Compendium(items: items),
+      );
     } catch (_) {
-      _showSnack('도감을 불러오지 못했어요');
+      if (mounted) {
+        showV2Snack(context, '도감을 불러오지 못했어요. 다시 시도해 주세요.', tone: V2Tone.err);
+      }
     }
   }
-
-  void _showSnack(String msg) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), duration: const Duration(seconds: 2)),
-    );
-  }
-
-  String _formatCoins(int n) => n >= 1000
-      ? '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}K'
-      : '$n';
-
-  // ── Build ────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Center(
+    if (_loading && _owned.isEmpty) {
+      return const Padding(
         key: Key('inventory_loading_state'),
-        child: CircularProgressIndicator(),
+        padding: EdgeInsets.all(V2Space.page),
+        child: V2SkeletonList(count: 3),
       );
     }
-    if (_error != null) {
-      return ListView(
+    if (_failed) {
+      return KeyedSubtree(
         key: const Key('inventory_error_state'),
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(24, 100, 24, 24),
-        children: [
-          const Icon(Icons.cloud_off_rounded, size: 42, color: kMainMuted),
-          const SizedBox(height: 12),
-          Text(
-            _error!,
-            textAlign: TextAlign.center,
-            style: mainTitle(size: 16),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '잠시 후 다시 불러오거나 네트워크를 확인해주세요.',
-            textAlign: TextAlign.center,
-            style: mainBody(size: 13, color: kMainMuted),
-          ),
-          const SizedBox(height: 18),
-          Center(
-            child: ElevatedButton(onPressed: _load, child: const Text('다시 시도')),
-          ),
-        ],
+        child: V2ErrorState(
+          title: '인벤토리를 불러오지 못했어요.',
+          body: '잠시 후 다시 불러오거나 네트워크를 확인해 주세요. 가진 아이템은 그대로 안전해요.',
+          onRetry: _load,
+        ),
       );
     }
 
-    final filteredOwned = _filterGame == null
+    final owned = _filterGame == null
         ? _owned
         : _owned.where((i) => i['game'] == _filterGame).toList();
-
-    // 기본 아이템: 필터 일치 + 맨 앞에 배치
-    final filteredDefaults = _defaultItems
-        .where((d) {
-          if (_filterGame == null) return true;
-          return d['game'] == _filterGame;
-        })
-        .map((d) {
-          final slot = d['slot'] as String;
-          final slotEquipped = _equippedBySlot[slot];
-          // 해당 슬롯에 다른 아이템이 장착돼 있지 않으면 기본이 장착 중
-          final isDefaultEquipped = slotEquipped == null;
-          return <String, dynamic>{
+    final defaults = [
+      for (final d in _defaultItems)
+        if (_filterGame == null || d['game'] == _filterGame)
+          {
             ...d,
             '_isDefault': true,
-            '_defaultEquipped': isDefaultEquipped,
-          };
-        })
-        .toList();
-
-    final allItems = [...filteredDefaults, ...filteredOwned];
+            // 슬롯에 다른 아이템이 없으면 기본 아이템이 장착 중이에요.
+            '_equipped': _equippedBySlot[d['slot']] == null,
+          },
+    ];
+    final p = V2Palette.of(context);
 
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
+        padding: const EdgeInsets.only(bottom: 40),
         children: [
-          // 잔액 + 도감 버튼
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text('내 아이템 ${_owned.length}', style: V2Text.head),
+                ),
+                V2Button(
+                  label: '도감',
+                  icon: Icons.menu_book_rounded,
+                  variant: V2ButtonVariant.text,
+                  size: V2ButtonSize.sm,
+                  fullWidth: false,
+                  onPressed: _showCompendium,
+                ),
+              ],
+            ),
+          ),
+          CategoryFilter(
+            selected: _filterGame,
+            onChanged: (g) => setState(() => _filterGame = g),
+          ),
+          const SizedBox(height: 16),
+          if (owned.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: KeyedSubtree(
+                key: const Key('inventory_empty_state'),
+                child: V2Card(
+                  variant: V2CardVariant.soft,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('아직 보유한 아이템이 없어요.', style: V2Text.bodyStrong),
+                      const SizedBox(height: 4),
+                      Text(
+                        '상점에서 고르거나 뽑기로 첫 아이템을 만나 보세요. 산 아이템은 여기서 장착해요.',
+                        style: V2Text.cap.copyWith(color: p.sub),
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          V2Button(
+                            label: '다시 불러오기',
+                            variant: V2ButtonVariant.ghost,
+                            size: V2ButtonSize.sm,
+                            fullWidth: false,
+                            onPressed: _load,
+                          ),
+                          if (widget.onOpenShop != null)
+                            V2Button(
+                              label: '상점 둘러보기',
+                              size: V2ButtonSize.sm,
+                              fullWidth: false,
+                              onPressed: widget.onOpenShop,
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                for (final item in [...defaults, ...owned])
+                  _InventoryTile(
+                    item: item,
+                    equipped: item['_isDefault'] == true
+                        ? item['_equipped'] == true
+                        : _equippedIds.contains(
+                            (item['item_id'] as num).toInt(),
+                          ),
+                    onTap: item['_isDefault'] == true
+                        ? (item['_equipped'] == true
+                              ? null
+                              : () => _unequip(item['slot'] as String))
+                        : () => _showItemDetail(item),
+                    defaultLabel: item['_isDefault'] == true,
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InventoryTile extends StatelessWidget {
+  const _InventoryTile({
+    required this.item,
+    required this.equipped,
+    required this.onTap,
+    required this.defaultLabel,
+  });
+
+  final Map<String, dynamic> item;
+  final bool equipped;
+  final VoidCallback? onTap;
+  final bool defaultLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final grade = item['grade'] as String? ?? 'B';
+    final qty = (item['quantity'] as num?)?.toInt() ?? 1;
+    return SizedBox(
+      width: 156,
+      child: V2Card(
+        onTap: onTap,
+        padding: const EdgeInsets.all(12),
+        semanticLabel: [
+          '${item['name']}',
+          if (equipped) '장착 중',
+          if (onTap != null && !equipped)
+            defaultLabel ? '눌러서 기본으로 바꾸기' : '눌러서 자세히 보기',
+        ].join(', '),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                ItemArt(game: item['game'], grade: grade, size: 52),
+                const Spacer(),
+                if (qty > 1) Text('×$qty', style: V2Text.label),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              item['name'] as String? ?? '',
+              style: V2Text.bodyStrong,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 6),
+            GradeChip(grade: grade),
+            const SizedBox(height: 8),
+            ownershipChip(owned: true, equipped: equipped) ??
+                Text(
+                  defaultLabel ? '눌러서 쓰기' : '장착하기',
+                  style: V2Text.label.copyWith(
+                    color: V2Palette.of(context).primary,
+                  ),
+                ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatBar extends StatelessWidget {
+  const _StatBar({
+    required this.label,
+    required this.value,
+    required this.compare,
+    required this.max,
+    required this.grade,
+  });
+
+  final String label;
+  final double value;
+  final double? compare;
+  final double max;
+  final String grade;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = V2Palette.of(context);
+    final t = V2ToneColors.of(gradeTone(grade));
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
+              Expanded(
+                child: Text(label, style: V2Text.cap.copyWith(color: p.ink)),
+              ),
+              Text(
+                '+${formatStatValue(value)}',
+                style: V2Text.label.copyWith(color: t.text),
+              ),
+              if (compare != null)
+                Text(' (지금 +${formatStatValue(compare!)})', style: V2Text.cap),
+            ],
+          ),
+          const SizedBox(height: 4),
+          V2ProgressBar(
+            value: max > 0 ? value / max : 0,
+            height: 6,
+            color: t.base,
+            semanticLabel: '$label +${formatStatValue(value)}',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 도감: 모은 아이템은 보이고, 아직 못 모은 아이템은 "???"로 가려져요.
+class _Compendium extends StatefulWidget {
+  const _Compendium({required this.items});
+
+  final List<Map<String, dynamic>> items;
+
+  @override
+  State<_Compendium> createState() => _CompendiumState();
+}
+
+class _CompendiumState extends State<_Compendium> {
+  String? _game;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = widget.items
+        .where((i) => _game == null || i['game'] == _game)
+        .toList();
+    final owned = items.where((i) => i['owned'] == true).length;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('$owned개 모았어요 · 전체 ${items.length}개', style: V2Text.cap),
+        const SizedBox(height: 12),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (final c in shopCategories)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: V2Chip(
+                    label: c.label,
+                    selected: _game == c.game,
+                    onTap: () => setState(() => _game = c.game),
+                  ),
                 ),
-                decoration: BoxDecoration(
-                  color: kMainHoney.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            for (final item in items)
+              SizedBox(
+                width: 96,
+                child: Column(
                   children: [
-                    const Text('🪙', style: TextStyle(fontSize: 14)),
-                    const SizedBox(width: 4),
+                    item['owned'] == true
+                        ? ItemArt(
+                            game: item['game'],
+                            grade: item['grade'] as String? ?? 'B',
+                          )
+                        : Container(
+                            width: 56,
+                            height: 56,
+                            decoration: BoxDecoration(
+                              color: V2Palette.of(context).soft2,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Icon(
+                              V2Icons.lock,
+                              color: V2Palette.of(context).muted,
+                            ),
+                          ),
+                    const SizedBox(height: 6),
                     Text(
-                      _formatCoins(_balance),
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: kMainHoney,
+                      item['owned'] == true ? '${item['name']}' : '???',
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: V2Text.cap.copyWith(
+                        color: V2Palette.of(context).ink,
+                      ),
+                    ),
+                    Text(
+                      item['owned'] == true ? '' : '미보유',
+                      style: V2Text.label.copyWith(
+                        color: V2Palette.of(context).sub,
                       ),
                     ),
                   ],
                 ),
               ),
-              const Spacer(),
-              TextButton.icon(
-                onPressed: _showCompendium,
-                icon: const Icon(Icons.menu_book_rounded, size: 16),
-                label: const Text('도감', style: TextStyle(fontSize: 13)),
-                style: TextButton.styleFrom(foregroundColor: kMainLilac),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // 게임 필터 칩
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (final (label, game) in [
-                  ('전체', null),
-                  ('윷놀이', 'yut'),
-                  ('원카드', 'onecard'),
-                  ('마블 작전', 'marble'),
-                ])
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Text(label),
-                      selected: _filterGame == game,
-                      onSelected: (_) => setState(() {
-                        _filterGame = game;
-                      }),
-                      selectedColor: kMainRose.withValues(alpha: 0.16),
-                      labelStyle: TextStyle(
-                        color: _filterGame == game ? kMainRose : kMainMuted,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          if (filteredOwned.isEmpty)
-            Container(
-              key: const Key('inventory_empty_state'),
-              margin: const EdgeInsets.only(bottom: 16),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: kSurface,
-                borderRadius: BorderRadius.circular(26),
-                border: Border.all(color: kMainLine),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('아직 보유한 아이템이 없어요.', style: mainTitle(size: 15)),
-                  const SizedBox(height: 6),
-                  Text(
-                    '상점에서 산 아이템은 여기서 자세히 보고 장착할 수 있어요.',
-                    style: mainBody(size: 12, color: kMainMuted),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      TextButton(
-                        onPressed: _load,
-                        child: const Text('다시 불러오기'),
-                      ),
-                      if (widget.onOpenShop != null) ...[
-                        const SizedBox(width: 8),
-                        OutlinedButton(
-                          onPressed: widget.onOpenShop,
-                          child: const Text('상점에서 둘러보기'),
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-          // 보유 아이템 (기본 포함)
-          Text(
-            '아이템 (${filteredOwned.length}개 보유)',
-            style: mainBody(size: 13, weight: FontWeight.w700),
-          ),
-          const SizedBox(height: 10),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              mainAxisSpacing: 8,
-              crossAxisSpacing: 8,
-              childAspectRatio: 0.78,
-            ),
-            itemCount: allItems.length,
-            itemBuilder: (_, i) {
-              final item = allItems[i];
-              final isDefault = item['_isDefault'] == true;
-              final id = (item['item_id'] as num).toInt();
-              if (isDefault) {
-                final defaultEquipped = item['_defaultEquipped'] == true;
-                final slot = item['slot'] as String;
-                return _InventoryItemCard(
-                  item: item,
-                  equipped: defaultEquipped,
-                  quantity: 1,
-                  onEquip: defaultEquipped ? null : () => _unequip(slot),
-                  onTap: null,
-                );
-              }
-              final equipped = _equippedIds.contains(id);
-              final qty = (item['quantity'] as num?)?.toInt() ?? 1;
-              return _InventoryItemCard(
-                item: item,
-                equipped: equipped,
-                quantity: qty,
-                onEquip: equipped ? null : () => _equip(item),
-                onTap: () => _showItemDetail(item),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── _InventoryItemCard ────────────────────────────────────────────────────────
-
-class _InventoryItemCard extends StatelessWidget {
-  final Map<String, dynamic> item;
-  final bool equipped;
-  final int quantity;
-  final VoidCallback? onEquip;
-  final VoidCallback? onTap;
-
-  const _InventoryItemCard({
-    required this.item,
-    required this.equipped,
-    required this.quantity,
-    required this.onEquip,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final grade = item['grade'] as String? ?? 'B';
-    final gc = gradeColor(grade);
-    final usable = item['usable'] != false;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: MainCard(
-        padding: const EdgeInsets.all(8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: gc.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Center(
-                    child: Text(
-                      item['icon'] as String? ?? '🎁',
-                      style: const TextStyle(fontSize: 22),
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                if (quantity > 1)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 5,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: kMainMuted.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      'x$quantity',
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-              decoration: BoxDecoration(
-                color: gc.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                grade,
-                style: TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w800,
-                  color: gc,
-                ),
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              item['name'] as String? ?? '',
-              style: mainBody(size: 12, weight: FontWeight.w700),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const Spacer(),
-            if (equipped)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                decoration: BoxDecoration(
-                  color: kMainSage.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Center(
-                  child: Text(
-                    '장착 중 ✓',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: kMainSage,
-                    ),
-                  ),
-                ),
-              )
-            else if (!usable)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                decoration: BoxDecoration(
-                  color: kMainMuted.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Center(
-                  child: Text(
-                    '사용할 수 없음',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: kMainMuted,
-                    ),
-                  ),
-                ),
-              )
-            else
-              SizedBox(
-                width: double.infinity,
-                height: 30,
-                child: ElevatedButton(
-                  onPressed: onEquip,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: kMainRose,
-                    padding: EdgeInsets.zero,
-                    shape: const StadiumBorder(),
-                  ),
-                  child: const Text(
-                    '장착',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
           ],
         ),
-      ),
-    );
-  }
-}
-// ── _CompendiumSheet (도감) ────────────────────────────────────────────────────
-
-class _CompendiumSheet extends StatefulWidget {
-  final List<Map<String, dynamic>> items;
-  const _CompendiumSheet({required this.items});
-
-  @override
-  State<_CompendiumSheet> createState() => _CompendiumSheetState();
-}
-
-class _CompendiumSheetState extends State<_CompendiumSheet> {
-  String? _filterGrade;
-  String? _filterGame;
-
-  @override
-  Widget build(BuildContext context) {
-    var filtered = widget.items.where((i) {
-      if (_filterGrade != null && i['grade'] != _filterGrade) return false;
-      if (_filterGame != null && i['game'] != _filterGame) return false;
-      return true;
-    }).toList();
-
-    final total = widget.items.length;
-    final owned = widget.items
-        .where((i) => (i['owned'] as bool? ?? false))
-        .length;
-
-    return DraggableScrollableSheet(
-      initialChildSize: 0.9,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      builder: (_, ctrl) => Container(
-        decoration: const BoxDecoration(
-          color: kSurface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        child: Column(
-          children: [
-            // 핸들 + 헤더
-            Container(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-              child: Column(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: kMainLine,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Text('도감', style: mainTitle(size: 24, color: kMainRose)),
-                      const SizedBox(width: 8),
-                      Text(
-                        '$owned / $total 수집',
-                        style: mainBody(size: 12, color: kMainMuted),
-                      ),
-                      const Spacer(),
-                      SizedBox(
-                        width: 80,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(6),
-                          child: LinearProgressIndicator(
-                            value: total > 0 ? owned / total : 0,
-                            minHeight: 6,
-                            backgroundColor: kMainLine,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              kMainHoney,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  // 필터 행
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        for (final (g, label) in [
-                          (null, '전체'),
-                          ('yut', '윷놀이'),
-                          ('onecard', '원카드'),
-                        ])
-                          Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            child: ChoiceChip(
-                              label: Text(
-                                label,
-                                style: const TextStyle(fontSize: 11),
-                              ),
-                              selected: _filterGame == g,
-                              onSelected: (_) =>
-                                  setState(() => _filterGame = g),
-                              selectedColor: kMainRose.withValues(alpha: 0.16),
-                              labelStyle: TextStyle(
-                                color: _filterGame == g
-                                    ? kMainRose
-                                    : kMainMuted,
-                              ),
-                            ),
-                          ),
-                        const SizedBox(width: 8),
-                        for (final grade in ['B', 'A', 'S', 'SS', 'SSS'])
-                          Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            child: ChoiceChip(
-                              label: Text(
-                                grade,
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              selected: _filterGrade == grade,
-                              onSelected: (_) => setState(
-                                () => _filterGrade = _filterGrade == grade
-                                    ? null
-                                    : grade,
-                              ),
-                              selectedColor: gradeColor(
-                                grade,
-                              ).withValues(alpha: 0.2),
-                              labelStyle: TextStyle(
-                                color: _filterGrade == grade
-                                    ? gradeColor(grade)
-                                    : kMainMuted,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const Divider(height: 16),
-                ],
-              ),
-            ),
-            // 아이템 그리드
-            Expanded(
-              child: GridView.builder(
-                controller: ctrl,
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  mainAxisSpacing: 10,
-                  crossAxisSpacing: 10,
-                  childAspectRatio: 0.75,
-                ),
-                itemCount: filtered.length,
-                itemBuilder: (_, i) => _CompendiumCard(item: filtered[i]),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CompendiumCard extends StatelessWidget {
-  final Map<String, dynamic> item;
-  const _CompendiumCard({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    final active = item['active'] as bool? ?? false;
-    final owned = item['owned'] as bool? ?? false;
-    final grade = item['grade'] as String? ?? 'B';
-    final gc = gradeColor(grade);
-    final qty = (item['quantity'] as num?)?.toInt() ?? 0;
-
-    if (!active) {
-      // 미공개: 실루엣
-      return Container(
-        decoration: BoxDecoration(
-          color: kMainLine.withValues(alpha: 0.3),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            ColorFiltered(
-              colorFilter: const ColorFilter.matrix([
-                0.2126,
-                0.7152,
-                0.0722,
-                0,
-                0,
-                0.2126,
-                0.7152,
-                0.0722,
-                0,
-                0,
-                0.2126,
-                0.7152,
-                0.0722,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0.5,
-                0,
-              ]),
-              child: const Text('❓', style: TextStyle(fontSize: 28)),
-            ),
-            const SizedBox(height: 4),
-            Text('???', style: TextStyle(fontSize: 10, color: kMainMuted)),
-            Container(
-              margin: const EdgeInsets.only(top: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-              decoration: BoxDecoration(
-                color: gc.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                grade,
-                style: TextStyle(
-                  fontSize: 8,
-                  fontWeight: FontWeight.w800,
-                  color: gc.withValues(alpha: 0.5),
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return GestureDetector(
-      onTap: () => _showItemDetail(context, item),
-      child: Container(
-        decoration: BoxDecoration(
-          color: owned
-              ? gc.withValues(alpha: 0.08)
-              : kMainLine.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: owned ? gc.withValues(alpha: 0.3) : Colors.transparent,
-          ),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Stack(
-              alignment: Alignment.topRight,
-              children: [
-                Text(
-                  item['icon'] as String? ?? '🎁',
-                  style: TextStyle(
-                    fontSize: 28,
-                    color: owned ? null : Colors.white.withValues(alpha: 0.3),
-                  ),
-                ),
-                if (owned && qty > 1)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 3,
-                      vertical: 1,
-                    ),
-                    decoration: BoxDecoration(
-                      color: kMainHoney,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      'x$qty',
-                      style: const TextStyle(
-                        fontSize: 8,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              item['name'] as String? ?? '',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: owned ? null : kMainMuted,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-            ),
-            Container(
-              margin: const EdgeInsets.only(top: 3),
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-              decoration: BoxDecoration(
-                color: gc.withValues(alpha: owned ? 0.2 : 0.08),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                grade,
-                style: TextStyle(
-                  fontSize: 8,
-                  fontWeight: FontWeight.w800,
-                  color: gc.withValues(alpha: owned ? 1.0 : 0.4),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showItemDetail(BuildContext context, Map<String, dynamic> item) {
-    final grade = item['grade'] as String? ?? 'B';
-    final gc = gradeColor(grade);
-    final stats = item['stats'] as Map? ?? {};
-    final owned = item['owned'] as bool? ?? false;
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        decoration: const BoxDecoration(
-          color: kSurface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(
-                  item['icon'] as String? ?? '🎁',
-                  style: const TextStyle(fontSize: 40),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item['name'] as String? ?? '',
-                        style: mainTitle(size: 17),
-                      ),
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: gc.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(5),
-                        ),
-                        child: Text(
-                          grade,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            color: gc,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (owned)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: kMainSage.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      '보유 중',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: kMainSage,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            if (item['description'] != null) ...[
-              const SizedBox(height: 10),
-              Text(
-                item['description'] as String,
-                style: mainBody(size: 12, color: kMainMuted),
-              ),
-            ],
-            if (stats.isNotEmpty) ...[
-              const SizedBox(height: 14),
-              const Divider(),
-              const SizedBox(height: 8),
-              Text(
-                '스탯',
-                style: mainBody(
-                  size: 12,
-                  weight: FontWeight.w700,
-                  color: kMainMuted,
-                ),
-              ),
-              const SizedBox(height: 6),
-              for (final entry in stats.entries)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Row(
-                    children: [
-                      Text(
-                        statLabels[entry.key] ?? entry.key,
-                        style: mainBody(size: 12),
-                      ),
-                      const Spacer(),
-                      Text(
-                        '+${entry.value}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: gc,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ] else if (owned == false) ...[
-              const SizedBox(height: 12),
-              Text(
-                '보유 시 스탯이 공개됩니다',
-                style: mainBody(size: 12, color: kMainMuted),
-              ),
-            ],
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
+      ],
     );
   }
 }

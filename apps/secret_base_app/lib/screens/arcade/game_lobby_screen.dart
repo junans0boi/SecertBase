@@ -6,13 +6,22 @@ import '../../core/main_design.dart';
 import '../../core/socket_service.dart';
 import '../../core/yut_audio.dart';
 import '../../widgets/play_kit/play_kit.dart';
+import 'games/catch/catch_lobby.dart';
+import 'games/catch/catch_screen.dart' show kCatchHowToLines;
+import 'games/gostop/gostop_lobby.dart';
+import 'games/gostop/gostop_panels.dart' show gostopHowToLines;
 import 'games/penalty/penalty_lobby.dart';
 import 'games/penalty/penalty_models.dart';
 import 'games/onecard/onecard_lobby.dart';
+import 'games/pirate/pirate_game_screen.dart' show kPirateHowToLines;
+import 'games/pirate/pirate_lobby.dart';
 import 'games/telepathy/telepathy_lobby.dart';
 import 'game_lobby_themed.dart';
 import 'games/yut/yut_figures.dart';
 import 'games/yut/yut_lobby_view.dart';
+import 'games/zero/zero_lobby.dart';
+import 'games/zero/zero_screen.dart' show kZeroHowToLines;
+import 'lobby_kit.dart';
 import 'lobby_options.dart';
 
 const _kStakeOptions = [0, 500, 1000, 3000];
@@ -249,6 +258,22 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
       );
     }
 
+    // 해적 룰렛·제로·그림 맞히기·고스톱은 게임마다 전용 대기실을 쓴다(상태·동작은 아래와 같다).
+    final game = _gameLobby(
+      isHost: isHost,
+      canStart: canStart,
+      startLabel: startLabel,
+    );
+    if (game != null) {
+      return Stack(
+        children: [
+          game.view,
+          if (_countdown > 0)
+            LobbyCountdown(palette: game.palette, seconds: _countdown),
+        ],
+      );
+    }
+
     return Stack(
       children: [
         _buildScaffold(
@@ -259,6 +284,114 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
         if (_countdown > 0) _buildCountdownOverlay(),
       ],
     );
+  }
+
+  ({Widget view, LobbyPalette palette})? _gameLobby({
+    required bool isHost,
+    required bool canStart,
+    required String startLabel,
+  }) {
+    final type = widget.gameType;
+    if (!const {'pirate', 'zero', 'catch', 'gostop'}.contains(type)) {
+      return null;
+    }
+    final players = List<String>.from(_socket.lobbyPlayers);
+    final nicknames = Map<String, String>.from(_socket.presenceNicknames);
+    void onBack() => Navigator.of(context).pop();
+    void onStart() => _socket.startGameLobby(type);
+    return switch (type) {
+      'pirate' => (
+        palette: kPirateLobbyPalette,
+        view: PirateLobbyView(
+          holesDef: lobbyOptionsFor('pirate').single,
+          holesValue: _socket.lobbyOptions['holes'],
+          players: players,
+          host: _socket.lobbyHost,
+          me: _socket.userId,
+          nicknames: nicknames,
+          isHost: isHost,
+          canStart: canStart,
+          startLabel: startLabel,
+          onHoles: (v) => _socket.setLobbyOption(type, 'holes', v),
+          onStart: onStart,
+          onBack: onBack,
+          onHelp: () => showLobbyHowTo(
+            context,
+            palette: kPirateLobbyPalette,
+            title: '해적 룰렛',
+            lines: kPirateHowToLines,
+          ),
+        ),
+      ),
+      'zero' => (
+        palette: kZeroLobbyPalette,
+        view: ZeroLobbyView(
+          players: players,
+          host: _socket.lobbyHost,
+          me: _socket.userId,
+          nicknames: nicknames,
+          isHost: isHost,
+          canStart: canStart,
+          startLabel: startLabel,
+          onStart: onStart,
+          onBack: onBack,
+          onHelp: () => showLobbyHowTo(
+            context,
+            palette: kZeroLobbyPalette,
+            title: '제로 규칙',
+            lines: kZeroHowToLines,
+          ),
+        ),
+      ),
+      'catch' => (
+        palette: kCatchLobbyPalette,
+        view: CatchLobbyView(
+          roundsDef: lobbyOptionsFor('catch').single,
+          roundsValue: _socket.lobbyOptions['rounds'],
+          players: players,
+          host: _socket.lobbyHost,
+          me: _socket.userId,
+          nicknames: nicknames,
+          isHost: isHost,
+          canStart: canStart,
+          startLabel: startLabel,
+          onRounds: (v) => _socket.setLobbyOption(type, 'rounds', v),
+          onStart: onStart,
+          onBack: onBack,
+          onHelp: () => showLobbyHowTo(
+            context,
+            palette: kCatchLobbyPalette,
+            title: '그림 맞히기 규칙',
+            lines: kCatchHowToLines,
+          ),
+        ),
+      ),
+      _ => (
+        palette: kGostopLobbyPalette,
+        view: GostopLobbyView(
+          players: players,
+          host: _socket.lobbyHost,
+          me: _socket.userId,
+          nicknames: nicknames,
+          ready: _socket.lobbyReady,
+          stake: _socket.lobbyStake,
+          stakeOptions: _kGostopStakeOptions,
+          isHost: isHost,
+          canStart: canStart,
+          startLabel: startLabel,
+          onStake: (stake) => _socket.setLobbyStake(type, stake),
+          onReady: (ready) => _socket.setLobbyReady(type, ready),
+          onStart: onStart,
+          onBack: onBack,
+          onHelp: () => showLobbyHowTo(
+            context,
+            palette: kGostopLobbyPalette,
+            title: '고스톱 (맞고)',
+            lines: gostopHowToLines,
+          ),
+        ),
+      ),
+    };
   }
 
   Widget _buildCountdownOverlay() {

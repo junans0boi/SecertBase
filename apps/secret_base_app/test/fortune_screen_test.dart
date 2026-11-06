@@ -126,8 +126,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('출생 프로필을 저장하면 개인 운세가 준비돼요.'), findsOneWidget);
-    await tester.tap(find.text('출생 프로필 수정하기'));
+    expect(find.text('출생 정보를 알려 주면 개인 운세가 준비돼요.'), findsOneWidget);
+    await tester.tap(find.text('출생 정보 입력하기'));
     expect(edited, isTrue);
   });
 }

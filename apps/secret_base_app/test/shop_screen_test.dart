@@ -65,6 +65,9 @@ void main() {
       return _json({});
     });
 
+    tester.view.physicalSize = const Size(900, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     await tester.pumpWidget(
       MaterialApp(
         home: ShopScreen(client: client, baseUrl: _baseUrl),
@@ -73,13 +76,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('shop_balance_card')), findsOneWidget);
-    expect(find.text('현재 사용할 수 있는 코인'), findsOneWidget);
-    expect(find.text('구매 가능한 아이템'), findsOneWidget);
+    expect(find.text('500'), findsOneWidget); // the one place a balance shows
+    expect(find.text('코인 얻는 법'), findsOneWidget);
+    expect(find.text('윷놀이'), findsWidgets);
     expect(find.byKey(const Key('shop_item_1')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('shop_item_1')));
     await tester.pumpAndSettle();
-    expect(find.text('🪙 120 구매'), findsOneWidget);
+    expect(find.text('120 코인으로 사기'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('shop_purchase_button_1')));
     await tester.pump();
@@ -109,6 +113,9 @@ void main() {
       return _json({});
     });
 
+    tester.view.physicalSize = const Size(900, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     await tester.pumpWidget(
       MaterialApp(
         home: ShopScreen(client: client, baseUrl: _baseUrl),
@@ -120,8 +127,9 @@ void main() {
     await tester.tap(find.byKey(const Key('shop_purchase_button_1')));
     await tester.pumpAndSettle();
 
-    expect(find.text('구매하지 못했어요 · 코인이 부족해요'), findsOneWidget);
-    expect(find.text('구매 가능한 아이템'), findsOneWidget);
+    expect(find.text('구매하지 못했어요 · 코인이 부족해요.'), findsOneWidget);
+    expect(find.byKey(const Key('shop_item_1')), findsOneWidget);
+    expect(find.textContaining('오류:'), findsNothing);
   });
 
   testWidgets('inventory exposes a retryable error state', (tester) async {
@@ -145,6 +153,7 @@ void main() {
     expect(find.byKey(const Key('inventory_error_state')), findsOneWidget);
     expect(find.text('인벤토리를 불러오지 못했어요.'), findsOneWidget);
     expect(find.text('다시 시도'), findsOneWidget);
+    expect(find.textContaining('Exception'), findsNothing);
   });
 
   testWidgets('inventory distinguishes empty and usable item details', (

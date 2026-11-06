@@ -46,6 +46,10 @@ npm ci
 npm test
 npm run check
 
+# Resolved before the build so the same id is baked into the app (--dart-define
+# BUILD_ID, shown under Settings > 앱 정보) and used for cache busting below.
+BUILD_ID="$(date +%Y%m%d%H%M%S)"
+
 echo "==> Installing Flutter dependencies"
 cd "$REPO_DIR/apps/secret_base_app"
 flutter pub get
@@ -53,16 +57,17 @@ if [ -f .env ]; then
   echo "==> Using apps/secret_base_app/.env for build config"
   BUILD_ENV_FILE="$(mktemp)"
   grep -E '^(SOCKET_URL|GOOGLE_CLIENT_ID|KAKAO_REVIEW_AUTO_LOGIN)=' .env > "$BUILD_ENV_FILE" || true
-  flutter build web --release --no-wasm-dry-run --dart-define-from-file="$BUILD_ENV_FILE"
+  flutter build web --release --no-wasm-dry-run --dart-define-from-file="$BUILD_ENV_FILE" \
+    --dart-define=BUILD_ID="$BUILD_ID"
   rm -f "$BUILD_ENV_FILE"
 else
   flutter build web --release --no-wasm-dry-run \
     --dart-define=SOCKET_URL="$SOCKET_URL" \
     --dart-define=GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
-    --dart-define=KAKAO_REVIEW_AUTO_LOGIN="$KAKAO_REVIEW_AUTO_LOGIN"
+    --dart-define=KAKAO_REVIEW_AUTO_LOGIN="$KAKAO_REVIEW_AUTO_LOGIN" \
+    --dart-define=BUILD_ID="$BUILD_ID"
 fi
 
-BUILD_ID="$(date +%Y%m%d%H%M%S)"
 sed -i.bak "s/flutter_bootstrap.js?v=[^']*/flutter_bootstrap.js?v=$BUILD_ID/" build/web/index.html
 rm -f build/web/index.html.bak
 sed -i.bak "s/\"main.dart.js\"/\"main.dart.js?v=$BUILD_ID\"/" build/web/flutter_bootstrap.js

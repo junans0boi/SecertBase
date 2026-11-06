@@ -213,8 +213,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('0/1 문항 저장됨'), findsOneWidget);
+    // Likert end labels and the time/size line are always visible.
+    expect(find.byKey(const Key('assessment_likert_labels')), findsOneWidget);
+    expect(find.textContaining('약 1분 · 1문항'), findsOneWidget);
+    expect(find.byKey(const Key('assessment_scale_help')), findsOneWidget);
     expect(find.text('상대의 답장이 늦으면 걱정된다.'), findsOneWidget);
-    await tester.tap(find.widgetWithText(ChoiceChip, '5'));
+    await tester.tap(find.byKey(const Key('likert_5')));
     await tester.pumpAndSettle();
 
     expect(answerSaved, isTrue);
@@ -227,7 +231,10 @@ void main() {
       find.byKey(const Key('assessment_result_disclaimer')),
       findsOneWidget,
     );
-    expect(find.text('원할 때만 구조화된 결과를 자연어로 풀어볼 수 있어요.'), findsOneWidget);
+    expect(
+      find.text('원할 때만 결과를 쉬운 말로 풀어 볼 수 있어요. AI가 쓴 설명이에요.'),
+      findsOneWidget,
+    );
     await tester.ensureVisible(
       find.byKey(const Key('request_personal_explanation')),
     );
@@ -284,8 +291,8 @@ void main() {
       requestedPath,
       '/api/relationship/couple-assessments/conflict_repair/attempt',
     );
-    expect(find.text('커플 검사 진행 중'), findsOneWidget);
-    expect(find.textContaining('각자의 답변은 서로에게 공개되지 않으며'), findsOneWidget);
+    expect(find.text('함께 하는 검사'), findsOneWidget);
+    expect(find.textContaining('각자의 답변은 서로에게 공개되지 않고'), findsOneWidget);
   });
 
   testWidgets('couple attempt screen shows pending state after submission', (
@@ -346,7 +353,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ChoiceChip, '5'));
+    await tester.tap(find.byKey(const Key('likert_5')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('assessment_submit')));
     await tester.pumpAndSettle();
@@ -356,7 +363,7 @@ void main() {
       '/api/relationship/couple-assessment-attempts/42/submit',
     );
     expect(find.byKey(const Key('couple_assessment_pending')), findsOneWidget);
-    expect(find.text('파트너 응답을 기다리는 중'), findsOneWidget);
+    expect(find.text('파트너 응답을 기다리고 있어요'), findsOneWidget);
   });
 
   testWidgets('couple attempt screen renders a ready shared result', (
@@ -432,7 +439,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ChoiceChip, '5'));
+    await tester.tap(find.byKey(const Key('likert_5')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('assessment_submit')));
     await tester.pumpAndSettle();

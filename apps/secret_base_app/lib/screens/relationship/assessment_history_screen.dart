@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/assessment_attempt_api.dart';
-import '../../core/main_design.dart';
+import 'package:secret_base_app/v2/v2.dart';
 
 class AssessmentHistoryScreen extends StatefulWidget {
   final String title;
@@ -60,51 +60,49 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
         _errorMessage =
             error is AssessmentAttemptApiException &&
                 error.reason == 'network_error'
-            ? '네트워크 연결을 확인하고 다시 시도해주세요.'
-            : '과거 결과를 불러오지 못했어요.';
+            ? '네트워크 연결을 확인하고 다시 시도해 주세요.'
+            : '잠시 뒤 다시 시도해 주세요.';
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: kMainBg,
-      appBar: AppBar(
-        backgroundColor: kMainBg,
-        title: Text('${widget.title} 이력', style: mainTitle(size: 21)),
+    return V2Theme(
+      child: Scaffold(
+        appBar: V2Header(title: '${widget.title} 이력'),
+        body: _loading
+            ? const Padding(
+                padding: EdgeInsets.all(V2Space.page),
+                child: V2SkeletonList(count: 3),
+              )
+            : _errorMessage != null
+            ? _errorState()
+            : _history == null || _history!.isEmpty
+            ? _emptyState()
+            : ListView(
+                padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('검사 기록', style: V2Text.title),
+                      const SizedBox(width: 8),
+                      Text('${_history!.length}회', style: V2Text.cap),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '가장 최근 결과가 현재 결과로 사용돼요. 이전 결과도 수정되지 않고 그대로 보관돼요.',
+                    style: V2Text.cap,
+                  ),
+                  const SizedBox(height: 16),
+                  ..._history!.asMap().entries.map(
+                    (entry) => _historyCard(entry.key, entry.value),
+                  ),
+                ],
+              ),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: kMainRose))
-          : _errorMessage != null
-          ? _errorState()
-          : _history == null || _history!.isEmpty
-          ? _emptyState()
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text('검사 기록', style: mainTitle(size: 28, color: kMainRose)),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${_history!.length}회',
-                      style: mainBody(size: 12, color: kMainMuted),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '가장 최근 결과가 현재 결과로 사용돼요. 이전 결과도 수정되지 않고 그대로 보관됩니다.',
-                  style: mainBody(size: 13, color: kMainSub, height: 1.5),
-                ),
-                const SizedBox(height: 16),
-                ..._history!.asMap().entries.map(
-                  (entry) => _historyCard(entry.key, entry.value),
-                ),
-              ],
-            ),
     );
   }
 
@@ -118,18 +116,15 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
           key: const Key('assessment_comparison_card'),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: kMainPaperSoft,
+            color: V2Colors.soft,
             borderRadius: BorderRadius.circular(14),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('최근 변화', style: mainBody(weight: FontWeight.w800)),
+              Text('최근 변화', style: V2Text.bodyStrong),
               const SizedBox(height: 6),
-              Text(
-                comparison.message,
-                style: mainBody(size: 13, color: kMainSub, height: 1.5),
-              ),
+              Text(comparison.message, style: V2Text.cap),
             ],
           ),
         ),
@@ -143,7 +138,7 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
         key: const Key('assessment_comparison_card'),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: kMainPaperSoft,
+          color: V2Colors.soft,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Column(
@@ -151,40 +146,29 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
           children: [
             Row(
               children: [
-                const Icon(Icons.auto_graph_rounded, color: kMainLilac),
+                const Icon(Icons.auto_graph_rounded, color: V2Colors.lilac),
                 const SizedBox(width: 8),
-                Text('최근 변화', style: mainBody(weight: FontWeight.w800)),
+                Text('최근 변화', style: V2Text.bodyStrong),
               ],
             ),
             const SizedBox(height: 6),
-            Text(
-              comparison.accessibleMessage,
-              style: mainBody(size: 13, color: kMainSub, height: 1.5),
-            ),
+            Text(comparison.accessibleMessage, style: V2Text.cap),
             const SizedBox(height: 12),
             ...comparison.dimensions.map(
               (dimension) => Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
                   children: [
-                    Expanded(
-                      child: Text(
-                        dimension.title,
-                        style: mainBody(size: 12, color: kMainSub),
-                      ),
-                    ),
+                    Expanded(child: Text(dimension.title, style: V2Text.cap)),
                     Text(
                       '${dimension.previous} → ${dimension.current} (${dimension.delta >= 0 ? '+' : ''}${dimension.delta})',
-                      style: mainBody(size: 12, weight: FontWeight.w700),
+                      style: V2Text.cap.copyWith(fontWeight: FontWeight.w700),
                     ),
                   ],
                 ),
               ),
             ),
-            Text(
-              comparison.disclaimer,
-              style: mainBody(size: 11, color: kMainMuted, height: 1.4),
-            ),
+            Text(comparison.disclaimer, style: V2Text.cap),
           ],
         ),
       ),
@@ -203,7 +187,7 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
           key: Key('assessment_history_open_${item.id}'),
           borderRadius: BorderRadius.circular(26),
           onTap: () => _openDetail(index, item),
-          child: MainCard(
+          child: V2Card(
             key: index == 0
                 ? const Key('assessment_history_current_meta')
                 : Key('assessment_history_${item.id}'),
@@ -216,30 +200,24 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
                     Expanded(
                       child: Text(
                         index == 0 ? '현재 결과' : '이전 결과 $index',
-                        style: mainBody(weight: FontWeight.w800),
+                        style: V2Text.bodyStrong,
                       ),
                     ),
-                    Text(
-                      item.version,
-                      style: mainBody(size: 12, color: kMainMuted),
-                    ),
+                    Text(item.version, style: V2Text.cap),
                     const SizedBox(width: 4),
                     const Icon(
                       Icons.chevron_right_rounded,
                       size: 20,
-                      color: kMainMuted,
+                      color: V2Colors.muted,
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  item.result.overallTendency,
-                  style: mainBody(size: 14, height: 1.45),
-                ),
+                Text(item.result.overallTendency, style: V2Text.body),
                 const SizedBox(height: 8),
                 Text(
                   '전체 점수 ${item.result.overallScore}점$dateLabel · 전체 ${_history?.length ?? 0}회 기록',
-                  style: mainBody(size: 12, color: kMainSub),
+                  style: V2Text.cap,
                 ),
                 if (index == 0 && _comparison != null) ...[
                   const SizedBox(height: 12),
@@ -258,12 +236,12 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: kMainPaperSoft,
+                            color: V2Colors.soft,
                             borderRadius: BorderRadius.circular(999),
                           ),
                           child: Text(
                             '${dimension.title} ${dimension.score}점',
-                            style: mainBody(size: 11, color: kMainSub),
+                            style: V2Text.cap,
                           ),
                         ),
                     ],
@@ -277,17 +255,16 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
                           ? Icons.info_outline_rounded
                           : Icons.checklist_rounded,
                       size: 16,
-                      color: kMainRose,
+                      color: V2Colors.rose600,
                     ),
                     const SizedBox(width: 6),
                     Text(
                       item.answers.isEmpty
                           ? '선택 답변 상세 보기'
                           : '${item.answers.length}개 문항의 선택 답변 보기',
-                      style: mainBody(
-                        size: 12,
-                        color: kMainRose,
-                        weight: FontWeight.w700,
+                      style: V2Text.cap.copyWith(
+                        color: V2Colors.rose600,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],
@@ -323,56 +300,17 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
     return '$year.$month.$day $hour:$minute';
   }
 
-  Widget _emptyState() => ListView(
-    padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
-    children: [
-      Text('검사 기록', style: mainTitle(size: 28, color: kMainRose)),
-      const SizedBox(height: 6),
-      Text(
-        '완료한 검사는 결과가 자동으로 보관돼요. 다시 검사해도 이전 기록은 사라지지 않아요.',
-        style: mainBody(size: 13, color: kMainSub, height: 1.5),
-      ),
-      const SizedBox(height: 18),
-      MainCard(
-        padding: const EdgeInsets.all(22),
-        color: kMainPaperSoft,
-        child: Column(
-          children: [
-            const Icon(Icons.history_rounded, size: 34, color: kMainLilac),
-            const SizedBox(height: 12),
-            Text('아직 완료한 기록이 없어요', style: mainBody(weight: FontWeight.w800)),
-            const SizedBox(height: 6),
-            Text(
-              '검사를 완료하면 결과가 이곳에 보관돼요.',
-              textAlign: TextAlign.center,
-              style: mainBody(size: 13, color: kMainSub),
-            ),
-          ],
-        ),
-      ),
-    ],
+  Widget _emptyState() => const V2EmptyState(
+    title: '아직 완료한 기록이 없어요',
+    body: '검사를 마치면 결과가 이곳에 보관돼요. 다시 검사해도 이전 기록은 사라지지 않아요.',
   );
 
-  Widget _errorState() => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: MainCard(
-        key: const Key('assessment_history_error'),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('과거 결과를 불러오지 못했어요', style: mainTitle(size: 20)),
-            const SizedBox(height: 8),
-            Text(
-              _errorMessage!,
-              textAlign: TextAlign.center,
-              style: mainBody(size: 13, color: kMainSub),
-            ),
-            const SizedBox(height: 14),
-            OutlinedButton(onPressed: _load, child: const Text('다시 시도')),
-          ],
-        ),
-      ),
+  Widget _errorState() => KeyedSubtree(
+    key: const Key('assessment_history_error'),
+    child: V2ErrorState(
+      title: '과거 결과를 불러오지 못했어요',
+      body: _errorMessage,
+      onRetry: _load,
     ),
   );
 }
@@ -392,56 +330,48 @@ class AssessmentHistoryDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final resultLabel = index == 0 ? '현재 결과' : '이전 결과 $index';
-    return Scaffold(
-      backgroundColor: kMainBg,
-      appBar: AppBar(
-        backgroundColor: kMainBg,
-        title: Text('$resultLabel 상세', style: mainTitle(size: 21)),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
-        children: [
-          Text(title, style: mainTitle(size: 28, color: kMainRose)),
-          const SizedBox(height: 6),
-          Text(
-            '이 기록은 읽기 전용이에요. 당시 선택한 답변은 변경할 수 없습니다.',
-            style: mainBody(size: 13, color: kMainSub, height: 1.5),
-          ),
-          const SizedBox(height: 16),
-          MainCard(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(resultLabel, style: mainBody(weight: FontWeight.w800)),
-                const SizedBox(height: 8),
-                Text(
-                  item.result.overallTendency,
-                  style: mainBody(size: 14, height: 1.45),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '전체 점수 ${item.result.overallScore}점 · ${item.version}',
-                  style: mainBody(size: 12, color: kMainSub),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
-          Text('당시 선택한 답변', style: mainTitle(size: 19)),
-          const SizedBox(height: 8),
-          if (item.answers.isEmpty)
-            MainCard(
-              padding: const EdgeInsets.all(18),
-              color: kMainPaperSoft,
-              child: Text(
-                '이 기록에는 문항별 선택 정보가 아직 포함되어 있지 않아요.',
-                style: mainBody(size: 13, color: kMainSub, height: 1.5),
+    return V2Theme(
+      child: Scaffold(
+        appBar: V2Header(title: '$resultLabel 상세'),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
+          children: [
+            Text(title, style: V2Text.title),
+            const SizedBox(height: 6),
+            Text('이 기록은 읽기 전용이에요. 당시 선택한 답변은 바꿀 수 없어요.', style: V2Text.cap),
+            const SizedBox(height: 16),
+            V2Card(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(resultLabel, style: V2Text.bodyStrong),
+                  const SizedBox(height: 8),
+                  Text(item.result.overallTendency, style: V2Text.body),
+                  const SizedBox(height: 8),
+                  Text(
+                    '전체 점수 ${item.result.overallScore}점 · ${item.version}',
+                    style: V2Text.cap,
+                  ),
+                ],
               ),
-            )
-          else
-            for (final answer in item.answers) _answerDetailCard(answer),
-        ],
+            ),
+            const SizedBox(height: 18),
+            Text('당시 선택한 답변', style: V2Text.head),
+            const SizedBox(height: 8),
+            if (item.answers.isEmpty)
+              V2Card(
+                padding: const EdgeInsets.all(18),
+                color: V2Colors.soft,
+                child: Text(
+                  '이 기록에는 문항별 선택 정보가 아직 포함되어 있지 않아요.',
+                  style: V2Text.cap,
+                ),
+              )
+            else
+              for (final answer in item.answers) _answerDetailCard(answer),
+          ],
+        ),
       ),
     );
   }
@@ -450,9 +380,9 @@ class AssessmentHistoryDetailScreen extends StatelessWidget {
 Widget _answerDetailCard(AssessmentHistoryAnswer answer) {
   return Padding(
     padding: const EdgeInsets.only(bottom: 12),
-    child: MainCard(
+    child: V2Card(
       padding: const EdgeInsets.all(14),
-      color: kMainPaperSoft,
+      color: V2Colors.soft,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -462,46 +392,34 @@ Widget _answerDetailCard(AssessmentHistoryAnswer answer) {
                   answer.dimensionTitle!.isNotEmpty) ...[
                 Text(
                   answer.dimensionTitle!,
-                  style: mainBody(
-                    size: 11,
-                    color: kMainRose,
-                    weight: FontWeight.w700,
+                  style: V2Text.cap.copyWith(
+                    color: V2Colors.rose600,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-                Text(' · ', style: mainBody(size: 11, color: kMainMuted)),
+                Text(' · ', style: V2Text.cap),
               ],
-              Text(
-                '문항 ${answer.order}',
-                style: mainBody(
-                  size: 11,
-                  color: kMainMuted,
-                  weight: FontWeight.w700,
-                ),
-              ),
+              Text('문항 ${answer.order}', style: V2Text.cap),
             ],
           ),
           const SizedBox(height: 4),
-          Text(
-            answer.prompt,
-            style: mainBody(size: 13, color: kMainInk, height: 1.4),
-          ),
+          Text(answer.prompt, style: V2Text.body),
           const SizedBox(height: 8),
           Row(
             children: [
-              Text('선택한 답변', style: mainBody(size: 11, color: kMainSub)),
+              Text('선택한 답변', style: V2Text.cap),
               const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
                 decoration: BoxDecoration(
-                  color: kMainPaper,
+                  color: V2Colors.surface,
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
                   '${answer.value} · ${answer.label}',
-                  style: mainBody(
-                    size: 11,
-                    color: kMainRose,
-                    weight: FontWeight.w800,
+                  style: V2Text.cap.copyWith(
+                    color: V2Colors.rose600,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),

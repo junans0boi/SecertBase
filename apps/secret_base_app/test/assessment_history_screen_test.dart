@@ -134,6 +134,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('아직 완료한 기록이 없어요'), findsOneWidget);
-    expect(find.textContaining('검사를 완료하면 결과가 이곳에 보관돼요'), findsOneWidget);
+    expect(find.textContaining('검사를 마치면 결과가 이곳에 보관돼요'), findsOneWidget);
   });
 }

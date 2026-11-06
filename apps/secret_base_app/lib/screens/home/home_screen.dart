@@ -1,30 +1,52 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/auth_service.dart';
-import '../../core/main_design.dart';
-import '../../core/main_hero.dart';
+import '../../core/fortune_api.dart';
+import '../../core/push/push_platform.dart';
+import '../../core/push/push_service.dart';
 import '../../core/today_api.dart';
 import '../../features/home/application/home_controller.dart';
 import '../../features/home/data/home_overview_repository.dart';
 import '../../features/home/domain/home_overview.dart';
+import '../../v2/v2.dart';
+import '../auth/partner_screen.dart';
+import '../relationship/fortune_screen.dart';
+import '../relationship/relationship_understanding_screen.dart';
+import '../secret_base/base_api.dart';
+import '../secret_base/base_common.dart';
+import '../secret_base/base_rewards_tab.dart';
+import '../secret_base/secret_base_screen.dart';
+import '../settings/notification_settings_screen.dart';
+import 'anniversaries_screen.dart';
+import 'home_format.dart';
+import 'start_date_sheet.dart';
 import 'today_card.dart';
 import 'today_loop_viewer.dart';
-import 'memory_list_screen.dart';
-import '../secret_base/secret_base_screen.dart';
-import '../relationship/relationship_understanding_screen.dart';
-import '../../core/fortune_api.dart';
-import '../relationship/fortune_screen.dart';
-import '../relationship/saju_screen.dart';
-import '../relationship/tarot_screen.dart';
-import '../auth/partner_screen.dart';
-import 'anniversaries_screen.dart';
+import 'today_poke.dart';
 
+/// 홈: 오늘 우리 둘의 순간이 어떤 상태인지 한눈에 보여 주고, 눌러서 바로
+/// 남기게 하는 화면.
 class HomeScreen extends StatefulWidget {
   final ValueChanged<int> onNavigate;
   final RelationshipAssessmentStatus? relationshipStatus;
   final Future<TodayState> Function()? todayStateLoader;
   final HomeController? controller;
+
+  /// True while the shell knows the device is offline.
+  final ValueListenable<bool>? offline;
+
+  /// Whether the OS blocks notifications (drives the 알림 거부 banner).
+  final Future<bool> Function()? notificationsBlocked;
+
+  /// Number of rewards that can be claimed now (badge on the 비밀기지 shortcut).
+  final Future<int> Function()? claimableRewards;
+
+  /// Saves the first day (defaults to `PATCH /api/couple/info`).
+  final Future<void> Function(DateTime day)? saveStartDate;
+
+  final TodayPoke? poke;
 
   const HomeScreen({
     super.key,
@@ -32,6 +54,11 @@ class HomeScreen extends StatefulWidget {
     this.relationshipStatus,
     this.todayStateLoader,
     this.controller,
+    this.offline,
+    this.notificationsBlocked,
+    this.claimableRewards,
+    this.saveStartDate,
+    this.poke,
   });
 
   @override
@@ -42,6 +69,13 @@ class _HomeScreenState extends State<HomeScreen> {
   final _auth = AuthService();
   late HomeController _controller;
   var _ownsController = false;
+  late final TodayPoke _poke = widget.poke ?? TodayPoke();
+  bool _pokedToday = false;
+  bool _poking = false;
+  bool _notificationsBlocked = false;
+  bool _notificationBannerDismissed = false;
+  int _claimable = 0;
+  bool _savingStart = false;
 
   Map<String, String> get _authHeaders => {
     if (_auth.token != null) 'Authorization': 'Bearer ${_auth.token}',
@@ -52,16 +86,19 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _attachController(widget.controller ?? _createController());
     _controller.load();
+    widget.offline?.addListener(_onOfflineChanged);
+    _poke.sentToday().then((v) {
+      if (mounted) setState(() => _pokedToday = v);
+    });
+    _loadSideInfo();
   }
 
-  HomeController _createController() {
-    return HomeController(
-      HomeOverviewRepository.forAuth(
-        _auth,
-        todayStateLoader: widget.todayStateLoader,
-      ),
-    );
-  }
+  HomeController _createController() => HomeController(
+    HomeOverviewRepository.forAuth(
+      _auth,
+      todayStateLoader: widget.todayStateLoader,
+    ),
+  );
 
   void _attachController(HomeController controller) {
     _controller = controller;
@@ -73,11 +110,20 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) setState(() {});
   }
 
+  void _onOfflineChanged() {
+    if (!mounted) return;
+    final wasOffline = _offline;
+    setState(() {});
+    // Back online: refresh what we are showing.
+    if (!_offline && wasOffline) _refresh();
+  }
+
+  bool get _offline => widget.offline?.value ?? false;
+
   @override
   void didUpdateWidget(covariant HomeScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller == widget.controller) return;
-
     _controller.removeListener(_onControllerChanged);
     if (_ownsController) _controller.dispose();
     _attachController(widget.controller ?? _createController());
@@ -86,691 +132,790 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    widget.offline?.removeListener(_onOfflineChanged);
     _controller.removeListener(_onControllerChanged);
     if (_ownsController) _controller.dispose();
     super.dispose();
   }
 
-  HomeOverview? get _overview => _controller.state.data;
-
-  Future<void> _refresh() => _controller.refresh();
-
-  RelationshipAssessmentStatus? get _loadedRelationshipStatus {
-    return switch (_overview?.assessmentStatus) {
-      HomeAssessmentStatus.inProgress =>
-        RelationshipAssessmentStatus.inProgress,
-      HomeAssessmentStatus.resultReady =>
-        RelationshipAssessmentStatus.resultReady,
-      HomeAssessmentStatus.notStarted =>
-        RelationshipAssessmentStatus.notStarted,
-      null => null,
-    };
+  Future<void> _loadSideInfo() async {
+    final blocked = await (widget.notificationsBlocked ?? _defaultBlocked)();
+    final claimable = await (widget.claimableRewards ?? _defaultClaimable)();
+    if (!mounted) return;
+    setState(() {
+      _notificationsBlocked = blocked;
+      _claimable = claimable;
+    });
   }
 
-  HomeCoupleInfo? get _couple => _overview?.couple;
-
-  bool get _homeLoading =>
-      _controller.state.status == HomeStatus.loading && _overview == null;
-
-  bool get _needsPartner =>
-      _overview != null &&
-      _couple == null &&
-      !_overview!.failedSections.contains(HomeSection.couple);
-
-  Widget _partnerGuide() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: kMainRoseSoft,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '아직 연결 전이에요',
-            style: mainBody(size: 16, weight: FontWeight.w800),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '1. 내 회원코드를 상대방에게 전달해요\n'
-            '2. 또는 상대방 코드를 입력해 연결 요청을 보내요\n'
-            '3. 상대방이 요청을 확인하면 연결돼요',
-            style: mainBody(size: 13),
-          ),
-          const SizedBox(height: 12),
-          FilledButton(
-            onPressed: () => Navigator.of(context).push<void>(
-              MaterialPageRoute(builder: (_) => const PartnerScreen()),
-            ),
-            child: const Text('연결하러 가기'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  bool get _homeFailed => _controller.state.status == HomeStatus.failure;
-
-  bool get _todayLoadFailed =>
-      _homeFailed || _overview == null || _overview!.todayLoadFailed;
-
-  TodayState? get _todayState => _overview?.todayState;
-
-  bool get _todayLoading => _homeLoading;
-
-  @override
-  Widget build(BuildContext context) {
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light,
-      child: ColoredBox(
-        color: kMainCream,
-        child: RefreshIndicator(
-          onRefresh: _refresh,
-          color: kMainRose,
-          edgeOffset: MediaQuery.paddingOf(context).top + 40,
-          child: ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.only(bottom: 32),
-            children: [
-              _homeHero(),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (_needsPartner) ...[
-                      _partnerGuide(),
-                      const SizedBox(height: 12),
-                    ],
-                    _featureCard(),
-                    const SizedBox(height: 12),
-                    _todayEntry(),
-                    const SizedBox(height: 12),
-                    _primaryActions(),
-                    const SizedBox(height: 24),
-                    _quickActions(),
-                    const SizedBox(height: 18),
-                    _relationshipCard(),
-                    if (_overview?.memoryCard != null) ...[
-                      const SizedBox(height: 18),
-                      _MemoryCardWidget(
-                        card: _overview!.memoryCard!,
-                        totalCount: _overview!.memoryCardTotal,
-                        baseUrl: _auth.baseUrl,
-                        authHeaders: _authHeaders,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _homeHero() {
-    final name = _auth.user?['Nickname'] ?? _auth.user?['UserName'] ?? '우리';
-    final partnerName = _couple?.partnerName ?? '상대방';
-    final dDay = _couple?.dDay;
-    return MainHero(
-      trailing: const HeroMascot(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white.withAlpha(72),
-              borderRadius: BorderRadius.circular(99),
-            ),
-            child: Text(
-              dDay == null ? '우리의 하루' : 'D + $dDay',
-              style: mainBody(
-                size: 12,
-                color: Colors.white,
-                weight: FontWeight.w800,
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text('오늘도\n함께해요', style: mainTitle(size: 38, color: Colors.white)),
-          const SizedBox(height: 8),
-          Text(
-            '$name님 & $partnerName님, 오늘도 함께 기록해요',
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: mainBody(size: 12, color: Colors.white.withAlpha(215)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _featureCard() {
-    final dDay = _couple?.dDay;
-    final startDate = _couple?.startDate;
-    final partnerName = _couple?.partnerName ?? '상대방';
-    final next = _couple?.nextAnniversary;
-    Widget mini(String value, String label) => Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Text(value, style: mainTitle(size: 22), maxLines: 1),
-        Text(label, style: mainBody(size: 11, color: kMainMuted)),
-      ],
-    );
-    return GestureDetector(
-      onTap: () => Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => const AnniversariesScreen())),
-      child: MainCard(
-        radius: 26,
-        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
-        child: Row(
-          children: [
-            Expanded(
-              child: dDay == null
-                  ? Text(
-                      '우리의 첫날을 등록해보세요',
-                      style: mainTitle(size: 22, color: kMainRose),
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '$dDay',
-                          style: mainTitle(size: 60, color: kMainRose),
-                        ),
-                        Text(
-                          '함께한 날',
-                          style: mainBody(size: 12, color: kMainMuted),
-                        ),
-                        if (next != null) ...[
-                          const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.event_rounded,
-                                size: 13,
-                                color: kMainRose,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                next.daysUntil == 0
-                                    ? '오늘은 ${next.label}!'
-                                    : 'D-${next.daysUntil} ${next.label}',
-                                style: mainBody(
-                                  size: 11,
-                                  color: kMainRose,
-                                  weight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ],
-                    ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                mini(partnerName, '함께하는 사람'),
-                if (startDate != null) ...[
-                  const SizedBox(height: 10),
-                  mini(startDate, '시작일'),
-                ],
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _primaryActions() {
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            flex: 2,
-            child: Semantics(
-              button: true,
-              label: '순간 남기기',
-              child: GestureDetector(
-                onTap: () => widget.onNavigate(1),
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    gradient: kRoseGrad,
-                    borderRadius: BorderRadius.circular(22),
-                    boxShadow: [
-                      BoxShadow(
-                        color: kMainRose.withAlpha(70),
-                        blurRadius: 18,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.auto_stories_rounded,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              '순간 남기기',
-                              style: mainBody(
-                                size: 14,
-                                color: Colors.white,
-                                weight: FontWeight.w900,
-                              ),
-                            ),
-                            Text(
-                              '오늘의 기록 쓰기',
-                              style: mainBody(
-                                size: 11,
-                                color: Colors.white.withAlpha(200),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Semantics(
-              button: true,
-              label: '놀이 시작',
-              child: GestureDetector(
-                onTap: () => widget.onNavigate(3),
-                child: MainCard(
-                  radius: 22,
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.sports_esports_rounded,
-                        color: kMainLilac,
-                        size: 24,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '놀이',
-                        style: mainBody(
-                          size: 12,
-                          color: kMainSub,
-                          weight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _quickActions() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(child: Text('함께 해볼까요?', style: mainTitle(size: 22))),
-            Text('좌우로 밀어 더 보기', style: mainBody(size: 11, color: kMainMuted)),
-          ],
-        ),
-        const SizedBox(height: 10),
-        SizedBox(
-          height: 118,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            clipBehavior: Clip.none,
-            children: [
-              _QuickAction(
-                icon: Icons.map_outlined,
-                title: '비밀 지도',
-                subtitle: '장소 남기기',
-                color: kMainSage,
-                background: kMainSageSoft,
-                onTap: () => widget.onNavigate(2),
-              ),
-              _QuickAction(
-                icon: Icons.cottage_outlined,
-                title: '비밀기지',
-                subtitle: '우리의 기록',
-                color: kMainLilac,
-                background: kMainLilacSoft,
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => SecretBaseScreen(
-                      baseUrl: _auth.baseUrl,
-                      authHeaders: _authHeaders,
-                    ),
-                  ),
-                ),
-              ),
-              _QuickAction(
-                icon: Icons.auto_awesome_outlined,
-                title: '운세',
-                subtitle: '오늘의 흐름',
-                color: kMainRose,
-                background: kMainRoseSoft,
-                onTap: () => Navigator.of(context).push<void>(
-                  MaterialPageRoute(
-                    builder: (_) => RelationshipFortuneScreen(
-                      api: FortuneApi(
-                        baseUrl: _auth.baseUrl,
-                        token: _auth.token ?? '',
-                      ),
-                      onEditProfile: () => Navigator.of(context).push<void>(
-                        MaterialPageRoute(
-                          builder: (_) => const RelationshipUnderstandingScreen(
-                            editBirthProfileOnly: true,
-                          ),
-                        ),
-                      ),
-                      onOpenPartner: () => Navigator.of(context).push<void>(
-                        MaterialPageRoute(
-                          builder: (_) => const PartnerScreen(),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              _QuickAction(
-                icon: Icons.style_outlined,
-                title: '타로',
-                subtitle: '오늘의 카드',
-                color: kMainLilac,
-                background: kMainLilacSoft,
-                onTap: () => Navigator.of(context).push<void>(
-                  MaterialPageRoute(builder: (_) => const TarotScreen()),
-                ),
-              ),
-              _QuickAction(
-                icon: Icons.auto_graph_rounded,
-                title: '사주',
-                subtitle: '나의 흐름',
-                color: kMainSage,
-                background: kMainSageSoft,
-                onTap: () => Navigator.of(context).push<void>(
-                  MaterialPageRoute(builder: (_) => const SajuScreen()),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _todayEntry() {
-    if (_todayLoading) return const _TodayLoadingCard();
-    final state = _todayState;
-    if (_todayLoadFailed || state == null) {
-      return _TodayFailureCard(onRetry: _refresh);
+  static Future<bool> _defaultBlocked() async {
+    try {
+      if (!PushService.instance.enabled) return false;
+      final prefs = await SharedPreferences.getInstance();
+      if (!(prefs.getBool('push_permission_asked') ?? false)) return false;
+      return !await FirebasePushPlatform().permissionGranted();
+    } catch (_) {
+      return false;
     }
-    return TodayCard(
-      state: state,
-      onCreateMoment: () => widget.onNavigate(1),
-      onOpenLoop: () => Navigator.of(context).push<void>(
-        MaterialPageRoute(
-          builder: (_) => TodayLoopViewer(state: state, baseUrl: _auth.baseUrl),
-        ),
-      ),
-    );
   }
 
-  Widget _relationshipCard() {
-    final status = widget.relationshipStatus ?? _defaultRelationshipStatus;
-    return _RelationshipHomeEntry(
-      status: status,
-      onTap: () => Navigator.of(context).push<void>(
-        MaterialPageRoute(
-          builder: (_) => RelationshipUnderstandingScreen(
-            assessmentStatus: status,
-            hasActiveCouple: _couple != null,
-          ),
+  Future<int> _defaultClaimable() async {
+    if (_auth.token == null) return 0;
+    final api = BaseApi(baseUrl: _auth.baseUrl, headers: _authHeaders);
+    try {
+      final body = await api.get('/retention/secret-base/milestones');
+      final raw = body['milestones'];
+      if (raw is! List) return 0;
+      return raw
+          .whereType<Map>()
+          .map((m) => Milestone.fromJson(Map<String, dynamic>.from(m)))
+          .where((m) => m.claimable)
+          .length;
+    } catch (_) {
+      return 0;
+    } finally {
+      api.close();
+    }
+  }
+
+  HomeOverview? get _overview => _controller.state.data;
+  HomeCoupleInfo? get _couple => _overview?.couple;
+  TodayState? get _todayState => _overview?.todayState;
+  bool get _initialLoading =>
+      _controller.state.status == HomeStatus.loading && _overview == null;
+  bool get _fatal =>
+      _overview == null && _controller.state.status == HomeStatus.failure;
+  bool get _coupleFailed =>
+      _overview?.failedSections.contains(HomeSection.couple) ?? false;
+  bool get _unpaired => _overview != null && _couple == null && !_coupleFailed;
+
+  Future<void> _refresh() async {
+    await _controller.refresh();
+    _loadSideInfo();
+  }
+
+  String get _myName {
+    final user = _auth.user;
+    final name = '${user?['Nickname'] ?? user?['UserName'] ?? ''}'.trim();
+    return name.isEmpty ? '나' : name;
+  }
+
+  String get _partnerName => _couple?.partnerName ?? '짝꿍';
+
+  DateTime? get _startDay => parseDay(_couple?.startDate);
+
+  // ---- actions ----------------------------------------------------------
+
+  Future<void> _createMoment() async {
+    await openMomentComposer(context);
+    if (mounted) _refresh();
+  }
+
+  Future<void> _openLoop() async {
+    final state = _todayState;
+    if (state == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => TodayLoopViewer(
+          state: state,
+          baseUrl: _auth.baseUrl,
+          myName: _myName,
+          partnerName: _partnerName,
+          reveal: true,
+          onPoke: _pokedToday ? null : _sendPoke,
         ),
       ),
     );
+    if (mounted) _refresh();
   }
+
+  Future<void> _sendPoke() async {
+    if (_poking) return;
+    setState(() => _poking = true);
+    final outcome = await _poke.send();
+    if (!mounted) return;
+    setState(() {
+      _poking = false;
+      if (outcome != PokeOutcome.unavailable) _pokedToday = true;
+    });
+    switch (outcome) {
+      case PokeOutcome.sent:
+        showV2Snack(context, '${josa(_partnerName, '을', '를')} 콕 찔렀어요');
+      case PokeOutcome.alreadyToday:
+        showV2Snack(context, '콕 찌르기는 하루에 한 번만 할 수 있어요');
+      case PokeOutcome.unavailable:
+        showV2Snack(
+          context,
+          '지금은 콕 찌를 수 없어요. 잠시 후 다시 해 주세요.',
+          tone: V2Tone.err,
+        );
+    }
+  }
+
+  Future<void> _pickStartDate() async {
+    if (_savingStart) return;
+    final picked = await showStartDateSheet(
+      context,
+      initial: _startDay,
+      subtitle: '연결한 날이 기본이에요. 실제 첫날로 바꿔도 돼요',
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _savingStart = true);
+    try {
+      final saver = widget.saveStartDate;
+      if (saver != null) {
+        await saver(picked);
+      } else {
+        final api = BaseApi(baseUrl: _auth.baseUrl, headers: _authHeaders);
+        try {
+          await api.patch('/couple/info', {'start_date': isoDay(picked)});
+        } finally {
+          api.close();
+        }
+      }
+      if (!mounted) return;
+      showV2Snack(context, '우리의 첫날을 저장했어요');
+      _refresh();
+    } catch (_) {
+      if (mounted) {
+        showV2Snack(context, '저장하지 못했어요. 다시 시도해 주세요.', tone: V2Tone.err);
+      }
+    } finally {
+      if (mounted) setState(() => _savingStart = false);
+    }
+  }
+
+  void _push(Widget page) {
+    Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) => page));
+  }
+
+  void _openFortune() => _push(
+    RelationshipFortuneScreen(
+      api: FortuneApi(baseUrl: _auth.baseUrl, token: _auth.token ?? ''),
+      onEditProfile: () => _push(
+        const RelationshipUnderstandingScreen(editBirthProfileOnly: true),
+      ),
+      onOpenPartner: () => _push(const PartnerScreen()),
+    ),
+  );
+
+  void _openUnderstanding() => _push(
+    RelationshipUnderstandingScreen(
+      assessmentStatus: widget.relationshipStatus ?? _defaultRelationshipStatus,
+      hasActiveCouple: _couple != null,
+    ),
+  );
 
   RelationshipAssessmentStatus get _defaultRelationshipStatus {
     final birthDate = _auth.user?['BirthDate'] ?? _auth.user?['birthDate'];
     if (birthDate == null || '$birthDate'.trim().isEmpty) {
       return RelationshipAssessmentStatus.profileIncomplete;
     }
-    return _loadedRelationshipStatus ?? RelationshipAssessmentStatus.notStarted;
+    return switch (_overview?.assessmentStatus) {
+      HomeAssessmentStatus.inProgress =>
+        RelationshipAssessmentStatus.inProgress,
+      HomeAssessmentStatus.resultReady =>
+        RelationshipAssessmentStatus.resultReady,
+      _ => RelationshipAssessmentStatus.notStarted,
+    };
   }
-}
 
-class _MemoryCardWidget extends StatelessWidget {
-  final HomeMemoryCard card;
-  final int totalCount;
-  final String baseUrl;
-  final Map<String, String> authHeaders;
+  void _openBase([int tab = 0]) => _push(
+    SecretBaseScreen(
+      baseUrl: _auth.baseUrl,
+      authHeaders: _authHeaders,
+      initialTab: tab,
+    ),
+  );
 
-  const _MemoryCardWidget({
-    required this.card,
-    required this.totalCount,
-    required this.baseUrl,
-    required this.authHeaders,
-  });
+  void _openNotifications() => _push(const NotificationSettingsScreen());
+
+  // ---- build ------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
-    final yearsAgo = card.yearsAgo;
-    final placeName = card.placeName;
-    final caption = card.caption;
-    final mediaUrl = card.mediaUrl;
-    final fullMediaUrl = mediaUrl != null ? '$baseUrl$mediaUrl' : null;
+    return V2Theme(
+      child: Scaffold(backgroundColor: V2Colors.bg, body: _body()),
+    );
+  }
 
-    return MainCard(
-      padding: const EdgeInsets.all(16),
+  Widget _body() {
+    if (_initialLoading) return const _HomeSkeleton();
+    if (_fatal) {
+      return SafeArea(
+        child: _offline
+            ? V2ErrorState.offline(onRetry: _refresh)
+            : V2ErrorState(
+                title: '홈을 불러오지 못했어요',
+                body: '잠시 후 다시 시도해 주세요.',
+                retryLabel: '다시 불러오기',
+                onRetry: _refresh,
+              ),
+      );
+    }
+    if (_unpaired) {
+      return SafeArea(
+        child: V2EmptyState.unpaired(
+          onAction: () => openPartnerScreen(context),
+        ),
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.zero,
+        children: [
+          _hero(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              V2Space.page,
+              V2Space.x4,
+              V2Space.page,
+              V2Space.x10,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_controller.state.status == HomeStatus.failure) ...[
+                  V2Banner(
+                    tone: V2BannerTone.err,
+                    message: '새 소식을 불러오지 못했어요. 마지막으로 받은 내용을 보여 줘요.',
+                    actionLabel: '다시 불러오기',
+                    onAction: _refresh,
+                  ),
+                  const SizedBox(height: V2Space.x3),
+                ],
+                if (_notificationsBlocked && !_notificationBannerDismissed) ...[
+                  V2Banner(
+                    tone: V2BannerTone.warn,
+                    icon: V2Icons.bellOff,
+                    title: '알림이 꺼져 있어요',
+                    message: '새 순간과 콕을 놓칠 수 있어요',
+                    actionLabel: '설정 열기',
+                    onAction: _openNotifications,
+                    onDismiss: () =>
+                        setState(() => _notificationBannerDismissed = true),
+                  ),
+                  const SizedBox(height: V2Space.x3),
+                ],
+                _todayEntry(),
+                ..._partnerLine(),
+                if (_showChecklist) ...[
+                  const SizedBox(height: V2Space.x4),
+                  _checklist(),
+                ],
+                const SizedBox(height: V2Space.x5),
+                _shortcuts(),
+                const SizedBox(height: V2Space.x5),
+                _memory(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // hero
+
+  ({String label, int days})? get _nextEvent {
+    final candidates = <({String label, int days})>[];
+    final server = _couple?.nextAnniversary;
+    if (server != null && server.daysUntil >= 0) {
+      candidates.add((label: server.label, days: server.daysUntil));
+    }
+    final start = _startDay;
+    if (start != null) {
+      final m = nextAutoMilestone(start);
+      if (m != null) candidates.add((label: m.label, days: m.daysUntil));
+    }
+    if (candidates.isEmpty) return null;
+    candidates.sort((a, b) => a.days.compareTo(b.days));
+    return candidates.first;
+  }
+
+  Widget _hero() {
+    final top = MediaQuery.paddingOf(context).top;
+    final start = _startDay;
+    final dDay = start != null ? dPlus(start) : _couple?.dDay;
+    final next = _nextEvent;
+    final pill = next == null
+        ? null
+        : next.days == 0
+        ? '오늘은 ${next.label}이에요'
+        : '${next.label}까지 ${next.days}일';
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        V2Space.page,
+        top + V2Space.x3,
+        V2Space.page,
+        V2Space.x6,
+      ),
+      decoration: const BoxDecoration(
+        gradient: V2Gradients.hero,
+        borderRadius: BorderRadius.vertical(
+          bottom: Radius.circular(V2Radius.sheet),
+        ),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '추억 되짚기',
-            style: mainBody(size: 14, color: kMainInk, weight: FontWeight.w900),
-          ),
-          const SizedBox(height: 5),
           Row(
             children: [
-              const Icon(Icons.history_rounded, size: 14, color: kMainMuted),
-              const SizedBox(width: 4),
-              Text(
-                '$yearsAgo년 전 오늘',
-                style: mainBody(size: 12, color: kMainMuted),
+              ExcludeSemantics(
+                child: V2AvatarPair(me: _myName, partner: _partnerName),
+              ),
+              const SizedBox(width: V2Space.x3),
+              Expanded(
+                child: Text(
+                  '$_myName · $_partnerName',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: V2Text.bodyStrong.copyWith(color: Colors.white),
+                ),
+              ),
+              IconButton(
+                tooltip: '알림 설정',
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                icon: Badge(
+                  isLabelVisible: _notificationsBlocked,
+                  smallSize: 8,
+                  child: const Icon(V2Icons.bell, color: Colors.white),
+                ),
+                onPressed: _openNotifications,
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (fullMediaUrl != null)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: Image.network(
-                    fullMediaUrl,
-                    width: 72,
-                    height: 72,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, a, b) => Container(
-                      width: 72,
-                      height: 72,
-                      color: kMainPaperSoft,
-                      child: const Icon(
-                        Icons.image_outlined,
-                        color: kMainMuted,
-                      ),
-                    ),
-                  ),
-                )
-              else
-                Container(
-                  width: 72,
-                  height: 72,
-                  decoration: BoxDecoration(
-                    color: kMainPaperSoft,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.photo_album_outlined,
-                    color: kMainMuted,
-                    size: 28,
-                  ),
-                ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          const SizedBox(height: V2Space.x4),
+          if (dDay == null)
+            _startPrompt()
+          else ...[
+            Semantics(
+              label: '함께한 지 $dDay일째',
+              child: ExcludeSemantics(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
                   children: [
-                    if (placeName != null)
-                      Text(
-                        placeName,
-                        style: mainBody(
-                          size: 13,
-                          weight: FontWeight.w700,
-                          color: kMainInk,
+                    Text(
+                      'D+',
+                      style: V2Text.serif(size: 28, color: Colors.white),
+                    ),
+                    const SizedBox(width: V2Space.x1),
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          '$dDay',
+                          style: V2Text.serif(size: 64, color: Colors.white),
                         ),
                       ),
-                    if (caption != null)
-                      Text(
-                        caption,
-                        style: mainBody(size: 13, color: kMainSub),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (pill != null) ...[
+              const SizedBox(height: V2Space.x2),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: V2Space.x3,
+                  vertical: V2Space.x1 + 2,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: .24),
+                  borderRadius: V2Radius.pillAll,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(V2Icons.event, size: 16, color: Colors.white),
+                    const SizedBox(width: V2Space.x1),
+                    Flexible(
+                      child: Text(
+                        pill,
+                        style: V2Text.label.copyWith(
+                          color: Colors.white,
+                          fontSize: 13,
+                        ),
                       ),
+                    ),
                   ],
                 ),
               ),
             ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _startPrompt() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '우리의 첫날을\n알려 주세요',
+          style: V2Text.serif(size: 30, color: Colors.white),
+        ),
+        const SizedBox(height: V2Space.x1),
+        Text(
+          _coupleFailed
+              ? '정보를 불러오지 못했어요. 아래로 당겨 새로고침해 보세요.'
+              : '연결한 날이 기본이에요. 바꿔도 돼요',
+          style: V2Text.cap.copyWith(color: Colors.white),
+        ),
+        if (!_coupleFailed) ...[
+          const SizedBox(height: V2Space.x3),
+          V2Button(
+            label: '첫날 정하기',
+            icon: V2Icons.calendar,
+            variant: V2ButtonVariant.soft,
+            size: V2ButtonSize.sm,
+            fullWidth: false,
+            loading: _savingStart,
+            onPressed: _pickStartDate,
           ),
-          if (totalCount > 0) ...[
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  totalCount > 1 ? '이 날 $totalCount개의 기억이 있어요' : '이 날의 기억',
-                  style: mainBody(size: 12, color: kMainMuted),
-                ),
-                TextButton.icon(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => MemoryListScreen(
-                        baseUrl: baseUrl,
-                        authHeaders: authHeaders,
-                      ),
-                    ),
-                  ),
-                  icon: const Icon(Icons.arrow_forward_rounded, size: 16),
-                  label: Text(
-                    '모든 기억 보기',
-                    style: mainBody(
-                      size: 12,
-                      color: kMainRose,
-                      weight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
+        ],
+      ],
+    );
+  }
+
+  // today
+
+  Widget _todayEntry() {
+    final state = _todayState;
+    final failed = _overview?.todayLoadFailed ?? true;
+    if (state == null || failed) {
+      return V2Card(
+        child: Column(
+          children: [
+            const V2Art(icon: V2Icons.error, tone: V2Tone.err),
+            const SizedBox(height: V2Space.x3),
+            Text(
+              '오늘의 순간을 불러오지 못했어요',
+              style: V2Text.head,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: V2Space.x1),
+            Text(
+              V2Text.keepAll('잠시 후 다시 해 보세요. 아래 다른 기능은 그대로 쓸 수 있어요.'),
+              style: V2Text.cap,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: V2Space.x4),
+            V2Button(
+              label: '다시 불러오기',
+              icon: V2Icons.refresh,
+              variant: V2ButtonVariant.soft,
+              onPressed: _refresh,
             ),
           ],
+        ),
+      );
+    }
+    return TodayCard(
+      state: state,
+      myName: _myName,
+      partnerName: _partnerName,
+      // _createMoment → openMomentComposer → MomentLoopScreen(openComposer: true).
+      onCreateMoment: _createMoment,
+      onOpenLoop: _openLoop,
+      onPoke: _sendPoke,
+      pokedToday: _pokedToday,
+      poking: _poking,
+      offline: _offline,
+      baseUrl: _auth.baseUrl,
+    );
+  }
+
+  List<Widget> _partnerLine() {
+    final state = _todayState;
+    if (state == null || (_overview?.todayLoadFailed ?? true)) return const [];
+    final name = _partnerName;
+    final moment = state.partnerMoment;
+    final clock = clockLabel(moment?.capturedAt ?? moment?.takenAt);
+    final text = switch (state.status) {
+      TodayStatus.empty => '${josa(name, '도', '도')} 아직이에요',
+      TodayStatus.selfWaiting => '${josa(name, '은', '는')} 아직 남기지 않았어요',
+      _ =>
+        clock != null
+            ? '${josa(name, '이', '가')} $clock에 남겼어요'
+            : '${josa(name, '이', '가')} 오늘의 순간을 남겼어요',
+    };
+    return [
+      const SizedBox(height: V2Space.x3),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: V2Space.x1),
+        child: Row(
+          children: [
+            ExcludeSemantics(
+              child: V2Avatar(
+                name: name,
+                color: V2Avatar.partnerColor,
+                size: V2AvatarSize.sm,
+              ),
+            ),
+            const SizedBox(width: V2Space.x2),
+            Expanded(child: Text(text, style: V2Text.cap)),
+          ],
+        ),
+      ),
+    ];
+  }
+
+  // first-use checklist
+
+  bool get _showChecklist {
+    final state = _todayState;
+    if (_overview == null || _unpaired) return false;
+    final start = _startDay;
+    final young = start == null || dPlus(start) <= 7;
+    if (!young) return false;
+    return !(start != null &&
+        state?.myMoment != null &&
+        !_notificationsBlocked);
+  }
+
+  Widget _checklist() {
+    final startDone = _startDay != null;
+    final momentDone = _todayState?.myMoment != null;
+    final notifDone = !_notificationsBlocked;
+    final done =
+        1 + (startDone ? 1 : 0) + (momentDone ? 1 : 0) + (notifDone ? 1 : 0);
+    return V2Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text('시작해 볼까요?', style: V2Text.head)),
+              V2Chip(label: '$done/4', tone: V2Tone.rose),
+            ],
+          ),
+          const SizedBox(height: V2Space.x2),
+          _CheckRow(done: true, title: '${josa(_partnerName, '와', '과')} 연결했어요'),
+          _CheckRow(
+            done: startDone,
+            title: '우리의 첫날 정하기',
+            sub: '100일·1주년을 자동으로 세어 줘요',
+            action: '정하기',
+            onTap: _pickStartDate,
+          ),
+          _CheckRow(
+            done: momentDone,
+            title: '오늘의 첫 순간 남기기',
+            sub: '${josa(_partnerName, '와', '과')} 같이 열어 봐요',
+            action: '남기기',
+            onTap: _createMoment,
+          ),
+          _CheckRow(
+            done: notifDone,
+            title: '알림 켜기',
+            sub: '${josa(_partnerName, '의', '의')} 순간과 콕을 놓치지 않아요',
+            action: '켜기',
+            onTap: _openNotifications,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // shortcuts
+
+  Widget _shortcuts() {
+    final items = [
+      (
+        icon: V2Icons.sparkle,
+        label: '오늘의 운세',
+        tone: V2Tone.lilac,
+        badge: 0,
+        onTap: _openFortune,
+      ),
+      (
+        icon: V2Icons.heart,
+        label: '우리 이해',
+        tone: V2Tone.rose,
+        badge: 0,
+        onTap: _openUnderstanding,
+      ),
+      (
+        icon: V2Icons.event,
+        label: '기념일',
+        tone: V2Tone.honey,
+        badge: 0,
+        onTap: () => _push(const AnniversariesScreen()),
+      ),
+      (
+        icon: V2Icons.base,
+        label: '비밀기지',
+        tone: V2Tone.sage,
+        badge: _claimable,
+        onTap: () => _openBase(),
+      ),
+    ];
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < items.length; i++) ...[
+          if (i > 0) const SizedBox(width: V2Space.x2),
+          Expanded(
+            child: _Shortcut(
+              icon: items[i].icon,
+              label: items[i].label,
+              tone: items[i].tone,
+              badge: items[i].badge,
+              onTap: items[i].onTap,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  // memory
+
+  Widget _memory() {
+    final card = _overview?.memoryCard;
+    if (_overview?.failedSections.contains(HomeSection.memory) ?? false) {
+      return const SizedBox.shrink();
+    }
+    if (card == null) {
+      return V2Card(
+        variant: V2CardVariant.soft,
+        child: Row(
+          children: [
+            const V2Art(icon: V2Icons.calendar, tone: V2Tone.honey),
+            const SizedBox(width: V2Space.x3),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('n년 전 오늘', style: V2Text.bodyStrong),
+                  Text('기록이 쌓이면 1년 뒤 오늘 여기서 만나요', style: V2Text.cap),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    final total = _overview?.memoryCardTotal ?? 0;
+    final title = card.caption?.trim().isNotEmpty == true
+        ? card.caption!
+        : (card.placeName ?? '그날의 기록');
+    final media = card.mediaUrl;
+    return V2Card(
+      onTap: () => _openBase(3),
+      semanticLabel: '${card.yearsAgo}년 전 오늘, $title. 추억 모아 보기',
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: V2Radius.ctlAll,
+            child: SizedBox(
+              width: 64,
+              height: 64,
+              child: media == null
+                  ? const V2PhotoPlaceholder(seed: 'memory')
+                  : Image.network(
+                      media.startsWith('http')
+                          ? media
+                          : '${_auth.baseUrl}$media',
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) =>
+                          const V2PhotoPlaceholder(seed: 'memory'),
+                    ),
+            ),
+          ),
+          const SizedBox(width: V2Space.x3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('${card.yearsAgo}년 전 오늘', style: V2Text.label),
+                const SizedBox(height: 2),
+                Text(
+                  title,
+                  style: V2Text.bodyStrong,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (total > 1) Text('이 날의 기록 $total개', style: V2Text.cap),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right_rounded, color: V2Colors.muted),
         ],
       ),
     );
   }
 }
 
-class _QuickAction extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final Color background;
-  final VoidCallback onTap;
-
-  const _QuickAction({
+class _Shortcut extends StatelessWidget {
+  const _Shortcut({
     required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.background,
+    required this.label,
+    required this.tone,
+    required this.badge,
     required this.onTap,
   });
 
+  final IconData icon;
+  final String label;
+  final V2Tone tone;
+  final int badge;
+  final VoidCallback onTap;
+
   @override
   Widget build(BuildContext context) {
+    final c = V2ToneColors.of(tone);
     return Semantics(
-      label: '$title: $subtitle',
+      container: true,
       button: true,
+      label: badge > 0 ? '$label, 받을 보상 $badge개' : label,
       onTap: onTap,
       child: ExcludeSemantics(
-        child: Padding(
-          padding: const EdgeInsets.only(right: 10),
-          child: SizedBox(
-            width: 124,
-            child: Material(
-              color: kMainPaper,
-              elevation: 3,
-              shadowColor: color.withAlpha(60),
-              borderRadius: BorderRadius.circular(24),
-              child: InkWell(
-                onTap: onTap,
-                borderRadius: BorderRadius.circular(24),
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: background,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(icon, color: color, size: 21),
+        child: Material(
+          color: V2Colors.surface,
+          borderRadius: V2Radius.cardAll,
+          child: InkWell(
+            borderRadius: V2Radius.cardAll,
+            onTap: onTap,
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 92),
+              padding: const EdgeInsets.symmetric(
+                horizontal: V2Space.x1,
+                vertical: V2Space.x3,
+              ),
+              decoration: BoxDecoration(
+                borderRadius: V2Radius.cardAll,
+                border: Border.all(color: V2Colors.line),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Badge(
+                    isLabelVisible: badge > 0,
+                    label: Text('$badge'),
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: c.soft,
+                        borderRadius: V2Radius.ctlAll,
                       ),
-                      const Spacer(),
-                      Text(
-                        title,
-                        style: mainBody(size: 13, weight: FontWeight.w800),
-                      ),
-                      Text(
-                        subtitle,
-                        style: mainBody(size: 11, color: kMainMuted),
-                      ),
-                    ],
+                      child: Icon(icon, color: c.text),
+                    ),
                   ),
-                ),
+                  const SizedBox(height: V2Space.x2),
+                  Text(
+                    V2Text.keepAll(label),
+                    textAlign: TextAlign.center,
+                    style: V2Text.label,
+                  ),
+                ],
               ),
             ),
           ),
@@ -780,174 +925,93 @@ class _QuickAction extends StatelessWidget {
   }
 }
 
-class _TodayLoadingCard extends StatelessWidget {
-  const _TodayLoadingCard();
+class _CheckRow extends StatelessWidget {
+  const _CheckRow({
+    required this.done,
+    required this.title,
+    this.sub,
+    this.action,
+    this.onTap,
+  });
+
+  final bool done;
+  final String title;
+  final String? sub;
+  final String? action;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return MainCard(
-      color: kMainSkySoft,
-      padding: const EdgeInsets.all(18),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: V2Space.tap),
       child: Row(
         children: [
-          const IconBadge(
-            color: kMainSky,
-            backgroundColor: Colors.white,
-            size: 44,
-            child: Icon(Icons.auto_stories_outlined, color: kMainSky),
+          Icon(
+            done ? V2Icons.ok : Icons.radio_button_unchecked_rounded,
+            color: done ? V2Colors.okText : V2Colors.control,
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: V2Space.x3),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '오늘의 루프를 준비하고 있어요',
-                  style: mainBody(
-                    size: 14,
-                    color: kMainInk,
-                    weight: FontWeight.w900,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: V2Space.x2),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: V2Text.bodyStrong.copyWith(
+                      color: done ? V2Colors.muted : null,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  '오늘의 순간을 함께 열어볼게요',
-                  style: mainBody(size: 12, color: kMainSub),
-                ),
-              ],
+                  if (sub != null && !done) Text(sub!, style: V2Text.cap),
+                ],
+              ),
             ),
           ),
+          if (!done && action != null)
+            V2Button(
+              label: action!,
+              size: V2ButtonSize.sm,
+              fullWidth: false,
+              variant: V2ButtonVariant.soft,
+              onPressed: onTap,
+            ),
         ],
       ),
     );
   }
 }
 
-class _TodayFailureCard extends StatelessWidget {
-  final VoidCallback onRetry;
-
-  const _TodayFailureCard({required this.onRetry});
+class _HomeSkeleton extends StatelessWidget {
+  const _HomeSkeleton();
 
   @override
   Widget build(BuildContext context) {
-    return MainCard(
-      color: kMainPaperSoft,
-      padding: const EdgeInsets.all(14),
-      child: Row(
-        children: [
-          const IconBadge(
-            color: kMainRose,
-            backgroundColor: Colors.white,
-            size: 44,
-            child: Icon(Icons.refresh_rounded, color: kMainRose),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    final top = MediaQuery.paddingOf(context).top;
+    return Semantics(
+      label: '홈을 불러오는 중이에요',
+      child: V2Shimmer(
+        child: SingleChildScrollView(
+          physics: const NeverScrollableScrollPhysics(),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              V2Space.page,
+              top + V2Space.x4,
+              V2Space.page,
+              0,
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  '오늘의 루프를 불러오지 못했어요',
-                  style: mainBody(
-                    size: 14,
-                    color: kMainInk,
-                    weight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  '잠시 후 다시 시도해주세요',
-                  style: mainBody(size: 12, color: kMainSub),
-                ),
+                V2SkeletonBox(height: 190, radius: V2Radius.sheet),
+                SizedBox(height: V2Space.x4),
+                V2SkeletonBox(height: 240, radius: V2Radius.card),
+                SizedBox(height: V2Space.x4),
+                V2SkeletonBox(height: 92, radius: V2Radius.card),
               ],
             ),
           ),
-          TextButton(onPressed: onRetry, child: const Text('다시 시도')),
-        ],
-      ),
-    );
-  }
-}
-
-class _RelationshipHomeEntry extends StatelessWidget {
-  final RelationshipAssessmentStatus status;
-  final VoidCallback onTap;
-
-  const _RelationshipHomeEntry({required this.status, required this.onTap});
-
-  ({String title, String subtitle, String action, IconData icon, bool primary})
-  get _copy => switch (status) {
-    RelationshipAssessmentStatus.profileIncomplete => (
-      title: '관계 이해 준비하기',
-      subtitle: '출생 프로필을 먼저 완성해주세요',
-      action: '준비 상태 확인하기',
-      icon: Icons.edit_note_outlined,
-      primary: false,
-    ),
-    RelationshipAssessmentStatus.notStarted => (
-      title: '관계 이해 알아보기',
-      subtitle: '우리의 대화와 관계를 천천히 살펴봐요',
-      action: '관계 이해 살펴보기',
-      icon: Icons.psychology_outlined,
-      primary: false,
-    ),
-    RelationshipAssessmentStatus.inProgress => (
-      title: '관계 이해 이어보기',
-      subtitle: '진행 중인 검사를 이어가세요',
-      action: '검사 이어가기',
-      icon: Icons.play_circle_outline,
-      primary: true,
-    ),
-    RelationshipAssessmentStatus.resultReady => (
-      title: '관계 이해 결과가 있어요',
-      subtitle: '최근 결과와 다음 질문을 확인해보세요',
-      action: '결과 살펴보기',
-      icon: Icons.insights_outlined,
-      primary: false,
-    ),
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    final copy = _copy;
-    final action = copy.primary
-        ? FilledButton(onPressed: onTap, child: Text(copy.action))
-        : OutlinedButton(onPressed: onTap, child: Text(copy.action));
-    return MainCard(
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              IconBadge(
-                color: kMainLilac,
-                backgroundColor: kMainLilacSoft,
-                size: 44,
-                child: Icon(copy.icon, color: kMainLilac, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      copy.title,
-                      style: mainBody(size: 15, weight: FontWeight.w900),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      copy.subtitle,
-                      style: mainBody(size: 12, color: kMainSub),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          SizedBox(width: double.infinity, child: action),
-        ],
+        ),
       ),
     );
   }

@@ -11,7 +11,7 @@ import 'pirate_controller.dart';
 import 'pirate_panels.dart';
 
 const _theme = GameTheme.pirateNight;
-const _howToLines = [
+const kPirateHowToLines = [
   '통에 난 구멍 중 하나에 폭탄이 숨어 있어요.',
   '번갈아 구멍을 하나씩 골라 칼을 꽂아요. 한 차례는 20초!',
   '폭탄 구멍을 찌르면 해적이 하늘로 날아가고, 찌른 사람이 져요.',
@@ -92,7 +92,7 @@ class _PirateGameScreenState extends State<PirateGameScreen>
         prefKey: 'how_to_pirate_v2',
         theme: _theme,
         title: '해적 룰렛',
-        lines: _howToLines,
+        lines: kPirateHowToLines,
         emoji: '🏴‍☠️',
       );
     });
@@ -199,7 +199,7 @@ class _PirateGameScreenState extends State<PirateGameScreen>
     context,
     theme: _theme,
     title: '해적 룰렛',
-    lines: _howToLines,
+    lines: kPirateHowToLines,
     emoji: '🏴‍☠️',
   );
 

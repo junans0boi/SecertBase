@@ -15,7 +15,7 @@ import 'zero_widgets.dart';
 
 const _kGameType = 'zero';
 
-const _kHowToLines = [
+const kZeroHowToLines = [
   '0~5 중 낼 손가락 수를 골라요.',
   '두 사람 손가락의 합계를 예측해요. 내 숫자보다 작은 합은 나올 수 없어서 고를 수 없어요.',
   '정확히 맞히면 2점, 둘 다 빗나가면 더 가까운 쪽이 1점이에요.',
@@ -87,7 +87,7 @@ class _ZeroScreenState extends State<ZeroScreen> with TickerProviderStateMixin {
         theme: theme,
         title: '제로 규칙',
         emoji: '✋',
-        lines: _kHowToLines,
+        lines: kZeroHowToLines,
       );
     });
   }
@@ -202,7 +202,7 @@ class _ZeroScreenState extends State<ZeroScreen> with TickerProviderStateMixin {
     theme: theme,
     title: '제로 규칙',
     emoji: '✋',
-    lines: _kHowToLines,
+    lines: kZeroHowToLines,
   );
 
   // ── 그리기 ───────────────────────────────────────────────────────────────

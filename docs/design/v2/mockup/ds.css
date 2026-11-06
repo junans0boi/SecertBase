@@ -1,0 +1,101 @@
+/* 비밀기지 2.0 공용 디자인 시스템 (목업 공용 CSS). 모든 영역은 이 클래스와 토큰만 쓴다. 화면 루트: <div class="screen app" data-label="..."> */
+:root{
+  /* 색 — 중립 */
+  --bg:#FFFBFD; --surface:#FFFFFF; --soft:#FFF4F8; --soft2:#FBEFF4; --line:#EFD9E3; --line2:#E4CCD8;
+  --ink:#1E1E2E; --sub:#4C4C68; --muted:#6B6B84; --dis:#B4B4C4;
+  /* 브랜드 — 장미. 버튼 배경은 rose-600(흰 글자 대비 4.5+), rose는 장식·아이콘용 */
+  --rose:#FF6F9F; --rose-600:#D0336D; --rose-700:#B52C5E; --rose-soft:#FFE3EC;
+  /* 보조 액센트(소프트 쌍) */
+  --sage:#2E9E6B; --sage-soft:#DDF4E8; --sky:#2F7FC1; --sky-soft:#DCEEFA; --honey:#B7791F; --honey-soft:#FFF0CC;
+  --lilac:#6F58D6; --lilac-soft:#ECE7FF; --peach:#D9663C; --peach-soft:#FFE6DC;
+  /* 상태 */
+  --ok:#1F8A58; --ok-soft:#DDF4E8; --warn:#9A5B00; --warn-soft:#FFF0CC; --err:#C62828; --err-soft:#FDE4E4;
+  /* 반경·그림자·간격(4pt) */
+  --ok-t:#126A40; --sky-t:#1B5C96; --warn-t:#7A4700; --lilac-t:#5740BC; --sage-t:#1B7149; --peach-t:#9E4316; --honey-t:#7F5410; --err-t:#B01F1F;
+  --r-ctl:12px; --r-card:20px; --r-sheet:28px; --r-pill:999px;
+  --sh-1:0 1px 2px rgba(60,20,40,.05),0 6px 18px rgba(60,20,40,.06); --sh-2:0 10px 30px rgba(60,20,40,.14);
+  --font:'Noto Sans KR',system-ui,sans-serif; --serif:'Gowun Batang','Noto Sans KR',serif;
+}
+/* 화면 바탕 */
+.screen.app{background:var(--bg);color:var(--ink);font:500 15px/22px var(--font);letter-spacing:-.005em}
+.screen.app *{box-sizing:border-box}
+.screen.app.dark{--bg:#17131C;--surface:#221C2A;--soft:#2A2233;--soft2:#30283A;--line:#3A3045;--line2:#473B54;--ink:#F6F0F7;--sub:#D5CADB;--muted:#A99DB3;--dis:#6D627A;--rose-soft:#4A2336;--sage-soft:#17362A;--sky-soft:#173047;--honey-soft:#3F3015;--lilac-soft:#2D2650;--peach-soft:#432719;--ok-soft:#17362A;--warn-soft:#3F3015;--err-soft:#4A1F22}
+.app .safe{height:52px;flex:none}
+.app .col{display:flex;flex-direction:column;height:100%}
+.app .scroll{flex:1;min-height:0;overflow:hidden}
+.app .pad{padding-left:20px;padding-right:20px}
+.app .gap-4{gap:4px}.app .gap-8{gap:8px}.app .gap-12{gap:12px}.app .gap-16{gap:16px}.app .gap-24{gap:24px}
+.app .row{display:flex;align-items:center}.app .between{justify-content:space-between}.app .center{justify-content:center;text-align:center}.app .grow{flex:1;min-width:0}
+/* 타입 스케일(6단) */
+.app .t-display{font:800 28px/34px var(--font);letter-spacing:-.02em}
+.app .t-title{font:800 22px/28px var(--font);letter-spacing:-.015em}
+.app .t-head{font:700 18px/24px var(--font)}
+.app .t-body{font:500 15px/22px var(--font)}
+.app .t-cap{font:500 13px/18px var(--font);color:var(--sub)}
+.app .t-label{font:700 12px/16px var(--font);letter-spacing:.02em}
+.app .serif{font-family:var(--serif)} .app .muted{color:var(--muted)} .app .sub{color:var(--sub)} .app .rose{color:var(--rose-600)}
+/* 상단 바 */
+.app .hdr{display:flex;align-items:center;min-height:52px;padding:0 12px 0 20px;gap:8px}
+.app .hdr .ttl{font:800 22px/28px var(--font);letter-spacing:-.015em;flex:1}
+.app .hdr.back{padding-left:8px}.app .hdr.back .ttl{font:700 17px/24px var(--font);text-align:center;margin-right:44px}
+.app .ib{width:44px;height:44px;border-radius:50%;border:0;background:transparent;display:grid;place-items:center;color:var(--ink);position:relative}
+.app .ib.fill{background:var(--soft)}
+.app .ib .dot{position:absolute;top:10px;right:10px;width:9px;height:9px;border-radius:50%;background:var(--rose-600);border:2px solid var(--bg)}
+/* 버튼 */
+.app .btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;height:52px;border-radius:14px;border:0;background:var(--rose-600);color:#fff;font:700 16px/1 var(--font)}
+.app .btn.sm{height:44px;width:auto;padding:0 18px;font-size:14px;border-radius:12px}
+.app .btn.soft{background:var(--rose-soft);color:var(--rose-700)}
+.app .btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line2)}
+.app .btn.text{background:transparent;color:var(--sub);height:44px;font-weight:600}
+.app .btn.danger{background:var(--err);color:#fff}.app .btn.danger.soft{background:var(--err-soft);color:var(--err)}
+.app .btn.off{background:var(--soft2);color:var(--dis)}
+/* 카드·리스트 */
+.app .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card);box-shadow:var(--sh-1);padding:16px}
+.app .card.flat{box-shadow:none}.app .card.soft{background:var(--soft);border-color:transparent;box-shadow:none}
+.app .list{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card);overflow:hidden}
+.app .li{display:flex;align-items:center;gap:12px;min-height:56px;padding:10px 16px;border-top:1px solid var(--line)}
+.app .li:first-child{border-top:0}
+.app .li .ic{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;background:var(--soft);color:var(--rose-600);flex:none}
+.app .li .tx{flex:1;min-width:0}.app .li .tx b{display:block;font:600 15px/20px var(--font)}.app .li .tx span{display:block;font:500 13px/18px var(--font);color:var(--sub)}
+.app .li .chev{color:var(--dis)}
+.app .sec{font:700 13px/18px var(--font);color:var(--sub);margin:24px 20px 8px}
+/* 칩·뱃지·진행 */
+.app .chip{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:var(--r-pill);background:var(--soft);color:var(--sub);font:600 13px/1 var(--font);border:1px solid transparent}
+.app .chip.on{background:var(--ink);color:var(--bg)}.app .chip.rose{background:var(--rose-soft);color:var(--rose-700)}
+.app .chip.ok{background:var(--ok-soft);color:var(--ok-t)}.app .chip.warn{background:var(--warn-soft);color:var(--warn-t)}.app .chip.err{background:var(--err-soft);color:var(--err-t)}
+.app .chip.sky{background:var(--sky-soft);color:var(--sky-t)}.app .chip.lilac{background:var(--lilac-soft);color:var(--lilac-t)}.app .chip.sage{background:var(--sage-soft);color:var(--sage-t)}
+.app .badge{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--rose-600);color:#fff;font:700 12px/20px var(--font);text-align:center}
+.app .bar{height:8px;border-radius:4px;background:var(--soft2);overflow:hidden}.app .bar i{display:block;height:100%;border-radius:4px;background:var(--rose-600)}
+.app .avatar{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font:800 17px/1 var(--font);color:#fff;background:var(--rose-600);flex:none}
+.app .avatar.b{background:var(--sky)}.app .avatar.sm{width:32px;height:32px;font-size:13px}.app .avatar.lg{width:64px;height:64px;font-size:24px}
+/* 입력 */
+.app .field{display:block}.app .field label{display:block;font:600 13px/18px var(--font);color:var(--sub);margin:0 2px 6px}
+.app .inp{display:flex;align-items:center;height:52px;padding:0 16px;border-radius:var(--r-ctl);background:var(--surface);border:1.5px solid var(--line2);font:500 16px/1 var(--font);color:var(--ink)}
+.app .inp.focus{border-color:var(--rose-600);box-shadow:0 0 0 4px var(--rose-soft)}.app .inp.err{border-color:var(--err);box-shadow:0 0 0 4px var(--err-soft)}
+.app .inp .ph{color:var(--dis)}.app .help{font:500 13px/18px var(--font);color:var(--sub);margin:6px 2px 0}.app .help.err{color:var(--err)}
+.app .toggle{width:51px;height:31px;border-radius:16px;background:var(--line2);position:relative;flex:none}.app .toggle::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.app .toggle.on{background:var(--rose-600)}.app .toggle.on::after{left:22px}
+.app .seg{display:flex;background:var(--soft2);border-radius:12px;padding:3px;height:44px}.app .seg b{flex:1;display:grid;place-items:center;border-radius:10px;font:600 14px/1 var(--font);color:var(--sub)}.app .seg b.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(60,20,40,.15)}
+.app .check{width:24px;height:24px;border-radius:8px;border:2px solid var(--line2);display:grid;place-items:center;flex:none;background:var(--surface)}.app .check.on{background:var(--rose-600);border-color:var(--rose-600);color:#fff}
+/* 하단 탭바 (5탭, 한글 라벨) */
+.app .tabbar{position:absolute;left:0;right:0;bottom:0;height:84px;padding:8px 8px 22px;background:var(--surface);border-top:1px solid var(--line);display:flex}
+.app .tabbar .tb{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;font:600 12px/16px var(--font);color:var(--muted);position:relative}
+.app .tabbar .tb svg{width:26px;height:26px}.app .tabbar .tb.on{color:var(--rose-600)}.app .tabbar .tb.on::before{content:"";position:absolute;top:-9px;width:28px;height:3px;border-radius:2px;background:var(--rose-600)}
+.app .tabbar .tb .badge{position:absolute;top:-2px;right:18px;min-width:16px;height:16px;line-height:16px;font-size:11px;padding:0 4px}
+.app .has-tabs{padding-bottom:84px}
+/* 바텀시트·다이얼로그·배너 */
+.app .scrim{position:absolute;inset:0;background:rgba(20,10,25,.46)}
+.app .sheet{position:absolute;left:0;right:0;bottom:0;background:var(--surface);border-radius:var(--r-sheet) var(--r-sheet) 0 0;padding:12px 20px 28px;box-shadow:var(--sh-2)}
+.app .sheet::before{content:"";display:block;width:40px;height:5px;border-radius:3px;background:var(--line2);margin:0 auto 16px}
+.app .dialog{position:absolute;left:28px;right:28px;top:50%;transform:translateY(-50%);background:var(--surface);border-radius:24px;padding:24px 20px 16px;box-shadow:var(--sh-2)}
+.app .banner{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-radius:14px;background:var(--soft);font:500 14px/20px var(--font);color:var(--sub)}
+.app .banner.warn{background:var(--warn-soft);color:var(--warn-t)}.app .banner.err{background:var(--err-soft);color:var(--err-t)}.app .banner.info{background:var(--sky-soft);color:var(--sky-t)}.app .banner.ok{background:var(--ok-soft);color:var(--ok-t)}
+.app .snack{position:absolute;left:16px;right:16px;bottom:100px;background:#2A2433;color:#fff;border-radius:14px;padding:14px 16px;font:600 14px/20px var(--font);display:flex;justify-content:space-between;gap:12px;box-shadow:var(--sh-2)}
+/* 빈·오류·스켈레톤 */
+.app .state{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;padding:32px 28px}
+.app .state .art{width:88px;height:88px;border-radius:28px;background:var(--soft);display:grid;place-items:center;color:var(--rose-600);margin-bottom:8px}
+.app .skel{background:linear-gradient(90deg,var(--soft2) 25%,var(--soft) 50%,var(--soft2) 75%);background-size:200% 100%;border-radius:10px;animation:sk 1.4s linear infinite}
+@keyframes sk{to{background-position:-200% 0}}
+/* 일러스트 바탕 */
+.app .hero-g{background:linear-gradient(160deg,#FF8FB3 0%,#FF6F9F 45%,#FF9A8B 100%);color:#fff}
+.app .ph-img{background:linear-gradient(135deg,#FFD6E4,#FFEBD6);display:grid;place-items:center;color:#fff}

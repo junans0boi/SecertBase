@@ -32,6 +32,42 @@ class PushService {
   StreamSubscription<String>? _refreshSub;
   StreamSubscription<PushTarget>? _openedSub;
   bool get enabled => _enabled;
+
+  /// 2.0: OS 알림 권한은 용도 안내 시트를 거친 뒤에만 묻는다. true면 `sync`가
+  /// 연결 직후 자동으로 OS 권한을 묻지 않는다(축하 화면의 안내 시트가 대신 한다).
+  bool deferPermissionPrompt = false;
+
+  /// 알림 권한이 이미 허용됐는지(웹/미지원이면 false).
+  Future<bool> isPermissionGranted() async {
+    try {
+      return await _platform?.permissionGranted() ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// 안내 시트에서 "알림 받기"를 누른 뒤 OS 권한을 요청하고, 허용되면 토큰을 등록한다.
+  Future<bool> requestPermissionFromUser() async {
+    final platform = _platform;
+    if (platform == null) return false;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_askedKey, true);
+    final granted = await platform.requestPermission();
+    final api = _api;
+    if (granted && api != null && _identity != null) {
+      unawaited(
+        sync(
+          api: api,
+          loggedIn: true,
+          paired: _paired,
+          identity: _identity,
+          authToken: _authToken,
+        ),
+      );
+    }
+    return granted;
+  }
+
   static const _askedKey = 'push_permission_asked';
 
   Future<void> _enqueue(Future<void> Function() operation) {
@@ -108,7 +144,7 @@ class PushService {
     return _enqueue(() async {
       if (!_current(generation)) return;
       var permitted = await _platform!.permissionGranted();
-      if (!permitted && paired) {
+      if (!permitted && paired && !deferPermissionPrompt) {
         final prefs = await SharedPreferences.getInstance();
         if (!(prefs.getBool(_askedKey) ?? false) && _current(generation)) {
           await prefs.setBool(_askedKey, true);

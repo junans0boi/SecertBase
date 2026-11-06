@@ -81,6 +81,18 @@ import path from 'path';
 import fs from 'fs';
 import { clientIpKey, createRateLimiter, emailKey } from './shared/rate-limit.js';
 import { extensionForMime, isAllowedUploadMime } from './shared/upload-safety.js';
+import {
+  MIN_SIGNUP_AGE,
+  ageOn,
+  isMissingSchemaError,
+  isStrongPassword,
+  isValidBirthDate,
+  normalizeConsents,
+  recordConsents,
+} from './modules/auth/policy.js';
+import { createMailer, resolveMailTransport } from './modules/auth/mailer.js';
+import { createPasswordResetRouter } from './modules/auth/password-reset.js';
+import { createConsentRouter } from './modules/auth/consent-router.js';
 
 const router = express.Router();
 const googleClient = new OAuth2Client();
@@ -195,7 +207,21 @@ const normalizeAuthUser = (user) => ({
   AuthProvider: user.AuthProvider ?? null,
   GoogleLinked: Boolean(user.GoogleSubject),
   GooglePictureUrl: user.GooglePictureUrl ?? null,
+  // Google 신규 가입자는 닉네임·생일·동의를 마칠 때까지 true(앱이 가입 마무리 화면을 띄운다).
+  SignupRequired: user.SignupRequired === true,
 });
+
+// 0050 마이그레이션 전 스키마에서도 로그인이 깨지지 않도록 별도 쿼리로 읽고, 컬럼이 없으면 "완료"로 본다.
+const readSignupRequired = async (userId) => {
+  try {
+    const result = await query('SELECT SignupCompletedAt FROM Users WHERE UserId = ?', [userId]);
+    const row = result.rows[0];
+    return Boolean(row) && row.SignupCompletedAt == null;
+  } catch (error) {
+    if (isMissingSchemaError(error)) return false;
+    throw error;
+  }
+};
 
 const getProfileRowByUserId = async (userId) => {
   const result = await query(
@@ -216,7 +242,9 @@ const getProfileRowByUserId = async (userId) => {
      WHERE u.UserId = ?`,
     [userId]
   );
-  return result.rows[0] ?? null;
+  const row = result.rows[0] ?? null;
+  if (row) row.SignupRequired = await readSignupRequired(userId);
+  return row;
 };
 
 const getCoupleIdForUser = async (userId) => {
@@ -284,10 +312,20 @@ router.post('/auth/register', ...registerLimiters, async (req, res) => {
     if (!email || !password || !fullName || !nicknameValue || !birthDate) {
       return res.status(400).json({ ok: false, reason: 'missing_fields' });
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
+    if (!isValidBirthDate(birthDate)) {
       return res.status(400).json({ ok: false, reason: 'invalid_birth_date' });
     }
-
+    if (ageOn(birthDate) < MIN_SIGNUP_AGE) {
+      return res.status(400).json({ ok: false, reason: 'under_age' });
+    }
+    if (!isStrongPassword(password)) {
+      return res.status(400).json({ ok: false, reason: 'weak_password' });
+    }
+    // 2.0 앱은 항목별 동의를 보낸다. 1.x 앱(단일 필수 체크)은 consents 없이 오므로 약관·개인정보만 기록한다.
+    const consents = normalizeConsents(req.body.consents);
+    if (!consents.ok) {
+      return res.status(400).json({ ok: false, reason: consents.reason });
+    }
 
     // 중복 확인
     const existing = await query('SELECT UserId FROM Users WHERE Email = ?', [email]);
@@ -322,6 +360,15 @@ router.post('/auth/register', ...registerLimiters, async (req, res) => {
       await connection.execute(
         'INSERT INTO User_Preference (UserId) VALUES (?)',
         [userId]
+      );
+
+      // 동의 이력(버전·시각)
+      await recordConsents(
+        (sql, params) => connection.execute(sql, params),
+        userId,
+        consents.records,
+        consents.legacy ? 'signup_legacy' : 'signup',
+        () => console.error('[API] user_consents table missing; run migration 0050'),
       );
     });
 
@@ -467,13 +514,28 @@ router.post(
           if (codeRows.length === 0) break;
         }
 
-        const [userResult] = await connection.execute(
-          `INSERT INTO Users
-           (Email, PasswordHash, PasswordSalt, UserName, FullName, Nickname, BirthDate, UserCode, CreatedBy,
-            AuthProvider, GoogleSubject, GooglePictureUrl)
-           VALUES (?, NULL, NULL, ?, ?, ?, '2000-01-01', ?, 'google', 'google', ?, ?)`,
-          [email, nickname, name, nickname, userCode, googleSubject, picture]
-        );
+        // BirthDate는 NOT NULL이라 임시값을 넣고, 가입 마무리(/auth/complete-signup)에서 실제 생일로 바꾼다.
+        // SignupCompletedAt = NULL → 앱이 닉네임·생일·동의 화면을 먼저 보여 준다.
+        const params = [email, nickname, name, nickname, userCode, googleSubject, picture];
+        let userResult;
+        try {
+          [userResult] = await connection.execute(
+            `INSERT INTO Users
+             (Email, PasswordHash, PasswordSalt, UserName, FullName, Nickname, BirthDate, UserCode, CreatedBy,
+              AuthProvider, GoogleSubject, GooglePictureUrl, SignupCompletedAt)
+             VALUES (?, NULL, NULL, ?, ?, ?, '2000-01-01', ?, 'google', 'google', ?, ?, NULL)`,
+            params
+          );
+        } catch (error) {
+          if (!isMissingSchemaError(error)) throw error;
+          [userResult] = await connection.execute(
+            `INSERT INTO Users
+             (Email, PasswordHash, PasswordSalt, UserName, FullName, Nickname, BirthDate, UserCode, CreatedBy,
+              AuthProvider, GoogleSubject, GooglePictureUrl)
+             VALUES (?, NULL, NULL, ?, ?, ?, '2000-01-01', ?, 'google', 'google', ?, ?)`,
+            params
+          );
+        }
         userId = userResult.insertId;
 
         await connection.execute(
@@ -498,12 +560,27 @@ router.post(
   },
 );
 
+// 비밀번호 재설정(로그인 전). 발송 수단은 MAIL_TRANSPORT로 고른다(mailer.js).
+router.use(createPasswordResetRouter({
+  queryFn: query,
+  mailer: createMailer({
+    transport: resolveMailTransport(config),
+    webhookUrl: config.MAIL_WEBHOOK_URL,
+    webhookToken: config.MAIL_WEBHOOK_TOKEN,
+    from: config.MAIL_FROM || undefined,
+  }),
+  secret: config.JWT_SECRET,
+  appUrl: config.APP_PUBLIC_URL,
+  limiterEnabled: authLimiterEnabled,
+}));
+
 const isAccountActive = createAccountActiveChecker({ queryFn: query });
 router.use(requireAuth(config.JWT_SECRET, {
   // 통합 테스트는 DB 스키마를 직접 구성하므로 테스트 환경에서는 계정 확인을 건너뛴다.
   isAccountActive: config.NODE_ENV === 'test' ? undefined : isAccountActive,
 }));
 router.use(mvpRestFeatureGate(config.PUBLIC_FEATURE_SET));
+router.use(createConsentRouter({ queryFn: query }));
 
 const momentUploadStore = createMomentUploadStore({ config });
 const momentRepository = createMomentLoopRepository({
@@ -3009,7 +3086,7 @@ router.patch('/user/password/:userId', async (req, res) => {
     if (!currentPassword || !newPassword) {
       return res.status(400).json({ ok: false, reason: 'missing_fields' });
     }
-    if (String(newPassword).length < 6) {
+    if (!isStrongPassword(newPassword)) {
       return res.status(400).json({ ok: false, reason: 'weak_password' });
     }
 
@@ -3027,7 +3104,8 @@ router.patch('/user/password/:userId', async (req, res) => {
 
     const isMatch = await bcrypt.compare(currentPassword, user.PasswordHash);
     if (!isMatch) {
-      return res.status(401).json({ ok: false, reason: 'invalid_current_password' });
+      // 401이면 앱이 세션 만료로 보고 로그아웃해 버리므로 403으로 돌려준다.
+      return res.status(403).json({ ok: false, reason: 'invalid_current_password' });
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -3186,7 +3264,8 @@ router.delete('/user', async (req, res) => {
       }
       const isMatch = await bcrypt.compare(password, user.PasswordHash || '');
       if (!isMatch) {
-        return res.status(401).json({ ok: false, reason: 'invalid_password' });
+        // 401이면 앱이 세션 만료로 보고 로그아웃해 버리므로 403으로 돌려준다.
+        return res.status(403).json({ ok: false, reason: 'invalid_password' });
       }
     }
 
