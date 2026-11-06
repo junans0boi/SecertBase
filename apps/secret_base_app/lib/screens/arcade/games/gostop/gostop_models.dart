@@ -69,6 +69,8 @@ class HScore {
   final int ribCount;
   final int piTotal;
   final int gwangScore;
+  final int animScore;
+  final int ribScore;
   final int godoriScore;
   final int hongdanBonus;
   final int cheongdanBonus;
@@ -82,6 +84,8 @@ class HScore {
     this.ribCount = 0,
     this.piTotal = 0,
     this.gwangScore = 0,
+    this.animScore = 0,
+    this.ribScore = 0,
     this.godoriScore = 0,
     this.hongdanBonus = 0,
     this.cheongdanBonus = 0,
@@ -98,6 +102,8 @@ class HScore {
       ribCount: _int(raw['ribCount']),
       piTotal: _int(raw['piTotal']),
       gwangScore: _int(raw['gwangScore']),
+      animScore: _int(raw['animScore']),
+      ribScore: _int(raw['ribScore']),
       godoriScore: _int(raw['godoriScore']),
       hongdanBonus: _int(raw['hongdanBonus']),
       cheongdanBonus: _int(raw['cheongdanBonus']),
