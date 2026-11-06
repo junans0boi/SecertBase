@@ -31,11 +31,14 @@ export const TELEPATHY_REVEAL_MS = 3_500;
 export const TELEPATHY_RESTART_INTRO_MS = 1_500;
 /** 연속 시간 초과 몇 번이면 판을 마치는지. */
 export const TELEPATHY_TIMEOUT_LIMIT = 3;
+/** 19+ 수위를 켜려면 두 사람 모두 이 나이(연 나이) 이상이어야 한다. */
+export const TELEPATHY_ADULT_AGE = 19;
 export const TELEPATHY_BAG_TTL_SEC = 365 * 24 * 3600;
 const STATE_TTL_SEC = 3600;
 
 const stateKey = (roomCode) => `game:${roomCode}:telepathy`;
-const bagKey = (roomCode) => `telepathy:${roomCode}:bag`;
+// 순한맛·살짝 매운맛은 한 가방을 나눠 쓰고(매운맛은 순한맛을 포함하니 반복이 없다), 19+는 문제 풀이 달라 가방을 따로 둔다.
+const bagKey = (roomCode, heat = "mild") => (heat === "nuclear" ? `telepathy:${roomCode}:bag:nuclear` : `telepathy:${roomCode}:bag`);
 const seriesKey = (roomCode) => `telepathy:${roomCode}:series`;
 const lastKey = (roomCode) => `telepathy:${roomCode}:last`;
 
@@ -81,7 +84,7 @@ function clearTimer(kit, roomCode) {
   (handle.api ?? kit?.timerApi)?.clearTimeout(handle.timer);
 }
 
-const publicQuestion = (q) => (q ? { id: q.id, cat: q.cat, a: q.a, b: q.b, emojiA: q.emojiA, emojiB: q.emojiB, spicy: q.spicy } : null);
+const publicQuestion = (q) => (q ? { id: q.id, cat: q.cat, a: q.a, b: q.b, emojiA: q.emojiA, emojiB: q.emojiB, spicy: q.spicy, heat: q.heat } : null);
 
 /** 모두에게 보내는 모양: 누가 골랐는지만 알리고 값은 숨긴다. 앞으로 나올 문제도 숨긴다. */
 export function publicTelepathyState(state, viewer = null) {
@@ -94,7 +97,7 @@ export function publicTelepathyState(state, viewer = null) {
     players: state.players,
     round: state.round,
     rounds: state.rounds,
-    spicy: state.spicy,
+    heat: state.heat,
     question: playing ? publicQuestion(state.questions[state.round - 1]) : null,
     picked,
     timeouts: state.timeouts,
@@ -137,22 +140,23 @@ function scheduleRound(kit, roomCode, state) {
 }
 
 /** 방 가방에서 이번 판 문제를 꺼내고 가방을 저장한다(1년). */
-async function drawForRoom(kit, roomCode, rounds, spicy) {
-  const bag = (await readJson(kit, bagKey(roomCode))) ?? emptyBag();
-  const drawn = drawQuestions(bag, bank, rounds, { spicy, random });
-  await kit.redis.set(bagKey(roomCode), JSON.stringify(drawn.bag), "EX", TELEPATHY_BAG_TTL_SEC);
+async function drawForRoom(kit, roomCode, rounds, heat) {
+  const key = bagKey(roomCode, heat);
+  const bag = (await readJson(kit, key)) ?? emptyBag();
+  const drawn = drawQuestions(bag, bank, rounds, { heat, random });
+  await kit.redis.set(key, JSON.stringify(drawn.bag), "EX", TELEPATHY_BAG_TTL_SEC);
   return drawn.questions;
 }
 
-async function beginGame(kit, roomCode, { players, gameId, firstDeadline, firstTurnMs = TELEPATHY_TURN_MS, rounds, spicy }) {
+async function beginGame(kit, roomCode, { players, gameId, firstDeadline, firstTurnMs = TELEPATHY_TURN_MS, rounds, heat }) {
   clearTimer(kit, roomCode);
-  const questions = await drawForRoom(kit, roomCode, rounds, spicy);
+  const questions = await drawForRoom(kit, roomCode, rounds, heat);
   const state = {
     gameId,
     players,
     status: "playing",
     rounds: questions.length,
-    spicy,
+    heat,
     round: 1,
     questions: questions.map(publicQuestion),
     picks: {},
@@ -170,7 +174,7 @@ async function beginGame(kit, roomCode, { players, gameId, firstDeadline, firstT
     createdAt: Date.now(),
   };
   await saveState(kit, roomCode, state);
-  await kit.redis.set(lastKey(roomCode), JSON.stringify({ players, rounds, spicy }), "EX", SERIES_TTL_SEC);
+  await kit.redis.set(lastKey(roomCode), JSON.stringify({ players, rounds, heat }), "EX", SERIES_TTL_SEC);
   emitState(kit, roomCode, state);
   scheduleRound(kit, roomCode, state);
   return state;
@@ -258,14 +262,45 @@ function previousSettings(previous, last) {
   const src = previous ?? last ?? {};
   const options = normalizeLobbyOptions(TELEPATHY_GAME_TYPE, {
     rounds: src.rounds,
-    spicy: src.spicy === true ? "on" : src.spicy === false ? "off" : src.spicy,
+    heat: src.heat,
   });
-  return { rounds: options.rounds, spicy: options.spicy === "on" };
+  return { rounds: options.rounds, heat: options.heat };
+}
+
+/**
+ * 19+ 수위용 성인 확인: 가입 때 입력한 생년(Users.BirthDate)으로 계산한 연 나이가 19세 이상인지.
+ * 나이를 알 수 없는 사람(생년 없음·조회 실패)은 통과시키지 않는다.
+ */
+async function everyoneIsAdult(kit, players) {
+  const codes = (players ?? []).filter(Boolean);
+  if (codes.length === 0) return true;
+  try {
+    const ages = await kit.playerAges(codes);
+    return codes.every((p) => Number.isFinite(ages.get(p)) && ages.get(p) >= TELEPATHY_ADULT_AGE);
+  } catch (err) {
+    console.error(`[telepathy] age check failed: ${err.message}`);
+    return false;
+  }
 }
 
 const telepathy = {
   gameType: TELEPATHY_GAME_TYPE,
   lobbyType: TELEPATHY_GAME_TYPE,
+
+  // 로비 훅(socket.js가 부른다): 19+ 판은 상대가 직접 동의해야 시작하고, 둘 다 성인이어야 한다.
+  lobbyNeedsReady: (lobby) => lobby?.options?.heat === "nuclear",
+  async checkLobbyOption(lobby, key, value, kit) {
+    if (key === "heat" && value === "nuclear" && !(await everyoneIsAdult(kit, lobby.players))) {
+      return { ok: false, reason: "adult_only" };
+    }
+    return { ok: true };
+  },
+  async checkLobbyStart(lobby, kit) {
+    if (lobby?.options?.heat === "nuclear" && !(await everyoneIsAdult(kit, lobby.players))) {
+      return { ok: false, reason: "adult_only" };
+    }
+    return { ok: true };
+  },
 
   register(socket, kit) {
     socket.on("game:telepathy:sync", async (_payload, ackRaw) => {
@@ -324,7 +359,7 @@ const telepathy = {
         firstDeadline: (ctx.startsAt ?? Date.now()) + TELEPATHY_TURN_MS + TELEPATHY_FIRST_EXTRA_MS,
         firstTurnMs: TELEPATHY_TURN_MS + TELEPATHY_FIRST_EXTRA_MS,
         rounds: options.rounds,
-        spicy: options.spicy === "on",
+        heat: options.heat,
       });
     });
   },
@@ -337,11 +372,15 @@ const telepathy = {
     const players = known?.length === 2 && known.every((p) => ctx.orderedPlayers.includes(p))
       ? known
       : [ctx.p1, ctx.p2];
+    const settings = previousSettings(previous, last);
+    if (settings.heat === "nuclear" && !(await everyoneIsAdult(kit, players))) {
+      return { ok: false, reason: "adult_only" };
+    }
     await beginGame(kit, roomCode, {
       players,
       gameId: kit.randomUUID(),
       firstDeadline: Date.now() + TELEPATHY_RESTART_INTRO_MS + TELEPATHY_TURN_MS,
-      ...previousSettings(previous, last),
+      ...settings,
     });
   },
 

@@ -36,20 +36,14 @@ test('normalizing keeps valid values, drops unknown keys and fills defaults', ()
   assert.deepEqual(normalizeLobbyOptions('blackjack', { cells: 3 }), {});
 });
 
-test('telepathy offers 10|5|15 questions and a spicy switch that is off by default', () => {
-  assert.deepEqual(defaultLobbyOptions('telepathy'), { rounds: 10, spicy: 'off' });
+test('telepathy offers 10|5|15 questions and a heat level that starts mild', () => {
+  assert.deepEqual(defaultLobbyOptions('telepathy'), { rounds: 10, heat: 'mild' });
   assert.equal(isValidLobbyOption('telepathy', 'rounds', 15), true);
   assert.equal(isValidLobbyOption('telepathy', 'rounds', 20), false);
-  assert.equal(isValidLobbyOption('telepathy', 'spicy', 'on'), true);
-  assert.equal(isValidLobbyOption('telepathy', 'spicy', true), false);
-  assert.deepEqual(normalizeLobbyOptions('telepathy', { rounds: 5, spicy: 'on' }), { rounds: 5, spicy: 'on' });
-  assert.deepEqual(normalizeLobbyOptions('telepathy', { rounds: '5' }), { rounds: 10, spicy: 'off' });
-});
-
-test('yut piece count option: 4 (default), 3 or 2', () => {
-  assert.deepEqual(defaultLobbyOptions('yut'), { pieces: 4 });
-  for (const n of [4, 3, 2]) assert.equal(isValidLobbyOption('yut', 'pieces', n), true);
-  assert.equal(isValidLobbyOption('yut', 'pieces', 5), false);
-  assert.equal(isValidLobbyOption('yut', 'pieces', '3'), false);
-  assert.deepEqual(normalizeLobbyOptions('yut', { pieces: 1 }), { pieces: 4 });
+  for (const heat of ['mild', 'spicy', 'nuclear']) assert.equal(isValidLobbyOption('telepathy', 'heat', heat), true);
+  assert.equal(isValidLobbyOption('telepathy', 'heat', 'extreme'), false);
+  assert.equal(isValidLobbyOption('telepathy', 'heat', true), false);
+  assert.equal(isValidLobbyOption('telepathy', 'spicy', 'on'), false, 'the old on/off switch is gone');
+  assert.deepEqual(normalizeLobbyOptions('telepathy', { rounds: 5, heat: 'nuclear' }), { rounds: 5, heat: 'nuclear' });
+  assert.deepEqual(normalizeLobbyOptions('telepathy', { rounds: '5', spicy: 'on' }), { rounds: 10, heat: 'mild' });
 });

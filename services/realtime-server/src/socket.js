@@ -502,7 +502,19 @@ const normalizeLobby = (lobby, presence) => {
 };
 
 // 판돈이 걸린 판은 방장이 아닌 모든 참가자가 준비 완료해야 시작할 수 있다.
-const lobbyNeedsReady = (lobby) => STAKE_GAME_TYPES.has(lobby.gameType) && (lobby.stake ?? 0) > 0;
+const lobbyNeedsReady = (lobby) =>
+  (STAKE_GAME_TYPES.has(lobby.gameType) && (lobby.stake ?? 0) > 0) ||
+  Boolean(GAME_MODULE_BY_LOBBY_TYPE.get(lobby.gameType)?.lobbyNeedsReady?.(lobby));
+// 가입 때 입력한 생년으로 계산한 연 나이(올해 - 태어난 해). 모르는 사람은 null.
+const loadPlayerAges = async (codes) => {
+  const unique = [...new Set(codes)].slice(0, 2);
+  if (unique.length === 0) return new Map();
+  const { rows } = await query(
+    "SELECT UserCode, YEAR(CURDATE()) - YEAR(BirthDate) AS Age FROM Users WHERE UserCode = ? OR UserCode = ?",
+    [unique[0], unique[1] ?? unique[0]],
+  );
+  return new Map(rows.map((row) => [row.UserCode, row.Age == null ? null : Number(row.Age)]));
+};
 const lobbyAllReady = (lobby) =>
   lobby.players.filter((p) => p !== lobby.host).every((p) => lobby.ready?.[p] === true);
 
@@ -796,6 +808,7 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
     getPresence: (roomCode) => getPresence(io, roomCode),
     getOrderedPlayers,
     consumePendingGame,
+    playerAges: loadPlayerAges,
     recordGameOutcome,
     presenceProfiles: (roomCode) => getPresenceProfiles(io, roomCode),
     presenceNicknames: (roomCode) => getPresenceNicknames(io, roomCode),
@@ -1062,6 +1075,8 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         const lobby = normalizeLobby(JSON.parse(lobbyText), getPresence(io, roomCode));
         if (lobby.host !== userId) { ack({ ok: false, reason: "not_host" }); return; }
         if (!isValidLobbyOption(gameType, optionKey, value)) { ack({ ok: false, reason: "invalid_option" }); return; }
+        const optionGate = await GAME_MODULE_BY_LOBBY_TYPE.get(gameType)?.checkLobbyOption?.(lobby, optionKey, value, kit);
+        if (optionGate && optionGate.ok === false) { ack({ ok: false, reason: optionGate.reason }); return; }
         if (lobby.options[optionKey] !== value) lobby.ready = {};
         lobby.options = { ...lobby.options, [optionKey]: value };
         lobby.updatedAt = Date.now();
@@ -1200,6 +1215,11 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       }
       if (lobbyNeedsReady(lobby) && !lobbyAllReady(lobby)) {
         ack({ ok: false, reason: "partner_not_ready" });
+        return;
+      }
+      const startGate = await GAME_MODULE_BY_LOBBY_TYPE.get(gameType)?.checkLobbyStart?.(lobby, kit);
+      if (startGate && startGate.ok === false) {
+        ack({ ok: false, reason: startGate.reason });
         return;
       }
       const stakeForGame = STAKE_GAME_TYPES.has(gameType) ? (lobby.stake ?? 0) : 0;
