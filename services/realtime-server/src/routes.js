@@ -6469,7 +6469,7 @@ router.get('/shop/owned', async (req, res) => {
        FROM owned_items oi
        JOIN shop_items si ON si.id = oi.item_id
        LEFT JOIN equipped_items ei ON ei.item_id = oi.item_id AND ei.user_id = ?
-       WHERE oi.user_id = ?`,
+       WHERE oi.user_id = ? AND COALESCE(si.game, '') <> 'yut_legacy'`,
       [req.auth.userId, req.auth.userId]
     );
     res.json({ ok: true, owned });

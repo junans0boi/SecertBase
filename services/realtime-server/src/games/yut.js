@@ -7,7 +7,7 @@
 //   남은 이동을 "최선 이동"으로 하나씩 둔다. 같은 사람이 연속 3번 자동 처리되면 기권패.
 // - 승리·기권은 finishYutGame 하나로: 끝남 저장 → 정산·기록(try/finally) → 상태 삭제 → game:yut:ended.
 import { query } from "../db.js";
-import { getEquippedItemsInfo, getEquippedStats } from "../wallet-engine.js";
+import { getEquippedItemsInfo } from "../wallet-engine.js";
 import { viewerRoomKey } from "../game-session.js";
 import {
   DEFAULT_PIECE_COUNT,
@@ -96,8 +96,10 @@ async function loadItems(players) {
     try {
       const { rows } = await query("SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1", [code]);
       const numId = rows[0]?.UserId;
-      playerStats[code] = numId ? await getEquippedStats(numId) : {};
-      equippedItems[code] = numId ? await getEquippedItemsInfo(numId) : {};
+      // 말 스킨은 폐지: 효과도 표시도 윷 스킨(yut_yut) 하나에서만 온다(남은 옛 장착은 무시).
+      const info = numId ? await getEquippedItemsInfo(numId) : {};
+      equippedItems[code] = info.yut_yut ? { yut_yut: info.yut_yut } : {};
+      playerStats[code] = { ...(info.yut_yut?.stats ?? {}) };
     } catch (err) {
       // 아이템 조회가 실패해도 판은 만든다(아이템 효과만 빠진다).
       console.error(`[yut] item load failed for ${code}: ${err.message}`);
@@ -285,7 +287,7 @@ async function createGame(kit, roomCode, { players, pieces, stake, gameId, start
   state.playerStats = items.playerStats;
   state.equippedItems = items.equippedItems;
   // 판돈 게임에서도 아이템 효과는 합산 상한 안에서만(엔진이 계산).
-  state.effects = Object.fromEntries(players.map((p) => [p, yutItemEffects(items.playerStats[p])]));
+  state.effects = Object.fromEntries(players.map((p) => [p, yutItemEffects(items.playerStats[p], state.characters?.[p])]));
   state.seq = 1;
   state.lastAction = { type: "start", by: firstPlayer, seq: 1 };
   try {
