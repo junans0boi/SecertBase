@@ -27,8 +27,11 @@ String withSubjectParticle(String name) {
 
 /// One-line summary for the 더보기 row ("켜짐 · 방해금지 밤 10:00 – 아침 8:00").
 String notificationSummary(Map<String, dynamic> prefs) {
-  final anyOn = ['partner_moment', 'today_loop', 'game_invite']
-      .any((k) => prefs[k] == true);
+  final anyOn = [
+    'partner_moment',
+    'today_loop',
+    'game_invite',
+  ].any((k) => prefs[k] == true);
   if (!anyOn) return '모든 알림을 껐어요';
   if (prefs['quiet_hours_enabled'] == true) {
     return '켜짐 · 방해금지 ${koreanClock('${prefs['quiet_start']}')} – '

@@ -7,11 +7,15 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:secret_base_app/core/http/api_client.dart';
 import 'package:secret_base_app/screens/settings/notification_settings_screen.dart';
+import 'package:secret_base_app/v2/v2.dart';
 
 void main() {
   testWidgets(
     'pending save blocks later writes, rolls back on failure, and survives disposal',
     (tester) async {
+      tester.view.physicalSize = const Size(900, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
       final first = Completer<http.Response>();
       var puts = 0;
       final api = ApiClient(
@@ -40,12 +44,10 @@ void main() {
       expect(puts, 1);
       first.complete(http.Response('{"error":"unavailable"}', 503));
       await tester.pumpAndSettle();
-      expect(tester.widget<SwitchListTile>(partner).value, true);
+      expect(tester.widget<V2Toggle>(partner).value, true);
       expect(
         tester
-            .widget<SwitchListTile>(
-              find.byKey(const ValueKey('pref_today_loop')),
-            )
+            .widget<V2Toggle>(find.byKey(const ValueKey('pref_today_loop')))
             .value,
         true,
       );
@@ -81,6 +83,9 @@ void main() {
   testWidgets(
     'quiet hours and reveal hour retain typed values and save partial changes',
     (tester) async {
+      tester.view.physicalSize = const Size(900, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
       final requests = <http.Request>[];
       final api = ApiClient(
         baseUrl: 'http://x.test',
@@ -112,9 +117,9 @@ void main() {
         MaterialApp(home: NotificationSettingsScreen(apiClient: api)),
       );
       await tester.pumpAndSettle();
-      expect(find.text('22:00'), findsOneWidget);
-      expect(find.text('08:00'), findsOneWidget);
-      expect(find.text('21:00'), findsOneWidget);
+      expect(find.text('밤 10:00'), findsOneWidget);
+      expect(find.text('아침 8:00'), findsOneWidget);
+      expect(find.text('밤 9:00'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('pref_quiet_start')));
       await tester.pumpAndSettle();
       expect(
@@ -145,6 +150,9 @@ void main() {
     },
   );
   testWidgets('switch change is saved through the prefs API', (tester) async {
+    tester.view.physicalSize = const Size(900, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     final requests = <http.Request>[];
     final api = ApiClient(
       baseUrl: 'http://x.test',
@@ -176,9 +184,7 @@ void main() {
 
     expect(
       tester
-          .widget<SwitchListTile>(
-            find.byKey(const ValueKey('pref_game_invite')),
-          )
+          .widget<V2Toggle>(find.byKey(const ValueKey('pref_game_invite')))
           .value,
       isFalse,
     );

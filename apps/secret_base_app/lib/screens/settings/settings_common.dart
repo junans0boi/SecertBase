@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth_service.dart';
+import '../../core/http/api_client.dart';
 import '../../v2/v2.dart';
 
 /// Shared helpers for the 더보기 (settings) screens.
@@ -10,6 +12,62 @@ import '../../v2/v2.dart';
 /// 하단 탭을 숨겨").
 Future<T?> pushMorePage<T>(BuildContext context, Widget page) =>
     Navigator.of(context).push<T>(MaterialPageRoute(builder: (_) => page));
+
+/// Opens [uri] outside the app. Returns false when nothing could open it
+/// (no mail app, blocked pop-up...). Injectable in tests.
+typedef LinkOpener = Future<bool> Function(Uri uri);
+
+Future<bool> openExternalLink(Uri uri) async {
+  try {
+    return await launchUrl(uri, mode: LaunchMode.externalApplication);
+  } catch (_) {
+    return false;
+  }
+}
+
+/// `/api/couple/info` as the 더보기 screens need it.
+class CoupleInfo {
+  const CoupleInfo({
+    this.startDate,
+    this.dDay,
+    this.partnerName,
+    this.nextAnniversaryLabel,
+    this.nextAnniversaryDays,
+  });
+
+  final DateTime? startDate;
+  final int? dDay;
+  final String? partnerName;
+  final String? nextAnniversaryLabel;
+  final int? nextAnniversaryDays;
+
+  factory CoupleInfo.fromJson(Map<dynamic, dynamic> json) {
+    final next = json['nextAnniversary'];
+    return CoupleInfo(
+      startDate: parseDateOnly(json['startDate']),
+      dDay: (json['dDay'] as num?)?.toInt(),
+      partnerName: json['partnerName'] == null
+          ? null
+          : '${json['partnerName']}'.trim(),
+      nextAnniversaryLabel: next is Map ? '${next['label'] ?? ''}' : null,
+      nextAnniversaryDays: next is Map
+          ? (next['daysUntil'] as num?)?.toInt()
+          : null,
+    );
+  }
+
+  /// `D+412` — empty when the start date is unknown.
+  String get dDayText => dDay == null ? '' : 'D+$dDay';
+}
+
+/// Loads [CoupleInfo]; throws when the request fails.
+Future<CoupleInfo> fetchCoupleInfo(ApiClient api) async {
+  final body = await api.getJson('/api/couple/info');
+  if (body is! Map || body['ok'] != true) {
+    throw StateError('couple_info_failed');
+  }
+  return CoupleInfo.fromJson(body);
+}
 
 /// The user's display name (닉네임 우선).
 String myDisplayName(Map<String, dynamic>? user) {
@@ -42,6 +100,14 @@ bool needsPasswordToDelete(Map<String, dynamic>? user) {
   final provider =
       '${user?['AuthProvider'] ?? user?['authProvider'] ?? 'password'}';
   return provider == 'password' || provider == 'null' || provider.isEmpty;
+}
+
+/// `서윤` → `서윤과`, `민지` → `민지와` (with/and particle).
+String withWaGwa(String name) {
+  if (name.isEmpty) return name;
+  final code = name.runes.last;
+  if (code < 0xAC00 || code > 0xD7A3) return '$name와';
+  return (code - 0xAC00) % 28 == 0 ? '$name와' : '$name과';
 }
 
 /// `2025년 9월 21일`.
@@ -207,4 +273,85 @@ class MoreStepChip extends StatelessWidget {
     excludeSemantics: true,
     child: V2Chip(label: '$step/$total'),
   );
+}
+
+/// Sheet that makes the user type [phrase] before a dangerous action
+/// (연결 해제, 탈퇴). Returns true only when the phrase matches and the red
+/// button is pressed.
+Future<bool> showTypedConfirmSheet(
+  BuildContext context, {
+  required String title,
+  required String message,
+  required String phrase,
+  required String confirmLabel,
+  String cancelLabel = '그만두기',
+}) async {
+  final result = await showV2Sheet<bool>(
+    context,
+    title: title,
+    builder: (ctx) => _TypedConfirmBody(
+      message: message,
+      phrase: phrase,
+      confirmLabel: confirmLabel,
+      cancelLabel: cancelLabel,
+    ),
+  );
+  return result ?? false;
+}
+
+class _TypedConfirmBody extends StatefulWidget {
+  const _TypedConfirmBody({
+    required this.message,
+    required this.phrase,
+    required this.confirmLabel,
+    required this.cancelLabel,
+  });
+
+  final String message;
+  final String phrase;
+  final String confirmLabel;
+  final String cancelLabel;
+
+  @override
+  State<_TypedConfirmBody> createState() => _TypedConfirmBodyState();
+}
+
+class _TypedConfirmBodyState extends State<_TypedConfirmBody> {
+  final _ctrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final matches = _ctrl.text.trim() == widget.phrase;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(widget.message, style: V2Text.body),
+        const SizedBox(height: 16),
+        V2TextField(
+          label: '아래에 ‘${widget.phrase}’라고 입력해 주세요',
+          controller: _ctrl,
+          hint: widget.phrase,
+          onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: 16),
+        V2Button(
+          label: widget.cancelLabel,
+          onPressed: () => Navigator.of(context).pop(false),
+        ),
+        const SizedBox(height: 8),
+        V2Button(
+          label: widget.confirmLabel,
+          variant: V2ButtonVariant.danger,
+          onPressed: matches ? () => Navigator.of(context).pop(true) : null,
+        ),
+      ],
+    );
+  }
 }
