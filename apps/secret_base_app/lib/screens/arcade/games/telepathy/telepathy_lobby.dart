@@ -263,6 +263,7 @@ class TelepathyLobbyView extends StatelessWidget {
             const SizedBox(height: 10),
             Semantics(
               button: true,
+              onTap: () => onAccept(!iAccepted),
               label: iAccepted ? '19세 이상 동의 취소' : '19세 이상이며 동의해요',
               child: ExcludeSemantics(
                 child: Material(
@@ -320,6 +321,7 @@ class TelepathyLobbyView extends StatelessWidget {
             Semantics(
               button: true,
               enabled: canStart,
+              onTap: canStart ? onStart : null,
               label: startLabel,
               child: ExcludeSemantics(
                 child: Opacity(

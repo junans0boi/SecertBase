@@ -281,6 +281,7 @@ class _MainButton extends StatelessWidget {
     return Semantics(
       button: true,
       enabled: enabled,
+      onTap: onPressed,
       label: label,
       child: ExcludeSemantics(
         child: Opacity(
