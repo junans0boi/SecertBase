@@ -3,6 +3,14 @@ import 'package:flutter/foundation.dart';
 /// 정규 킥 수(한 사람당).
 const kPenaltyKicksPerPlayer = 5;
 
+/// 규칙 안내(경기 화면 첫 방문·로비·결과의 ? 버튼이 같이 쓴다).
+const kPenaltyHowToTitle = '패널티킥 하는 법';
+const kPenaltyHowToLines = [
+  '골대 칸 중 하나를 골라요. 키퍼가 같은 칸을 고르면 막혀요!',
+  '칸을 누르고 큰 버튼(슛!·막기!)으로 확정해요. 20초가 지나면 자동으로 골라져요.',
+  '5번씩 번갈아 차서 골이 많으면 승리! 동점이면 한 번씩 더 차요.',
+];
+
 /// 한 번 고르는 시간(서버 `PENALTY_TURN_MS`와 같다).
 const kPenaltyTurn = Duration(seconds: 20);
 

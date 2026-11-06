@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import '../../core/main_design.dart';
 import '../../core/socket_service.dart';
 import '../../core/yut_audio.dart';
+import '../../widgets/play_kit/play_kit.dart';
+import 'games/penalty/penalty_lobby.dart';
+import 'games/penalty/penalty_models.dart';
 import 'games/yut/yut_character_picker.dart';
 import 'games/yut/yut_figures.dart';
 import 'lobby_options.dart';
@@ -233,6 +236,33 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
     final lobbyPlayers = List<String>.from(_socket.lobbyPlayers);
     final profileEmojis = Map<String, String>.from(_socket.profileEmojis);
     final nicknames = Map<String, String>.from(_socket.presenceNicknames);
+
+    // 패널티킥은 목업 디자인(야간 방송)의 전용 대기방 화면을 쓴다. 동작은 아래와 같다.
+    if (widget.gameType == 'penalty') {
+      return PenaltyLobbyView(
+        cellsDef: lobbyOptionsFor('penalty').single,
+        cellsValue: _socket.lobbyOptions['cells'],
+        myId: _socket.userId,
+        hostId: _socket.lobbyHost,
+        players: lobbyPlayers,
+        nicknames: nicknames,
+        emojis: profileEmojis,
+        isHost: isHost,
+        canStart: canStart,
+        startLabel: startLabel,
+        onSelectCells: (value) =>
+            _socket.setLobbyOption(widget.gameType, 'cells', value),
+        onStart: () => _socket.startGameLobby(widget.gameType),
+        onBack: () => Navigator.of(context).pop(),
+        onHelp: () => showGameHowTo(
+          context,
+          theme: GameTheme.sunsetStadium,
+          title: kPenaltyHowToTitle,
+          lines: kPenaltyHowToLines,
+          emoji: '⚽',
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: kMainBg,
