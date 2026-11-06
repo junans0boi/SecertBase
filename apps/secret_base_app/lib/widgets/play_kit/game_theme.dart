@@ -49,6 +49,16 @@ class GameTheme {
   final TextStyle Function({double size, Color? color, FontWeight weight})
   displayFont;
 
+  /// 본문 서체. 비워 두면 기본(Noto Sans)을 쓴다. 한글 글리프를 직접 가진
+  /// Noto Sans KR을 쓰는 테마만 지정한다(그래야 기기마다 한글 대체 글꼴이 달라 보이지 않는다).
+  final TextStyle Function({
+    double size,
+    Color? color,
+    FontWeight weight,
+    double? height,
+  })?
+  bodyFont;
+
   const GameTheme({
     required this.id,
     required this.texture,
@@ -64,6 +74,7 @@ class GameTheme {
     required this.me,
     required this.opponent,
     required this.displayFont,
+    this.bodyFont,
   });
 
   /// 본문 서체(모든 테마 공통: Noto Sans KR).
@@ -72,12 +83,23 @@ class GameTheme {
     Color? color,
     FontWeight weight = FontWeight.w600,
     double? height,
-  }) => GoogleFonts.notoSans(
-    fontSize: size,
-    color: color ?? ink,
-    fontWeight: weight,
-    height: height,
-  );
+  }) {
+    final custom = bodyFont;
+    if (custom != null) {
+      return custom(
+        size: size,
+        color: color ?? ink,
+        weight: weight,
+        height: height,
+      );
+    }
+    return GoogleFonts.notoSans(
+      fontSize: size,
+      color: color ?? ink,
+      fontWeight: weight,
+      height: height,
+    );
+  }
 
   TextStyle display({
     double size = 24,
@@ -116,6 +138,23 @@ class GameTheme {
     height: 1.15,
   );
 
+  /// Noto Sans KR 본문. 내려받는 굵기를 400/500/700 셋으로만 쓴다(한글 글꼴은 한 벌이 무겁다).
+  static TextStyle _notoKr({
+    double size = 14,
+    Color? color,
+    FontWeight weight = FontWeight.w600,
+    double? height,
+  }) => GoogleFonts.notoSansKr(
+    fontSize: size,
+    color: color,
+    fontWeight: weight.value <= 400
+        ? FontWeight.w400
+        : weight.value <= 500
+        ? FontWeight.w500
+        : FontWeight.w700,
+    height: height,
+  );
+
   static TextStyle _jua({
     double size = 24,
     Color? color,
@@ -139,17 +178,18 @@ class GameTheme {
     id: 'lounge',
     texture: GameTexture.felt,
     dark: true,
-    backdrop: [Color(0xFF0B3B33), Color(0xFF0E4A3F), Color(0xFF072823)],
-    surface: Color(0xFF0F5446),
-    surfaceBorder: Color(0x55E9C77B),
+    backdrop: [Color(0xFF0F5648), Color(0xFF0B4036), Color(0xFF072B25)],
+    surface: Color(0xFF0E4B40),
+    surfaceBorder: Color(0x47E2BC6A),
     accent: Color(0xFFD9A441),
     accentSoft: Color(0x33E9C77B),
     gold: Color(0xFFE2BC6A),
     ink: Color(0xFFFDF6E3),
-    subInk: Color(0xCCE8DDC4),
+    subInk: Color(0xB8E8DDC4),
     me: Color(0xFF8FE3C6),
     opponent: Color(0xFFF2A7B8),
     displayFont: _batang,
+    bodyFont: _notoKr,
   );
 
   /// 도둑잡기: 동화책 티파티.
@@ -157,17 +197,18 @@ class GameTheme {
     id: 'storybook',
     texture: GameTexture.paper,
     dark: false,
-    backdrop: [Color(0xFFFFF8EE), Color(0xFFFBEFE2), Color(0xFFF6E3D3)],
+    backdrop: [Color(0xFFFBF4E6), Color(0xFFF6EBD7), Color(0xFFF6EBD7)],
     surface: Color(0xFFFFFCF6),
-    surfaceBorder: Color(0x66A8495B),
-    accent: Color(0xFF9E3550),
-    accentSoft: Color(0x1F9E3550),
+    surfaceBorder: Color(0x243B2430),
+    accent: Color(0xFFA23B55),
+    accentSoft: Color(0x1FA23B55),
     gold: Color(0xFFC79A4B),
     ink: Color(0xFF3B2430),
     subInk: Color(0xFF7D6470),
     me: Color(0xFF7E6BD6),
     opponent: Color(0xFFD0607E),
     displayFont: _batang,
+    bodyFont: _notoKr,
   );
 
   /// 제로: 스포트라이트 쇼.

@@ -5,12 +5,15 @@ import 'package:flutter/material.dart';
 import '../../../../core/game_sfx/game_sfx.dart';
 import '../../../../core/socket_service.dart';
 import '../../../../widgets/game_menu.dart';
+import '../../../../widgets/play_kit/modern_kit.dart';
+import '../../../../widgets/play_kit/modern_result.dart';
 import '../../../../widgets/play_kit/play_kit.dart';
+import '../../game_lobby_themed.dart' show ThiefHero;
 import 'oldmaid_controller.dart';
 import 'oldmaid_layout.dart';
 import 'oldmaid_widgets.dart';
 
-const _howToLines = [
+const oldMaidHowTo = [
   '조커 한 장이 섞인 카드를 나눠 갖고, 같은 숫자 두 장은 바로 버려요.',
   '내 차례에는 상대의 뒤집힌 카드 중 한 장을 골라요. 한 번 눌러 고르고, 한 번 더 누르면 뽑아요.',
   '뽑은 카드가 내 카드와 짝이 맞으면 둘 다 버림 더미로 가요.',
@@ -18,7 +21,7 @@ const _howToLines = [
   '😊 버튼으로 표정 연기를 해 보세요. 조커를 숨긴 채 능청 떨기!',
 ];
 
-/// 도둑잡기 2.0 — 동화책 티파티. 한 화면(스크롤 없음)에 상대 부채꼴 → 가운데 → 내 부채꼴.
+/// 도둑잡기 2.0 — 동화책 크림 종이. 한 화면(스크롤 없음)에 상대 부채꼴 → 가운데 무대 → 내 부채꼴 → 주 버튼.
 class OldMaidScreen extends StatefulWidget {
   const OldMaidScreen({super.key});
 
@@ -99,13 +102,12 @@ class _OldMaidScreenState extends State<OldMaidScreen>
     _c.sync();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      showHowToOnce(
+      showModHowToOnce(
         context,
         prefKey: 'howto_oldmaid_v2',
         theme: _theme,
         title: '도둑잡기',
-        emoji: '🃏',
-        lines: _howToLines,
+        lines: oldMaidHowTo,
       );
     });
   }
@@ -229,13 +231,8 @@ class _OldMaidScreenState extends State<OldMaidScreen>
     _c.draw(slot);
   }
 
-  void _showHelp() => showGameHowTo(
-    context,
-    theme: _theme,
-    title: '도둑잡기',
-    emoji: '🃏',
-    lines: _howToLines,
-  );
+  void _showHelp() =>
+      showModHowTo(context, theme: _theme, title: '도둑잡기', lines: oldMaidHowTo);
 
   @override
   Widget build(BuildContext context) {
@@ -244,59 +241,66 @@ class _OldMaidScreenState extends State<OldMaidScreen>
       backgroundColor: t.backdrop.last,
       body: GameMenuListener(
         gameType: OldMaidController.gameType,
-        child: GameBackdrop(
-          theme: t,
-          child: SafeArea(
-            child: ListenableBuilder(
-              listenable: Listenable.merge([_socket, _fx, _deal]),
-              builder: (context, _) => Stack(
-                children: [
-                  Column(
-                    children: [
-                      GameTopBar(
-                        theme: t,
-                        title: '도둑잡기',
-                        gameType: OldMaidController.gameType,
-                        canRestart: _c.hasGame,
-                        restartWaiting: _socket.restartWaiting,
-                        onRequestRestart: () =>
-                            _socket.requestRestart(OldMaidController.gameType),
-                        onHelp: _showHelp,
-                      ),
-                      Expanded(
-                        child: LayoutBuilder(
-                          builder: (context, box) =>
-                              _table(OldMaidTableLayout.of(box.biggest)),
-                        ),
-                      ),
-                    ],
+        child: ListenableBuilder(
+          listenable: Listenable.merge([_socket, _fx, _deal]),
+          builder: (context, _) {
+            final overlay = _c.finished && _c.result != null && !_fxRunning;
+            return Stack(
+              children: [
+                ModBackdrop(
+                  theme: t,
+                  kind: ModBackdropKind.paper,
+                  child: SafeArea(child: _content()),
+                ),
+                // 결과 화면은 안전 영역까지 덮는다(자체 SafeArea를 가진다).
+                if (overlay) Positioned.fill(child: _resultOverlay()),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _content() {
+    final t = _theme;
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Stack(
+          children: [
+            Column(
+              children: [
+                ModTopBar(
+                  theme: t,
+                  title: '도둑잡기',
+                  gameType: OldMaidController.gameType,
+                  canRestart: _c.hasGame,
+                  restartWaiting: _socket.restartWaiting,
+                  onRequestRestart: () =>
+                      _socket.requestRestart(OldMaidController.gameType),
+                  onHelp: _showHelp,
+                ),
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, box) =>
+                        _table(OldMaidTableLayout.of(box.biggest)),
                   ),
-                  Positioned(
-                    top: 58,
-                    left: 0,
-                    right: 0,
-                    child: Center(
-                      child: GameToast(
-                        theme: t,
-                        id: _toastSeq,
-                        message: _toast,
-                      ),
-                    ),
-                  ),
-                  Positioned.fill(
-                    child: GameTurnBanner(
-                      theme: t,
-                      id: _bannerId,
-                      text: '내 차례!',
-                      sub: '상대 카드를 한 장 뽑아요',
-                    ),
-                  ),
-                  if (_c.finished && _c.result != null && !_fxRunning)
-                    Positioned.fill(child: _resultOverlay()),
-                ],
-              ),
+                ),
+              ],
             ),
-          ),
+            Align(
+              alignment: const Alignment(0, -0.5),
+              child: ModToast(theme: t, id: _toastSeq, message: _toast),
+            ),
+            ModTurnFlash(
+              theme: t,
+              id: _bannerId,
+              text: '내 차례',
+              sub: '상대 카드를 한 장 뽑아요',
+              alignment: const Alignment(0, -0.1),
+            ),
+          ],
         ),
       ),
     );
@@ -330,12 +334,13 @@ class _OldMaidScreenState extends State<OldMaidScreen>
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        ..._oppBar(l, opp),
+        ..._oppBar(l, opp, oppShown),
         ..._oppFan(l, oppShown),
         _oppPicker(l, oppShown),
         ..._center(l, discardsShown, opp),
         ..._myFan(l, hand),
         ..._myBar(l, opp),
+        _dock(l, opp),
         if (d != null) ..._fxLayer(l, d, p),
       ],
     );
@@ -348,12 +353,15 @@ class _OldMaidScreenState extends State<OldMaidScreen>
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
-            width: 34,
-            height: 34,
-            child: CircularProgressIndicator(strokeWidth: 3, color: t.accent),
+            width: 30,
+            height: 30,
+            child: CircularProgressIndicator(strokeWidth: 2.6, color: t.accent),
           ),
           const SizedBox(height: 14),
-          Text('판을 준비하는 중…', style: t.body(size: 15, color: t.subInk)),
+          Text(
+            '판을 준비하는 중…',
+            style: t.body(size: 15, color: t.subInk, weight: FontWeight.w500),
+          ),
         ],
       ),
     );
@@ -361,37 +369,27 @@ class _OldMaidScreenState extends State<OldMaidScreen>
 
   // ── 상대 줄 ──────────────────────────────────────────────────────────────
 
-  List<Widget> _oppBar(OldMaidTableLayout l, String? opp) {
+  List<Widget> _oppBar(OldMaidTableLayout l, String? opp, int shown) {
     final t = _theme;
     final oppTurn = _c.playing && _c.turn != null && _c.turn == opp;
     return [
       Positioned.fromRect(
         rect: l.oppBar,
-        child: Row(
-          children: [
-            Flexible(
-              child: PlayerBadge(
-                theme: t,
-                emoji: _c.emojiOf(opp),
-                name: _c.displayName(opp),
-                subtitle: '카드 ${_c.oppCount}장',
-                active: oppTurn,
-                compact: true,
-                align: CrossAxisAlignment.start,
-              ),
-            ),
-            if (oppTurn) ...[
-              const SizedBox(width: 8),
-              TurnTimerRing(theme: t, deadline: _c.deadline, size: 36),
-            ],
-            const SizedBox(width: 8),
-            if (_c.series != null) SeriesScore.fromMap(t, _c.series, _c.me),
-          ],
+        child: Center(
+          child: ModCapsule(
+            theme: t,
+            name: _c.displayName(opp),
+            sub: '카드 $shown장',
+            mine: false,
+            active: oppTurn,
+            height: 48,
+            minWidth: 186,
+          ),
         ),
       ),
       Positioned(
-        left: l.oppBar.left + 30,
-        top: l.oppBar.bottom - 10,
+        left: l.oppBar.center.dx + 70,
+        top: l.oppBar.bottom - 6,
         child: ReactionBubble(
           theme: t,
           forPlayer: opp,
@@ -421,7 +419,7 @@ class _OldMaidScreenState extends State<OldMaidScreen>
             geo.rectOf(
               i,
               lift: i == _selected
-                  ? 18
+                  ? 16
                   : i == _hover
                   ? 7
                   : 0,
@@ -431,19 +429,22 @@ class _OldMaidScreenState extends State<OldMaidScreen>
             l.stage,
           ),
           angle: geo.angleOf(i),
+          pivot: geo.pivot,
           child: i < revealed.length
               ? PlayingCard(
                   suit: revealed[i].suit,
                   rank: revealed[i].rank,
                   width: geo.cardW,
+                  style: kOldMaidStyle,
                   highlight: revealed[i].isJoker,
-                  highlightColor: kJokerRed,
+                  highlightColor: kJokerRed.withValues(alpha: 0.25),
                 )
               : PlayingCard(
                   faceUp: false,
                   width: geo.cardW,
-                  back: kOldMaidBack,
+                  style: kOldMaidStyle,
                   highlight: i == _selected,
+                  highlightColor: _theme.ink,
                 ),
         ),
     ];
@@ -454,6 +455,7 @@ class _OldMaidScreenState extends State<OldMaidScreen>
     required Rect rect,
     double angle = 0,
     double opacity = 1,
+    Alignment pivot = Alignment.center,
     required Widget child,
   }) {
     return Positioned.fromRect(
@@ -462,7 +464,7 @@ class _OldMaidScreenState extends State<OldMaidScreen>
       child: IgnorePointer(
         child: Opacity(
           opacity: opacity.clamp(0.0, 1.0),
-          child: Transform.rotate(angle: angle, child: child),
+          child: Transform.rotate(angle: angle, alignment: pivot, child: child),
         ),
       ),
     );
@@ -501,7 +503,7 @@ class _OldMaidScreenState extends State<OldMaidScreen>
     );
   }
 
-  // ── 가운데: 안내 · 버린 짝 더미 · 공개 자리 · 문구 · 기록 ──────────────────
+  // ── 가운데 무대: 버린 짝 더미 · 안내 · 타이머 · 문구 ───────────────────────
 
   List<Widget> _center(
     OldMaidTableLayout l,
@@ -510,231 +512,205 @@ class _OldMaidScreenState extends State<OldMaidScreen>
   ) {
     final t = _theme;
     final oppName = _c.displayName(opp);
-    final prompt = !_c.playing
+    final playing = _c.playing;
+    final prompt = !playing
         ? '판이 끝났어요'
         : _c.myTurn
-        ? (_selected == null ? '상대 카드 한 장을 골라요' : '한 번 더 누르거나 아래 버튼으로 뽑아요')
+        ? (_selected == null ? '상대 카드를 한 장 골라요' : '이 카드로 정했어요')
         : '$oppName${subjectParticle(oppName)} 내 카드를 고르는 중…';
-    final caption = l.caption;
-    final showConfirm = _canPick && _selected != null;
-    final logs = _c.log.reversed.take(3).toList();
     final pairGlow = _fxDraw != null && _fxDraw!.paired && _fx.value >= 0.96;
+    final showText = _fxDraw == null;
     return [
-      Positioned(
-        left: l.center.left,
-        right: l.size.width - l.center.right,
-        top: l.center.top + 2,
-        height: 22,
-        child: Text(
-          prompt,
-          textAlign: TextAlign.center,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: t.body(size: 13, color: t.subInk, weight: FontWeight.w700),
-        ),
-      ),
-      // 공개 자리: 레이스 받침.
       Positioned.fromRect(
-        rect: l.stage.inflate(6),
-        child: IgnorePointer(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(l.stageCardW * 0.16),
-              border: Border.all(color: t.gold.withValues(alpha: 0.45)),
-              gradient: RadialGradient(
-                colors: [
-                  const Color(0xFF9D83FF).withValues(alpha: 0.12),
-                  Colors.transparent,
-                ],
+        rect: l.panel,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: t.surface,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: t.hair),
+            boxShadow: [
+              BoxShadow(
+                color: t.ink.withValues(alpha: 0.08),
+                blurRadius: 18,
+                offset: const Offset(0, 6),
               ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 96,
+                  child: Center(
+                    child: OldMaidDiscardStack(
+                      theme: t,
+                      pairs: discards.length,
+                      cardW: l.discardPile.width,
+                      glow: pairGlow,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: showText
+                      ? Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: _stageText(t, prompt),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+                SizedBox(
+                  width: 68,
+                  child: playing && _c.deadline != null
+                      ? Align(
+                          alignment: Alignment.centerRight,
+                          child: ModTimerRing(
+                            theme: t,
+                            deadline: _c.deadline,
+                            size: 52,
+                            stroke: 3.4,
+                            numberSize: 17,
+                            tickSound: _c.myTurn,
+                          ),
+                        )
+                      : null,
+                ),
+              ],
             ),
           ),
         ),
       ),
-      Positioned(
-        left: l.discardPile.left,
-        top: l.discardPile.top,
-        child: OldMaidDiscardPile(
-          theme: t,
-          discards: discards,
-          cardW: l.discardPile.width,
-          glow: pairGlow,
-        ),
-      ),
-      Positioned(
-        right: l.size.width - l.center.right + 2,
-        top: l.stage.center.dy - 34,
-        child: OldMaidTeacup(theme: t, size: math.min(68, l.stageCardW * 0.8)),
-      ),
       // 뽑기 결과 문구(뽑은 쪽/뺏긴 쪽이 서로 다르게 읽는다).
-      Positioned(
-        left: caption.left,
-        width: caption.width,
-        top: caption.top,
+      Positioned.fromRect(
+        rect: l.caption,
         child: Center(
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 240),
             child: _caption == null
-                ? const SizedBox(height: 32, key: ValueKey('no-caption'))
-                : Container(
+                ? const SizedBox(height: 22, key: ValueKey('no-caption'))
+                : Text(
+                    _caption!,
                     key: ValueKey(_captionSeq),
-                    constraints: BoxConstraints(maxWidth: caption.width),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 7,
-                    ),
-                    decoration: BoxDecoration(
-                      color: t.surface,
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(
-                        color: (_fxDraw?.jokerMoved ?? false)
-                            ? kJokerRed
-                            : t.gold.withValues(alpha: 0.7),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.08),
-                          blurRadius: 8,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
-                    ),
-                    child: Text(
-                      _caption!,
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: t.body(size: 13.5, weight: FontWeight.w800),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.body(
+                      size: 13.5,
+                      color: (_fxDraw?.jokerMoved ?? false)
+                          ? t.accent
+                          : const Color(0xFF527360),
+                      weight: FontWeight.w700,
                     ),
                   ),
-          ),
-        ),
-      ),
-      if (showConfirm)
-        Positioned(
-          left: caption.left,
-          width: caption.width,
-          top: caption.top + 40,
-          child: Center(
-            child: SizedBox(
-              width: 190,
-              child: GamePrimaryButton(
-                theme: t,
-                label: '이 카드 뽑기',
-                icon: Icons.back_hand_rounded,
-                height: 46,
-                onPressed: _confirm,
-              ),
-            ),
-          ),
-        ),
-      // 최근 기록(공개 정보만): 위가 최신.
-      Positioned(
-        left: l.center.left,
-        right: l.size.width - l.center.right,
-        bottom: l.size.height - l.center.bottom + 2,
-        child: IgnorePointer(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (var i = 0; i < logs.length; i++)
-                Text(
-                  _c.logLine(logs[i]),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: t.body(
-                    size: 11.5,
-                    color: t.subInk.withValues(alpha: 1 - i * 0.28),
-                    weight: i == 0 ? FontWeight.w800 : FontWeight.w600,
-                  ),
-                ),
-            ],
           ),
         ),
       ),
     ];
   }
 
-  // ── 내 부채꼴(정렬, NEW, 조커 붉은 테두리) ───────────────────────────────
+  Widget _stageText(GameTheme t, String prompt) {
+    final myTurn = _c.myTurn;
+    final playing = _c.playing;
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 150),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (playing)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: myTurn ? t.accent : t.ink.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Text(
+                  myTurn ? '내 차례' : '상대 차례',
+                  style: t.body(
+                    size: 13,
+                    color: myTurn ? Colors.white : t.subInk,
+                    weight: FontWeight.w700,
+                    height: 1.2,
+                  ),
+                ),
+              ),
+            SizedBox(height: playing ? 10 : 0),
+            Text(
+              prompt,
+              textAlign: TextAlign.center,
+              style: t.display(size: 18).copyWith(height: 1.35),
+            ),
+            if (myTurn) ...[
+              const SizedBox(height: 4),
+              Text(
+                '한 번 더 누르면 바로 뽑아요',
+                textAlign: TextAlign.center,
+                style: t.body(
+                  size: 12.5,
+                  color: t.subInk,
+                  weight: FontWeight.w400,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── 내 부채꼴(정렬, NEW, 조커 베리 테두리) ───────────────────────────────
 
   List<Widget> _myFan(OldMaidTableLayout l, List<OldMaidCard> hand) {
     final geo = l.myFanOf(hand.length);
-    final picking = _c.playing && !_c.myTurn;
     return [
       for (var i = 0; i < hand.length; i++)
         _placed(
           key: ValueKey('om-my-${hand[i].id}'),
           rect: _dealt(geo.rectOf(i), i, hand.length, l.stage),
           angle: geo.angleOf(i),
+          pivot: geo.pivot,
           child: PlayingCard(
             suit: hand[i].suit,
             rank: hand[i].rank,
             width: geo.cardW,
-            highlight: hand[i].isJoker || hand[i].id == _c.newCardId,
-            highlightColor: hand[i].isJoker
-                ? kJokerRed
-                : const Color(0xFFFFD36E),
+            style: kOldMaidStyle,
+            highlight: hand[i].isJoker,
+            highlightColor: kJokerRed.withValues(alpha: 0.25),
             badge: hand[i].id == _c.newCardId ? 'NEW' : null,
-          ),
-        ),
-      if (picking && hand.isNotEmpty)
-        Positioned(
-          left: 0,
-          right: 0,
-          top: l.myFan.top - 6,
-          child: Center(
-            child: GameChip(
-              theme: _theme,
-              leading: '👀',
-              label: '${_c.displayName(_c.opponent)} 고르는 중…',
-              color: _theme.opponent,
-              emphasized: true,
-            ),
           ),
         ),
     ];
   }
 
-  // ── 내 줄 ────────────────────────────────────────────────────────────────
+  // ── 내 줄 · 주 버튼 ──────────────────────────────────────────────────────
 
   List<Widget> _myBar(OldMaidTableLayout l, String? opp) {
     final t = _theme;
     final me = _c.me;
+    final hasJoker = _c.myHand.any((c) => c.isJoker);
+    final sub = '카드 ${_c.myHand.length}장${hasJoker ? ' · 조커 보유' : ''}';
     return [
-      Positioned(
-        left: l.myBar.left,
-        top: l.myBar.top,
-        height: l.myBar.height,
-        width: math.max(0, l.myBar.width - 56),
-        child: Row(
-          children: [
-            Flexible(
-              child: PlayerBadge(
-                theme: t,
-                emoji: _c.emojiOf(me),
-                name: _c.displayName(me),
-                subtitle: '카드 ${_c.myHand.length}장',
-                active: _c.myTurn,
-                isMe: true,
-                compact: true,
-                align: CrossAxisAlignment.start,
-              ),
-            ),
-            if (_c.myTurn) ...[
-              const SizedBox(width: 8),
-              TurnTimerRing(
-                theme: t,
-                deadline: _c.deadline,
-                size: 38,
-                tickSound: true,
-              ),
-            ],
-          ],
+      Positioned.fromRect(
+        rect: l.myBar,
+        child: Center(
+          child: ModCapsule(
+            theme: t,
+            name: _c.displayName(me),
+            sub: sub,
+            mine: true,
+            active: _c.myTurn,
+            height: 48,
+            minWidth: 186,
+          ),
         ),
       ),
       Positioned(
-        left: l.myBar.left + 30,
-        top: l.myBar.top - 34,
+        left: l.myBar.center.dx + 70,
+        top: l.myBar.top - 40,
         child: ReactionBubble(
           theme: t,
           forPlayer: me,
@@ -742,11 +718,32 @@ class _OldMaidScreenState extends State<OldMaidScreen>
         ),
       ),
       Positioned(
-        right: l.size.width - l.myBar.right,
-        top: l.myBar.top + 3,
+        right: 20,
+        top: l.myBar.top + 1,
         child: ReactionButton(theme: t, gameType: OldMaidController.gameType),
       ),
     ];
+  }
+
+  Widget _dock(OldMaidTableLayout l, String? opp) {
+    final t = _theme;
+    final d = _fxDraw;
+    final String label;
+    VoidCallback? onTap;
+    if (d != null) {
+      label = d.paired ? '짝을 버리는 중…' : '카드를 옮기는 중…';
+    } else if (!_c.playing) {
+      label = '판이 끝났어요';
+    } else if (_c.myTurn) {
+      label = '이 카드 뽑기';
+      if (_canPick && _selected != null) onTap = _confirm;
+    } else {
+      label = '${_c.displayName(opp)} 차례예요';
+    }
+    return Positioned.fromRect(
+      rect: l.dock,
+      child: ModButton(theme: t, label: label, onPressed: onTap),
+    );
   }
 
   // ── 뽑기 연출 ────────────────────────────────────────────────────────────
@@ -804,18 +801,6 @@ class _OldMaidScreenState extends State<OldMaidScreen>
     }
     final flip = _seg(p, 0.18, 0.34);
 
-    if (d.jokerMoved) {
-      final ink = _seg(p, 0.3, 0.95);
-      out.add(
-        Positioned.fromRect(
-          rect: stage.inflate(stage.width * 0.7),
-          child: IgnorePointer(
-            child: CustomPaint(painter: InkBleedPainter(progress: ink)),
-          ),
-        ),
-      );
-    }
-
     out.add(
       _placed(
         key: const ValueKey('om-fx-drawn'),
@@ -829,15 +814,9 @@ class _OldMaidScreenState extends State<OldMaidScreen>
               card: card,
               width: rect.width,
               flip: flip,
-              highlight: p > 0.3,
-              highlightColor: d.jokerMoved ? kJokerRed : t.gold,
+              highlight: d.jokerMoved && p > 0.3,
+              highlightColor: kJokerRed,
             ),
-            if (d.jokerMoved && flip >= 1)
-              Positioned.fill(
-                child: CustomPaint(
-                  painter: JokerGrinPainter(_seg(p, 0.36, 0.56)),
-                ),
-              ),
           ],
         ),
       ),
@@ -872,21 +851,7 @@ class _OldMaidScreenState extends State<OldMaidScreen>
             card: d.matched,
             width: mRect.width,
             flip: 1,
-            highlight: p > 0.5,
-            highlightColor: t.gold,
-          ),
-        ),
-      );
-      out.add(
-        Positioned.fromRect(
-          rect: stage.inflate(stage.width * 0.8),
-          child: IgnorePointer(
-            child: CustomPaint(
-              painter: SparklePainter(
-                progress: _seg(p, 0.54, 0.92),
-                color: t.gold,
-              ),
-            ),
+            highlight: false,
           ),
         ),
       );
@@ -900,25 +865,17 @@ class _OldMaidScreenState extends State<OldMaidScreen>
         Positioned(
           left: 0,
           right: 0,
-          top: stage.top - 30,
+          top: stage.top - 20,
           child: IgnorePointer(
             child: Center(
               child: Opacity(
                 opacity: 1 - wordOut,
                 child: Transform.scale(
                   scale: Curves.elasticOut.transform(wordIn) * 0.9 + 0.1,
-                  child: Text(
-                    word,
-                    style: t
-                        .display(
-                          size: 28,
-                          color: d.jokerMoved ? kJokerRed : t.accent,
-                        )
-                        .copyWith(
-                          shadows: [
-                            const Shadow(color: Colors.white, blurRadius: 6),
-                          ],
-                        ),
+                  child: OldMaidStamp(
+                    theme: t,
+                    text: word,
+                    joker: d.jokerMoved,
                   ),
                 ),
               ),
@@ -968,18 +925,6 @@ class _OldMaidScreenState extends State<OldMaidScreen>
     final flip = d.paired ? 1.0 : 1 - _seg(p, 0.55, 0.7);
     final opacity = 1 - _seg(p, 0.88, 1);
     return [
-      if (d.jokerMoved)
-        Positioned.fromRect(
-          rect: l.stage.inflate(l.stageCardW * 0.8),
-          child: IgnorePointer(
-            child: CustomPaint(
-              painter: SparklePainter(
-                progress: _seg(p, 0.4, 0.8),
-                color: const Color(0xFF9D83FF),
-              ),
-            ),
-          ),
-        ),
       _placed(
         key: const ValueKey('om-fx-taken'),
         rect: rect,
@@ -990,7 +935,7 @@ class _OldMaidScreenState extends State<OldMaidScreen>
           width: rect.width,
           flip: flip,
           highlight: true,
-          highlightColor: d.jokerMoved ? const Color(0xFF9D83FF) : t.opponent,
+          highlightColor: d.jokerMoved ? kJokerRed : t.ink,
         ),
       ),
     ];
@@ -1001,7 +946,10 @@ class _OldMaidScreenState extends State<OldMaidScreen>
   Widget _resultOverlay() {
     final t = _theme;
     final won = _c.winner != null && _c.winner == _c.me;
-    final oppName = _c.displayName(_c.opponent);
+    final opp = _c.opponent;
+    final oppName = _c.displayName(opp);
+    final loserId = _c.loser;
+    final loserName = _c.displayName(loserId);
     final reason = switch ((_c.resultReason, won)) {
       ('timeout', true) =>
         '$oppName${subjectParticle(oppName)} 시간을 세 번 넘겨 이겼어요',
@@ -1011,37 +959,142 @@ class _OldMaidScreenState extends State<OldMaidScreen>
       (_, true) => '마지막 조커는 $oppName에게 남았어요',
       (_, false) => '마지막까지 조커를 들고 있었어요',
     };
-    return GameResultOverlay(
+    // 조커를 쥔 쪽의 마지막 손패.
+    final lastHand = loserId == _c.me
+        ? _c.sortedHand
+        : OldMaidController.sortHand(_c.oppRevealed);
+    return ModResultView(
       theme: t,
+      backdrop: ModBackdropKind.paper,
+      gameType: OldMaidController.gameType,
       outcome: won ? GameOutcome.win : GameOutcome.lose,
-      title: won ? '조커를 피했어요!' : '조커가 내 손에…',
-      reason: reason,
+      hero: const ThiefHero(size: 80),
+      title: won ? '도둑을 잡았어요!' : '조커가 내 손에…',
+      titleSize: 30,
+      why: reason,
+      extra: lastHand.isEmpty
+          ? null
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final c in lastHand)
+                        Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            5,
+                            c.isJoker ? 0 : 8,
+                            5,
+                            c.isJoker ? 8 : 0,
+                          ),
+                          child: PlayingCard(
+                            suit: c.suit,
+                            rank: c.rank,
+                            width: 54,
+                            style: kOldMaidStyle,
+                            highlight: c.isJoker,
+                            highlightColor: kJokerRed.withValues(alpha: 0.25),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  '$loserName의 마지막 손패',
+                  style: t.body(
+                    size: 12.5,
+                    color: t.subInk,
+                    weight: FontWeight.w400,
+                  ),
+                ),
+              ],
+            ),
       series: _c.series,
       me: _c.me,
-      resultId: _c.gameId,
-      details: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          PlayingCard(
-            rank: 'JOKER',
-            suit: '🃏',
-            width: 40,
-            highlight: true,
-            highlightColor: kJokerRed,
-          ),
-          const SizedBox(width: 10),
-          Flexible(
-            child: Text(
-              '조커: ${_c.displayName(_c.loser)}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: t.body(size: 14, weight: FontWeight.w800),
-            ),
-          ),
-        ],
-      ),
+      table: _recentMoments(t, oppName),
       onRematch: () => _socket.requestRestart(OldMaidController.gameType),
       rematchWaiting: _socket.restartWaiting,
+      onHelp: _showHelp,
+      resultId: _c.gameId,
+    );
+  }
+
+  /// 마지막 순간들: 최근 뽑기 세 줄(위가 최신).
+  Widget? _recentMoments(GameTheme t, String oppName) {
+    final logs = _c.log.reversed.take(3).toList();
+    if (logs.isEmpty) return null;
+    Widget row(OldMaidLogEntry e) {
+      final mine = e.by == _c.me;
+      final rank = e.rank ?? '';
+      final obj = objectParticle(rank);
+      final String text;
+      if (mine) {
+        text = e.paired
+            ? '내가 $oppName의 $rank$obj 뽑아 짝!'
+            : '내가 $oppName의 카드를 뽑았어요';
+      } else {
+        text = e.paired
+            ? '$oppName${subjectParticle(oppName)} 내 $rank$obj 뽑아 짝!'
+            : '$oppName${subjectParticle(oppName)} 내 카드를 뽑았어요';
+      }
+      final dot = mine && e.paired ? kPairSage : (mine ? t.me : t.opponent);
+      return SizedBox(
+        height: 44,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          child: Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(shape: BoxShape.circle, color: dot),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  text,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: t.body(size: 13.5, weight: FontWeight.w400),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                mine ? '나' : oppName,
+                style: t.body(
+                  size: 12,
+                  color: t.subInk,
+                  weight: FontWeight.w400,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    TextStyle small() =>
+        t.body(size: 12, color: t.subInk, weight: FontWeight.w400);
+    return ModRowsCard(
+      theme: t,
+      header: SizedBox(
+        height: 36,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('마지막 순간들', style: small()),
+              Text('버린 짝 ${_c.discards.length}쌍', style: small()),
+            ],
+          ),
+        ),
+      ),
+      rows: [for (final e in logs) row(e)],
     );
   }
 }

@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import '../../../../core/game_sfx/game_sfx.dart';
 import '../../../../core/socket_service.dart';
 import '../../../../widgets/game_menu.dart';
+import '../../../../widgets/play_kit/modern_kit.dart';
+import '../../../../widgets/play_kit/modern_result.dart';
 import '../../../../widgets/play_kit/play_kit.dart';
 import 'blackjack_controller.dart';
 import 'blackjack_hand.dart';
@@ -13,7 +15,7 @@ import 'blackjack_result.dart';
 import 'blackjack_rules.dart';
 import 'blackjack_table.dart';
 
-/// 블랙잭 2.0 화면(벨벳 라운지). 위 = 상대, 아래 = 나. 시작 버튼 없이 서버가 로비 시작 때
+/// 블랙잭 2.0 화면(모던 라운지). 위 = 상대, 아래 = 나. 시작 버튼 없이 서버가 로비 시작 때
 /// 만든 판을 `sync`로 받아 그린다.
 class BlackjackGameScreen extends StatefulWidget {
   /// 화면이 열릴 때 서버에 현재 상태를 요청한다(테스트에서 끈다).
@@ -84,12 +86,11 @@ class _BlackjackGameScreenState extends State<BlackjackGameScreen> {
     if (widget.showHowTo) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        showHowToOnce(
+        showModHowToOnce(
           context,
           prefKey: 'how_to_blackjack_v2',
           theme: _theme,
           title: '블랙잭 1:1',
-          emoji: '🃏',
           lines: blackjackHowTo,
         );
       });
@@ -222,7 +223,7 @@ class _BlackjackGameScreenState extends State<BlackjackGameScreen> {
 
   String _name(String? id, {required bool mine}) {
     final name = _c.nameOf(id);
-    if (name.isEmpty || name == id) return mine ? '플레이어' : '상대';
+    if (name.isEmpty || name == id) return mine ? '나' : '상대';
     return name;
   }
 
@@ -233,148 +234,110 @@ class _BlackjackGameScreenState extends State<BlackjackGameScreen> {
       backgroundColor: t.backdrop.last,
       body: GameMenuListener(
         gameType: _gameType,
-        child: GameBackdrop(
-          theme: t,
-          frame: false,
-          child: SafeArea(
-            child: ListenableBuilder(
-              listenable: _c,
-              builder: (context, _) {
-                final v = _c.view;
-                return Stack(
-                  children: [
-                    Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 520),
-                        child: Column(
-                          children: [
-                            GameTopBar(
-                              theme: t,
-                              title: '블랙잭',
-                              gameType: _gameType,
-                              canRestart: true,
-                              restartWaiting: _sock.restartWaiting,
-                              onRequestRestart: () =>
-                                  _sock.requestRestart(_gameType),
-                              onHelp: () => showGameHowTo(
-                                context,
-                                theme: t,
-                                title: '블랙잭 1:1',
-                                emoji: '🃏',
-                                lines: blackjackHowTo,
-                              ),
-                            ),
-                            if (v == null)
-                              Expanded(child: _preparing())
-                            else ...[
-                              _hud(v),
-                              Expanded(child: _table(v)),
-                              _dock(v),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                    GameTurnBanner(
-                      theme: t,
-                      id: _bannerId,
-                      text: '내 차례!',
-                      sub: '히트 또는 스탠드를 골라요',
-                    ),
-                    // 안내는 테이블 가운데(남은 시간 위)에 잠깐 띄워 머리글을 가리지 않는다.
-                    Align(
-                      alignment: const Alignment(0, -0.12),
-                      child: GameToast(theme: t, id: _toastId, message: _toast),
-                    ),
-                    if (v != null && v.finished && _overlayFor == v.gameId)
-                      Positioned.fill(child: _resultOverlay(v)),
-                  ],
-                );
-              },
-            ),
-          ),
+        child: ListenableBuilder(
+          listenable: _c,
+          builder: (context, _) {
+            final v = _c.view;
+            final overlay = v != null && v.finished && _overlayFor == v.gameId;
+            return Stack(
+              children: [
+                ModBackdrop(
+                  theme: t,
+                  kind: ModBackdropKind.felt,
+                  child: SafeArea(child: _content(v)),
+                ),
+                // 결과 화면은 안전 영역까지 덮는다(자체 SafeArea를 가진다).
+                if (overlay) Positioned.fill(child: _resultOverlay(v)),
+              ],
+            );
+          },
         ),
       ),
     );
   }
+
+  Widget _content(BlackjackView? v) {
+    final t = _theme;
+    return Stack(
+      children: [
+        Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Column(
+              children: [
+                ModTopBar(
+                  theme: t,
+                  title: '블랙잭',
+                  gameType: _gameType,
+                  canRestart: true,
+                  restartWaiting: _sock.restartWaiting,
+                  onRequestRestart: () => _sock.requestRestart(_gameType),
+                  onHelp: _showHelp,
+                ),
+                if (v == null)
+                  Expanded(child: _preparing())
+                else ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                    child: BlackjackHud(
+                      theme: t,
+                      round: v.round,
+                      maxRounds: v.maxRounds,
+                      winsNeeded: v.winsNeeded,
+                      myWins: v.winsOf(v.me),
+                      oppWins: v.winsOf(v.opponent),
+                    ),
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                      child: _table(v),
+                    ),
+                  ),
+                  _dock(v),
+                ],
+              ],
+            ),
+          ),
+        ),
+        ModTurnFlash(
+          theme: t,
+          id: _bannerId,
+          text: '내 차례',
+          sub: '히트 또는 스탠드를 골라요',
+          alignment: const Alignment(0, -0.12),
+        ),
+        // 안내는 테이블 가운데(남은 시간 위)에 잠깐 띄워 머리글을 가리지 않는다.
+        Align(
+          alignment: const Alignment(0, -0.12),
+          child: ModToast(theme: t, id: _toastId, message: _toast),
+        ),
+      ],
+    );
+  }
+
+  void _showHelp() => showModHowTo(
+    context,
+    theme: _theme,
+    title: '블랙잭 1:1',
+    lines: blackjackHowTo,
+  );
 
   Widget _preparing() {
     final t = _theme;
     return Center(
-      child: GamePanel(
-        theme: t,
-        padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 22),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 28,
-              height: 28,
-              child: CircularProgressIndicator(strokeWidth: 2.6, color: t.gold),
-            ),
-            const SizedBox(height: 12),
-            Text('판을 준비하는 중…', style: t.body(size: 15)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _hud(BlackjackView v) {
-    final t = _theme;
-    final me = v.me;
-    final opp = v.opponent;
-    Widget pips(String? id, String label, Color color) => Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        RoundPips(
-          theme: t,
-          wins: v.winsOf(id),
-          needed: v.winsNeeded,
-          color: color,
-          label: label,
-        ),
-        const SizedBox(height: 3),
-        Text(label, style: t.body(size: 11, color: t.subInk)),
-      ],
-    );
-    // 좌우 대칭: [내 승수] [라운드] [상대 승수]. 남은 시간은 테이블 가운데에 둔다.
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: pips(me, '나', t.me),
-            ),
+          SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(strokeWidth: 2.4, color: t.gold),
           ),
-          Expanded(
-            flex: 2,
-            child: Semantics(
-              label: '${v.round}라운드, 최대 ${v.maxRounds}라운드',
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '${v.round}라운드',
-                    style: t.display(size: 20, color: t.gold),
-                  ),
-                  Text(
-                    '먼저 ${v.winsNeeded}승 · 최대 ${v.maxRounds}라운드',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: t.body(size: 10.5, color: t.subInk),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Expanded(
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: pips(opp, '상대', t.opponent),
-            ),
+          const SizedBox(height: 14),
+          Text(
+            '판을 준비하는 중…',
+            style: t.body(size: 15, color: t.subInk, weight: FontWeight.w500),
           ),
         ],
       ),
@@ -394,135 +357,182 @@ class _BlackjackGameScreenState extends State<BlackjackGameScreen> {
         : null;
     final myScore = v.myScore();
     final oppFirst = v.firstPlayer == opp;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: BlackjackFelt(
-        theme: t,
-        child: LayoutBuilder(
-          builder: (context, box) {
-            const seatH = 50.0;
-            // 레일(금박 테두리) 안쪽 여백: 좌석·점수판이 레일에 걸치지 않게 한다.
-            const pad = 16.0;
-            final w = box.maxWidth;
-            final h = box.maxHeight;
-            final centerH = math.max(64.0, h * 0.13);
-            final handH = math.max(
-              40.0,
-              (h - pad * 2 - seatH * 2 - centerH) / 2,
-            );
-            const shoeW = 44.0;
-            final shoe = Offset(w - pad - shoeW / 2, h / 2);
-            final oppCenter = Offset(w / 2, pad + seatH + handH / 2);
-            final myCenter = Offset(w / 2, h - pad - seatH - handH / 2);
-            return Stack(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(pad),
-                  child: Column(
-                    children: [
-                      SizedBox(
-                        height: seatH,
-                        child: _seat(v, opp, mine: false, score: oppScore),
-                      ),
-                      SizedBox(
-                        height: handH,
-                        child: BlackjackHand(
-                          theme: t,
-                          cards: oppCards,
-                          roundKey: key,
-                          seat: oppFirst ? 0 : 1,
-                          dealFrom: shoe - oppCenter,
-                          flipDelay: Duration(
-                            milliseconds: oppFirst ? 150 : 520,
-                          ),
-                          gold: oppScore == 21,
-                          bust: v.statuses[opp] == 'bust',
-                          semanticsLabel: '상대 카드 ${oppCards.length}장',
-                        ),
-                      ),
-                      SizedBox(
-                        height: centerH,
-                        child: Center(
-                          child: BlackjackEmblem(
-                            theme: t,
-                            caption: _centerCaption(v),
-                            timer: v.playing && v.deadline != null
-                                ? TurnTimerRing(
-                                    theme: t,
-                                    size: 44,
-                                    deadline: v.deadline,
-                                    tickSound: v.isMyTurn,
-                                  )
-                                : null,
-                          ),
-                        ),
-                      ),
-                      SizedBox(
-                        height: handH,
-                        child: BlackjackHand(
-                          theme: t,
-                          cards: myCards,
-                          roundKey: key,
-                          seat: oppFirst ? 1 : 0,
-                          dealFrom: shoe - myCenter,
-                          markHole: !reveal,
-                          gold: myScore == 21,
-                          bust: v.statuses[me] == 'bust',
-                          semanticsLabel: '내 카드 ${myCards.length}장, 합 $myScore',
-                        ),
-                      ),
-                      SizedBox(
-                        height: seatH,
-                        child: _seat(v, me, mine: true, score: myScore),
-                      ),
-                    ],
+    final panel = v.showsRoundResult && _panelFor == key;
+    final String? winnerId = panel
+        ? (v.lastRoundResult?['winner'] as String?)
+        : null;
+    return BlackjackFelt(
+      theme: t,
+      child: LayoutBuilder(
+        builder: (context, box) {
+          const seatH = 56.0;
+          const midH = 52.0;
+          final w = box.maxWidth;
+          final h = box.maxHeight;
+          // 다섯 줄(좌석·패·가운데·패·좌석)을 같은 간격으로 나눈다. 높이가 모자라면 카드부터 줄인다.
+          final spare = h - seatH * 2 - midH;
+          final handH = math.min(94.0, (spare - 4 * 8) / 2).clamp(40.0, 94.0);
+          final gap = math.max(0.0, (spare - 2 * handH) / 4);
+          // 카드는 테이블 오른쪽 가장자리 가운데에서 나눠 준다.
+          final deal = Offset(w, h / 2);
+          final oppCenter = Offset(w / 2, seatH + gap + handH / 2);
+          final myCenter = Offset(w / 2, h - seatH - gap - handH / 2);
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Column(
+                children: [
+                  SizedBox(
+                    height: seatH,
+                    child: _seat(
+                      v,
+                      opp,
+                      mine: false,
+                      score: oppScore,
+                      winnerId: winnerId,
+                      showResult: panel,
+                    ),
                   ),
-                ),
-                Positioned(
-                  left: shoe.dx - shoeW / 2,
-                  top: shoe.dy - shoeW * 1.15 / 2,
-                  child: const BlackjackShoe(theme: _theme, width: shoeW),
-                ),
-                Positioned(
-                  top: pad + seatH - 6,
-                  left: pad + 44,
-                  child: ReactionBubble(
-                    theme: t,
-                    forPlayer: opp,
-                    gameType: _gameType,
+                  SizedBox(height: gap),
+                  SizedBox(
+                    height: handH,
+                    child: BlackjackHand(
+                      theme: t,
+                      cards: oppCards,
+                      roundKey: key,
+                      seat: oppFirst ? 0 : 1,
+                      dealFrom: deal - oppCenter,
+                      flipDelay: Duration(milliseconds: oppFirst ? 150 : 520),
+                      gold: oppScore == 21,
+                      bust: v.statuses[opp] == 'bust',
+                      winner: winnerId != null && winnerId == opp,
+                      semanticsLabel: '상대 카드 ${oppCards.length}장',
+                    ),
                   ),
-                ),
-                Positioned(
-                  bottom: pad + seatH - 6,
-                  left: pad + 44,
-                  child: ReactionBubble(
-                    theme: t,
-                    forPlayer: me,
-                    gameType: _gameType,
+                  SizedBox(height: gap),
+                  BlackjackMidRow(theme: t, center: _center(v, panel)),
+                  SizedBox(height: gap),
+                  SizedBox(
+                    height: handH,
+                    child: BlackjackHand(
+                      theme: t,
+                      cards: myCards,
+                      roundKey: key,
+                      seat: oppFirst ? 1 : 0,
+                      dealFrom: deal - myCenter,
+                      markHole: !reveal,
+                      gold: myScore == 21,
+                      bust: v.statuses[me] == 'bust',
+                      winner: winnerId != null && winnerId == me,
+                      semanticsLabel: '내 카드 ${myCards.length}장, 합 $myScore',
+                    ),
                   ),
+                  SizedBox(height: gap),
+                  SizedBox(
+                    height: seatH,
+                    child: _seat(
+                      v,
+                      me,
+                      mine: true,
+                      score: myScore,
+                      winnerId: winnerId,
+                      showResult: panel,
+                    ),
+                  ),
+                ],
+              ),
+              Positioned(
+                top: seatH - 6,
+                left: 44,
+                child: ReactionBubble(
+                  theme: t,
+                  forPlayer: opp,
+                  gameType: _gameType,
                 ),
-              ],
-            );
-          },
-        ),
+              ),
+              Positioned(
+                bottom: seatH - 6,
+                left: 44,
+                child: ReactionBubble(
+                  theme: t,
+                  forPlayer: me,
+                  gameType: _gameType,
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
-  String _centerCaption(BlackjackView v) {
-    if (v.roundOver) return '카드 공개';
-    if (v.isMyTurn) return '내 차례';
-    return '상대 차례';
+  /// 가운데: 진행 중에는 남은 시간 링, 끝나면 "패배  18 : 20" 같은 알약.
+  Widget _center(BlackjackView v, bool panel) {
+    final t = _theme;
+    if (v.playing && v.deadline != null) {
+      // 링은 56px, 줄은 52px: 위아래로 2px씩 걸쳐 그린다.
+      return SizedBox(
+        width: 56,
+        height: 52,
+        child: OverflowBox(
+          maxHeight: 56,
+          child: ModTimerRing(
+            theme: t,
+            deadline: v.deadline,
+            size: 56,
+            stroke: 3,
+            numberSize: 19,
+            tickSound: v.isMyTurn,
+          ),
+        ),
+      );
+    }
+    if (v.playing) {
+      return BlackjackChip(theme: t, text: v.isMyTurn ? '내 차례' : '상대 차례');
+    }
+    if (panel) {
+      final winner = v.lastRoundResult?['winner'];
+      final tie = winner == null || winner == 'tie';
+      final iWon = winner == v.me;
+      final mine = v.scores[v.me] ?? blackjackScore(v.handOf(v.me));
+      final theirs =
+          v.scores[v.opponent] ?? blackjackScore(v.handOf(v.opponent));
+      return BlackjackChip(
+        theme: t,
+        text: '${tie ? '무승부' : (iWon ? '승리' : '패배')}  $mine : $theirs',
+        lose: !tie && !iWon,
+      );
+    }
+    return BlackjackChip(theme: t, text: '카드 공개');
   }
 
-  /// 좌석 한 줄: 프로필 + 상태 + 점수.
-  Widget _seat(BlackjackView v, String? id, {required bool mine, int? score}) {
+  /// 좌석 한 줄: 캡슐(이름 + 상태) + 합계 플라크.
+  Widget _seat(
+    BlackjackView v,
+    String? id, {
+    required bool mine,
+    int? score,
+    String? winnerId,
+    required bool showResult,
+  }) {
     final t = _theme;
     final status = v.statuses[id];
     final natural = v.roundOver && isNaturalBlackjack(v.handOf(id));
     final active = v.playing && v.currentTurn == id;
-    String sub;
-    if (natural) {
+    final won = winnerId != null && winnerId == id;
+    final String sub;
+    if (showResult && score != null) {
+      final tail = natural
+          ? '블랙잭'
+          : won
+          ? '승리'
+          : status == 'bust'
+          ? '버스트'
+          : (winnerId == null || winnerId == 'tie')
+          ? '무승부'
+          : '스탠드';
+      sub = '$score · $tail';
+    } else if (natural) {
       sub = '블랙잭!';
     } else if (status == 'bust') {
       sub = '버스트!';
@@ -532,6 +542,8 @@ class _BlackjackGameScreenState extends State<BlackjackGameScreen> {
       sub = mine ? '고르는 중' : '고르는 중…';
     } else if (v.playing) {
       sub = '기다리는 중';
+    } else if (v.phase == 'round_result' && v.ready[id] == true) {
+      sub = '다음 라운드 준비 완료';
     } else {
       sub = '';
     }
@@ -547,30 +559,24 @@ class _BlackjackGameScreenState extends State<BlackjackGameScreen> {
       value = '${v.visibleScores[id] ?? 0}+?';
       caption = '공개 합';
     }
-    final badge = PlayerBadge(
-      theme: t,
-      emoji: _c.emojiOf(id),
-      name: _name(id, mine: mine),
-      subtitle: sub.isEmpty ? null : sub,
-      active: active,
-      isMe: mine,
-      compact: true,
-      align: CrossAxisAlignment.start,
-    );
     return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Expanded(
-          child: Align(alignment: Alignment.centerLeft, child: badge),
+        ModCapsule(
+          theme: t,
+          name: _name(id, mine: mine),
+          sub: sub,
+          mine: mine,
+          active: active,
+          height: 56,
+          minWidth: 172,
         ),
-        const SizedBox(width: 8),
         ScorePlaque(
           theme: t,
           value: value,
           caption: caption,
-          color: status == 'bust'
-              ? const Color(0xFFFF8A80)
-              : (mine ? t.me : t.opponent),
-          glow: score == 21,
+          win: won,
+          bust: status == 'bust',
         ),
       ],
     );
@@ -581,58 +587,81 @@ class _BlackjackGameScreenState extends State<BlackjackGameScreen> {
     final key = _roundKey(v);
     final showResult = v.showsRoundResult && _panelFor == key;
     final pending = _c.pending;
-    final Widget info;
+    final Widget top;
     final Widget actions;
     if (showResult) {
-      info = BlackjackRoundHeadline(theme: t, view: v);
-      actions = v.finished
-          ? GamePrimaryButton(
-              theme: t,
-              height: 52,
-              label: '최종 결과 보기',
-              icon: Icons.emoji_events_rounded,
-              onPressed: () {
-                _overlayTimer?.cancel();
-                _overlayTimer = null;
-                setState(() => _overlayFor = v.gameId);
-              },
-            )
-          : BlackjackReadyBar(
-              theme: t,
-              view: v,
-              pending: pending,
-              onReady: _c.nextRound,
-            );
+      top = Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: BlackjackRoundHeadline(theme: t, view: v),
+      );
+      if (v.finished) {
+        actions = ModButton(
+          theme: t,
+          label: '최종 결과 보기',
+          onPressed: () {
+            _overlayTimer?.cancel();
+            _overlayTimer = null;
+            setState(() => _overlayFor = v.gameId);
+          },
+        );
+      } else {
+        final iReady = v.ready[v.me] == true;
+        actions = ModButton(
+          theme: t,
+          label: iReady ? '상대를 기다리는 중…' : '다음 라운드 준비',
+          onPressed: iReady || pending ? null : _c.nextRound,
+        );
+      }
     } else {
-      info = Text(
-        _statusLine(v),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: t.body(
-          size: 13.5,
-          color: v.isMyTurn ? t.gold : t.subInk,
-          weight: FontWeight.w800,
+      top = Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: SizedBox(
+          height: 40,
+          child: Row(
+            children: [
+              SizedBox(
+                width: 48,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: ReactionButton(theme: t, gameType: _gameType),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  _statusLine(v),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: t.body(
+                    size: 14,
+                    color: v.isMyTurn ? t.gold : t.subInk,
+                    weight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 48),
+            ],
+          ),
         ),
       );
       final canAct = !pending;
       actions = Row(
         children: [
           Expanded(
-            child: GamePrimaryButton(
+            child: ModButton(
               theme: t,
-              height: 56,
               label: '히트',
-              icon: Icons.add_rounded,
+              sub: '카드 한 장 더',
               onPressed: v.canHit && canAct ? _c.hit : null,
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: GameSecondaryButton(
+            child: ModButton(
               theme: t,
-              height: 56,
               label: '스탠드',
-              icon: Icons.front_hand_rounded,
+              sub: '여기서 멈추기',
+              kind: ModButtonKind.outline,
               onPressed: v.canStand && canAct ? _c.stand : null,
             ),
           ),
@@ -640,24 +669,8 @@ class _BlackjackGameScreenState extends State<BlackjackGameScreen> {
       );
     }
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            height: 46,
-            child: Row(
-              children: [
-                ReactionButton(theme: t, gameType: _gameType),
-                const SizedBox(width: 10),
-                Expanded(child: info),
-              ],
-            ),
-          ),
-          const SizedBox(height: 6),
-          SizedBox(height: 56, child: Center(child: actions)),
-        ],
-      ),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [top, actions]),
     );
   }
 
@@ -674,19 +687,27 @@ class _BlackjackGameScreenState extends State<BlackjackGameScreen> {
     final winner = v.result?['winner'] as String?;
     final draw = winner == null || winner == 'tie';
     final iWon = winner == v.me;
-    return GameResultOverlay(
+    final outcome = draw
+        ? GameOutcome.draw
+        : (iWon ? GameOutcome.win : GameOutcome.lose);
+    return ModResultView(
       theme: t,
-      outcome: draw
-          ? GameOutcome.draw
-          : (iWon ? GameOutcome.win : GameOutcome.lose),
-      reason: draw
+      backdrop: ModBackdropKind.felt,
+      gameType: _gameType,
+      outcome: outcome,
+      hero: BlackjackResultMark(theme: t, outcome: outcome),
+      title: draw ? '무승부' : (iWon ? '승리' : '패배'),
+      titleColor: draw ? t.ink : (iWon ? t.gold : t.lose),
+      titleSize: 44,
+      why: draw
           ? '5라운드를 마쳤는데 승수가 같아요'
           : matchReasonText(v.result?['reason'] as String?, iWon: iWon),
       series: v.series,
       me: v.me,
-      details: BlackjackRoundHistory(theme: t, view: v),
+      table: BlackjackRoundHistory(theme: t, view: v),
       onRematch: () => _sock.requestRestart(_gameType),
       rematchWaiting: _sock.restartWaiting,
+      onHelp: _showHelp,
       resultId: 'blackjack-${v.gameId}',
     );
   }
