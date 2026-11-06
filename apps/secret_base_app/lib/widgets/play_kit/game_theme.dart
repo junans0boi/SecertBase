@@ -12,7 +12,7 @@ enum GameTexture {
   stadium,
   velvet,
   starlight,
-  hanji,
+  meadow,
   table,
   atelier,
 }
@@ -116,16 +116,11 @@ class GameTheme {
     height: 1.15,
   );
 
-  static TextStyle _brush({
+  static TextStyle _jua({
     double size = 24,
     Color? color,
     FontWeight weight = FontWeight.w400,
-  }) => GoogleFonts.gowunBatang(
-    fontSize: size,
-    color: color,
-    fontWeight: FontWeight.w700,
-    height: 1.15,
-  );
+  }) => GoogleFonts.jua(fontSize: size, color: color, height: 1.12);
 
   static TextStyle _blackHan({
     double size = 24,
@@ -265,22 +260,22 @@ class GameTheme {
     displayFont: _batang,
   );
 
-  /// 윷놀이: 한지 마당(한지 질감 바탕, 먹빛 글자, 오방색 포인트).
-  static const hanji = GameTheme(
-    id: 'hanji',
-    texture: GameTexture.hanji,
+  /// 윷놀이: 햇살 가득한 풀밭(하늘색 → 연두, 구름과 나뭇잎, 밝은 낮).
+  static const meadow = GameTheme(
+    id: 'meadow',
+    texture: GameTexture.meadow,
     dark: false,
-    backdrop: [Color(0xFFF7F0DF), Color(0xFFF1E7D0), Color(0xFFE6D8B8)],
-    surface: Color(0xFFFBF6E9),
-    surfaceBorder: Color(0x662A2623),
-    accent: Color(0xFFB5412F),
-    accentSoft: Color(0x1FB5412F),
-    gold: Color(0xFFC49A3E),
-    ink: Color(0xFF2A2623),
-    subInk: Color(0xFF6D6254),
-    me: Color(0xFF2F5D8A),
-    opponent: Color(0xFFB5412F),
-    displayFont: _brush,
+    backdrop: [Color(0xFF8FD2F2), Color(0xFFBDE8B4), Color(0xFF6FC05A)],
+    surface: Color(0xFFFFFDF2),
+    surfaceBorder: Color(0x883E7D2E),
+    accent: Color(0xFFEF8A1E),
+    accentSoft: Color(0x26EF8A1E),
+    gold: Color(0xFFE5B22E),
+    ink: Color(0xFF263A2A),
+    subInk: Color(0xFF4F6A52),
+    me: Color(0xFF2F82DE),
+    opponent: Color(0xFFE5534B),
+    displayFont: _jua,
   );
 
   /// 고스톱: 초록 펠트 판(화투 상). 깊은 초록 위에 올이 보이는 천 질감과 따뜻한 금빛 조명.
@@ -300,12 +295,6 @@ class GameTheme {
     opponent: Color(0xFFF4A9A0),
     displayFont: _batang,
   );
-
-  static TextStyle _jua({
-    double size = 24,
-    Color? color,
-    FontWeight weight = FontWeight.w400,
-  }) => GoogleFonts.jua(fontSize: size, color: color, height: 1.12);
 
   /// 그림 맞히기: 아틀리에 스케치북(리넨 벽 위에 크림 종이와 파란 테두리).
   static const atelier = GameTheme(
@@ -333,7 +322,7 @@ class GameTheme {
     sunsetStadium,
     salon,
     starlight,
-    hanji,
+    meadow,
     felt,
     atelier,
   ];
@@ -401,8 +390,8 @@ class _BackdropPainter extends CustomPainter {
         _velvet(canvas, size);
       case GameTexture.starlight:
         _starlight(canvas, size);
-      case GameTexture.hanji:
-        _hanji(canvas, size);
+      case GameTexture.meadow:
+        _meadow(canvas, size);
       case GameTexture.table:
         _table(canvas, size);
       case GameTexture.atelier:
@@ -923,80 +912,102 @@ class _BackdropPainter extends CustomPainter {
     _goldFrame(canvas, size, 10, 0.32);
   }
 
-  /// 한지 마당: 닥종이 섬유 + 아주 옅은 먹 번짐(먼 산) + 가장자리 얼룩.
-  void _hanji(Canvas canvas, Size size) {
+  /// 풀밭 낮: 하늘 위 구름, 먼 언덕, 흩날리는 나뭇잎, 아래쪽 잔디 결.
+  void _meadow(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    // 먼 산 먹 번짐(아래쪽, 아주 옅게).
+    // 햇살.
+    _spotlight(
+      canvas,
+      size,
+      Offset(w * 0.86, h * 0.04),
+      math.max(w, h) * 0.55,
+      const Color(0x66FFF6C8),
+    );
+    // 구름.
+    void cloud(double cx, double cy, double s) {
+      final paint = Paint()..color = const Color(0xCCFFFFFF);
+      for (final o in const [
+        Offset(0, 0),
+        Offset(-0.9, 0.25),
+        Offset(0.95, 0.22),
+        Offset(-0.35, -0.38),
+        Offset(0.4, -0.3),
+      ]) {
+        canvas.drawCircle(
+          Offset(cx + o.dx * s, cy + o.dy * s),
+          s * 0.62,
+          paint,
+        );
+      }
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromCenter(
+            center: Offset(cx, cy + s * 0.35),
+            width: s * 3.2,
+            height: s * 0.7,
+          ),
+          Radius.circular(s * 0.35),
+        ),
+        paint,
+      );
+    }
+
+    cloud(w * 0.2, h * 0.08, w * 0.07);
+    cloud(w * 0.72, h * 0.14, w * 0.055);
+    cloud(w * 0.46, h * 0.045, w * 0.04);
+    // 먼 언덕 두 겹.
     for (final layer in [
-      (0.82, 0.10, const Color(0x142A2623), 3),
-      (0.88, 0.07, const Color(0x1A2A2623), 5),
+      (0.74, 0.08, const Color(0x5578C26A)),
+      (0.80, 0.06, const Color(0x6658B04A)),
     ]) {
       final base = h * layer.$1;
-      final amp = h * layer.$2;
-      final path = Path()..moveTo(0, h);
-      final rnd = math.Random(layer.$4);
-      path.lineTo(0, base);
-      for (double x = 0; x <= w; x += w / 8) {
+      final path = Path()
+        ..moveTo(0, h)
+        ..lineTo(0, base);
+      for (double x = 0; x <= w; x += w / 6) {
         path.quadraticBezierTo(
-          x + w / 16,
-          base - amp * (0.4 + rnd.nextDouble() * 0.9),
-          x + w / 8,
-          base - amp * (rnd.nextDouble() * 0.3),
+          x + w / 12,
+          base - h * layer.$2,
+          x + w / 6,
+          base,
         );
       }
       path
         ..lineTo(w, h)
         ..close();
-      canvas.drawPath(
-        path,
-        Paint()
-          ..color = layer.$3
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
+      canvas.drawPath(path, Paint()..color = layer.$3);
+    }
+    // 잔디 결과 나뭇잎.
+    final rnd = math.Random(52);
+    final blade = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 1.4
+      ..color = const Color(0x3326561E);
+    for (int i = 0; i < (w * h / 3600).round(); i++) {
+      final x = rnd.nextDouble() * w;
+      final y = h * (0.5 + rnd.nextDouble() * 0.5);
+      canvas.drawLine(
+        Offset(x, y),
+        Offset(x + 2, y - 5 - rnd.nextDouble() * 4),
+        blade,
       );
     }
-    // 오방색 번짐 두 점(청·적)을 구석에 아주 옅게.
-    _spotlight(
-      canvas,
-      size,
-      Offset(w * 0.08, h * 0.1),
-      size.shortestSide * 0.55,
-      const Color(0x142F5D8A),
-    );
-    _spotlight(
-      canvas,
-      size,
-      Offset(w * 0.95, h * 0.9),
-      size.shortestSide * 0.55,
-      const Color(0x12B5412F),
-    );
-    // 닥나무 섬유: 짧은 곡선 가닥.
-    final rnd = math.Random(41);
-    final fiber = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-    final count = (w * h / 520).round();
-    for (int i = 0; i < count; i++) {
+    final leaf = Paint()..color = const Color(0x4439A046);
+    for (int i = 0; i < 9; i++) {
       final x = rnd.nextDouble() * w;
-      final y = rnd.nextDouble() * h;
-      final len = 4 + rnd.nextDouble() * 12;
-      final a = rnd.nextDouble() * math.pi;
-      final dark = rnd.nextBool();
-      fiber
-        ..strokeWidth = 0.4 + rnd.nextDouble() * 0.5
-        ..color = dark ? const Color(0x143A2E1C) : const Color(0x33FFFFFF);
-      final path = Path()
-        ..moveTo(x, y)
-        ..quadraticBezierTo(
-          x + math.cos(a) * len * 0.5,
-          y + math.sin(a) * len * 0.5 + 1.5,
-          x + math.cos(a) * len,
-          y + math.sin(a) * len,
-        );
-      canvas.drawPath(path, fiber);
+      final y = rnd.nextDouble() * h * 0.7;
+      canvas.save();
+      canvas.translate(x, y);
+      canvas.rotate(rnd.nextDouble() * math.pi);
+      canvas.drawOval(
+        Rect.fromCenter(center: Offset.zero, width: 12, height: 5),
+        leaf,
+      );
+      canvas.restore();
     }
-    _grain(canvas, size, const Color(0x0C5A4630), (w * h / 1500).round(), 43);
-    _goldFrame(canvas, size, 10, 0.55);
+    _grain(canvas, size, const Color(0x10FFFFFF), (w * h / 2600).round(), 53);
   }
 
   void _atelier(Canvas canvas, Size size) {

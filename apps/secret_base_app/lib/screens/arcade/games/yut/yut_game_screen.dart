@@ -12,10 +12,10 @@ import '../../../../widgets/play_kit/play_kit.dart';
 import 'yut_board_view.dart';
 import 'yut_controller.dart';
 import 'yut_models.dart';
-import 'yut_pieces.dart';
+import 'yut_figures.dart';
 import 'yut_sticks.dart';
 
-/// 윷놀이 2.0 — 한지 마당(GameTheme.hanji).
+/// 윷놀이 2.0 — 햇살 풀밭(GameTheme.meadow).
 /// 서버가 로비 시작과 함께 판을 만든다. 이 화면에는 시작 버튼이 없다.
 class YutGameScreen extends StatefulWidget {
   const YutGameScreen({super.key});
@@ -26,7 +26,7 @@ class YutGameScreen extends StatefulWidget {
 
 class _YutGameScreenState extends State<YutGameScreen>
     with TickerProviderStateMixin {
-  static const _theme = GameTheme.hanji;
+  static const _theme = GameTheme.meadow;
   static const _sounds = [
     GameSound.yutToss,
     GameSound.yutClack,
@@ -73,6 +73,10 @@ class _YutGameScreenState extends State<YutGameScreen>
   int _stageSeq = 0;
   String? _stageBy;
   YutMoveAnim? _moveAnim;
+  // 작은 통나무에 놓여 있는 마지막 던지기(연출이 끝나면 갱신).
+  YutThrow? _lastShown;
+  String? _lastShownBy;
+  int _lastShownSeq = 1;
   YutBoardEffect? _effect;
   int _goalBursts = 0;
 
@@ -179,6 +183,8 @@ class _YutGameScreenState extends State<YutGameScreen>
         _stage = null;
         _moveAnim = null;
         _effect = null;
+        _lastShown = null;
+        _lastShownBy = null;
         _clearSelection();
         final first = c.displayName(v.currentTurn);
         _after(350, () {
@@ -313,6 +319,9 @@ class _YutGameScreenState extends State<YutGameScreen>
 
   void _onSticksDone(YutAction a) {
     final t = a.thrown;
+    _lastShown = t;
+    _lastShownBy = a.by;
+    _lastShownSeq = a.seq;
     _after(a.thrown?.isBig == true ? 1000 : 750, () {
       setState(() => _stage = null);
       final who = _who(a.by);
@@ -513,8 +522,10 @@ class _YutGameScreenState extends State<YutGameScreen>
   // ── 화면 ────────────────────────────────────────────────────────────────
   Color _colorOf(String player) => player == c.me ? _theme.me : _theme.opponent;
 
-  String? _skinOf(String player) =>
-      yutPieceEmojiFromItem(c.view?.itemOf(player, 'yut_piece'));
+  YutFigureSpec _specOf(String player) => YutFigureSpec.of(
+    c.characterOf(player),
+    c.view?.itemOf(player, 'yut_piece'),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -590,15 +601,6 @@ class _YutGameScreenState extends State<YutGameScreen>
                             ),
                           ),
                         ),
-                      if (c.view != null && !_showResult)
-                        Positioned(
-                          right: 10,
-                          top: 58,
-                          child: ReactionButton(
-                            theme: t,
-                            gameType: YutController.gameType,
-                          ),
-                        ),
                       if (_showResult && c.result != null)
                         Positioned.fill(child: _resultOverlay(c.result!)),
                     ],
@@ -662,33 +664,46 @@ class _YutGameScreenState extends State<YutGameScreen>
       return math.max(0, n);
     }
 
+    Widget card(String? player, bool mine, bool active) => _PlayerCard(
+      theme: t,
+      name: c.displayName(player),
+      isMe: mine,
+      active: active,
+      team: _colorOf(player ?? ''),
+      spec: _specOf(player ?? ''),
+      waiting: waitingShown(player),
+      finished: v.finishedOf(player),
+      total: v.pieceCount,
+      deadline: active ? deadline : null,
+      stick: v.itemOf(player, 'yut_yut'),
+      piece: v.itemOf(player, 'yut_piece'),
+      effects: v.effectsOf(player).chips(staked: v.stake > 0),
+      onTapCard: () => _showEquipSheet(v, player),
+      selectableWaiting: mine && sel.moves.any((m) => m.from == 0),
+      waitingSelected:
+          mine &&
+          _pieceId != null &&
+          sel.moves.any((m) => m.from == 0 && m.pieceIds.contains(_pieceId)),
+      onTapWaiting: mine
+          ? () {
+              final rep = sel.moves.where((m) => m.from == 0);
+              if (rep.isNotEmpty) _onPieceTap(rep.first.pieceId);
+            }
+          : null,
+      bubble: ReactionBubble(
+        theme: t,
+        forPlayer: player,
+        gameType: YutController.gameType,
+      ),
+    );
+
     return Column(
       children: [
         topBar,
-        _infoRow(v),
-        _PlayerStrip(
-          theme: t,
-          name: c.displayName(opp),
-          emoji: c.emojiOf(opp),
-          character: c.characterOf(opp),
-          color: _colorOf(opp ?? ''),
-          isMe: false,
-          active: oppTurn,
-          waiting: waitingShown(opp),
-          finished: v.finishedOf(opp),
-          total: v.pieceCount,
-          skinEmoji: _skinOf(opp ?? ''),
-          deadline: oppTurn ? deadline : null,
-          items: _itemBadges(v, opp),
-          bubble: ReactionBubble(
-            theme: t,
-            forPlayer: opp,
-            gameType: YutController.gameType,
-          ),
-        ),
+        card(opp, false, oppTurn),
         Expanded(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             child: Stack(
               alignment: Alignment.center,
               children: [
@@ -704,62 +719,76 @@ class _YutGameScreenState extends State<YutGameScreen>
                     onTapPiece: _onPieceTap,
                     onTapDestination: (m) => _onDestinationTap(m, sel.chosen),
                     colorOf: _colorOf,
-                    characterOf: c.characterOf,
-                    skinOf: _skinOf,
+                    specOf: _specOf,
                     moveAnim: _moveAnim,
                     moveProgress: _moveCtl,
                     effect: _effect,
                     effectProgress: _effectCtl,
                   ),
                 ),
+                Positioned(
+                  right: 4,
+                  top: 0,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (((v.series?['games'] as num?)?.toInt() ?? 0) > 0)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: SeriesScore.fromMap(t, v.series, c.me),
+                        ),
+                      if (!_showResult)
+                        ReactionButton(
+                          theme: t,
+                          gameType: YutController.gameType,
+                        ),
+                    ],
+                  ),
+                ),
+                if (v.stake > 0)
+                  Positioned(
+                    left: 6,
+                    top: 0,
+                    child: Wrap(
+                      spacing: 6,
+                      children: [
+                        GameChip(
+                          theme: t,
+                          leading: '🪙',
+                          label: '판돈 ${v.stake}',
+                          emphasized: true,
+                        ),
+                        if ((v.coinBonus[c.me] ?? 0) > 0)
+                          GameChip(
+                            theme: t,
+                            leading: '🎁',
+                            label: '보너스 ${v.coinBonus[c.me]}',
+                          ),
+                      ],
+                    ),
+                  ),
                 if (_stage != null) _stageOverlay(v),
               ],
             ),
           ),
         ),
-        _PlayerStrip(
-          theme: t,
-          name: c.displayName(me),
-          emoji: c.emojiOf(me),
-          character: c.characterOf(me),
-          color: _colorOf(me ?? ''),
-          isMe: true,
-          active: myTurn,
-          waiting: waitingShown(me),
-          finished: v.finishedOf(me),
-          total: v.pieceCount,
-          skinEmoji: _skinOf(me ?? ''),
-          deadline: myTurn ? deadline : null,
-          items: const [],
-          selectableWaiting: sel.moves.any((m) => m.from == 0),
-          waitingSelected:
-              _pieceId != null &&
-              sel.moves.any(
-                (m) => m.from == 0 && m.pieceIds.contains(_pieceId),
-              ),
-          onTapWaiting: () {
-            final rep = sel.moves.where((m) => m.from == 0);
-            if (rep.isNotEmpty) _onPieceTap(rep.first.pieceId);
-          },
-          bubble: ReactionBubble(
-            theme: t,
-            forPlayer: me,
-            gameType: YutController.gameType,
-          ),
-        ),
-        _chipTray(v, sel, myTurn),
-        _actionRow(v, sel, myTurn),
-        const SizedBox(height: 8),
+        card(me, true, myTurn),
+        _throwArea(v, sel, myTurn),
+        const SizedBox(height: 6),
       ],
     );
   }
 
+  YutStickLook _lookOf(YutView v, String? player) =>
+      YutStickLook.fromItem(v.itemOf(player, 'yut_yut'));
+
   Widget _stageOverlay(YutView v) {
     final stage = _stage!;
     final by = _stageBy;
-    final skin = yutSkinFromItem(v.itemOf(by, 'yut_yut'));
+    final look = _lookOf(v, by);
+    final seq = _stageSeq;
     final action = YutAction(
-      seq: _stageSeq,
+      seq: seq,
       type: 'throw',
       by: by,
       auto: false,
@@ -770,33 +799,41 @@ class _YutGameScreenState extends State<YutGameScreen>
       itemEffects: const [],
     );
     return Positioned.fill(
-      child: Center(
-        child: FractionallySizedBox(
-          widthFactor: 0.96,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 380),
-            child: YutSticksStage(
-              key: ValueKey('stage$_stageSeq'),
-              thrown: stage,
-              seed: _stageSeq,
-              skin: skin,
-              throwerName: by == c.me ? '내' : c.displayName(by),
-              onLanded: () => _onSticksLanded(action),
-              onDone: () => _onSticksDone(
-                YutAction(
-                  seq: _stageSeq,
-                  type: 'throw',
-                  by: by,
-                  auto: _lastAutoFor(_stageSeq),
+      child: IgnorePointer(
+        child: LayoutBuilder(
+          builder: (context, box) {
+            final size = math.min(
+              math.min(box.maxWidth, box.maxHeight) * 0.86,
+              330.0,
+            );
+            return Center(
+              child: SizedBox(
+                width: size,
+                height: size,
+                child: YutSticksStage(
+                  key: ValueKey('stage$seq'),
                   thrown: stage,
-                  move: null,
-                  turnPassed: false,
-                  discardedBackdo: 0,
-                  itemEffects: const [],
+                  seed: seq,
+                  look: look,
+                  throwerName: by == c.me ? '내' : c.displayName(by),
+                  onLanded: () => _onSticksLanded(action),
+                  onDone: () => _onSticksDone(
+                    YutAction(
+                      seq: seq,
+                      type: 'throw',
+                      by: by,
+                      auto: _lastAutoFor(seq),
+                      thrown: stage,
+                      move: null,
+                      turnPassed: false,
+                      discardedBackdo: 0,
+                      itemEffects: const [],
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
@@ -807,56 +844,41 @@ class _YutGameScreenState extends State<YutGameScreen>
     return a != null && a.seq == seq && a.auto;
   }
 
-  Widget _infoRow(YutView v) {
+  /// 장착 아이템과 실제 적용 효과를 보여 주는 창(카드를 누르면).
+  void _showEquipSheet(YutView v, String? player) {
     final t = _theme;
-    final series = v.series;
-    final hasSeries = ((series?['games'] as num?)?.toInt() ?? 0) > 0;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 0, 60, 4),
-      child: Wrap(
-        spacing: 6,
-        runSpacing: 4,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          GameChip(theme: t, leading: '🐎', label: '말 ${v.pieceCount}개'),
-          if (v.stake > 0)
-            GameChip(
-              theme: t,
-              leading: '🪙',
-              label: '판돈 ${v.stake}',
-              emphasized: true,
+    final mine = player == c.me;
+    final chips = v.effectsOf(player).chips(staked: v.stake > 0);
+    Widget itemBlock(String slotLabel, Map<String, dynamic>? item) {
+      if (item == null) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            '$slotLabel: 기본',
+            style: t.body(size: 13.5, color: t.subInk),
+          ),
+        );
+      }
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          children: [
+            Text(
+              '${item['icon'] ?? '🎁'}',
+              style: const TextStyle(fontSize: 22),
             ),
-          if (v.stake > 0 && (v.coinBonus[c.me] ?? 0) > 0)
-            GameChip(
-              theme: t,
-              leading: '🎁',
-              label: '보너스 ${v.coinBonus[c.me]}',
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '$slotLabel: ${item['name'] ?? '아이템'} (${item['grade'] ?? 'B'}등급)',
+                style: t.body(size: 13.5, weight: FontWeight.w800),
+              ),
             ),
-          if (hasSeries) SeriesScore.fromMap(t, series, c.me),
-        ],
-      ),
-    );
-  }
-
-  List<Widget> _itemBadges(YutView v, String? player) {
-    final out = <Widget>[];
-    for (final slot in const ['yut_yut', 'yut_piece']) {
-      final item = v.itemOf(player, slot);
-      if (item == null) continue;
-      out.add(
-        _ItemBadge(
-          icon: '${item['icon'] ?? '🎁'}',
-          grade: '${item['grade'] ?? 'B'}',
-          onTap: () => _showItemSheet(item),
+          ],
         ),
       );
     }
-    return out;
-  }
 
-  void _showItemSheet(Map<String, dynamic> item) {
-    final t = _theme;
-    final stats = (item['stats'] as Map?)?.cast<String, dynamic>() ?? {};
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -866,35 +888,38 @@ class _YutGameScreenState extends State<YutGameScreen>
           theme: t,
           opaque: true,
           radius: 22,
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '${item['icon'] ?? '🎁'} ${item['name'] ?? '아이템'}',
+                '${mine ? '내' : c.displayName(player)} 장비',
                 style: t.display(size: 20),
               ),
+              const SizedBox(height: 10),
+              itemBlock('말', v.itemOf(player, 'yut_piece')),
+              itemBlock('윷', v.itemOf(player, 'yut_yut')),
               const SizedBox(height: 4),
               Text(
-                '${item['grade'] ?? 'B'} 등급',
-                style: t.body(size: 13, color: t.subInk),
+                '이 판에 적용되는 효과',
+                style: t.body(size: 13, weight: FontWeight.w800),
               ),
-              const SizedBox(height: 10),
-              if (stats.isEmpty)
-                Text('꾸미기 아이템이에요.', style: t.body(size: 13.5, color: t.subInk))
-              else
-                for (final e in stats.entries)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Text(
-                      '${_statLabel(e.key)} ${e.value}',
-                      style: t.body(size: 13.5),
-                    ),
-                  ),
               const SizedBox(height: 6),
+              if (chips.isEmpty)
+                Text('적용되는 효과가 없어요.', style: t.body(size: 13, color: t.subInk))
+              else
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final label in chips)
+                      GameChip(theme: t, label: label, emphasized: true),
+                  ],
+                ),
+              const SizedBox(height: 10),
               Text(
-                '판돈 게임에서는 효과가 합쳐서 일정 한도까지만 적용돼요.',
-                textAlign: TextAlign.center,
+                '아이템 효과는 합쳐서 일정 한도까지만 적용되고, 코인 보너스는 판돈의 30%까지만 쌓여요.',
                 style: t.body(size: 12, color: t.subInk, height: 1.4),
               ),
             ],
@@ -904,147 +929,149 @@ class _YutGameScreenState extends State<YutGameScreen>
     );
   }
 
-  static String _statLabel(String key) =>
-      const {
-        'yut_control_pct': '윷 컨트롤 +%',
-        'yut_mo_rate_pct': '모 확률 +%',
-        'yut_backdo_bonus_pct': '빽도 보너스 던지기 %',
-        'yut_win_coin_pct': '윷·모 추가 코인 %',
-        'yut_overturn_pct': '역전 확률 +%',
-        'piece_catch_resist_pct': '잡힘 방어 %',
-        'piece_catch_coin_bonus': '잡기 추가 코인',
-        'yut_catch_bonus': '잡기 보너스 코인',
-        'piece_safe_zone_pct': '안전 착지 %',
-        'piece_group_pct': '그룹 유지 %',
-        'coin_bonus_pct': '코인 보너스 +%',
-      }[key] ??
-      '효과';
-
-  Widget _chipTray(YutView v, _Sel sel, bool myTurn) {
-    final t = _theme;
-    var pending = v.pendingMoves;
-    // 던지기 연출이 끝나기 전에는 새로 던진 칩을 숨긴다.
-    final hide = _stage != null && !_stage!.nak && pending.isNotEmpty;
-    final shown = hide ? pending.sublist(0, pending.length - 1) : pending;
-    final chosenChip = sel.chip;
-    String hint;
-    if (v.winner != null) {
-      hint = '판이 끝났어요';
-    } else if (!myTurn) {
-      hint = '${c.displayName(v.currentTurn)}의 차례예요';
-    } else if (_playing) {
-      hint = '윷가락이 굴러가는 중이에요';
-    } else if (pending.isEmpty) {
-      hint = '윷가락을 던져 주세요';
-    } else if (_pieceId == null) {
-      hint = shown.length > 1
-          ? '던지기 결과를 고르고, 움직일 말을 눌러요'
-          : '움직일 말을 눌러요 (대기 말은 아래 말판에서)';
-    } else if (sel.preview.length > 1 && sel.chosen == null) {
-      hint = '갈림길이에요. 가고 싶은 화살표를 눌러요';
-    } else {
-      hint = '붉은 길로 옮겨져요. 확인하고 눌러요';
-    }
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 2, 14, 2),
-      child: Column(
-        children: [
-          SizedBox(
-            height: 58,
-            child: shown.isEmpty
-                ? Center(
-                    child: Text(
-                      pending.isEmpty ? '던진 결과가 여기 쌓여요' : '…',
-                      style: t.body(size: 12.5, color: t.subInk),
-                    ),
-                  )
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      for (var i = 0; i < shown.length; i++)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: _ThrowChip(
-                            steps: shown[i],
-                            selected: myTurn && chosenChip == i && !_playing,
-                            enabled: myTurn && !_playing,
-                            onTap: () => _onChipTap(i),
-                          ),
-                        ),
-                    ],
-                  ),
-          ),
-          Text(
-            hint,
-            textAlign: TextAlign.center,
-            style: t.body(size: 12.5, color: t.subInk),
-          ),
-        ],
-      ),
-    );
+  YutThrow? _restingThrow(YutView v) {
+    if (_lastShown != null) return _lastShown;
+    if (v.turnThrows.isNotEmpty) return v.turnThrows.last;
+    return v.lastAction?.thrown;
   }
 
-  Widget _actionRow(YutView v, _Sel sel, bool myTurn) {
+  /// 아래 줄: 통나무 던지는 자리 + 던지기 결과 칩 + 던지기·옮기기 버튼.
+  Widget _throwArea(YutView v, _Sel sel, bool myTurn) {
     final t = _theme;
+    final pending = v.pendingMoves;
+    final hide = _stage != null && !_stage!.nak && pending.isNotEmpty;
+    final shown = hide ? pending.sublist(0, pending.length - 1) : pending;
     final chosen = sel.chosen;
     final canThrow = myTurn && v.canThrow && !_playing && !c.busy;
-    final children = <Widget>[];
-    if (chosen != null && myTurn && !_playing) {
-      children.add(
-        Expanded(
-          flex: 3,
-          child: GamePrimaryButton(
-            theme: t,
-            label: chosen.finish
-                ? '골인시키기'
-                : chosen.captures > 0
-                ? '잡으러 가기'
-                : '여기로 옮기기',
-            icon: Icons.check_rounded,
-            height: 50,
-            onPressed: c.busy ? null : () => _confirm(chosen),
-          ),
-        ),
-      );
-      if (v.canThrow) {
-        children
-          ..add(const SizedBox(width: 8))
-          ..add(
-            Expanded(
-              flex: 2,
-              child: GameSecondaryButton(
-                theme: t,
-                label: '던지기',
-                icon: Icons.casino_rounded,
-                height: 50,
-                onPressed: canThrow ? _throw : null,
+    final resting = _restingThrow(v);
+    final by = _lastShownBy ?? v.lastAction?.by ?? c.me;
+
+    String label;
+    var enabled = false;
+    if (v.winner != null) {
+      label = '판이 끝났어요';
+    } else if (!myTurn) {
+      label = '${c.displayName(v.currentTurn)}의 차례';
+    } else if (_playing) {
+      label = '윷가락이 구르는 중…';
+    } else if (chosen != null) {
+      label = chosen.finish
+          ? '골인시키기'
+          : chosen.captures > 0
+          ? '잡으러 가기'
+          : '여기로 옮기기';
+      enabled = !c.busy;
+    } else if (sel.preview.length > 1) {
+      label = '화살표를 골라요';
+    } else if (v.canThrow) {
+      label = pending.isEmpty ? '윷 던지기' : '한 번 더 던지기';
+      enabled = canThrow;
+    } else if (_pieceId == null) {
+      label = '말을 눌러요';
+    } else {
+      label = '말을 눌러요';
+    }
+    final confirm = chosen != null && myTurn && !_playing;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 2, 10, 0),
+      child: SizedBox(
+        height: 108,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 108,
+              height: 108,
+              child: Semantics(
+                label: '윷가락이 놓인 통나무',
+                child: YutSlab(
+                  sticks: resting?.sticks ?? const [0, 0, 0, 0],
+                  seed: _lastShownSeq,
+                  look: _lookOf(v, by),
+                ),
               ),
             ),
-          );
-      }
-    } else {
-      final label = !myTurn
-          ? '${c.displayName(v.currentTurn)}의 차례'
-          : v.canThrow
-          ? (v.pendingMoves.isEmpty ? '윷 던지기' : '한 번 더 던지기')
-          : '말을 옮겨요';
-      children.add(
-        Expanded(
-          child: GamePrimaryButton(
-            theme: t,
-            label: label,
-            icon: myTurn && v.canThrow
-                ? Icons.casino_rounded
-                : Icons.hourglass_top_rounded,
-            height: 50,
-            onPressed: canThrow ? _throw : null,
-          ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    height: 56,
+                    child: shown.isEmpty
+                        ? Center(
+                            child: Text(
+                              myTurn && !_playing
+                                  ? '던진 결과가 여기 쌓여요'
+                                  : pending.isEmpty
+                                  ? ''
+                                  : '…',
+                              style: t.body(size: 12.5, color: t.subInk),
+                            ),
+                          )
+                        : ListView(
+                            scrollDirection: Axis.horizontal,
+                            shrinkWrap: true,
+                            children: [
+                              for (var i = 0; i < shown.length; i++)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 3,
+                                  ),
+                                  child: _ThrowChip(
+                                    steps: shown[i],
+                                    selected:
+                                        myTurn && sel.chip == i && !_playing,
+                                    enabled: myTurn && !_playing,
+                                    onTap: () => _onChipTap(i),
+                                  ),
+                                ),
+                            ],
+                          ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 5,
+                        child: GamePrimaryButton(
+                          theme: t,
+                          label: label,
+                          icon: confirm
+                              ? Icons.check_rounded
+                              : v.canThrow && myTurn
+                              ? Icons.casino_rounded
+                              : Icons.hourglass_top_rounded,
+                          height: 46,
+                          onPressed: !enabled
+                              ? null
+                              : confirm
+                              ? () => _confirm(chosen)
+                              : _throw,
+                        ),
+                      ),
+                      if (confirm && v.canThrow) ...[
+                        const SizedBox(width: 6),
+                        SizedBox(
+                          width: 52,
+                          child: GameSecondaryButton(
+                            theme: t,
+                            label: '',
+                            icon: Icons.casino_rounded,
+                            height: 46,
+                            onPressed: canThrow ? _throw : null,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-      );
-    }
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 4, 14, 0),
-      child: Row(children: children),
+      ),
     );
   }
 
@@ -1132,6 +1159,33 @@ class _YutGameScreenState extends State<YutGameScreen>
       details: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              key: const ValueKey('yut_result_figures'),
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                YutFigure(
+                  height: 104,
+                  team: _colorOf(r.winner),
+                  spec: _specOf(r.winner),
+                  badge: false,
+                  glow: true,
+                ),
+                if (oppId != null) ...[
+                  const SizedBox(width: 14),
+                  YutFigure(
+                    height: 72,
+                    team: _colorOf(oppId),
+                    spec: _specOf(oppId),
+                    badge: false,
+                    dimmed: true,
+                  ),
+                ],
+              ],
+            ),
+          ),
           if (r.stake > 0 && r.settlementFailed)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
@@ -1190,157 +1244,204 @@ class _Sel {
   });
 }
 
-/// 위·아래 플레이어 띠: 캐릭터 얼굴, 이름, 대기·도착 수, 대기 말, 남은 시간.
-class _PlayerStrip extends StatelessWidget {
+/// 위·아래 플레이어 카드: 서 있는 말(캐릭터 또는 상점 동물 말), 이름, 대기·도착 수,
+/// 장착한 윷·말 이름과 실제 적용 "효과" 칩, 남은 시간, 대기 말. 카드를 누르면 장비 창.
+class _PlayerCard extends StatelessWidget {
   final GameTheme theme;
   final String name;
-  final String emoji;
-  final String character;
-  final Color color;
   final bool isMe;
   final bool active;
+  final Color team;
+  final YutFigureSpec spec;
   final int waiting;
   final int finished;
   final int total;
-  final String? skinEmoji;
   final GameDeadline? deadline;
-  final List<Widget> items;
+  final Map<String, dynamic>? stick;
+  final Map<String, dynamic>? piece;
+  final List<String> effects;
+  final VoidCallback onTapCard;
   final bool selectableWaiting;
   final bool waitingSelected;
   final VoidCallback? onTapWaiting;
   final Widget bubble;
 
-  const _PlayerStrip({
+  const _PlayerCard({
     required this.theme,
     required this.name,
-    required this.emoji,
-    required this.character,
-    required this.color,
     required this.isMe,
     required this.active,
+    required this.team,
+    required this.spec,
     required this.waiting,
     required this.finished,
     required this.total,
-    required this.skinEmoji,
     required this.deadline,
-    required this.items,
+    required this.stick,
+    required this.piece,
+    required this.effects,
+    required this.onTapCard,
     required this.bubble,
     this.selectableWaiting = false,
     this.waitingSelected = false,
     this.onTapWaiting,
   });
 
+  Widget _chip(String text, {Color? color}) => Container(
+    margin: const EdgeInsets.only(right: 4),
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+    decoration: BoxDecoration(
+      color: (color ?? theme.accent).withValues(alpha: 0.16),
+      borderRadius: BorderRadius.circular(99),
+      border: Border.all(color: (color ?? theme.accent).withValues(alpha: 0.7)),
+    ),
+    child: Text(
+      text,
+      maxLines: 1,
+      style: theme.body(size: 12, weight: FontWeight.w800, height: 1.15),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final t = theme;
+    final charName = yutCharacterNames[spec.character] ?? '';
+    final who = spec.isSkin ? (spec.skinName ?? '동물 말') : charName;
+    final chips = <Widget>[
+      if (stick != null)
+        _chip(
+          '${stick!['icon'] ?? ''} ${stick!['name'] ?? ''}',
+          color: yutGradeColor('${stick!['grade'] ?? 'B'}') == Colors.white
+              ? t.subInk
+              : yutGradeColor('${stick!['grade'] ?? 'B'}'),
+        ),
+      if (effects.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(right: 4),
+          child: Center(
+            child: Text(
+              '효과',
+              style: t.body(size: 12, weight: FontWeight.w900, color: t.accent),
+            ),
+          ),
+        ),
+      for (final e in effects) _chip(e),
+    ];
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 2, 14, 2),
+      padding: const EdgeInsets.fromLTRB(8, 2, 8, 2),
       child: Semantics(
+        button: true,
         label:
-            '${isMe ? '나' : name}${active ? ', 차례' : ''}, 대기 말 $waiting개, 도착 $finished개',
-        child: Row(
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 260),
-                  width: 48,
-                  height: 48,
-                  padding: const EdgeInsets.all(2.4),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: active ? t.goldGradient : null,
-                    color: active ? null : color.withValues(alpha: 0.75),
-                    boxShadow: active
-                        ? [
-                            BoxShadow(
-                              color: t.gold.withValues(alpha: 0.7),
-                              blurRadius: 14,
-                            ),
-                          ]
-                        : null,
+            '${isMe ? '나' : name}${active ? ', 차례' : ''}, 대기 말 $waiting개, 도착 $finished개, 장비 보기',
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTapCard,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 64),
+            padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: active ? 0.88 : 0.66),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: active ? t.gold : t.surfaceBorder.withValues(alpha: 0.5),
+                width: active ? 2.2 : 1,
+              ),
+              boxShadow: [
+                if (active)
+                  BoxShadow(
+                    color: t.gold.withValues(alpha: 0.5),
+                    blurRadius: 12,
                   ),
-                  child: DecoratedBox(
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Obangsaek.white,
-                    ),
-                    child: YutCharacterFace(character: character, size: 43),
-                  ),
-                ),
-                Positioned(left: 40, top: -10, child: bubble),
               ],
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
+            child: Row(
+              children: [
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    YutFigure(
+                      key: ValueKey('yut_card_figure_${isMe ? 'me' : 'opp'}'),
+                      height: 58,
+                      team: team,
+                      spec: spec,
+                      badge: false,
+                    ),
+                    Positioned(left: 44, top: -12, child: bubble),
+                  ],
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Flexible(
-                        child: Text(
-                          isMe && name != '나' ? '$name (나)' : name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: t.body(size: 13.5, weight: FontWeight.w800),
+                      Text(
+                        isMe && name != '나' ? '$name (나)' : name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: t.body(size: 13.5, weight: FontWeight.w800),
+                      ),
+                      Text(
+                        '$who · 대기 $waiting · 도착 $finished/$total',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: t.body(
+                          size: 12,
+                          color: t.subInk,
+                          weight: FontWeight.w700,
                         ),
                       ),
-                      for (final w in items) w,
-                    ],
-                  ),
-                  Text(
-                    '${yutCharacterNames[character] ?? ''} · 대기 $waiting · 도착 $finished/$total',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: t.body(
-                      size: 12,
-                      color: t.subInk,
-                      weight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (deadline != null) ...[
-              TurnTimerRing(
-                theme: t,
-                deadline: deadline,
-                size: 40,
-                tickSound: isMe,
-              ),
-              const SizedBox(width: 6),
-            ],
-            // 대기 말(나는 눌러서 고른다).
-            SizedBox(
-              width: 52,
-              height: 52,
-              child: waiting <= 0
-                  ? const SizedBox.shrink()
-                  : Semantics(
-                      button: selectableWaiting,
-                      label: '대기 말 $waiting개',
-                      child: GestureDetector(
-                        key: isMe ? const ValueKey('yut_waiting_piece') : null,
-                        behavior: HitTestBehavior.opaque,
-                        onTap: selectableWaiting ? onTapWaiting : null,
-                        child: Center(
-                          child: YutToken(
-                            size: 40,
-                            color: color,
-                            character: character,
-                            skinEmoji: skinEmoji,
-                            count: waiting,
-                            selected: waitingSelected,
-                            glow: selectableWaiting && !waitingSelected,
+                      if (chips.isNotEmpty)
+                        SizedBox(
+                          height: 24,
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(children: chips),
                           ),
                         ),
-                      ),
-                    ),
+                    ],
+                  ),
+                ),
+                if (deadline != null) ...[
+                  TurnTimerRing(
+                    theme: t,
+                    deadline: deadline,
+                    size: 40,
+                    tickSound: isMe,
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                SizedBox(
+                  width: 54,
+                  height: 58,
+                  child: waiting <= 0
+                      ? const SizedBox.shrink()
+                      : Semantics(
+                          button: selectableWaiting,
+                          label: '대기 말 $waiting개',
+                          child: GestureDetector(
+                            key: isMe
+                                ? const ValueKey('yut_waiting_piece')
+                                : null,
+                            behavior: HitTestBehavior.opaque,
+                            onTap: selectableWaiting ? onTapWaiting : null,
+                            child: Align(
+                              alignment: Alignment.bottomCenter,
+                              child: YutFigure(
+                                height: 52,
+                                team: team,
+                                spec: spec,
+                                count: waiting,
+                                selected: waitingSelected,
+                                glow: selectableWaiting && !waitingSelected,
+                              ),
+                            ),
+                          ),
+                        ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -1443,57 +1544,6 @@ class _ThrowChip extends StatelessWidget {
   }
 }
 
-class _ItemBadge extends StatelessWidget {
-  final String icon;
-  final String grade;
-  final VoidCallback onTap;
-
-  const _ItemBadge({
-    required this.icon,
-    required this.grade,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = switch (grade) {
-      'SSS' => const Color(0xFFD9541E),
-      'SS' => const Color(0xFF8E3BA8),
-      'S' => const Color(0xFF2F6FB5),
-      'A' => const Color(0xFF3F8F4F),
-      _ => const Color(0xFF7A7467),
-    };
-    return Semantics(
-      button: true,
-      label: '장착 아이템 $grade 등급',
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 13),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.14),
-              border: Border.all(color: color),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              '$icon $grade',
-              style: GoogleFonts.notoSans(
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-                color: color,
-                height: 1.2,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _ItemEffectBadge extends StatelessWidget {
   final YutItemEffect effect;
   final bool mine;
@@ -1516,7 +1566,11 @@ class _ItemEffectBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
-      child: GameChip(theme: GameTheme.hanji, label: message, emphasized: true),
+      child: GameChip(
+        theme: GameTheme.meadow,
+        label: message,
+        emphasized: true,
+      ),
     );
   }
 }

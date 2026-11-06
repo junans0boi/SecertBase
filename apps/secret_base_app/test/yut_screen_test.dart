@@ -78,7 +78,7 @@ void main() {
       expect(find.text('하늘'), findsOneWidget);
       expect(find.textContaining('OPP-CODE'), findsNothing);
       expect(find.textContaining('ME-CODE'), findsNothing);
-      expect(find.text('말 4개'), findsOneWidget);
+      expect(find.textContaining('도착 0/4'), findsNWidgets(2));
       await settle(tester);
     },
   );
@@ -94,7 +94,7 @@ void main() {
     expect(find.byKey(const ValueKey('yut_chip_-1')), findsOneWidget);
     // 말을 고르기 전에는 목적지가 없다.
     expect(find.byKey(const ValueKey('yut_dest_10_f')), findsNothing);
-    expect(find.text('말을 옮겨요'), findsOneWidget);
+    expect(find.text('말을 눌러요'), findsOneWidget);
     // 대기 말을 누르면 잡는 칸 하나만 보인다.
     await tester.tap(find.byKey(const ValueKey('yut_waiting_piece')));
     await tester.pump(const Duration(milliseconds: 300));
@@ -137,7 +137,7 @@ void main() {
       findsNothing,
       reason: 'a direction must be picked',
     );
-    expect(find.textContaining('갈림길이에요'), findsOneWidget);
+    expect(find.text('화살표를 골라요'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('yut_dest_25_25')));
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('여기로 옮기기'), findsOneWidget);

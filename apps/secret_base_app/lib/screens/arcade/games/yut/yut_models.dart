@@ -284,6 +284,7 @@ class YutView {
   final Map<String, int> coinBonus;
   final int coinBonusCap;
   final Map<String, dynamic> equippedItems;
+  final Map<String, YutEffects> effects;
   final Map<String, dynamic>? series;
   final String? winner;
   final num? turnDeadline;
@@ -313,6 +314,7 @@ class YutView {
     required this.coinBonus,
     required this.coinBonusCap,
     required this.equippedItems,
+    required this.effects,
     required this.series,
     required this.winner,
     required this.turnDeadline,
@@ -361,6 +363,10 @@ class YutView {
       coinBonus: {for (final e in coin.entries) e.key: _int(e.value)},
       coinBonusCap: _int(m['coinBonusCap']),
       equippedItems: _map(m['equippedItems']),
+      effects: {
+        for (final e in _map(m['effects']).entries)
+          e.key: YutEffects.fromJson(e.value),
+      },
       series: series is Map ? Map<String, dynamic>.from(series) : null,
       winner: m['winner'] as String?,
       turnDeadline: m['turnDeadline'] as num?,
@@ -384,6 +390,8 @@ class YutView {
   int finishedOf(String? player) =>
       piecesOf(player).where((p) => p.finished).length;
 
+  YutEffects effectsOf(String? player) => effects[player] ?? YutEffects.none;
+
   /// 장착 아이템 한 칸(`yut_piece`·`yut_yut`).
   Map<String, dynamic>? itemOf(String? player, String slot) {
     final items = equippedItems[player];
@@ -391,6 +399,65 @@ class YutView {
     final item = items[slot];
     return item is Map ? Map<String, dynamic>.from(item) : null;
   }
+}
+
+/// 한 사람에게 이 판에서 실제로 적용되는 아이템 효과(서버가 상한을 적용한 값).
+@immutable
+class YutEffects {
+  final double controlPct;
+  final double moRatePct;
+  final double overturnPct;
+  final double backdoBonusPct;
+  final double defensePct;
+  final double winCoinPct;
+  final int catchCoinPer;
+  final int catchFlat;
+
+  const YutEffects({
+    this.controlPct = 0,
+    this.moRatePct = 0,
+    this.overturnPct = 0,
+    this.backdoBonusPct = 0,
+    this.defensePct = 0,
+    this.winCoinPct = 0,
+    this.catchCoinPer = 0,
+    this.catchFlat = 0,
+  });
+
+  static const none = YutEffects();
+
+  factory YutEffects.fromJson(Object? raw) {
+    final m = _map(raw);
+    double d(String k) => m[k] is num ? (m[k] as num).toDouble() : 0;
+    return YutEffects(
+      controlPct: d('controlPct'),
+      moRatePct: d('moRatePct'),
+      overturnPct: d('overturnPct'),
+      backdoBonusPct: d('backdoBonusPct'),
+      defensePct: d('defensePct'),
+      winCoinPct: d('winCoinPct'),
+      catchCoinPer: _int(m['catchCoinPer']),
+      catchFlat: _int(m['catchFlat']),
+    );
+  }
+
+  static String _n(double v) {
+    final t = v.toStringAsFixed(1);
+    return t.endsWith('.0') ? t.substring(0, t.length - 2) : t;
+  }
+
+  /// 화면의 "효과" 칩 문구(원시 아이템 수치가 아니라 실제 적용값).
+  /// 판돈이 없는 판에서는 코인 효과를 감춘다.
+  List<String> chips({required bool staked}) => [
+    if (controlPct > 0) '윷 컨트롤 +${_n(controlPct)}%',
+    if (moRatePct > 0) '모 확률 +${_n(moRatePct)}%',
+    if (overturnPct > 0) '역전 +${_n(overturnPct)}%',
+    if (backdoBonusPct > 0) '빽도 보너스 ${_n(backdoBonusPct)}%',
+    if (defensePct > 0) '잡힘 방어 ${_n(defensePct)}%',
+    if (staked && winCoinPct > 0) '윷·모 코인 ${_n(winCoinPct)}%',
+    if (staked && catchCoinPer > 0) '잡기 말당 +$catchCoinPer코인',
+    if (staked && catchFlat > 0) '잡기 +$catchFlat코인',
+  ];
 }
 
 @immutable
@@ -469,49 +536,22 @@ class YutResult {
   }
 }
 
-/// 상점 윷 스킨 아이콘 → 윷가락 색 이름.
-String yutSkinFromItem(Map<String, dynamic>? item) {
-  if (item == null) return 'base';
-  final icon = '${item['icon'] ?? ''}';
-  final grade = '${item['grade'] ?? 'B'}';
-  return switch (icon) {
-    '🌸' || '🌺' || '💝' || '🌷' => 'cherry',
-    '🔥' || '⛈️' || '🐉' => 'fire',
-    '🌱' || '🍃' || '🌿' || '🎋' => 'bamboo',
-    '❄️' || '🧊' || '🌙' || '⭐' || '💎' => 'crystal',
-    '🌌' || '✨' || '🎯' || '🦅' || '⚡' => 'legend',
-    '🪨' || '🪵' => 'stone',
-    '☀️' || '🌞' || '🏅' => 'gold',
-    '🍁' => 'autumn',
-    '🌊' => 'wave',
-    '💨' => 'wind',
-    '🌪️' => 'storm',
-    _ => switch (grade) {
-      'SSS' => 'legend',
-      'SS' => 'crystal',
-      'S' => 'gold',
-      'A' => 'bamboo',
-      _ => 'base',
-    },
-  };
-}
-
-/// 상점 말 스킨 이모지(기본 말이면 null → 캐릭터 얼굴).
-String? yutPieceEmojiFromItem(Map<String, dynamic>? item) {
-  if (item == null) return null;
-  final icon = '${item['icon'] ?? ''}';
-  return icon.isEmpty ? null : icon;
-}
-
 const yutCharacterNames = {'honggilldong': '홍길동', 'nolbu': '놀부', 'miho': '미호'};
 
 String yutCharacterAsset(String id) => switch (id) {
-  'nolbu' => 'assets/images/yut/character_nolbu_v2.png',
-  'miho' => 'assets/images/yut/character_miho_v2.png',
-  _ => 'assets/images/yut/character_honggildong_v2.png',
+  'nolbu' => 'assets/images/yut/fig_nolbu.png',
+  'miho' => 'assets/images/yut/fig_miho.png',
+  _ => 'assets/images/yut/fig_honggilldong.png',
 };
 
-/// 한지 마당 오방색.
+/// 캐릭터 그림 가로/세로 비율(잘라낸 전신 그림).
+double yutCharacterAspect(String id) => switch (id) {
+  'nolbu' => 289 / 420,
+  'miho' => 277 / 420,
+  _ => 252 / 420,
+};
+
+/// 오방색(판 모서리 표시와 글자 포인트).
 class Obangsaek {
   Obangsaek._();
   static const blue = Color(0xFF2F5D8A); // 청

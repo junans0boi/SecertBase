@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/main_design.dart';
 import '../../core/socket_service.dart';
 import '../../core/yut_audio.dart';
+import 'games/yut/yut_character_picker.dart';
 import 'lobby_options.dart';
 
 const _kStakeOptions = [0, 500, 1000, 3000];
@@ -251,116 +252,126 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
                 const SizedBox(height: 22),
                 Expanded(
                   child: Center(
-                    child: MainCard(
-                      padding: const EdgeInsets.fromLTRB(20, 22, 20, 24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.workspace_premium,
-                            color: widget.color,
-                            size: 28,
-                          ),
-                          const SizedBox(height: 18),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _PlayerSlot(
-                                  index: 0,
-                                  color: widget.color,
-                                  players: lobbyPlayers,
-                                  host: _socket.lobbyHost,
-                                  profileEmojis: profileEmojis,
-                                  nicknames: nicknames,
+                    child: SingleChildScrollView(
+                      child: MainCard(
+                        padding: const EdgeInsets.fromLTRB(20, 22, 20, 24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.workspace_premium,
+                              color: widget.color,
+                              size: 28,
+                            ),
+                            const SizedBox(height: 18),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _PlayerSlot(
+                                    index: 0,
+                                    color: widget.color,
+                                    players: lobbyPlayers,
+                                    host: _socket.lobbyHost,
+                                    profileEmojis: profileEmojis,
+                                    nicknames: nicknames,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 18),
-                              Expanded(
-                                child: _PlayerSlot(
-                                  index: 1,
-                                  color: widget.color,
-                                  players: lobbyPlayers,
-                                  host: _socket.lobbyHost,
-                                  profileEmojis: profileEmojis,
-                                  nicknames: nicknames,
+                                const SizedBox(width: 18),
+                                Expanded(
+                                  child: _PlayerSlot(
+                                    index: 1,
+                                    color: widget.color,
+                                    players: lobbyPlayers,
+                                    host: _socket.lobbyHost,
+                                    profileEmojis: profileEmojis,
+                                    nicknames: nicknames,
+                                  ),
                                 ),
-                              ),
+                              ],
+                            ),
+                            const SizedBox(height: 18),
+                            if (widget.gameType == 'yut') ...[
+                              YutCharacterPicker(color: widget.color),
+                              const SizedBox(height: 18),
                             ],
-                          ),
-                          const SizedBox(height: 18),
-                          for (final def in lobbyOptionsFor(
-                            widget.gameType,
-                          )) ...[
-                            LobbyOptionPicker(
-                              def: def,
-                              isHost: isHost,
-                              value: _socket.lobbyOptions[def.key],
-                              color: widget.color,
-                              onSelect: (value) => _socket.setLobbyOption(
-                                widget.gameType,
-                                def.key,
-                                value,
-                              ),
-                            ),
-                            const SizedBox(height: 18),
-                          ],
-                          if (kStakeGameTypes.contains(widget.gameType)) ...[
-                            _StakeSelector(
-                              gameType: widget.gameType,
-                              isHost: isHost,
-                              stake: _socket.lobbyStake,
-                              color: widget.color,
-                            ),
-                            const SizedBox(height: 18),
-                          ],
-                          if (isHost)
-                            SizedBox(
-                              width: double.infinity,
-                              height: 52,
-                              child: FilledButton(
-                                onPressed: canStart
-                                    ? () => _socket.startGameLobby(
-                                        widget.gameType,
-                                      )
-                                    : null,
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: kMainInk,
-                                  disabledBackgroundColor: kMainLine,
-                                  foregroundColor: kMainPaper,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  elevation: 0,
-                                ),
-                                child: Text(
-                                  startLabel,
-                                  style: mainBody(
-                                    size: 15,
-                                    color: canStart ? kMainPaper : kMainMuted,
-                                    weight: FontWeight.w800,
-                                    height: 1,
-                                  ),
+                            for (final def in lobbyOptionsFor(
+                              widget.gameType,
+                            )) ...[
+                              LobbyOptionPicker(
+                                def: def,
+                                isHost: isHost,
+                                value: _socket.lobbyOptions[def.key],
+                                color: widget.color,
+                                onSelect: (value) => _socket.setLobbyOption(
+                                  widget.gameType,
+                                  def.key,
+                                  value,
                                 ),
                               ),
-                            )
-                          else if (kStakeGameTypes.contains(widget.gameType) &&
-                              _socket.lobbyStake > 0)
-                            _ReadyButton(
-                              ready:
-                                  _socket.lobbyReady[_socket.userId ?? ''] ==
-                                  true,
-                              stake: _socket.lobbyStake,
-                              color: widget.color,
-                              onChanged: (ready) =>
-                                  _socket.setLobbyReady(widget.gameType, ready),
-                            )
-                          else
-                            Text(
-                              '방장이 게임을 시작할 때까지 기다려주세요',
-                              textAlign: TextAlign.center,
-                              style: mainBody(size: 14, color: kMainSub),
-                            ),
-                        ],
+                              const SizedBox(height: 18),
+                            ],
+                            if (kStakeGameTypes.contains(widget.gameType)) ...[
+                              _StakeSelector(
+                                gameType: widget.gameType,
+                                isHost: isHost,
+                                stake: _socket.lobbyStake,
+                                color: widget.color,
+                              ),
+                              const SizedBox(height: 18),
+                            ],
+                            if (isHost)
+                              SizedBox(
+                                width: double.infinity,
+                                height: 52,
+                                child: FilledButton(
+                                  onPressed: canStart
+                                      ? () => _socket.startGameLobby(
+                                          widget.gameType,
+                                        )
+                                      : null,
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: kMainInk,
+                                    disabledBackgroundColor: kMainLine,
+                                    foregroundColor: kMainPaper,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    elevation: 0,
+                                  ),
+                                  child: Text(
+                                    startLabel,
+                                    style: mainBody(
+                                      size: 15,
+                                      color: canStart ? kMainPaper : kMainMuted,
+                                      weight: FontWeight.w800,
+                                      height: 1,
+                                    ),
+                                  ),
+                                ),
+                              )
+                            else if (kStakeGameTypes.contains(
+                                  widget.gameType,
+                                ) &&
+                                _socket.lobbyStake > 0)
+                              _ReadyButton(
+                                ready:
+                                    _socket.lobbyReady[_socket.userId ?? ''] ==
+                                    true,
+                                stake: _socket.lobbyStake,
+                                color: widget.color,
+                                onChanged: (ready) => _socket.setLobbyReady(
+                                  widget.gameType,
+                                  ready,
+                                ),
+                              )
+                            else
+                              Text(
+                                '방장이 게임을 시작할 때까지 기다려주세요',
+                                textAlign: TextAlign.center,
+                                style: mainBody(size: 14, color: kMainSub),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
