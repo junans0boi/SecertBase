@@ -51,8 +51,8 @@ export const WEAPONS = {
   cluster:  { name: '집속탄',     damage: 18, blastR: 3, count: 1, kind: 'cluster', bomblets: 4 },
   teleport: { name: '순간이동탄', damage: 0,  blastR: 0, count: 1, kind: 'teleport' },
   // 전차 전용 특수탄
-  quake:    { name: '지진탄',     damage: 50, blastR: 9, count: 0, kind: 'blast', special: 'rhino' },
-  shotgun:  { name: '산탄',       damage: 14, blastR: 2, count: 0, kind: 'spread', shots: 5, spreadDeg: 8, special: 'falcon' },
+  quake:    { name: '지진탄',     damage: 60, blastR: 9, count: 0, kind: 'blast', special: 'rhino' },
+  shotgun:  { name: '산탄',       damage: 15, blastR: 2, count: 0, kind: 'spread', shots: 5, spreadDeg: 4, special: 'falcon' },
   drill:    { name: '드릴탄',     damage: 50, blastR: 3, count: 0, kind: 'blast', penetrates: true, special: 'mole' },
   wall:     { name: '방벽탄',     damage: 0,  blastR: 5, count: 0, kind: 'wall', special: 'turtle' },
 };
@@ -499,16 +499,14 @@ function resolveBlast(state, shooterIdx, impact, weapon, damageMul, events, stag
   if (weapon.kind === 'wall') {
     const { terrain, changed } = raiseMound(state.terrain, impact.col, weapon.blastR);
     state.terrain = terrain;
-    events.push({ type: 'mound', col: impact.col, r: weapon.blastR, changed, stage });
+    events.push({ type: 'mound', col: impact.col, row: surfaceY(terrain, impact.col) - 1, r: weapon.blastR, changed, stage });
     return { dealt: [0, 0], hitAny: false };
   }
-  if (!weapon.penetrates) {
-    const { terrain, changed } = carveBlast(state.terrain, impact.col, weapon.blastR);
-    state.terrain = terrain;
-    events.push({ type: 'blast', col: impact.col, row: impact.row, r: weapon.blastR, changed, stage });
-  } else {
-    events.push({ type: 'blast', col: impact.col, row: impact.row, r: weapon.blastR, changed: [], stage });
-  }
+  // 관통탄(드릴)은 땅속 깊이 파고든 뒤 터지므로 일반 폭발보다 한 칸 더 깊은 구덩이를 남긴다.
+  const carveR = weapon.penetrates ? weapon.blastR + 1 : weapon.blastR;
+  const { terrain, changed } = carveBlast(state.terrain, impact.col, carveR);
+  state.terrain = terrain;
+  events.push({ type: 'blast', col: impact.col, row: impact.row, r: carveR, changed, stage, ...(weapon.penetrates ? { drill: true } : {}) });
 
   const dealt = [0, 0];
   for (let pi = 0; pi < state.players.length; pi++) {

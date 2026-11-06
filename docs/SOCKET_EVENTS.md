@@ -195,7 +195,9 @@ Phases: `select` → `aiming` → `result`. Turns last 30 s (server timer,
 20 (damage ×1.5), turn 30 decides by HP ratio. `events[]` entries carry `stage`
 (cluster bomblets use stage 1) and types `shell`, `blast`, `mound`, `damage`,
 `shield`, `crate`, `crate_drop`, `fall`, `teleport`, `split`, `heal`,
-`buff_used`, `sudden_death`. Rematches go through the restart protocol and keep
+`buff_used`, `sudden_death`. A drill shell's `blast` carries `drill: true` and
+carves one cell deeper; `mound` carries the new surface `row`; `heal` with
+`cause: 'regen'` is the turtle's per-turn regeneration. Rematches go through the restart protocol and keep
 the series score and stake.
 
 If a partner deletes their account (via `DELETE /user`), the remaining partner's socket receives `partner:disconnected` (reason: `partner_deleted_account`) and is disconnected from the room.

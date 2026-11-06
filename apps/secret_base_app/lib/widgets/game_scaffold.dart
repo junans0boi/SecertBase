@@ -10,10 +10,12 @@ class GameScaffold extends StatelessWidget {
   final double maxContentWidth;
   final bool fullBleed;
   final bool showAppBar;
-  final Color? backgroundColor;
 
   /// 이 화면의 게임 종류(다른 게임의 안내를 거른다).
   final String? gameType;
+
+  /// 화면 배경색(기본: 앱 배경). 어두운 게임 화면은 상태바 영역까지 맞춘다.
+  final Color? backgroundColor;
 
   const GameScaffold({
     super.key,
