@@ -199,7 +199,6 @@ class AuthErrorLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = V2Palette.of(context);
     return Semantics(
       liveRegion: true,
       child: Padding(

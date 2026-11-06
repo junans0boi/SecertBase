@@ -2,11 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../core/app_theme.dart';
-import '../../core/main_design.dart';
-import '../../core/auth_service.dart';
-import '../archive/personal_history_screen.dart';
 
+import '../../core/auth_service.dart';
+import '../../v2/v2.dart';
+import '../archive/personal_history_screen.dart';
+import 'account_menu.dart';
+import 'auth_parts.dart';
+
+/// 상대와 연결하기: 공유(내 코드) → 입력(받은 코드) → 축하(main.dart가 보여 줌).
+/// 연결 전에도 개인 보관함과 계정 메뉴(고객센터·약관·로그아웃·탈퇴)에 닿는다.
 class PartnerScreen extends StatefulWidget {
   const PartnerScreen({super.key});
 
@@ -16,22 +20,25 @@ class PartnerScreen extends StatefulWidget {
 
 class _PartnerScreenState extends State<PartnerScreen> {
   final _codeCtrl = TextEditingController();
-  bool _loading = false;
+  final _auth = AuthService();
+
+  bool _busy = false;
   bool _requestsLoading = true;
-  String? _error;
+  bool _inputMode = false;
+  String? _codeError;
   String? _requestsError;
+  String? _clipboardCode;
   List<Map<String, dynamic>> _sent = [];
   List<Map<String, dynamic>> _received = [];
   Timer? _pollTimer;
 
-  final _auth = AuthService();
-
   @override
   void initState() {
     super.initState();
+    _auth.addListener(_onAuth);
     _loadRequests(showLoading: true);
     _pollTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
-      if (mounted && !_requestsLoading) {
+      if (mounted && !_requestsLoading && !_busy) {
         _loadRequests();
         _auth.getProfile();
       }
@@ -40,9 +47,14 @@ class _PartnerScreenState extends State<PartnerScreen> {
 
   @override
   void dispose() {
+    _auth.removeListener(_onAuth);
     _codeCtrl.dispose();
     _pollTimer?.cancel();
     super.dispose();
+  }
+
+  void _onAuth() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadRequests({bool showLoading = false}) async {
@@ -57,7 +69,7 @@ class _PartnerScreenState extends State<PartnerScreen> {
     if (data == null) {
       setState(() {
         _requestsLoading = false;
-        _requestsError = '연결 요청을 불러오지 못했어요.';
+        _requestsError = '연결 요청을 불러오지 못했어요. 인터넷 연결을 확인해 주세요.';
       });
       return;
     }
@@ -70,408 +82,504 @@ class _PartnerScreenState extends State<PartnerScreen> {
     });
   }
 
-  Future<void> _linkPartner() async {
-    if (_loading) return;
+  Future<void> _readClipboard() async {
+    try {
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      final text = (data?.text ?? '').trim().toUpperCase();
+      final mine = _myCode?.toUpperCase();
+      if (mounted &&
+          RegExp(r'^[A-Z0-9]{6}$').hasMatch(text) &&
+          text != mine) {
+        setState(() => _clipboardCode = text);
+      }
+    } catch (_) {}
+  }
+
+  void _setInputMode(bool on) {
+    setState(() {
+      _inputMode = on;
+      _codeError = null;
+    });
+    if (on) _readClipboard();
+  }
+
+  Future<void> _sendRequest() async {
+    if (_busy) return;
     final code = _codeCtrl.text.trim().toUpperCase();
-    if (code.isEmpty) {
-      setState(() => _error = '상대방 코드를 입력해주세요.');
+    if (code.length != 6) {
+      setState(() => _codeError = '영문 대문자와 숫자 6자리를 입력해 주세요.');
       return;
     }
-
+    FocusScope.of(context).unfocus();
     setState(() {
-      _loading = true;
-      _error = null;
+      _busy = true;
+      _codeError = null;
     });
-
-    final error = await _auth.sendPairingRequest(code);
-
+    final err = await _auth.requestPairing(code);
     if (!mounted) return;
-    if (error == null) {
+    setState(() => _busy = false);
+    if (err == null) {
       _codeCtrl.clear();
-      setState(() => _loading = false);
+      setState(() => _inputMode = false);
       await _loadRequests();
-    } else {
-      setState(() {
-        _loading = false;
-        _error = error;
-      });
+      return;
+    }
+    switch (err) {
+      case 'active_couple_exists':
+        final again = await showV2Dialog<bool>(
+          context,
+          title: '이미 연결된 코드예요',
+          message: '이 코드의 주인은 지금 다른 상대와 연결되어 있어요. 코드를 다시 확인해 주세요.',
+          actions: const [
+            V2DialogAction(label: '코드 다시 입력하기', value: true),
+            V2DialogAction(
+              label: '내 코드 보내기',
+              value: false,
+              variant: V2ButtonVariant.text,
+            ),
+          ],
+        );
+        if (mounted && again == false) _setInputMode(false);
+      case 'recipient_not_found':
+        setState(() => _codeError = '없는 코드예요. 상대의 코드를 다시 확인해 주세요.');
+      case 'cannot_pair_with_self':
+        setState(() => _codeError = '내 코드예요. 상대에게 받은 코드를 입력해 주세요.');
+      case 'request_already_pending':
+        setState(() => _codeError = '이미 대기 중인 요청이 있어요.');
+        await _loadRequests();
+      default:
+        setState(() => _codeError = authErrorMessage(err));
     }
   }
 
   Future<void> _respond(int id, String action) async {
-    if (_loading) return;
-    setState(() => _loading = true);
-    final success = await _auth.respondToPairingRequest(id, action);
+    if (_busy) return;
+    setState(() => _busy = true);
+    final ok = await _auth.respondToPairingRequest(id, action);
     if (!mounted) return;
-    setState(() => _loading = false);
-    if (success) {
+    setState(() => _busy = false);
+    if (ok) {
       await _loadRequests();
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('요청 상태를 바꾸지 못했어요. 다시 시도해주세요.')),
+      showV2Snack(
+        context,
+        '요청을 처리하지 못했어요. 다시 시도해 주세요.',
+        tone: V2Tone.err,
       );
     }
   }
 
-  void _copyMyCode(String code) {
-    Clipboard.setData(ClipboardData(text: code));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('회원코드가 복사되었습니다. 상대방에게 전달해 주세요.')),
-    );
+  Future<void> _copy(String text, String done) async {
+    await Clipboard.setData(ClipboardData(text: text));
+    if (mounted) showV2Snack(context, done);
   }
 
-  Future<void> _editProfile() async {
-    final controller = TextEditingController(
-      text: '${_auth.user?['Nickname'] ?? _auth.user?['UserName'] ?? ''}',
-    );
-    final nickname = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('프로필 이름 수정'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 50,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('취소'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('저장'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (nickname == null || nickname.isEmpty) return;
-    await _auth.updateProfile(
-      fullName:
-          '${_auth.user?['FullName'] ?? _auth.user?['fullName'] ?? nickname}',
-      nickname: nickname,
-      birthDate:
-          '${_auth.user?['BirthDate'] ?? _auth.user?['birthDate'] ?? '2000-01-01'}'
-              .split('T')
-              .first,
-    );
-    if (mounted) setState(() {});
+  String? get _myCode {
+    final v = _auth.user?['UserCode']?.toString();
+    return v == null || v.isEmpty ? null : v;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final myCode = _auth.user?['UserCode']?.toString();
-    final isPaired = _auth.user?['PartnerCode']?.toString().isNotEmpty == true;
-    final partnerName = _partnerName;
-    final hasReceivedRequest = _received.any(
-      (item) => item['status'] == 'pending',
-    );
-    final hasSentRequest = _sent.any((item) => item['status'] == 'pending');
-    final hasExpiredRequest = [
-      ..._sent,
-      ..._received,
-    ].any((item) => item['status'] == 'expired');
-
-    return Scaffold(
-      backgroundColor: kMainBg,
-      body: CozyPage(
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 400),
-                child: Column(
-                  children: [
-                    const BrandLogo(size: 80),
-                    const SizedBox(height: 20),
-                    Text(
-                      isPaired ? '연결된 우리 공간' : '연결 대기 공간',
-                      style: mainTitle(size: 30, color: kMainRose),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      isPaired
-                          ? '${partnerName ?? '상대방'}와 연결되어 있어요.\n이제 둘만의 공간을 시작해 보세요.'
-                          : '상대방에게 요청을 보내고\n수락을 기다려 주세요.',
-                      style: mainBody(size: 14, color: kMainSub),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '개인 검사는 연결이 끊겨도 유지돼요.\n궁합과 커플 검사는 현재 연결된 두 사람에게만 보여요.',
-                      style: mainBody(size: 12, color: kMainMuted, height: 1.5),
-                      textAlign: TextAlign.center,
-                    ),
-                    TextButton.icon(
-                      onPressed: _editProfile,
-                      icon: const Icon(Icons.edit_outlined),
-                      label: Text(_myName),
-                    ),
-                    const SizedBox(height: 32),
-                    if (!isPaired && myCode != null) _myCodeCard(myCode),
-                    if (!isPaired && myCode != null) const SizedBox(height: 24),
-                    PartnerConnectionSummary(
-                      paired: isPaired,
-                      partnerName: partnerName,
-                      hasReceivedRequest: hasReceivedRequest,
-                      hasSentRequest: hasSentRequest,
-                      hasExpiredRequest: hasExpiredRequest,
-                      hasRequestError: _requestsError != null,
-                    ),
-                    const SizedBox(height: 24),
-                    const Divider(color: kMainLine),
-                    const SizedBox(height: 24),
-                    if (!isPaired) _partnerForm(),
-                    const SizedBox(height: 24),
-                    _requestSection(),
-                    const SizedBox(height: 24),
-                    OutlinedButton.icon(
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const PersonalHistoryScreen(),
-                        ),
-                      ),
-                      icon: const Icon(Icons.inventory_2_outlined),
-                      label: const Text('개인 보관함 열기'),
-                    ),
-                    const SizedBox(height: 40),
-                    TextButton(
-                      onPressed: () => _auth.logout(),
-                      child: Text(
-                        '다른 계정으로 로그인',
-                        style: mainBody(size: 13, color: kMainMuted),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
+  String get _myName {
+    final v = '${_auth.user?['Nickname'] ?? _auth.user?['UserName'] ?? ''}'
+        .trim();
+    return v.isEmpty ? '내' : v;
   }
-
-  Widget _myCodeCard(String code) {
-    return MainCard(
-      padding: const EdgeInsets.all(20),
-      color: kMainSageSoft,
-      child: Column(
-        children: [
-          Text(
-            '내 회원코드',
-            style: mainBody(size: 13, color: kMainSub, weight: FontWeight.w700),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            code,
-            style: mainTitle(
-              size: 40,
-              color: kMainInk,
-              weight: FontWeight.w800,
-              letterSpacing: 4,
-            ),
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => _copyMyCode(code),
-              icon: const Icon(Icons.copy, size: 16),
-              label: const Text('내 코드 복사하기'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: kMainInk,
-                side: const BorderSide(color: kMainSage),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _partnerForm() {
-    return MainCard(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '상대방에게 연결 요청',
-            style: mainBody(size: 13, color: kMainSub, weight: FontWeight.w700),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _codeCtrl,
-            enabled: !_loading,
-            textAlign: TextAlign.center,
-            textCapitalization: TextCapitalization.characters,
-            textInputAction: TextInputAction.done,
-            maxLength: 6,
-            onSubmitted: (_) => _linkPartner(),
-            style: mainTitle(size: 26, letterSpacing: 2),
-            decoration: InputDecoration(
-              hintText: 'ABC123',
-              counterText: '',
-              filled: true,
-              fillColor: kMainPaperSoft,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
-            ),
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 12),
-            Center(
-              child: Text(_error!, style: mainBody(size: 13, color: kError)),
-            ),
-          ],
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: FilledButton(
-              onPressed: _loading ? null : _linkPartner,
-              style: FilledButton.styleFrom(
-                backgroundColor: kMainRose,
-                shape: const StadiumBorder(),
-              ),
-              child: _loading
-                  ? const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : Text(
-                      '요청 보내기',
-                      style: mainBody(
-                        size: 16,
-                        color: Colors.white,
-                        weight: FontWeight.w700,
-                      ),
-                    ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _requestSection() {
-    if (_requestsLoading) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
-        child: CircularProgressIndicator(color: kMainRose),
-      );
-    }
-    if (_requestsError != null) {
-      return MainCard(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Text(
-              _requestsError!,
-              textAlign: TextAlign.center,
-              style: mainBody(size: 13, color: kMainSub),
-            ),
-            const SizedBox(height: 10),
-            TextButton(
-              onPressed: _loading
-                  ? null
-                  : () => _loadRequests(showLoading: true),
-              child: const Text('다시 불러오기'),
-            ),
-          ],
-        ),
-      );
-    }
-    final received = _received
-        .where((item) => item['status'] == 'pending')
-        .toList();
-    final sent = _sent.where((item) => item['status'] == 'pending').toList();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (received.isNotEmpty) ...[
-          Text('받은 요청', style: mainTitle(size: 20)),
-          const SizedBox(height: 10),
-          ...received.map((item) => _requestTile(item, receivedRequest: true)),
-          const SizedBox(height: 20),
-        ],
-        if (sent.isNotEmpty) ...[
-          Text('보낸 요청', style: mainTitle(size: 20)),
-          const SizedBox(height: 10),
-          ...sent.map((item) => _requestTile(item, receivedRequest: false)),
-        ] else if (received.isEmpty)
-          Text(
-            '아직 대기 중인 연결 요청이 없어요.',
-            style: mainBody(size: 13, color: kMainMuted),
-          ),
-      ],
-    );
-  }
-
-  Widget _requestTile(
-    Map<String, dynamic> item, {
-    required bool receivedRequest,
-  }) {
-    final candidate = receivedRequest
-        ? item['senderNickname']
-        : item['recipientNickname'];
-    final name = candidate is String && candidate.trim().isNotEmpty
-        ? candidate.trim()
-        : '상대방';
-    return MainCard(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(name, style: mainBody(weight: FontWeight.w700)),
-          ),
-          if (receivedRequest) ...[
-            TextButton(
-              onPressed: _loading
-                  ? null
-                  : () => _respond(item['id'] as int, 'reject'),
-              child: const Text('거절'),
-            ),
-            FilledButton(
-              onPressed: _loading
-                  ? null
-                  : () => _respond(item['id'] as int, 'accept'),
-              child: const Text('수락'),
-            ),
-          ] else
-            TextButton(
-              onPressed: _loading
-                  ? null
-                  : () => _respond(item['id'] as int, 'cancel'),
-              child: const Text('취소'),
-            ),
-        ],
-      ),
-    );
-  }
-
-  String get _myName =>
-      '${_auth.user?['Nickname'] ?? _auth.user?['UserName'] ?? '프로필'}';
 
   String? get _partnerName {
     final value = _auth.user?['PartnerName'];
     return value is String && value.trim().isNotEmpty ? value.trim() : null;
   }
+
+  String _inviteText(String code) =>
+      '$_myName님이 비밀기지에 초대했어요 💌\n비밀기지 앱에서 코드 $code 를 입력해 주세요.';
+
+  List<Map<String, dynamic>> get _pendingReceived =>
+      _received.where((e) => e['status'] == 'pending').toList();
+  List<Map<String, dynamic>> get _pendingSent =>
+      _sent.where((e) => e['status'] == 'pending').toList();
+
+  String _nameOf(Map<String, dynamic> item, {required bool received}) {
+    final v = received ? item['senderNickname'] : item['recipientNickname'];
+    return v is String && v.trim().isNotEmpty ? v.trim() : '상대';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final paired = _auth.user?['PartnerCode']?.toString().isNotEmpty == true;
+    return V2Theme(
+      child: Scaffold(
+        appBar: V2Header(
+          title: paired ? '연결 상태' : '상대와 연결하기',
+          actions: [
+            V2IconButton(
+              icon: V2Icons.menu,
+              tooltip: '계정 메뉴',
+              onPressed: () => showAccountSheet(context),
+            ),
+          ],
+        ),
+        body: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(
+                  V2Space.page,
+                  V2Space.x2,
+                  V2Space.page,
+                  V2Space.x8,
+                ),
+                children: paired ? _pairedBody() : _unpairedBody(),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _pairedBody() => [
+    PartnerConnectionSummary(paired: true, partnerName: _partnerName),
+    const SizedBox(height: V2Space.x5),
+    V2Button(label: '돌아가기', onPressed: () => Navigator.maybePop(context)),
+  ];
+
+  List<Widget> _unpairedBody() {
+    final receivedPending = _pendingReceived;
+    final sentPending = _pendingSent;
+    final waiting = receivedPending.isEmpty && sentPending.isNotEmpty;
+    final step = receivedPending.isNotEmpty
+        ? 1
+        : (waiting || _inputMode ? 2 : 1);
+    final hasExpired = [
+      ..._sent,
+      ..._received,
+    ].any((e) => e['status'] == 'expired');
+
+    return [
+      _StepIndicator(step: step),
+      const SizedBox(height: V2Space.x5),
+      if (_requestsError != null) ...[
+        V2Banner(
+          tone: V2BannerTone.warn,
+          message: _requestsError!,
+          actionLabel: '다시 불러오기',
+          onAction: () => _loadRequests(showLoading: true),
+        ),
+        const SizedBox(height: V2Space.x4),
+      ],
+      if (hasExpired && sentPending.isEmpty && receivedPending.isEmpty) ...[
+        const V2Banner(
+          tone: V2BannerTone.info,
+          message: '지난 요청의 기간이 끝났어요. 새로 요청해 주세요.',
+        ),
+        const SizedBox(height: V2Space.x4),
+      ],
+      if (_requestsLoading)
+        const V2SkeletonCard()
+      else if (receivedPending.isNotEmpty) ...[
+        for (final item in receivedPending) _receivedCard(item),
+        const SizedBox(height: V2Space.x5),
+        Text('직접 코드를 보내려면', style: V2Text.cap),
+        const SizedBox(height: V2Space.x2),
+        _codeCard(compact: true),
+      ] else if (waiting) ...[
+        _waitingCard(sentPending.first),
+        const SizedBox(height: V2Space.x5),
+        _archiveCard(),
+      ] else if (_inputMode)
+        ..._inputView()
+      else ...[
+        ..._shareView(),
+        const SizedBox(height: V2Space.x5),
+        _archiveCard(),
+      ],
+    ];
+  }
+
+  Widget _codeCard({bool compact = false}) {
+    final code = _myCode;
+    if (code == null) {
+      return const V2SkeletonCard();
+    }
+    return V2Card(
+      gradient: V2Gradients.hero,
+      padding: EdgeInsets.all(compact ? V2Space.x4 : V2Space.x5),
+      child: Column(
+        children: [
+          Text(
+            '내 초대 코드',
+            style: V2Text.label.copyWith(color: Colors.white),
+          ),
+          const SizedBox(height: V2Space.x2),
+          Semantics(
+            label: '내 초대 코드 ${code.split('').join(' ')}',
+            child: ExcludeSemantics(
+              child: Text(
+                code,
+                style: V2Text.serif(
+                  size: compact ? 32 : 44,
+                  color: Colors.white,
+                ).copyWith(letterSpacing: 6),
+              ),
+            ),
+          ),
+          const SizedBox(height: V2Space.x3),
+          V2Button(
+            label: '코드 복사',
+            icon: V2Icons.copy,
+            variant: V2ButtonVariant.soft,
+            size: V2ButtonSize.sm,
+            onPressed: () => _copy(code, '코드를 복사했어요. 상대에게 보내 주세요.'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _shareView() {
+    final code = _myCode;
+    return [
+      Text('내 코드를 상대에게 보내 주세요', style: V2Text.title),
+      const SizedBox(height: V2Space.x1),
+      Text('상대가 코드를 입력하면 연결 요청이 와요. 수락하면 연결돼요.', style: V2Text.cap),
+      const SizedBox(height: V2Space.x5),
+      _codeCard(),
+      if (code != null) ...[
+        const SizedBox(height: V2Space.x4),
+        V2Card(
+          variant: V2CardVariant.soft,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('보낼 문구 미리보기', style: V2Text.label),
+              const SizedBox(height: V2Space.x2),
+              Text(_inviteText(code), style: V2Text.body),
+            ],
+          ),
+        ),
+        const SizedBox(height: V2Space.x4),
+        V2Button(
+          label: '초대 문구 복사',
+          icon: V2Icons.share,
+          onPressed: () => _copy(_inviteText(code), '초대 문구를 복사했어요. 메시지에 붙여넣어 보내 주세요.'),
+        ),
+      ],
+      const SizedBox(height: V2Space.x1),
+      V2Button(
+        label: '상대에게 코드를 받았어요',
+        variant: V2ButtonVariant.text,
+        onPressed: () => _setInputMode(true),
+      ),
+    ];
+  }
+
+  List<Widget> _inputView() => [
+    Text('받은 코드를 입력해 주세요', style: V2Text.title),
+    const SizedBox(height: V2Space.x1),
+    Text('영문 대문자와 숫자 6자리예요.', style: V2Text.cap),
+    const SizedBox(height: V2Space.x5),
+    V2TextField(
+      label: '상대의 초대 코드',
+      hint: 'ABC123',
+      controller: _codeCtrl,
+      enabled: !_busy,
+      autofocus: true,
+      maxLength: 6,
+      error: _codeError,
+      textInputAction: TextInputAction.done,
+      keyboardType: TextInputType.visiblePassword,
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')),
+        TextInputFormatter.withFunction(
+          (old, v) => v.copyWith(text: v.text.toUpperCase()),
+        ),
+      ],
+      onChanged: (_) => setState(() => _codeError = null),
+      onSubmitted: (_) => _sendRequest(),
+    ),
+    if (_clipboardCode != null) ...[
+      const SizedBox(height: V2Space.x3),
+      V2Card(
+        variant: V2CardVariant.soft,
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('복사한 코드가 있어요', style: V2Text.cap),
+                  Text(_clipboardCode!, style: V2Text.bodyStrong),
+                ],
+              ),
+            ),
+            V2Button(
+              label: '붙여넣기',
+              variant: V2ButtonVariant.soft,
+              size: V2ButtonSize.sm,
+              onPressed: () => setState(() {
+                _codeCtrl.text = _clipboardCode!;
+                _codeError = null;
+              }),
+            ),
+          ],
+        ),
+      ),
+    ],
+    const SizedBox(height: V2Space.x5),
+    V2Button(
+      label: '연결 요청 보내기',
+      loading: _busy,
+      onPressed: _busy || _codeCtrl.text.trim().length != 6
+          ? null
+          : _sendRequest,
+    ),
+    V2Button(
+      label: '내 코드 보내기',
+      variant: V2ButtonVariant.text,
+      onPressed: _busy ? null : () => _setInputMode(false),
+    ),
+  ];
+
+  Widget _receivedCard(Map<String, dynamic> item) {
+    final name = _nameOf(item, received: true);
+    return V2Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              V2Avatar(name: name, color: V2Avatar.partnerColor),
+              const SizedBox(width: V2Space.x3),
+              Expanded(
+                child: Text('$name님이 연결을 요청했어요', style: V2Text.bodyStrong),
+              ),
+            ],
+          ),
+          const SizedBox(height: V2Space.x3),
+          Text('수락하면 둘만의 공간이 만들어져요. 연결은 설정에서 언제든 끊을 수 있어요.', style: V2Text.cap),
+          const SizedBox(height: V2Space.x4),
+          V2Button(
+            label: '수락하기',
+            loading: _busy,
+            onPressed: _busy ? null : () => _respond(item['id'] as int, 'accept'),
+          ),
+          V2Button(
+            label: '거절',
+            variant: V2ButtonVariant.text,
+            onPressed: _busy ? null : () => _respond(item['id'] as int, 'reject'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _waitingCard(Map<String, dynamic> item) {
+    final name = _nameOf(item, received: false);
+    return V2Card(
+      child: Column(
+        children: [
+          V2AvatarPair(me: _myName, partner: name),
+          const SizedBox(height: V2Space.x4),
+          Text('$name님의 수락을\n기다리고 있어요', textAlign: TextAlign.center, style: V2Text.head),
+          const SizedBox(height: V2Space.x2),
+          Text(
+            V2Text.keepAll('수락하면 바로 연결돼요. 이 화면을 열어 두지 않아도 돼요.'),
+            textAlign: TextAlign.center,
+            style: V2Text.cap,
+          ),
+          const SizedBox(height: V2Space.x4),
+          V2Button(
+            label: '요청 취소',
+            variant: V2ButtonVariant.soft,
+            onPressed: _busy ? null : () => _respond(item['id'] as int, 'cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _archiveCard() => V2Card(
+    variant: V2CardVariant.soft,
+    onTap: () => Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const PersonalHistoryScreen()),
+    ),
+    child: Row(
+      children: [
+        const V2Art(icon: V2Icons.lock),
+        const SizedBox(width: V2Space.x3),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('개인 보관함', style: V2Text.bodyStrong),
+              Text('연결하기 전에도 나만의 기록을 남길 수 있어요.', style: V2Text.cap),
+            ],
+          ),
+        ),
+        const Icon(V2Icons.chevron),
+      ],
+    ),
+  );
 }
 
+/// 공유 → 입력 → 축하 3단계 표시.
+class _StepIndicator extends StatelessWidget {
+  const _StepIndicator({required this.step});
+  final int step;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = V2Palette.of(context);
+    const labels = ['공유', '입력', '축하'];
+    return Semantics(
+      label: '3단계 중 $step단계: ${labels[step - 1]}',
+      child: ExcludeSemantics(
+        child: Row(
+          children: [
+            for (var i = 0; i < 3; i++) ...[
+              Container(
+                width: 24,
+                height: 24,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: i + 1 <= step ? p.primary : p.soft2,
+                ),
+                child: i + 1 < step
+                    ? Icon(V2Icons.check, size: 14, color: p.onPrimary)
+                    : Text(
+                        '${i + 1}',
+                        style: V2Text.label.copyWith(
+                          color: i + 1 == step ? p.onPrimary : p.sub,
+                        ),
+                      ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                labels[i],
+                style: V2Text.label.copyWith(
+                  color: i + 1 == step ? p.ink : p.sub,
+                ),
+              ),
+              if (i < 2)
+                Expanded(
+                  child: Container(
+                    height: 2,
+                    margin: const EdgeInsets.symmetric(horizontal: 8),
+                    color: i + 1 < step ? p.primary : p.line,
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 연결 상태 요약 카드(연결됨/요청 대기/받은 요청/끝난 요청/불러오기 실패).
 class PartnerConnectionSummary extends StatelessWidget {
   const PartnerConnectionSummary({
     super.key,
@@ -492,67 +600,65 @@ class PartnerConnectionSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (title, description, icon, color) = switch (true) {
+    final name = partnerName ?? '상대';
+    final (title, description, icon, tone) = switch (true) {
       _ when paired => (
         '연결됨',
-        '${partnerName ?? '상대방'}와 연결되어 있어요.',
-        Icons.favorite_rounded,
-        kMainRose,
+        '$name님과 연결되어 있어요.',
+        V2Icons.heart,
+        V2Tone.rose,
       ),
       _ when hasRequestError => (
         '상태를 확인할 수 없어요',
         '연결 요청을 다시 불러오면 최신 상태를 확인할 수 있어요.',
-        Icons.cloud_off_rounded,
-        kMainMuted,
+        V2Icons.offline,
+        V2Tone.neutral,
       ),
       _ when hasReceivedRequest => (
         '받은 요청이 있어요',
-        '아래 요청을 확인하고 연결 여부를 선택해주세요.',
-        Icons.mark_email_unread_outlined,
-        kMainRose,
+        '아래 요청을 확인하고 연결 여부를 선택해 주세요.',
+        V2Icons.send,
+        V2Tone.rose,
       ),
       _ when hasSentRequest => (
         '수락을 기다리는 중이에요',
-        '상대방이 요청을 확인하면 연결돼요.',
-        Icons.hourglass_top_rounded,
-        kMainSage,
+        '상대가 요청을 확인하면 연결돼요.',
+        V2Icons.refresh,
+        V2Tone.sage,
       ),
       _ when hasExpiredRequest => (
         '요청 기간이 끝났어요',
-        '새로운 상대방 코드로 다시 요청해주세요.',
-        Icons.schedule_rounded,
-        kMainMuted,
+        '새로운 코드로 다시 요청해 주세요.',
+        V2Icons.calendar,
+        V2Tone.neutral,
       ),
       _ => (
         '아직 연결 전이에요',
-        '내 코드를 공유하거나 상대방 코드를 입력해 연결을 시작하세요.',
-        Icons.link_rounded,
-        kMainSage,
+        '내 코드를 보내거나 상대의 코드를 입력해 연결을 시작해요.',
+        V2Icons.link,
+        V2Tone.sage,
       ),
     };
-
-    return MainCard(
-      color: kMainPaper,
-      padding: const EdgeInsets.all(18),
+    final colors = V2ToneColors.of(tone);
+    return V2Card(
+      variant: V2CardVariant.soft,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          IconBadge(
-            color: color,
-            backgroundColor: color.withAlpha(28),
-            child: Icon(icon, color: color),
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(color: colors.soft, shape: BoxShape.circle),
+            child: Icon(icon, color: colors.text),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: V2Space.x3),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: mainBody(weight: FontWeight.w800)),
-                const SizedBox(height: 4),
-                Text(
-                  description,
-                  style: mainBody(size: 13, color: kMainSub, height: 1.45),
-                ),
+                Text(title, style: V2Text.bodyStrong),
+                const SizedBox(height: 2),
+                Text(description, style: V2Text.cap),
               ],
             ),
           ),

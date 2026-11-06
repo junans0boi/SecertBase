@@ -9,12 +9,17 @@ import 'features/moment_loop/application/upload_outbox.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/semantics.dart';
 import 'core/app_theme.dart';
-import 'core/main_design.dart';
 import 'core/socket_service.dart';
 import 'core/auth_service.dart';
 import 'core/yut_audio.dart';
+import 'screens/auth/auth_parts.dart';
+import 'screens/auth/connecting_screen.dart';
+import 'screens/auth/google_signup_screen.dart';
 import 'screens/auth/login_screen.dart';
+import 'screens/auth/pairing_celebrate_screen.dart';
 import 'screens/auth/partner_screen.dart';
+import 'screens/onboarding/onboarding_screen.dart';
+import 'v2/v2.dart';
 import 'screens/home_shell.dart';
 import 'v2/gallery/v2_gallery_screen.dart';
 
@@ -52,11 +57,15 @@ Future<void> main() async {
       systemNavigationBarIconBrightness: Brightness.dark,
     ),
   );
-  runApp(const SecretBaseApp());
+  final onboardingSeen = auth.token != null || await hasSeenOnboarding();
+  runApp(SecretBaseApp(onboardingSeen: onboardingSeen));
 }
 
 class SecretBaseApp extends StatefulWidget {
-  const SecretBaseApp({super.key});
+  const SecretBaseApp({super.key, this.onboardingSeen = true});
+
+  /// false면 로그인 전에 온보딩 3장을 먼저 보여 준다(첫 실행).
+  final bool onboardingSeen;
 
   @override
   State<SecretBaseApp> createState() => _SecretBaseAppState();
@@ -69,12 +78,17 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
   bool _autoConnecting = false;
   bool _reunionNoticeScheduled = false;
   String? _outboxIdentity;
+  late bool _onboardingSeen = widget.onboardingSeen;
+  bool? _wasPaired;
+  bool _showCelebration = false;
 
   @override
   void initState() {
     super.initState();
     _socket.addListener(_rebuild);
     _auth.addListener(_onAuthChanged);
+    // 알림 권한은 연결 축하 화면의 안내 시트를 거쳐서만 묻는다.
+    PushService.instance.deferPermissionPrompt = true;
 
     // Initial check for auto-connect
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -90,6 +104,20 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
   }
 
   void _onAuthChanged() {
+    final paired = _auth.token != null &&
+        _auth.user?['PartnerCode']?.toString().isNotEmpty == true;
+    if (_auth.token == null) {
+      _wasPaired = null;
+      _showCelebration = false;
+    } else {
+      // 이번 실행 중 연결 전 → 연결로 바뀐 순간에만 축하 화면을 보여 준다.
+      if (_wasPaired == false && paired) _showCelebration = true;
+      _wasPaired = paired;
+      if (!_onboardingSeen) {
+        _onboardingSeen = true;
+        unawaited(markOnboardingSeen());
+      }
+    }
     _rebuild();
     if (_auth.user?['ReunionNoticePending'] == true &&
         !_reunionNoticeScheduled) {
@@ -134,19 +162,12 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
       _reunionNoticeScheduled = false;
       return;
     }
-    await showDialog<void>(
-      context: dialogContext,
+    await showV2Dialog<void>(
+      dialogContext,
+      title: '다시 만난 두 분을 응원해요',
+      message: '다시 이어진 두 분의 시간을 응원해요. 이전 기록도 다시 열렸어요.',
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('다시 만난 두 분을 응원해요'),
-        content: const Text('다시 이어진 두 분의 시간을 응원해요. 이전 기록도 다시 열렸어요.'),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('우리의 시간 이어가기'),
-          ),
-        ],
-      ),
+      actions: const [V2DialogAction(label: '우리의 시간 이어가기')],
     );
     await _auth.markReunionNoticeSeen();
     _reunionNoticeScheduled = false;
@@ -198,69 +219,47 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
           onRetry: _auth.loginForKakaoReview,
         );
       }
+      if (!_onboardingSeen) {
+        return OnboardingScreen(
+          key: const ValueKey('onboarding'),
+          onDone: () => setState(() => _onboardingSeen = true),
+        );
+      }
       return const LoginScreen(key: ValueKey('login'));
     }
 
-    // 2. Check Partner Pairing
+    // 2. Google 첫 로그인: 닉네임·생일·동의를 마쳐야 들어올 수 있다.
+    if (_auth.signupRequired) {
+      return const GoogleSignupScreen(key: ValueKey('google-signup'));
+    }
+
+    // 3. Check Partner Pairing
     if (_auth.user?['PartnerCode'] == null) {
       return const PartnerScreen(key: ValueKey('partner'));
     }
 
-    // 3. Check Socket Connection
+    // 4. 연결 직후 축하
+    if (_showCelebration) {
+      return PairingCelebrateScreen(
+        key: const ValueKey('celebrate'),
+        onDone: () => setState(() => _showCelebration = false),
+      );
+    }
+
+    // 5. Check Socket Connection
     if (_socket.isConnected) {
       return const HomeShell(key: ValueKey('home'));
     }
 
-    // 4. Paired but not connected -> Stay in Loading/Connecting State
-    // Never show EntryScreen for paired users
-    return Scaffold(
-      backgroundColor: kMainBg,
-      body: CozyPage(
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const BrandLogo(size: 120),
-              const SizedBox(height: 24),
-              Text('비밀기지로 입장하는 중...', style: mainTitle(size: 24)),
-              const SizedBox(height: 12),
-              Text(
-                [
-                  AppInfo.current?.displayVersion ?? '',
-                  _socket.status,
-                ].where((part) => part.isNotEmpty).join(' · '),
-                style: mainBody(size: 14, color: kMainSub),
-              ),
-              if (_socket.status == '연결 실패' || _socket.status == '연결 끊김') ...[
-                const SizedBox(height: 32),
-                SizedBox(
-                  width: 200,
-                  height: 48,
-                  child: FilledButton(
-                    onPressed: _autoConnect,
-                    style: FilledButton.styleFrom(backgroundColor: kMainInk),
-                    child: Text(
-                      '다시 시도하기',
-                      style: mainBody(
-                        color: Colors.white,
-                        weight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextButton(
-                  onPressed: () => _auth.logout(),
-                  child: Text(
-                    '로그아웃',
-                    style: mainBody(size: 13, color: kMainMuted),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
+    // 6. Paired but not connected -> 입장 중 / 실패 / 오프라인
+    final failed = _socket.status == '연결 실패' ||
+        _socket.status == '연결 끊김' ||
+        _socket.status.startsWith('입장 실패');
+    return ConnectingScreen(
+      key: const ValueKey('connecting'),
+      failed: failed,
+      onRetry: _autoConnect,
+      onLogout: () => _auth.logout(),
     );
   }
 }
@@ -278,43 +277,35 @@ class _ReviewAutoLoginScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: kMainBg,
-      body: CozyPage(
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const BrandLogo(size: 116),
-              const SizedBox(height: 24),
-              Text('비밀기지로 입장하는 중...', style: mainTitle(size: 24)),
-              const SizedBox(height: 10),
-              Text(
-                error ?? '심사용 계정으로 자동 로그인하고 있어요',
-                style: mainBody(size: 14, color: kMainSub),
-                textAlign: TextAlign.center,
+    return AuthFrame(
+      hero: true,
+      body: Padding(
+        padding: const EdgeInsets.only(top: V2Space.x12 * 2),
+        child: Column(
+          children: [
+            const AuthEmblem(size: 96),
+            const SizedBox(height: V2Space.x6),
+            Text('비밀기지에 들어가는 중이에요', style: V2Text.title),
+            const SizedBox(height: V2Space.x2),
+            Text(
+              error ?? '자동으로 입장하고 있어요',
+              textAlign: TextAlign.center,
+              style: V2Text.cap,
+            ),
+            const SizedBox(height: V2Space.x6),
+            if (loading)
+              const SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(strokeWidth: 3),
+              )
+            else if (error != null)
+              V2Button(
+                label: '다시 입장',
+                fullWidth: false,
+                onPressed: () => onRetry(),
               ),
-              const SizedBox(height: 28),
-              if (loading)
-                const CircularProgressIndicator(color: kMainRose)
-              else if (error != null)
-                SizedBox(
-                  width: 180,
-                  height: 46,
-                  child: FilledButton(
-                    onPressed: () => onRetry(),
-                    style: FilledButton.styleFrom(backgroundColor: kMainInk),
-                    child: Text(
-                      '다시 입장',
-                      style: mainBody(
-                        color: Colors.white,
-                        weight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
+          ],
         ),
       ),
     );

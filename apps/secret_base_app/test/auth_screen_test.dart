@@ -1,66 +1,66 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:secret_base_app/screens/auth/auth_layout.dart';
+import 'package:secret_base_app/screens/auth/auth_parts.dart';
 import 'package:secret_base_app/screens/auth/partner_screen.dart';
+import 'package:secret_base_app/v2/v2.dart';
 
 void main() {
-  test('auth email validation returns readable field errors', () {
-    expect(validateAuthEmail(null), '이메일을 입력해주세요.');
-    expect(validateAuthEmail('not-an-email'), '이메일 주소를 확인해주세요.');
-    expect(validateAuthEmail('hello@example.com'), isNull);
+  test('password and age rules match the server policy', () {
+    expect(isStrongPassword('abcdefg1'), isTrue);
+    expect(isStrongPassword('abcdefgh'), isFalse);
+    expect(isStrongPassword('12345678'), isFalse);
+    expect(isStrongPassword('a1'), isFalse);
+    expect(isValidEmail('hello@example.com'), isTrue);
+    expect(isValidEmail('not-an-email'), isFalse);
+    final today = DateTime(2026, 11, 6);
+    expect(isAtLeast14(DateTime(2012, 11, 6), today: today), isTrue);
+    expect(isAtLeast14(DateTime(2012, 11, 7), today: today), isFalse);
+    expect(isoDate(DateTime(2000, 3, 4)), '2000-03-04');
   });
 
-  testWidgets(
-    'auth page keeps its CTA below the keyboard and exposes loading state',
-    (tester) async {
-      await tester.pumpWidget(
-        MediaQuery(
-          data: const MediaQueryData(viewInsets: EdgeInsets.only(bottom: 320)),
-          child: MaterialApp(
-            home: AuthPage(
-              header: const Text('header'),
-              content: const Text('content'),
-              footer: const AuthButton(
-                label: '로그인',
-                loading: true,
-                onPressed: null,
-              ),
-            ),
-          ),
-        ),
-      );
-
-      final padding = tester.widget<Padding>(
-        find.byWidgetPredicate(
-          (widget) =>
-              widget is Padding &&
-              widget.padding == const EdgeInsets.fromLTRB(24, 12, 24, 340),
-        ),
-      );
-      expect(padding.padding, const EdgeInsets.fromLTRB(24, 12, 24, 340));
-      expect(find.bySemanticsLabel('로그인, 처리 중'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    },
-  );
+  test('server error codes become readable Korean without internal terms', () {
+    for (final code in [
+      'invalid_credentials',
+      'email_already_exists',
+      'weak_password',
+      'under_age',
+      'mail_unavailable',
+      'invalid_code',
+      'code_expired',
+      'network_error',
+      'something_unknown',
+    ]) {
+      final message = authErrorMessage(code);
+      expect(message, isNot(contains('_')), reason: code);
+      expect(message, endsWith('.'), reason: code);
+    }
+  });
 
   testWidgets('partner summary distinguishes connected and waiting states', (
     tester,
   ) async {
     await tester.pumpWidget(
       const MaterialApp(
-        home: PartnerConnectionSummary(paired: false, hasSentRequest: true),
+        home: V2Theme(
+          child: Scaffold(
+            body: PartnerConnectionSummary(paired: false, hasSentRequest: true),
+          ),
+        ),
       ),
     );
     expect(find.text('수락을 기다리는 중이에요'), findsOneWidget);
-    expect(find.text('상대방이 요청을 확인하면 연결돼요.'), findsOneWidget);
-    expect(find.text('ABC123'), findsNothing);
+    expect(find.text('상대가 요청을 확인하면 연결돼요.'), findsOneWidget);
 
     await tester.pumpWidget(
       const MaterialApp(
-        home: PartnerConnectionSummary(paired: true, partnerName: '민지'),
+        home: V2Theme(
+          child: Scaffold(
+            body: PartnerConnectionSummary(paired: true, partnerName: '민지'),
+          ),
+        ),
       ),
     );
     expect(find.text('연결됨'), findsOneWidget);
-    expect(find.text('민지와 연결되어 있어요.'), findsOneWidget);
+    expect(find.text('민지님과 연결되어 있어요.'), findsOneWidget);
   });
 }
