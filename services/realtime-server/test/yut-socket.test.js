@@ -370,3 +370,58 @@ test('free games have no settlement and a failing user lookup does not stop a st
   assert.equal(staked.ended.transferred, 500);
   assert.equal(staked.f.results.length, 1, 'the result is still recorded');
 });
+
+test('lobby character picks are honoured, a taken character is refused, and an unpicked player gets a distinct fallback', async t => {
+  const f = await fixture(t);
+  await f.call(0, 'game:lobby:join', { gameType: 'yut' });
+  await f.call(1, 'game:lobby:join', { gameType: 'yut' });
+  assert.equal((await f.call(0, 'game:lobby:select_character', { gameType: 'yut', character: 'miho' })).ok, true);
+  const taken = await f.call(1, 'game:lobby:select_character', { gameType: 'yut', character: 'miho' });
+  assert.equal(taken.ok, false);
+  assert.equal(taken.reason, 'character_taken');
+  // 상대는 고르지 않고 시작: 겹치지 않는 다른 캐릭터가 배정된다.
+  assert.equal((await f.call(0, 'game:lobby:start', { gameType: 'yut' })).ok, true);
+  await flush();
+  const g = await readGame(f);
+  assert.equal(g.characters[A], 'miho');
+  assert.notEqual(g.characters[B], 'miho');
+  assert.ok(['honggilldong', 'nolbu'].includes(g.characters[B]));
+});
+
+test('assignCharacters never gives both players the same character', async () => {
+  const { assignCharacters } = await import('../src/games/yut.js');
+  for (const picks of [{}, { [A]: 'nolbu' }, { [B]: 'nolbu' }, { [A]: 'nolbu', [B]: 'nolbu' }, { [A]: 'bogus', [B]: 'miho' }]) {
+    const out = assignCharacters([A, B], picks);
+    assert.notEqual(out[A], out[B], JSON.stringify(picks));
+    assert.ok(out[A] && out[B]);
+  }
+  // 지난 판 캐릭터를 이어받되 겹치면 한쪽을 바꾼다.
+  const kept = assignCharacters([A, B], { [A]: 'miho' }, { [A]: 'nolbu', [B]: 'miho' });
+  assert.equal(kept[A], 'miho');
+  assert.notEqual(kept[B], 'miho');
+});
+
+test('game:yut:state carries both players equipped items and their effective effects', async t => {
+  const f = await fixture(t);
+  const base = boundary.query;
+  const stats = { 11: [['yut_control_pct', '15'], ['piece_catch_resist_pct', '15'], ['yut_win_coin_pct', '15']], 22: [['yut_mo_rate_pct', '8']] };
+  const items = {
+    11: [{ slot: 'yut_piece', name: '호랑이 말', icon: '🐯', grade: 'A', stats: { piece_catch_resist_pct: 15 } }, { slot: 'yut_yut', name: '황금 윷', icon: '🏅', grade: 'A', stats: { yut_control_pct: 15 } }],
+    22: [{ slot: 'yut_yut', name: '우주의 윷', icon: '🌌', grade: 'SSS', stats: { yut_mo_rate_pct: 8 } }],
+  };
+  boundary.query = async (sql, params) => {
+    if (sql.includes('SELECT UserId FROM Users WHERE UserCode')) return { rows: [{ UserId: params[0] === A ? 11 : 22 }] };
+    if (sql.includes('JOIN shop_items si ON si.id = ei.item_id')) return { rows: items[params[0]] ?? [] };
+    if (sql.includes('FROM equipped_items ei')) return { rows: (stats[params[0]] ?? []).map(([stat_key, total]) => ({ stat_key, total })) };
+    return base(sql, params);
+  };
+  t.after(() => { boundary.query = base; });
+  await startFromLobby(f, { stake: 100 });
+  const view = (await f.call(0, 'game:yut:sync', {})).state;
+  assert.equal(view.equippedItems[A].yut_piece.name, '호랑이 말');
+  assert.equal(view.equippedItems[A].yut_yut.grade, 'A');
+  assert.equal(view.equippedItems[B].yut_yut.name, '우주의 윷', "the opponent's items are visible too");
+  assert.equal(view.effects[A].defensePct, 10, 'defense shown at its cap');
+  assert.ok(view.effects[A].controlPct <= 3 && view.effects[A].controlPct > 0);
+  assert.ok(view.effects[B].moRatePct > 0 && view.effects[B].moRatePct <= 3);
+});

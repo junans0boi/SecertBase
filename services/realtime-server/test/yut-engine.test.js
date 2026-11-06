@@ -648,3 +648,13 @@ test('serializeYutState exposes legal moves for the current player and the deadl
   assert.equal(view.turnDeadline, 123);
   assert.deepEqual(view.players, ['A', 'B']);
 });
+
+test('serializeYutState exposes the capped, effective item effects of both players', () => {
+  const g = game({ effects: { A: Yut.yutItemEffects(MAX_ITEMS), B: Yut.yutItemEffects({ yut_control_pct: 1 }) } });
+  const view = Yut.serializeYutState(g);
+  const sum = (e) => e.controlPct + e.moRatePct + e.overturnPct + e.backdoBonusPct;
+  assert.ok(sum(view.effects.A) <= Yut.THROW_ITEM_CAP_PCT + 1e-9, 'shown numbers are the capped ones, not the raw item stats');
+  assert.equal(view.effects.A.defensePct, Yut.DEFENSE_CAP_PCT);
+  assert.equal(view.effects.B.controlPct, 1);
+  assert.equal(view.effects.B.defensePct, 0);
+});

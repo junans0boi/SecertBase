@@ -739,6 +739,8 @@ export function serializeYutState(gameState, { now = Date.now() } = {}) {
     coinBonusCap: coinBonusCap(gameState.stake),
     series: gameState.series ?? null,
     equippedItems: gameState.equippedItems ?? {},
+    // 이 판에서 실제로 적용되는 아이템 효과(상한을 적용한 값). 화면의 "효과" 칩이 그대로 보여 준다.
+    effects: Object.fromEntries(players.map((p) => [p, effectsOf(gameState, p)])),
     winner,
     turnDeadline: gameState.turnDeadline ?? null,
     turnMs: gameState.turnMs ?? null,
