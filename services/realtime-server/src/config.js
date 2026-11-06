@@ -46,6 +46,12 @@ const schema = z.object({
     .default("false")
     .transform((value) => value === "true"),
   KAKAO_REVIEW_EMAIL: z.string().optional().default(""),
+  // 비밀번호 재설정 메일. 비우면 개발 환경은 log(서버 로그), 그 밖에는 none(mail_unavailable).
+  MAIL_TRANSPORT: z.enum(["none", "log", "webhook"]).optional(),
+  MAIL_WEBHOOK_URL: z.string().url().optional().or(z.literal("")).default(""),
+  MAIL_WEBHOOK_TOKEN: z.string().optional().default(""),
+  MAIL_FROM: z.string().optional().default(""),
+  APP_PUBLIC_URL: z.string().url().optional().default("https://secretbase.cloud"),
   KAKAO_REST_API_KEY: z.string().optional().default(""),
   NAVER_SEARCH_CLIENT_ID: z.string().optional().default(""),
   NAVER_SEARCH_CLIENT_SECRET: z.string().optional().default(""),
