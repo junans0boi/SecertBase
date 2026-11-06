@@ -47,6 +47,9 @@ class TelepathyCard extends StatelessWidget {
   /// 공개 면에서 아무도 고르지 않은 카드는 흐리게.
   final bool faded;
 
+  /// 카드의 최소 높이(남는 화면 높이에 맞춰 키운다).
+  final double minHeight;
+
   const TelepathyCard({
     super.key,
     required this.theme,
@@ -59,6 +62,7 @@ class TelepathyCard extends StatelessWidget {
     this.marks = const [],
     this.glow = false,
     this.faded = false,
+    this.minHeight = 88,
   });
 
   @override
@@ -72,6 +76,7 @@ class TelepathyCard extends StatelessWidget {
     return Semantics(
       button: onTap != null,
       selected: mode == TelepathyCardMode.picked,
+      excludeSemantics: true,
       label: '선택지 $letter, $text',
       child: Transform.translate(
         offset: Offset(0, -lift),
@@ -104,7 +109,7 @@ class TelepathyCard extends StatelessWidget {
         scale: picked && !back ? 1.025 : 1,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 220),
-          constraints: const BoxConstraints(minHeight: 88),
+          constraints: BoxConstraints(minHeight: minHeight),
           padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(26),

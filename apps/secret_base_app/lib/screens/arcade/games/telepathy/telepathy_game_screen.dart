@@ -415,6 +415,7 @@ class _TelepathyGameScreenState extends State<TelepathyGameScreen>
     );
   }
 
+  /// 끈 가운데: 판정 원(💞 / 시간 초과 / 엇갈림) + 아래에 한 줄 글자.
   Widget _verdictBadge(TelepathyRound r) {
     final t = theme;
     final String text;
@@ -426,24 +427,42 @@ class _TelepathyGameScreenState extends State<TelepathyGameScreen>
       text = r.timedOut ? '시간 초과' : '엇갈림';
       color = t.subInk;
     }
-    return Container(
-      height: 46,
-      constraints: const BoxConstraints(minWidth: 46),
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: const Color(0xFF16143F),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: 0.8), width: 1.6),
-        boxShadow: r.matched
-            ? [BoxShadow(color: t.gold.withValues(alpha: 0.6), blurRadius: 16)]
-            : null,
-      ),
-      child: Text(
-        text,
-        maxLines: 1,
-        style: t.body(size: 13, color: color, weight: FontWeight.w900),
-      ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 46,
+          height: 46,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: const Color(0xFF16143F),
+            border: Border.all(color: color.withValues(alpha: 0.85), width: 2),
+            boxShadow: r.matched
+                ? [
+                    BoxShadow(
+                      color: t.gold.withValues(alpha: 0.7),
+                      blurRadius: 18,
+                      spreadRadius: 1,
+                    ),
+                  ]
+                : null,
+          ),
+          child: r.matched
+              ? const Text('💞', style: TextStyle(fontSize: 24))
+              : Icon(
+                  r.timedOut ? Icons.timer_off_rounded : Icons.close_rounded,
+                  color: color,
+                  size: 24,
+                ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          text,
+          maxLines: 1,
+          style: t.body(size: 12.5, color: color, weight: FontWeight.w900),
+        ),
+      ],
     );
   }
 
@@ -540,7 +559,10 @@ class _TelepathyGameScreenState extends State<TelepathyGameScreen>
                 ),
               ),
             ),
-            _caption(s, r),
+            AnimatedBuilder(
+              animation: _reveal,
+              builder: (context, _) => _caption(s, r),
+            ),
           ],
         );
       },
@@ -553,6 +575,26 @@ class _TelepathyGameScreenState extends State<TelepathyGameScreen>
     TelepathyRound? r,
     String? me,
     String? opp,
+  ) {
+    return LayoutBuilder(
+      builder: (context, box) => _cardStack(
+        s,
+        q,
+        r,
+        me,
+        opp,
+        ((box.maxHeight - 34) / 2).clamp(88.0, 150.0).toDouble(),
+      ),
+    );
+  }
+
+  Widget _cardStack(
+    TelepathyState s,
+    TelepathyQuestion q,
+    TelepathyRound? r,
+    String? me,
+    String? opp,
+    double cardHeight,
   ) {
     return AnimatedBuilder(
       animation: Listenable.merge([_reveal, _sway]),
@@ -608,6 +650,7 @@ class _TelepathyGameScreenState extends State<TelepathyGameScreen>
             marks: marks,
             glow: r != null && r.matched && marks.length == 2 && verdict,
             faded: r != null && marks.isEmpty,
+            minHeight: cardHeight,
             onTap: r == null && s.playing && !_c.iPicked
                 ? () => _pick(letter)
                 : null,
