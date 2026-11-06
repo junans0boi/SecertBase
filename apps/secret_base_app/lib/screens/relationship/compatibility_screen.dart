@@ -1,40 +1,30 @@
 import 'package:flutter/material.dart';
 
 import '../../core/compatibility_api.dart';
-import '../../core/main_design.dart';
+import 'package:secret_base_app/v2/v2.dart';
 import '../auth/partner_screen.dart';
 
-Widget _compatibilityRestrictedState(BuildContext context) => Center(
-  child: Padding(
-    padding: const EdgeInsets.all(24),
-    child: MainCard(
-      key: const Key('compatibility_restricted'),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.lock_outline, color: kMainMuted),
-          const SizedBox(height: 12),
-          Text(
-            '활성 커플 연결 후 궁합을 볼 수 있어요.',
-            style: mainBody(weight: FontWeight.w800),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '커플 검사와 궁합은 현재 연결된 두 사람에게만 보여요.',
-            textAlign: TextAlign.center,
-            style: mainBody(size: 13, color: kMainSub, height: 1.5),
-          ),
-          const SizedBox(height: 14),
-          OutlinedButton(
-            onPressed: () => Navigator.of(context).push<void>(
-              MaterialPageRoute(builder: (_) => const PartnerScreen()),
-            ),
-            child: const Text('파트너 연결하기'),
-          ),
-        ],
+Widget _compatibilityRestrictedState(BuildContext context) => Column(
+  key: const Key('compatibility_restricted'),
+  children: [
+    const Expanded(
+      child: V2EmptyState(
+        icon: V2Icons.lock,
+        title: '파트너와 연결하면 궁합을 볼 수 있어요',
+        body: '커플 검사와 궁합은 연결된 두 사람에게만 보여요.',
       ),
     ),
-  ),
+    Padding(
+      padding: const EdgeInsets.all(V2Space.page),
+      child: V2Button(
+        label: '파트너 연결하기',
+        variant: V2ButtonVariant.soft,
+        onPressed: () => Navigator.of(
+          context,
+        ).push<void>(MaterialPageRoute(builder: (_) => const PartnerScreen())),
+      ),
+    ),
+  ],
 );
 
 class CompatibilityDashboardScreen extends StatefulWidget {
@@ -89,51 +79,49 @@ class _CompatibilityDashboardScreenState
         _errorMessage =
             error is CompatibilityApiException &&
                 error.reason == 'network_error'
-            ? '네트워크 연결을 확인하고 다시 시도해주세요.'
+            ? '네트워크 연결을 확인하고 다시 시도해 주세요.'
             : _restricted
-            ? '활성 커플 연결 후 궁합을 볼 수 있어요.'
-            : '궁합 분석을 불러오지 못했어요.';
+            ? '파트너와 연결하면 궁합을 볼 수 있어요.'
+            : '잠시 뒤 다시 시도해 주세요.';
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: kMainBg,
-      appBar: AppBar(
-        backgroundColor: kMainBg,
-        title: Text('우리의 궁합 분석', style: mainTitle(size: 22)),
+    return V2Theme(
+      child: Scaffold(
+        appBar: const V2Header(title: '우리의 궁합'),
+        body: _loading
+            ? const Padding(
+                padding: EdgeInsets.all(V2Space.page),
+                child: V2SkeletonList(count: 3),
+              )
+            : _restricted
+            ? _restrictedState()
+            : _errorMessage != null
+            ? _errorState()
+            : ListView(
+                padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
+                children: [
+                  Text('검사별 관계 카드', style: V2Text.title),
+                  const SizedBox(height: 6),
+                  Text('각 분석은 필요한 검사만 준비되면 독립적으로 열려요.', style: V2Text.cap),
+                  const SizedBox(height: 16),
+                  ...?_dashboard?.cards.map(_card),
+                ],
+              ),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: kMainRose))
-          : _restricted
-          ? _restrictedState()
-          : _errorMessage != null
-          ? _errorState()
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
-              children: [
-                Text('검사별 관계 카드', style: mainTitle(size: 28, color: kMainRose)),
-                const SizedBox(height: 6),
-                Text(
-                  '각 분석은 필요한 검사만 준비되면 독립적으로 열려요.',
-                  style: mainBody(size: 13, color: kMainSub, height: 1.5),
-                ),
-                const SizedBox(height: 16),
-                ...?_dashboard?.cards.map(_card),
-              ],
-            ),
     );
   }
 
   Widget _card(CompatibilityDashboardCard card) {
     final statusLabel = switch (card.state.status) {
       'ready' => '결과 준비됨',
-      'pending' => '검사 완료를 기다리는 중',
-      _ => '현재 이용할 수 없음',
+      'pending' => '기다리는 중',
+      _ => '아직 이용할 수 없어요',
     };
-    final cardContent = MainCard(
+    final cardContent = V2Card(
       key: Key('compatibility_card_${card.code}'),
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -142,45 +130,38 @@ class _CompatibilityDashboardScreenState
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Text(
-                  card.title,
-                  style: mainBody(weight: FontWeight.w800),
-                ),
-              ),
-              Text(
-                statusLabel,
-                style: mainBody(
-                  size: 12,
-                  color: _statusColor(card.state.status),
-                ),
+              Expanded(child: Text(card.title, style: V2Text.bodyStrong)),
+              V2Chip(
+                label: statusLabel,
+                tone: switch (card.state.status) {
+                  'ready' => V2Tone.lilac,
+                  'pending' => V2Tone.honey,
+                  _ => V2Tone.neutral,
+                },
               ),
             ],
           ),
           const SizedBox(height: 6),
-          Text(card.description, style: mainBody(size: 13, color: kMainSub)),
+          Text(card.description, style: V2Text.cap),
           const SizedBox(height: 10),
           if (card.state.status == 'ready' && card.state.result != null)
-            Text(
-              card.state.result!.complementaryPattern,
-              style: mainBody(size: 13, height: 1.45),
-            )
+            Text(card.state.result!.complementaryPattern, style: V2Text.body)
           else if (card.state.status == 'pending')
             Text(
               _pendingDescription(card.state),
               key: Key('compatibility_pending_${card.code}'),
-              style: mainBody(size: 13, color: kMainSub, height: 1.45),
+              style: V2Text.cap,
             )
           else
-            Text(
-              '필요한 결과를 확인한 뒤 다시 준비할 수 있어요.',
-              style: mainBody(size: 13, color: kMainSub),
-            ),
+            Text('필요한 결과를 확인한 뒤 다시 준비할 수 있어요.', style: V2Text.cap),
           if (card.state.status == 'ready') ...[
             const SizedBox(height: 8),
-            TextButton(
+            V2Button(
+              label: '상세 보기',
+              variant: V2ButtonVariant.text,
+              size: V2ButtonSize.sm,
+              fullWidth: false,
               onPressed: () => _openDetail(card.code),
-              child: const Text('상세 보기'),
             ),
           ],
         ],
@@ -210,12 +191,6 @@ class _CompatibilityDashboardScreenState
     _ => '관계 검사',
   };
 
-  Color _statusColor(String status) => switch (status) {
-    'ready' => kMainLilac,
-    'pending' => kMainRose,
-    _ => kMainMuted,
-  };
-
   void _openDetail(String code) {
     Navigator.of(context).push<void>(
       MaterialPageRoute(
@@ -230,22 +205,10 @@ class _CompatibilityDashboardScreenState
     );
   }
 
-  Widget _errorState() => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: MainCard(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('궁합 분석을 불러오지 못했어요', style: mainTitle(size: 20)),
-            const SizedBox(height: 8),
-            Text(_errorMessage!, textAlign: TextAlign.center),
-            const SizedBox(height: 14),
-            OutlinedButton(onPressed: _load, child: const Text('다시 시도')),
-          ],
-        ),
-      ),
-    ),
+  Widget _errorState() => V2ErrorState(
+    title: '궁합 분석을 불러오지 못했어요',
+    body: _errorMessage,
+    onRetry: _load,
   );
 
   Widget _restrictedState() => _compatibilityRestrictedState(context);
@@ -321,10 +284,10 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
         _errorMessage =
             error is CompatibilityApiException &&
                 error.reason == 'network_error'
-            ? '네트워크 연결을 확인하고 다시 시도해주세요.'
+            ? '네트워크 연결을 확인하고 다시 시도해 주세요.'
             : _restricted
-            ? '활성 커플 연결 후 궁합을 볼 수 있어요.'
-            : '궁합 분석을 불러오지 못했어요.';
+            ? '파트너와 연결하면 궁합을 볼 수 있어요.'
+            : '잠시 뒤 다시 시도해 주세요.';
       });
     }
   }
@@ -346,7 +309,7 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
         _errorMessage =
             error is CompatibilityApiException &&
                 error.reason == 'network_error'
-            ? '네트워크 연결을 확인하고 다시 시도해주세요.'
+            ? '네트워크 연결을 확인하고 다시 시도해 주세요.'
             : '궁합 설명을 생성하지 못했어요.';
       });
     }
@@ -354,21 +317,22 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: kMainBg,
-      appBar: AppBar(
-        backgroundColor: kMainBg,
-        title: Text('우리의 궁합 분석', style: mainTitle(size: 22)),
+    return V2Theme(
+      child: Scaffold(
+        appBar: const V2Header(title: '우리의 궁합'),
+        body: _loading
+            ? const Padding(
+                padding: EdgeInsets.all(V2Space.page),
+                child: V2SkeletonList(count: 3),
+              )
+            : _restricted
+            ? _restrictedState()
+            : _errorMessage != null
+            ? _errorState()
+            : _state?.result == null
+            ? _pendingState()
+            : _readyState(_state!.result!),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: kMainRose))
-          : _restricted
-          ? _restrictedState()
-          : _errorMessage != null
-          ? _errorState()
-          : _state?.result == null
-          ? _pendingState()
-          : _readyState(_state!.result!),
     );
   }
 
@@ -379,20 +343,20 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
       children: [
-        Text('분석을 준비하고 있어요', style: mainTitle(size: 25)),
+        Text('분석을 준비하고 있어요', style: V2Text.head),
         const SizedBox(height: 8),
         Text(
           '두 사람의 애착 요약과 갈등·회복 검사가 모두 준비되면 이 공간이 열려요.',
           key: const Key('compatibility_pending'),
-          style: mainBody(size: 14, color: kMainSub, height: 1.55),
+          style: V2Text.cap,
         ),
         const SizedBox(height: 16),
-        MainCard(
+        V2Card(
           padding: const EdgeInsets.all(18),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('준비 상태', style: mainBody(weight: FontWeight.w800)),
+              Text('준비 상태', style: V2Text.bodyStrong),
               const SizedBox(height: 10),
               Text('애착 요약 $attachmentCount/2명'),
               const SizedBox(height: 6),
@@ -408,25 +372,27 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
       children: [
-        Text('우리의 관계 패턴', style: mainTitle(size: 28, color: kMainRose)),
+        Text('우리의 관계 패턴', style: V2Text.title),
         const SizedBox(height: 8),
         Text(
           result.complementaryPattern,
           key: const Key('compatibility_ready'),
-          style: mainBody(size: 15, color: kMainSub, height: 1.55),
+          style: V2Text.cap,
         ),
         const SizedBox(height: 16),
         ...result.dimensions.map(
           (dimension) => Padding(
             padding: const EdgeInsets.only(bottom: 10),
-            child: MainCard(
+            child: V2Card(
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
                   Expanded(child: Text(dimension.title)),
                   Text(
                     '차이 ${dimension.scoreDifference}점',
-                    style: mainBody(color: kMainLilac, weight: FontWeight.w800),
+                    style: V2Text.bodyStrong.copyWith(
+                      color: V2Colors.lilacText,
+                    ),
                   ),
                 ],
               ),
@@ -436,84 +402,81 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
         const SizedBox(height: 4),
         if (result.conflictTrigger != null ||
             result.repairApproach != null) ...[
-          Text('갈등을 이해하는 단서', style: mainTitle(size: 21)),
+          Text('갈등을 이해하는 단서', style: V2Text.head),
           const SizedBox(height: 8),
           if (result.conflictTrigger != null)
-            MainCard(
+            V2Card(
               padding: const EdgeInsets.all(14),
               child: Text(
                 result.conflictTrigger!,
                 key: const Key('compatibility_conflict_trigger'),
-                style: mainBody(size: 13, height: 1.45),
+                style: V2Text.body,
               ),
             ),
           if (result.repairApproach != null) ...[
             const SizedBox(height: 8),
-            MainCard(
+            V2Card(
               padding: const EdgeInsets.all(14),
               child: Text(
                 result.repairApproach!,
                 key: const Key('compatibility_repair_approach'),
-                style: mainBody(size: 13, height: 1.45),
+                style: V2Text.body,
               ),
             ),
           ],
         ],
         if (result.conversationStarters.isNotEmpty) ...[
           const SizedBox(height: 4),
-          Text('대화 시작점', style: mainTitle(size: 21)),
+          Text('대화 시작점', style: V2Text.head),
           const SizedBox(height: 8),
           ...result.conversationStarters.map(
             (item) => Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: MainCard(
+              child: V2Card(
                 padding: const EdgeInsets.all(14),
-                child: Text(item, style: mainBody(size: 13, height: 1.45)),
+                child: Text(item, style: V2Text.body),
               ),
             ),
           ),
         ],
-        Text('주의해서 살펴볼 상호작용', style: mainTitle(size: 21)),
+        Text('주의해서 살펴볼 상호작용', style: V2Text.head),
         const SizedBox(height: 8),
         ...result.cautionInteractions.map(
           (item) => Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: MainCard(
+            child: V2Card(
               padding: const EdgeInsets.all(14),
-              child: Text(item, style: mainBody(size: 13, height: 1.45)),
+              child: Text(item, style: V2Text.body),
             ),
           ),
         ),
         const SizedBox(height: 4),
-        Text('대화 질문', style: mainTitle(size: 21)),
+        Text('대화 질문', style: V2Text.head),
         const SizedBox(height: 8),
         ...result.conversationPrompts.map(
           (item) => Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: MainCard(
+            child: V2Card(
               padding: const EdgeInsets.all(14),
-              child: Text(item, style: mainBody(size: 13, height: 1.45)),
+              child: Text(item, style: V2Text.body),
             ),
           ),
         ),
         const SizedBox(height: 8),
-        Text(
-          result.disclaimer,
-          style: mainBody(size: 12, color: kMainMuted, height: 1.5),
-        ),
+        Text(result.disclaimer, style: V2Text.cap),
         const SizedBox(height: 16),
-        MainCard(
+        V2Card(
           key: const Key('compatibility_explanation_card'),
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('자연어 설명', style: mainBody(weight: FontWeight.w800)),
+              Text('자연어 설명', style: V2Text.bodyStrong),
               const SizedBox(height: 6),
               Text(
                 _explanationState?.generation?.explanation ??
                     '원할 때만 두 사람의 구조화된 패턴을 자연어로 풀어볼 수 있어요.',
-                style: mainBody(size: 13, color: kMainSub, height: 1.5),
+                style: V2Text.cap,
               ),
               const SizedBox(height: 10),
               if (_explanationState?.status == 'pending' || _loadingExplanation)
@@ -530,7 +493,7 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
                 Text(
                   '고정 설명을 표시하고 있어요. 궁합 점수와 핵심 결과는 변하지 않아요.',
                   key: const Key('compatibility_explanation_fallback'),
-                  style: mainBody(size: 11, color: kMainMuted),
+                  style: V2Text.cap,
                 ),
             ],
           ),
@@ -539,22 +502,10 @@ class _CompatibilityScreenState extends State<CompatibilityScreen> {
     );
   }
 
-  Widget _errorState() => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: MainCard(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('궁합 분석을 불러오지 못했어요', style: mainTitle(size: 20)),
-            const SizedBox(height: 8),
-            Text(_errorMessage!, textAlign: TextAlign.center),
-            const SizedBox(height: 14),
-            OutlinedButton(onPressed: _load, child: const Text('다시 시도')),
-          ],
-        ),
-      ),
-    ),
+  Widget _errorState() => V2ErrorState(
+    title: '궁합 분석을 불러오지 못했어요',
+    body: _errorMessage,
+    onRetry: _load,
   );
 
   Widget _restrictedState() => _compatibilityRestrictedState(context);

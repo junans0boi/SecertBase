@@ -1,27 +1,31 @@
 import 'dart:convert';
-import 'dart:math' as math;
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-import '../../core/auth_service.dart';
-import '../../core/app_theme.dart';
+import 'package:secret_base_app/v2/v2.dart';
+
 import '../../core/assessment_catalog_api.dart';
+import '../../core/auth_service.dart';
+import '../../core/birth_profile_api.dart';
 import '../../core/compatibility_api.dart';
 import '../../core/counseling_api.dart';
-import '../../core/birth_profile_api.dart';
-import '../../core/main_design.dart';
+import '../../core/fortune_api.dart';
 import '../../core/mindcare_api.dart';
 import '../../core/saju_api.dart';
 import '../../core/tarot_api.dart';
-import '../auth/partner_screen.dart';
 import 'assessment_catalog_screen.dart';
+import 'birth_info_sheet.dart';
+import 'care_safety.dart';
+import 'care_settings_screen.dart';
 import 'compatibility_screen.dart';
 import 'counseling_screen.dart';
+import 'fortune_screen.dart';
+import 'mindcare_screen.dart';
+import 'relationship_common.dart';
 import 'saju_screen.dart';
 import 'tarot_screen.dart';
-import 'mindcare_screen.dart';
+import 'widgets/tarot_card_art.dart';
 
 enum RelationshipAssessmentStatus {
   profileIncomplete,
@@ -30,116 +34,7 @@ enum RelationshipAssessmentStatus {
   resultReady,
 }
 
-class _BirthCountryOption {
-  final String label;
-  final String timezone;
-
-  const _BirthCountryOption(this.label, this.timezone);
-}
-
-const _birthCountryOptions = [
-  _BirthCountryOption('대한민국', 'Asia/Seoul'),
-  _BirthCountryOption('일본', 'Asia/Tokyo'),
-  _BirthCountryOption('중국', 'Asia/Shanghai'),
-  _BirthCountryOption('대만', 'Asia/Taipei'),
-  _BirthCountryOption('홍콩', 'Asia/Hong_Kong'),
-  _BirthCountryOption('마카오', 'Asia/Macau'),
-  _BirthCountryOption('몽골', 'Asia/Ulaanbaatar'),
-  _BirthCountryOption('필리핀', 'Asia/Manila'),
-  _BirthCountryOption('인도네시아', 'Asia/Jakarta'),
-  _BirthCountryOption('말레이시아', 'Asia/Kuala_Lumpur'),
-  _BirthCountryOption('싱가포르', 'Asia/Singapore'),
-  _BirthCountryOption('베트남', 'Asia/Ho_Chi_Minh'),
-  _BirthCountryOption('태국', 'Asia/Bangkok'),
-  _BirthCountryOption('캄보디아', 'Asia/Phnom_Penh'),
-  _BirthCountryOption('라오스', 'Asia/Vientiane'),
-  _BirthCountryOption('미얀마', 'Asia/Yangon'),
-  _BirthCountryOption('인도', 'Asia/Kolkata'),
-  _BirthCountryOption('네팔', 'Asia/Kathmandu'),
-  _BirthCountryOption('스리랑카', 'Asia/Colombo'),
-  _BirthCountryOption('방글라데시', 'Asia/Dhaka'),
-  _BirthCountryOption('파키스탄', 'Asia/Karachi'),
-  _BirthCountryOption('카자흐스탄', 'Asia/Almaty'),
-  _BirthCountryOption('우즈베키스탄', 'Asia/Tashkent'),
-  _BirthCountryOption('아랍에미리트', 'Asia/Dubai'),
-  _BirthCountryOption('사우디아라비아', 'Asia/Riyadh'),
-  _BirthCountryOption('이스라엘', 'Asia/Jerusalem'),
-  _BirthCountryOption('튀르키예', 'Europe/Istanbul'),
-  _BirthCountryOption('호주', 'Australia/Sydney'),
-  _BirthCountryOption('뉴질랜드', 'Pacific/Auckland'),
-  _BirthCountryOption('피지', 'Pacific/Fiji'),
-  _BirthCountryOption('영국', 'Europe/London'),
-  _BirthCountryOption('아일랜드', 'Europe/Dublin'),
-  _BirthCountryOption('프랑스', 'Europe/Paris'),
-  _BirthCountryOption('독일', 'Europe/Berlin'),
-  _BirthCountryOption('네덜란드', 'Europe/Amsterdam'),
-  _BirthCountryOption('벨기에', 'Europe/Brussels'),
-  _BirthCountryOption('스페인', 'Europe/Madrid'),
-  _BirthCountryOption('포르투갈', 'Europe/Lisbon'),
-  _BirthCountryOption('이탈리아', 'Europe/Rome'),
-  _BirthCountryOption('스위스', 'Europe/Zurich'),
-  _BirthCountryOption('오스트리아', 'Europe/Vienna'),
-  _BirthCountryOption('스웨덴', 'Europe/Stockholm'),
-  _BirthCountryOption('노르웨이', 'Europe/Oslo'),
-  _BirthCountryOption('덴마크', 'Europe/Copenhagen'),
-  _BirthCountryOption('핀란드', 'Europe/Helsinki'),
-  _BirthCountryOption('폴란드', 'Europe/Warsaw'),
-  _BirthCountryOption('체코', 'Europe/Prague'),
-  _BirthCountryOption('헝가리', 'Europe/Budapest'),
-  _BirthCountryOption('그리스', 'Europe/Athens'),
-  _BirthCountryOption('루마니아', 'Europe/Bucharest'),
-  _BirthCountryOption('우크라이나', 'Europe/Kyiv'),
-  _BirthCountryOption('러시아', 'Europe/Moscow'),
-  _BirthCountryOption('미국', 'America/New_York'),
-  _BirthCountryOption('캐나다', 'America/Toronto'),
-  _BirthCountryOption('멕시코', 'America/Mexico_City'),
-  _BirthCountryOption('브라질', 'America/Sao_Paulo'),
-  _BirthCountryOption('아르헨티나', 'America/Argentina/Buenos_Aires'),
-  _BirthCountryOption('칠레', 'America/Santiago'),
-  _BirthCountryOption('콜롬비아', 'America/Bogota'),
-  _BirthCountryOption('페루', 'America/Lima'),
-  _BirthCountryOption('남아프리카공화국', 'Africa/Johannesburg'),
-  _BirthCountryOption('이집트', 'Africa/Cairo'),
-  _BirthCountryOption('모로코', 'Africa/Casablanca'),
-  _BirthCountryOption('케냐', 'Africa/Nairobi'),
-  _BirthCountryOption('나이지리아', 'Africa/Lagos'),
-];
-
-/// Disposes the picker wheel controllers only once the bottom sheet route has
-/// actually been removed (after its closing animation), not when the route's
-/// future completes.
-class _DisposeControllers extends StatefulWidget {
-  final List<ScrollController> controllers;
-  final Widget child;
-
-  const _DisposeControllers({required this.controllers, required this.child});
-
-  @override
-  State<_DisposeControllers> createState() => _DisposeControllersState();
-}
-
-class _DisposeControllersState extends State<_DisposeControllers> {
-  @override
-  void dispose() {
-    for (final controller in widget.controllers) {
-      controller.dispose();
-    }
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => widget.child;
-}
-
-class _PickerSelection<T> {
-  final bool confirmed;
-  final T? value;
-
-  const _PickerSelection.confirmed(this.value) : confirmed = true;
-}
-
-enum _RelationshipArea { personal, couple }
-
+/// A compact entry card (kept for callers that embed the hub entry).
 class RelationshipEntryCard extends StatelessWidget {
   final RelationshipAssessmentStatus status;
   final VoidCallback onTap;
@@ -151,70 +46,46 @@ class RelationshipEntryCard extends StatelessWidget {
   });
 
   String get _title => switch (status) {
-    RelationshipAssessmentStatus.profileIncomplete => '관계 이해 준비하기',
-    RelationshipAssessmentStatus.notStarted => '관계 이해 시작하기',
-    RelationshipAssessmentStatus.inProgress => '관계 이해 이어하기',
-    RelationshipAssessmentStatus.resultReady => '관계 이해 결과 보기',
+    RelationshipAssessmentStatus.profileIncomplete => '우리 이해 준비하기',
+    RelationshipAssessmentStatus.notStarted => '우리 이해 시작하기',
+    RelationshipAssessmentStatus.inProgress => '우리 이해 이어하기',
+    RelationshipAssessmentStatus.resultReady => '우리 이해 결과 보기',
   };
 
   String get _subtitle => switch (status) {
-    RelationshipAssessmentStatus.profileIncomplete => '출생 프로필을 먼저 완성해주세요',
-    RelationshipAssessmentStatus.notStarted => '검사로 우리를 알아가요',
+    RelationshipAssessmentStatus.profileIncomplete =>
+      '출생 정보를 알려 주면 운세와 사주를 볼 수 있어요',
+    RelationshipAssessmentStatus.notStarted => '운세, 타로, 검사로 우리를 알아가요',
     RelationshipAssessmentStatus.inProgress => '진행 중인 검사를 이어가세요',
-    RelationshipAssessmentStatus.resultReady => '새로운 관계 패턴을 확인해보세요',
+    RelationshipAssessmentStatus.resultReady => '새로운 관계 패턴을 확인해 보세요',
   };
 
   IconData get _icon => switch (status) {
-    RelationshipAssessmentStatus.profileIncomplete => Icons.edit_note_outlined,
-    RelationshipAssessmentStatus.notStarted => Icons.psychology_outlined,
-    RelationshipAssessmentStatus.inProgress => Icons.play_circle_outline,
-    RelationshipAssessmentStatus.resultReady => Icons.insights_outlined,
+    RelationshipAssessmentStatus.profileIncomplete => V2Icons.edit,
+    RelationshipAssessmentStatus.notStarted => V2Icons.sparkle,
+    RelationshipAssessmentStatus.inProgress => V2Icons.chevron,
+    RelationshipAssessmentStatus.resultReady => V2Icons.star,
   };
 
   @override
   Widget build(BuildContext context) {
-    return MainCard(
-      radius: 26,
-      padding: EdgeInsets.zero,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(26),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: kMainLilacSoft,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Icon(_icon, color: kMainLilac),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(_title, style: mainBody(weight: FontWeight.w800)),
-                    const SizedBox(height: 4),
-                    Text(_subtitle, style: mainBody(size: 12, color: kMainSub)),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.arrow_forward_ios_rounded,
-                size: 16,
-                color: kMainMuted,
-              ),
-            ],
+    return V2Theme(
+      child: V2List(
+        children: [
+          V2ListTile(
+            icon: _icon,
+            tone: V2Tone.lilac,
+            title: _title,
+            subtitle: _subtitle,
+            onTap: onTap,
           ),
-        ),
+        ],
       ),
     );
   }
 }
 
+/// 우리 이해: 오늘 (운세·타로) / 알아가기 (사주·심리검사·궁합) / 돌봄.
 class RelationshipUnderstandingScreen extends StatefulWidget {
   final BirthProfileApi? api;
   final AssessmentCatalogApi? assessmentCatalogApi;
@@ -222,6 +93,8 @@ class RelationshipUnderstandingScreen extends StatefulWidget {
   final bool? hasActiveCouple;
   final http.Client? coupleInfoClient;
   final bool editBirthProfileOnly;
+  final FortuneApi? fortuneApi;
+  final TarotApi? tarotApi;
 
   const RelationshipUnderstandingScreen({
     super.key,
@@ -231,6 +104,8 @@ class RelationshipUnderstandingScreen extends StatefulWidget {
     this.hasActiveCouple,
     this.coupleInfoClient,
     this.editBirthProfileOnly = false,
+    this.fortuneApi,
+    this.tarotApi,
   });
 
   @override
@@ -239,68 +114,96 @@ class RelationshipUnderstandingScreen extends StatefulWidget {
 }
 
 class _RelationshipUnderstandingScreenState
-    extends State<RelationshipUnderstandingScreen>
-    with SingleTickerProviderStateMixin {
-  late final TabController _areaTabController;
+    extends State<RelationshipUnderstandingScreen> {
   late final BirthProfileApi _api;
   late final bool _ownsApi;
-  late final AssessmentCatalogApi? _assessmentCatalogApi;
-  late final bool _ownsAssessmentCatalogApi;
-  final _birthDateController = TextEditingController();
-  final _birthTimeController = TextEditingController();
-  final _timezoneController = TextEditingController(text: 'Asia/Seoul');
-  final _birthPlaceController = TextEditingController();
-  BirthCalendarType _calendarType = BirthCalendarType.solar;
-  bool _lunarLeapMonth = false;
-  String? _birthCountry = '대한민국';
+  AssessmentCatalogApi? _catalogApi;
+  late final bool _ownsCatalogApi;
+  FortuneApi? _fortuneApi;
+  late final bool _ownsFortuneApi;
+  TarotApi? _tarotApi;
+  late final bool _ownsTarotApi;
+
   BirthProfile? _profile;
+  bool _profileKnown = false;
   RelationshipAssessmentStatus? _loadedAssessmentStatus;
   bool? _hasActiveCouple;
-  bool _coupleLoadFailed = false;
-  String? _errorMessage;
-  bool _loading = true;
-  bool _saving = false;
-  _RelationshipArea _selectedArea = _RelationshipArea.personal;
+  FortuneToday? _fortune;
+  TarotToday? _tarot;
+  bool _todayLoading = true;
+  bool _todayFailed = false;
+  bool _we = false;
 
   @override
   void initState() {
     super.initState();
-    _areaTabController = TabController(length: 2, vsync: this);
+    final auth = AuthService();
     _ownsApi = widget.api == null;
     _api =
         widget.api ??
-        BirthProfileApi(
-          baseUrl: AuthService().baseUrl,
-          token: AuthService().token ?? '',
-        );
-    _ownsAssessmentCatalogApi =
-        widget.assessmentCatalogApi == null &&
-        widget.api == null &&
-        !widget.editBirthProfileOnly;
-    _assessmentCatalogApi =
+        BirthProfileApi(baseUrl: auth.baseUrl, token: auth.token ?? '');
+    final full = widget.api == null && !widget.editBirthProfileOnly;
+    _ownsCatalogApi = widget.assessmentCatalogApi == null && full;
+    _catalogApi =
         widget.assessmentCatalogApi ??
-        (_ownsAssessmentCatalogApi
+        (_ownsCatalogApi
             ? AssessmentCatalogApi(
-                baseUrl: AuthService().baseUrl,
-                token: AuthService().token ?? '',
+                baseUrl: auth.baseUrl,
+                token: auth.token ?? '',
               )
+            : null);
+    _ownsFortuneApi = widget.fortuneApi == null && full;
+    _fortuneApi =
+        widget.fortuneApi ??
+        (_ownsFortuneApi
+            ? FortuneApi(baseUrl: auth.baseUrl, token: auth.token ?? '')
+            : null);
+    _ownsTarotApi = widget.tarotApi == null && full;
+    _tarotApi =
+        widget.tarotApi ??
+        (_ownsTarotApi
+            ? TarotApi(baseUrl: auth.baseUrl, token: auth.token ?? '')
             : null);
     _hasActiveCouple =
         widget.hasActiveCouple ??
         (widget.api != null && widget.coupleInfoClient == null ? false : null);
-    _loadProfile();
-    if (widget.hasActiveCouple == null &&
-        (widget.api == null || widget.coupleInfoClient != null) &&
-        !widget.editBirthProfileOnly) {
-      _loadActiveCouple();
+    if (widget.editBirthProfileOnly) {
+      _todayLoading = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _editOnlyStart());
+    } else {
+      _loadAll();
     }
+  }
+
+  @override
+  void dispose() {
+    if (_ownsApi) _api.close();
+    if (_ownsCatalogApi) _catalogApi?.close();
+    if (_ownsFortuneApi) _fortuneApi?.close();
+    if (_ownsTarotApi) _tarotApi?.close();
+    super.dispose();
+  }
+
+  // ---- loading ---------------------------------------------------------
+
+  Future<void> _loadAll() async {
+    setState(() {
+      _todayLoading = true;
+      _todayFailed = false;
+    });
+    await Future.wait([
+      if (widget.hasActiveCouple == null &&
+          (widget.api == null || widget.coupleInfoClient != null))
+        _loadActiveCouple(),
+      _loadProfile(),
+      _loadAssessments(),
+      _loadToday(),
+    ]);
   }
 
   Future<void> _loadActiveCouple() async {
     final auth = AuthService();
     final client = widget.coupleInfoClient ?? http.Client();
-    final ownsClient = widget.coupleInfoClient == null;
-    if (mounted) setState(() => _coupleLoadFailed = false);
     try {
       final response = await client
           .get(
@@ -315,1290 +218,529 @@ class _RelationshipUnderstandingScreenState
           response.statusCode == 200 &&
           body is Map<String, dynamic> &&
           body['ok'] == true;
-      final knownResponse =
-          response.statusCode == 200 ||
-          response.statusCode == 404 ||
-          response.statusCode == 409;
-      if (!knownResponse) {
+      if (![200, 404, 409].contains(response.statusCode)) {
         throw const FormatException('couple_info_unavailable');
       }
-      if (!mounted) return;
-      setState(() {
-        _hasActiveCouple = active;
-        _coupleLoadFailed = false;
-      });
+      if (mounted) setState(() => _hasActiveCouple = active);
     } catch (_) {
-      if (!mounted) return;
-      setState(() => _coupleLoadFailed = true);
+      // Unknown: the hub treats it as not paired and stays usable.
     } finally {
-      if (ownsClient) client.close();
+      if (widget.coupleInfoClient == null) client.close();
     }
-  }
-
-  @override
-  void dispose() {
-    _areaTabController.dispose();
-    if (_ownsApi) _api.close();
-    if (_ownsAssessmentCatalogApi) _assessmentCatalogApi?.close();
-    _birthDateController.dispose();
-    _birthTimeController.dispose();
-    _timezoneController.dispose();
-    _birthPlaceController.dispose();
-    super.dispose();
   }
 
   Future<void> _loadProfile() async {
     try {
       final profile = await _api.fetch();
-      RelationshipAssessmentStatus? loadedAssessmentStatus;
-      final catalogApi = _assessmentCatalogApi;
-      if (catalogApi != null) {
-        try {
-          final assessments = await catalogApi.fetch();
-          loadedAssessmentStatus = _statusFromAssessments(assessments);
-        } catch (_) {
-          // The relationship hub remains usable when assessment status is unavailable.
-        }
-      }
       if (!mounted) return;
-      _setProfile(profile);
       setState(() {
         _profile = profile;
-        _loadedAssessmentStatus = loadedAssessmentStatus;
-        _loading = false;
+        _profileKnown = true;
       });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _errorMessage = _messageFor(error);
-      });
+    } catch (_) {
+      if (mounted) setState(() => _profileKnown = false);
     }
   }
 
-  void _setProfile(BirthProfile profile) {
-    _calendarType = profile.calendarType;
-    _lunarLeapMonth = profile.lunarLeapMonth;
-    _birthDateController.text = profile.birthDate;
-    _birthTimeController.text = profile.birthTime ?? '';
-    _timezoneController.text = profile.timezone;
-    _birthCountry = _birthCountryForTimezone(profile.timezone);
-    _birthPlaceController.text = profile.birthPlace ?? '';
-  }
-
-  String? _birthCountryForTimezone(String timezone) {
-    for (final option in _birthCountryOptions) {
-      if (option.timezone == timezone) return option.label;
-    }
-    return null;
-  }
-
-  void _selectBirthCountry(String country) {
-    for (final option in _birthCountryOptions) {
-      if (option.label != country) continue;
-      setState(() {
-        _birthCountry = option.label;
-        _timezoneController.text = option.timezone;
-      });
-      return;
-    }
-  }
-
-  DateTime _initialBirthDate() {
-    final parsed = DateTime.tryParse(_birthDateController.text.trim());
-    if (parsed != null) return parsed;
-    final today = DateTime.now();
-    return DateTime(today.year - 20, today.month, today.day);
-  }
-
-  TimeOfDay? _initialBirthTime() {
-    final match = RegExp(
-      r'^(\d{2}):(\d{2})',
-    ).firstMatch(_birthTimeController.text.trim());
-    if (match == null) return null;
-    return TimeOfDay(
-      hour: int.parse(match.group(1)!),
-      minute: int.parse(match.group(2)!),
-    );
-  }
-
-  String _twoDigits(int value) => value.toString().padLeft(2, '0');
-
-  Future<void> _pickBirthDate() async {
-    final today = DateTime.now();
-    const minYear = 1900;
-    final maxYear = today.year;
-    final initial = _initialBirthDate();
-    var year = math.min(maxYear, math.max(minYear, initial.year));
-    var month = initial.month;
-    var day = math.min(initial.day, DateUtils.getDaysInMonth(year, month));
-    final yearController = FixedExtentScrollController(
-      initialItem: year - minYear,
-    );
-    final monthController = FixedExtentScrollController(initialItem: month - 1);
-    final dayController = FixedExtentScrollController(initialItem: day - 1);
-
-    final result = await showModalBottomSheet<_PickerSelection<DateTime>>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => _DisposeControllers(
-        controllers: [yearController, monthController, dayController],
-        child: StatefulBuilder(
-          builder: (context, setModalState) {
-            final dayCount = DateUtils.getDaysInMonth(year, month);
-            void updateDayBounds() {
-              day = math.min(day, dayCount);
-              dayController.jumpToItem(day - 1);
-            }
-
-            return Container(
-              padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Text('생년월일 선택', style: mainTitle(size: 20)),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('취소'),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.pop(
-                          context,
-                          _PickerSelection.confirmed(
-                            DateTime(year, month, day),
-                          ),
-                        ),
-                        child: const Text('선택'),
-                      ),
-                    ],
-                  ),
-                  SizedBox(
-                    height: 220,
-                    child: Row(
-                      children: [
-                        _pickerWheel(
-                          controller: yearController,
-                          itemCount: maxYear - minYear + 1,
-                          labelBuilder: (index) => '${minYear + index}년',
-                          onSelectedItemChanged: (index) {
-                            setModalState(() {
-                              year = minYear + index;
-                              updateDayBounds();
-                            });
-                          },
-                        ),
-                        _pickerWheel(
-                          controller: monthController,
-                          itemCount: 12,
-                          labelBuilder: (index) => '${index + 1}월',
-                          onSelectedItemChanged: (index) {
-                            setModalState(() {
-                              month = index + 1;
-                              updateDayBounds();
-                            });
-                          },
-                        ),
-                        _pickerWheel(
-                          controller: dayController,
-                          itemCount: dayCount,
-                          labelBuilder: (index) => '${index + 1}일',
-                          onSelectedItemChanged: (index) => day = index + 1,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
-      ),
-    );
-    if (!mounted ||
-        result == null ||
-        !result.confirmed ||
-        result.value == null) {
-      return;
-    }
-    final selected = result.value!;
-    setState(() {
-      _birthDateController.text =
-          '${selected.year}-${_twoDigits(selected.month)}-${_twoDigits(selected.day)}';
-    });
-  }
-
-  Future<void> _pickBirthTime() async {
-    final initial = _initialBirthTime();
-    var hour = initial?.hour ?? 12;
-    var minute = initial?.minute ?? 0;
-    final hourController = FixedExtentScrollController(initialItem: hour);
-    final minuteController = FixedExtentScrollController(initialItem: minute);
-
-    final result = await showModalBottomSheet<_PickerSelection<String?>>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => _DisposeControllers(
-        controllers: [hourController, minuteController],
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Text('출생 시각 선택', style: mainTitle(size: 20)),
-                  const Spacer(),
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('취소'),
-                  ),
-                  TextButton(
-                    onPressed: () => Navigator.pop(
-                      context,
-                      _PickerSelection.confirmed(
-                        '${_twoDigits(hour)}:${_twoDigits(minute)}',
-                      ),
-                    ),
-                    child: const Text('선택'),
-                  ),
-                ],
-              ),
-              SizedBox(
-                height: 220,
-                child: Row(
-                  children: [
-                    _pickerWheel(
-                      controller: hourController,
-                      itemCount: 24,
-                      labelBuilder: (index) => '${_twoDigits(index)}시',
-                      onSelectedItemChanged: (index) => hour = index,
-                    ),
-                    _pickerWheel(
-                      controller: minuteController,
-                      itemCount: 60,
-                      labelBuilder: (index) => '${_twoDigits(index)}분',
-                      onSelectedItemChanged: (index) => minute = index,
-                    ),
-                  ],
-                ),
-              ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: () => Navigator.pop(
-                    context,
-                    const _PickerSelection<String?>.confirmed(null),
-                  ),
-                  icon: const Icon(Icons.backspace_outlined, size: 16),
-                  label: const Text('출생 시각 지우기'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (!mounted || result == null || !result.confirmed) return;
-    setState(() => _birthTimeController.text = result.value ?? '');
-  }
-
-  Widget _pickerWheel({
-    required FixedExtentScrollController controller,
-    required int itemCount,
-    required String Function(int index) labelBuilder,
-    required ValueChanged<int> onSelectedItemChanged,
-  }) {
-    return Expanded(
-      child: CupertinoPicker(
-        scrollController: controller,
-        itemExtent: 44,
-        useMagnifier: true,
-        magnification: 1.08,
-        onSelectedItemChanged: onSelectedItemChanged,
-        children: [
-          for (var index = 0; index < itemCount; index++)
-            Center(child: Text(labelBuilder(index))),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _save() async {
-    final birthDate = _birthDateController.text.trim();
-    final timezone = _timezoneController.text.trim();
-    if (birthDate.isEmpty || timezone.isEmpty) {
-      setState(() => _errorMessage = '생년월일과 시간대를 입력해주세요.');
-      return;
-    }
-
-    setState(() {
-      _saving = true;
-      _errorMessage = null;
-    });
+  Future<void> _loadAssessments() async {
+    final api = _catalogApi;
+    if (api == null) return;
     try {
-      final profile = await _api.update(
-        BirthProfileInput(
-          calendarType: _calendarType,
-          birthDate: birthDate,
-          lunarLeapMonth: _lunarLeapMonth,
-          birthTime: _birthTimeController.text.trim().isEmpty
-              ? null
-              : _birthTimeController.text.trim(),
-          timezone: timezone,
-          birthPlace: _birthPlaceController.text.trim().isEmpty
-              ? null
-              : _birthPlaceController.text.trim(),
-        ),
-      );
+      final items = await api.fetch();
       if (!mounted) return;
-      _setProfile(profile);
-      setState(() {
-        _profile = profile;
-        _saving = false;
-      });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('출생 프로필을 저장했어요.')));
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _saving = false;
-        _errorMessage = _messageFor(error);
-      });
+      setState(() => _loadedAssessmentStatus = _statusFromAssessments(items));
+    } catch (_) {
+      // The hub stays usable when assessment status is unavailable.
     }
   }
 
-  String _messageFor(Object error) {
-    if (error is! BirthProfileApiException) return '출생 프로필을 불러오지 못했어요.';
-    return switch (error.reason) {
-      'network_error' => '네트워크 연결을 확인하고 다시 시도해주세요.',
-      'invalid_calendar_type' => '양력 또는 음력을 선택해주세요.',
-      'invalid_birth_date' => '생년월일을 올바르게 입력해주세요.',
-      'future_birth_date' => '미래 날짜는 입력할 수 없어요.',
-      'invalid_birth_time' => '출생 시각을 HH:mm 형식으로 입력해주세요.',
-      'invalid_timezone' => '시간대 형식을 확인해주세요.',
-      'missing_fields' => '생년월일과 시간대를 입력해주세요.',
-      _ => '출생 프로필을 저장하지 못했어요.',
-    };
-  }
-
-  RelationshipAssessmentStatus get _effectiveStatus {
-    if (!_hasSavedBirthProfile) {
-      return RelationshipAssessmentStatus.profileIncomplete;
+  Future<void> _loadToday() async {
+    final fortuneApi = _fortuneApi;
+    final tarotApi = _tarotApi;
+    if (fortuneApi == null && tarotApi == null) {
+      if (mounted) setState(() => _todayLoading = false);
+      return;
     }
-    return _loadedAssessmentStatus ?? widget.assessmentStatus;
+    var failed = false;
+    FortuneToday? fortune;
+    TarotToday? tarot;
+    await Future.wait([
+      () async {
+        if (fortuneApi == null) return;
+        try {
+          fortune = await fortuneApi.fetchToday();
+        } catch (_) {
+          failed = true;
+        }
+      }(),
+      () async {
+        if (tarotApi == null) return;
+        try {
+          tarot = await tarotApi.fetchToday();
+        } catch (_) {
+          failed = true;
+        }
+      }(),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _fortune = fortune;
+      _tarot = tarot;
+      _todayFailed = failed && fortune == null && tarot == null;
+      _todayLoading = false;
+    });
   }
 
   RelationshipAssessmentStatus _statusFromAssessments(
-    List<AssessmentCatalogItem> assessments,
+    List<AssessmentCatalogItem> items,
   ) {
-    final personal = assessments.where(
-      (assessment) => assessment.audience == AssessmentAudience.individual,
+    final personal = items.where(
+      (a) => a.audience == AssessmentAudience.individual,
     );
     if (personal.any(
-      (assessment) =>
-          assessment.completionStatus == AssessmentCompletionStatus.inProgress,
+      (a) => a.completionStatus == AssessmentCompletionStatus.inProgress,
     )) {
       return RelationshipAssessmentStatus.inProgress;
     }
     if (personal.any(
-      (assessment) =>
-          assessment.completionStatus == AssessmentCompletionStatus.completed,
+      (a) => a.completionStatus == AssessmentCompletionStatus.completed,
     )) {
       return RelationshipAssessmentStatus.resultReady;
     }
     return RelationshipAssessmentStatus.notStarted;
   }
 
-  bool get _hasSavedBirthProfile =>
-      _profile?.birthDate.trim().isNotEmpty == true;
+  // ---- birth info -------------------------------------------------------
 
-  String get _statusTitle => switch (_effectiveStatus) {
-    RelationshipAssessmentStatus.profileIncomplete => '출생 프로필을 먼저 완성해주세요',
-    RelationshipAssessmentStatus.notStarted => '아직 시작하지 않은 검사예요',
-    RelationshipAssessmentStatus.inProgress => '진행 중인 검사가 있어요',
-    RelationshipAssessmentStatus.resultReady => '확인할 결과가 준비됐어요',
-  };
+  bool get _hasBirthProfile => _profile?.birthDate.trim().isNotEmpty == true;
 
-  String get _statusDescription => switch (_effectiveStatus) {
-    RelationshipAssessmentStatus.profileIncomplete =>
-      '기본 정보를 저장하면 관계 이해를 시작할 수 있어요.',
-    RelationshipAssessmentStatus.notStarted => '개인 검사부터 천천히 시작할 수 있어요.',
-    RelationshipAssessmentStatus.inProgress => '내가 답한 곳부터 이어서 살펴볼 수 있어요.',
-    RelationshipAssessmentStatus.resultReady => '점수와 관계 패턴을 함께 확인해보세요.',
-  };
-
-  String? get _statusActionLabel => switch (_effectiveStatus) {
-    RelationshipAssessmentStatus.profileIncomplete => null,
-    RelationshipAssessmentStatus.notStarted => '검사 시작하기',
-    RelationshipAssessmentStatus.inProgress => '검사 이어하기',
-    RelationshipAssessmentStatus.resultReady => '결과 보기',
-  };
-
-  Widget _errorState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: MainCard(
-          key: const Key('relationship_hub_error'),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.cloud_off_outlined, size: 36, color: kMainSub),
-              const SizedBox(height: 12),
-              Text('관계 이해 정보를 불러오지 못했어요', style: mainTitle(size: 20)),
-              const SizedBox(height: 8),
-              Text(
-                _errorMessage ?? '잠시 후 다시 시도해주세요.',
-                textAlign: TextAlign.center,
-                style: mainBody(size: 13, color: kMainSub, height: 1.5),
-              ),
-              const SizedBox(height: 16),
-              OutlinedButton(
-                onPressed: _loadProfile,
-                child: const Text('다시 시도'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _statusCard() {
-    return MainCard(
-      key: const Key('relationship_status_card'),
-      padding: const EdgeInsets.all(18),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.flag_outlined, color: kMainLilac),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('현재 상태', style: mainBody(size: 12, color: kMainSub)),
-                const SizedBox(height: 4),
-                Text(_statusTitle, style: mainBody(weight: FontWeight.w800)),
-                const SizedBox(height: 4),
-                Text(
-                  _statusDescription,
-                  style: mainBody(size: 13, color: kMainSub, height: 1.4),
-                ),
-                if (_statusActionLabel != null) ...[
-                  const SizedBox(height: 12),
-                  FilledButton(
-                    key: const Key('relationship_status_action'),
-                    onPressed: () =>
-                        _openCatalog(AssessmentAudience.individual),
-                    child: Text(_statusActionLabel!),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _personalArea() {
-    final status = _effectiveStatus;
-    final title = switch (status) {
-      RelationshipAssessmentStatus.profileIncomplete => '나의 검사 준비하기',
-      RelationshipAssessmentStatus.notStarted => '나를 이해하는 검사',
-      RelationshipAssessmentStatus.inProgress => '진행 중인 검사',
-      RelationshipAssessmentStatus.resultReady => '최근 검사 결과',
-    };
-    final description = switch (status) {
-      RelationshipAssessmentStatus.profileIncomplete =>
-        '출생 프로필을 저장한 뒤 나의 검사와 기록을 살펴볼 수 있어요.',
-      RelationshipAssessmentStatus.notStarted =>
-        '내 답변은 나에게만 보이며, 원하는 검사부터 시작할 수 있어요.',
-      RelationshipAssessmentStatus.inProgress => '저장된 답변부터 이어서 마무리할 수 있어요.',
-      RelationshipAssessmentStatus.resultReady =>
-        '가장 최근 결과와 이전 기록을 함께 확인할 수 있어요.',
-    };
-    return MainCard(
-      key: const Key('relationship_personal_area'),
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.person_outline, color: kMainRose),
-              const SizedBox(width: 8),
-              Text(title, style: mainBody(weight: FontWeight.w800)),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            description,
-            style: mainBody(size: 13, color: kMainSub, height: 1.5),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _sajuArea({bool couple = false}) {
-    return MainCard(
-      key: Key(
-        couple ? 'relationship_couple_saju_area' : 'relationship_saju_area',
-      ),
-      padding: const EdgeInsets.all(18),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.auto_awesome, color: kMainLilac),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  couple ? '우리의 관계 사주' : '나의 사주',
-                  style: mainBody(weight: FontWeight.w800),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  couple
-                      ? '두 사람의 흐름은 개인 결과와 분리해, 쉬운 설명부터 살펴봐요.'
-                      : '어려운 용어보다 쉬운 설명부터 내 흐름을 살펴봐요.',
-                  style: mainBody(size: 13, color: kMainSub, height: 1.5),
-                ),
-                const SizedBox(height: 10),
-                OutlinedButton(
-                  key: Key(couple ? 'open_couple_saju' : 'open_saju'),
-                  onPressed: () => _openSaju(relationshipFirst: couple),
-                  child: Text(couple ? '관계 사주 보기' : '사주 보기'),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _tarotArea({bool couple = false}) {
-    return MainCard(
-      key: Key(
-        couple ? 'relationship_couple_tarot_area' : 'relationship_tarot_area',
-      ),
-      padding: const EdgeInsets.all(18),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.style_outlined, color: kMainHoney),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  couple ? '우리의 관계 타로' : '오늘의 타로',
-                  style: mainBody(weight: FontWeight.w800),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  couple
-                      ? '오늘은 두 사람의 마음을 비추는 한 장을 함께 골라봐요.'
-                      : '오늘은 한 장만, 가볍게 마음을 비춰봐요.',
-                  style: mainBody(size: 13, color: kMainSub, height: 1.5),
-                ),
-                const SizedBox(height: 10),
-                OutlinedButton(
-                  key: Key(couple ? 'open_couple_tarot' : 'open_tarot'),
-                  onPressed: () => _openTarot(relationshipFirst: couple),
-                  child: Text(couple ? '관계 타로 보기' : '타로 보기'),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _openCatalog(AssessmentAudience audience) {
-    final auth = AuthService();
-    Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => AssessmentCatalogScreen(
-          api: AssessmentCatalogApi(
-            baseUrl: auth.baseUrl,
-            token: auth.token ?? '',
-          ),
-          hasActiveCouple: _hasActiveCouple == true,
-          audienceFilter: audience,
-        ),
-      ),
-    );
-  }
-
-  void _openCompatibility() {
-    final auth = AuthService();
-    Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => CompatibilityDashboardScreen(
-          api: CompatibilityApi(baseUrl: auth.baseUrl, token: auth.token ?? ''),
-        ),
-      ),
-    );
-  }
-
-  void _openPartnerConnection() {
-    Navigator.of(
+  Future<bool> _openBirthSheet() async {
+    final saved = await showBirthInfoSheet(
       context,
-    ).push<void>(MaterialPageRoute(builder: (_) => const PartnerScreen()));
+      api: _api,
+      existing: _hasBirthProfile ? _profile : null,
+    );
+    if (saved == null || !mounted) return false;
+    setState(() {
+      _profile = saved;
+      _profileKnown = true;
+    });
+    showV2Snack(context, '출생 정보를 저장했어요');
+    return true;
   }
 
-  void _openPrivateCounseling() {
-    final auth = AuthService();
-    Navigator.of(context).push<void>(
+  Future<void> _editOnlyStart() async {
+    await _loadProfile();
+    if (!mounted) return;
+    await _openBirthSheet();
+  }
+
+  // ---- navigation --------------------------------------------------------
+
+  AuthService get _auth => AuthService();
+
+  void _push(Widget page) =>
+      Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) => page));
+
+  Future<void> _openFortune() async {
+    await Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) => RelationshipCounselingScreen(
-          api: CounselingApi(baseUrl: auth.baseUrl, token: auth.token ?? ''),
-          shared: false,
+        builder: (_) => RelationshipFortuneScreen(
+          api: FortuneApi(baseUrl: _auth.baseUrl, token: _auth.token ?? ''),
+          scope: _we ? FortuneScope.couple : FortuneScope.personal,
         ),
       ),
     );
+    if (mounted && _fortuneApi != null) _loadToday();
   }
 
-  void _openMindcare() {
-    final auth = AuthService();
-    Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => MindcareScreen(
-          api: MindcareApi(baseUrl: auth.baseUrl, token: auth.token ?? ''),
-        ),
-      ),
-    );
-  }
-
-  void _openSaju({bool relationshipFirst = false}) {
-    final auth = AuthService();
-    Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => SajuScreen(
-          api: SajuApi(baseUrl: auth.baseUrl, token: auth.token ?? ''),
-          relationshipFirst: relationshipFirst,
-          onEditProfile: () => Navigator.of(context).push<void>(
-            MaterialPageRoute(
-              builder: (_) => const RelationshipUnderstandingScreen(
-                editBirthProfileOnly: true,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _openTarot({bool relationshipFirst = false}) {
-    final auth = AuthService();
-    Navigator.of(context).push<void>(
+  Future<void> _openTarot() async {
+    await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => TarotScreen(
-          api: TarotApi(baseUrl: auth.baseUrl, token: auth.token ?? ''),
-          relationshipFirst: relationshipFirst,
-          onOpenPartner: _openPartnerConnection,
+          api: TarotApi(baseUrl: _auth.baseUrl, token: _auth.token ?? ''),
+          relationshipFirst: _we,
         ),
       ),
     );
+    if (mounted && _tarotApi != null) _loadToday();
   }
 
-  void _openSharedCounseling() {
-    final auth = AuthService();
-    Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => RelationshipCounselingScreen(
-          api: CounselingApi(baseUrl: auth.baseUrl, token: auth.token ?? ''),
-          shared: true,
-          onOpenPartner: _openPartnerConnection,
-        ),
-      ),
-    );
-  }
-
-  Widget _counselingArea({required bool shared}) {
-    return MainCard(
-      key: Key(
-        shared
-            ? 'relationship_shared_counseling_area'
-            : 'relationship_counseling_area',
-      ),
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.forum_outlined, color: kMainLilac),
-              const SizedBox(width: 8),
-              Text(
-                shared ? '커플 상담' : '프라이빗 상담',
-                style: mainBody(weight: FontWeight.w800),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            shared
-                ? '두 사람이 함께 확인할 수 있는 내용만 바탕으로 대화해요.'
-                : '나만 볼 수 있는 공간에서 감정과 관계 패턴을 정리해요.',
-            style: mainBody(size: 13, color: kMainSub, height: 1.5),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              OutlinedButton(
-                key: Key(
-                  shared ? 'open_shared_counseling' : 'open_private_counseling',
-                ),
-                onPressed: shared
-                    ? _openSharedCounseling
-                    : _openPrivateCounseling,
-                child: Text(shared ? '커플 상담 시작' : '프라이빗 상담 시작'),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _mindcareArea() {
-    return MainCard(
-      key: const Key('relationship_mindcare_area'),
-      padding: const EdgeInsets.all(18),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.chat_bubble_outline, color: kMainLilac),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('마음관리 가이드', style: mainBody(weight: FontWeight.w800)),
-                const SizedBox(height: 6),
-                Text(
-                  '상담사와 채팅하듯 따뜻한 질문을 따라 감정과 작은 행동을 정리해요.',
-                  style: mainBody(size: 13, color: kMainSub, height: 1.5),
-                ),
-                const SizedBox(height: 10),
-                OutlinedButton(
-                  key: const Key('open_mindcare'),
-                  onPressed: _openMindcare,
-                  child: const Text('마음관리 시작'),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _coupleArea() {
-    final active = _hasActiveCouple == true;
-    final resolving = _hasActiveCouple == null;
-    final title = active
-        ? '커플 검사'
-        : resolving
-        ? '커플 연결 상태를 확인하는 중이에요'
-        : '커플 영역은 잠겨 있어요';
-    final description = active
-        ? '각자의 답변은 비공개로 저장되고, 완료 신호가 모이면 함께 볼 결과가 준비돼요.'
-        : resolving
-        ? '잠시만 기다려주세요. 연결된 커플 정보를 확인하고 있어요.'
-        : '파트너를 연결하면 두 사람의 관계 패턴을 함께 살펴볼 수 있어요.';
-    return MainCard(
-      key: const Key('relationship_couple_area'),
-      padding: const EdgeInsets.all(18),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            active ? Icons.favorite_border : Icons.hourglass_empty_rounded,
-            color: active ? kMainRose : kMainMuted,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: mainBody(weight: FontWeight.w800)),
-                const SizedBox(height: 6),
-                Text(
-                  description,
-                  style: mainBody(size: 13, color: kMainSub, height: 1.5),
-                ),
-                if (active) ...[
-                  const SizedBox(height: 12),
-                  FilledButton(
-                    key: const Key('open_couple_catalog'),
-                    onPressed: () => _openCatalog(AssessmentAudience.couple),
-                    child: const Text('커플 검사 확인하기'),
-                  ),
-                ] else if (_coupleLoadFailed) ...[
-                  const SizedBox(height: 12),
-                  OutlinedButton(
-                    onPressed: _loadActiveCouple,
-                    child: const Text('다시 확인'),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _compatibilityArea() => MainCard(
-    key: const Key('relationship_compatibility_area'),
-    padding: const EdgeInsets.all(18),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Icon(Icons.favorite_outline, color: kMainRose),
-            const SizedBox(width: 8),
-            Text('우리의 궁합', style: mainBody(weight: FontWeight.w800)),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Text(
-          '준비된 검사 결과만 사용해 두 사람의 관계 패턴을 함께 살펴봐요.',
-          style: mainBody(size: 13, color: kMainSub, height: 1.5),
-        ),
-        const SizedBox(height: 12),
-        OutlinedButton(
-          key: const Key('open_compatibility'),
-          onPressed: _openCompatibility,
-          child: const Text('궁합 분석 보기'),
-        ),
-      ],
+  void _openSaju() => _push(
+    SajuScreen(
+      api: SajuApi(baseUrl: _auth.baseUrl, token: _auth.token ?? ''),
+      relationshipFirst: _we,
     ),
   );
 
-  Widget _coupleRestrictedArea() => MainCard(
-    key: const Key('relationship_couple_restricted'),
-    color: kMainPaperSoft,
-    padding: const EdgeInsets.all(16),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('커플 기능은 연결 후 열려요', style: mainBody(weight: FontWeight.w800)),
-        const SizedBox(height: 6),
-        Text(
-          '개인 검사와 기록은 계속 내 공간에 남고, 커플 검사와 궁합은 활성 커플에게만 보여요.',
-          style: mainBody(size: 13, color: kMainSub, height: 1.5),
-        ),
-        const SizedBox(height: 10),
-        OutlinedButton(
-          onPressed: _openPartnerConnection,
-          child: const Text('파트너 연결하기'),
-        ),
-      ],
+  void _openCatalog() => _push(
+    AssessmentCatalogScreen(
+      api: AssessmentCatalogApi(
+        baseUrl: _auth.baseUrl,
+        token: _auth.token ?? '',
+      ),
+      hasActiveCouple: _hasActiveCouple == true,
+      audienceFilter: _we ? AssessmentAudience.couple : null,
     ),
   );
 
-  Widget _coupleCheckStateArea() => MainCard(
-    key: const Key('relationship_couple_check_state'),
-    color: kMainPaperSoft,
-    padding: const EdgeInsets.all(16),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(
-          _coupleLoadFailed
-              ? Icons.cloud_off_outlined
-              : Icons.hourglass_empty_rounded,
-          color: kMainMuted,
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _coupleLoadFailed
-                    ? '커플 연결 상태를 확인하지 못했어요'
-                    : '커플 연결 상태를 확인하는 중이에요',
-                style: mainBody(weight: FontWeight.w800),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                _coupleLoadFailed
-                    ? '잠시 후 다시 확인해주세요. 연결 전으로 확정하지 않았어요.'
-                    : '연결 상태를 확인한 뒤 커플 기능을 보여드릴게요.',
-                style: mainBody(size: 13, color: kMainSub, height: 1.5),
-              ),
-              if (_coupleLoadFailed) ...[
-                const SizedBox(height: 10),
-                OutlinedButton(
-                  onPressed: _loadActiveCouple,
-                  child: const Text('다시 확인'),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
+  void _openCompatibility() => _push(
+    CompatibilityDashboardScreen(
+      api: CompatibilityApi(baseUrl: _auth.baseUrl, token: _auth.token ?? ''),
     ),
   );
 
-  void _selectArea(int index) {
-    final area = index == 0
-        ? _RelationshipArea.personal
-        : _RelationshipArea.couple;
-    if (area == _RelationshipArea.couple && _hasActiveCouple != true) {
-      _areaTabController.animateTo(0);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            _hasActiveCouple == null
-                ? (_coupleLoadFailed
-                      ? '커플 연결 상태를 확인하지 못했어요. 아래에서 다시 확인해주세요.'
-                      : '커플 연결 상태를 확인하고 있어요.')
-                : '파트너를 연결하면 커플 영역을 이용할 수 있어요.',
-          ),
-        ),
-      );
-      return;
-    }
-    setState(() => _selectedArea = area);
-  }
+  void _openMindcare() => _push(
+    MindcareScreen(
+      api: MindcareApi(baseUrl: _auth.baseUrl, token: _auth.token ?? ''),
+    ),
+  );
+
+  void _openCounseling({required bool shared}) => _push(
+    RelationshipCounselingScreen(
+      api: CounselingApi(baseUrl: _auth.baseUrl, token: _auth.token ?? ''),
+      shared: shared,
+      onOpenPartner: () => openPartnerConnection(context),
+    ),
+  );
+
+  // ---- build -------------------------------------------------------------
+
+  bool get _paired => _hasActiveCouple == true;
 
   @override
   Widget build(BuildContext context) {
-    final showBirthProfile =
-        widget.editBirthProfileOnly || !_hasSavedBirthProfile;
-    return Scaffold(
-      backgroundColor: kMainBg,
-      appBar: AppBar(
-        backgroundColor: kMainBg,
-        title: Text(
-          widget.editBirthProfileOnly ? '출생 프로필 수정' : '관계 이해 허브',
-          style: mainTitle(size: 22),
-        ),
-        bottom: widget.editBirthProfileOnly
-            ? null
-            : PreferredSize(
-                preferredSize: const Size.fromHeight(48),
-                child: TabBar(
-                  controller: _areaTabController,
-                  onTap: _selectArea,
-                  isScrollable: true,
-                  tabAlignment: TabAlignment.center,
-                  indicatorSize: TabBarIndicatorSize.label,
-                  indicator: const UnderlineTabIndicator(
-                    borderSide: BorderSide(color: kMainRose, width: 3),
-                    insets: EdgeInsets.symmetric(horizontal: 10),
-                  ),
-                  dividerColor: Colors.transparent,
-                  labelColor: kMainRose,
-                  unselectedLabelColor: kMainMuted,
-                  labelStyle: mainBody(size: 18, weight: FontWeight.w800),
-                  unselectedLabelStyle: mainBody(
-                    size: 18,
-                    weight: FontWeight.w700,
-                  ),
-                  labelPadding: const EdgeInsets.symmetric(horizontal: 28),
-                  tabs: [
-                    Semantics(
-                      container: true,
-                      label: '개인 영역 탭',
-                      selected: _selectedArea == _RelationshipArea.personal,
-                      child: const Tab(text: '개인'),
-                    ),
-                    Semantics(
-                      container: true,
-                      label: '커플 영역 탭',
-                      selected: _selectedArea == _RelationshipArea.couple,
-                      child: const Tab(text: '커플'),
+    if (widget.editBirthProfileOnly) return _editOnlyPage();
+    return V2Theme(
+      child: Scaffold(
+        appBar: const V2Header(title: '우리 이해'),
+        body: Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(V2Space.page, 0, V2Space.page, 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: CareHelpChip(),
+              ),
+            ),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _loadAll,
+                child: ListView(
+                  padding: const EdgeInsets.only(bottom: 40),
+                  children: [
+                    _todaySection(),
+                    _knowSection(),
+                    _careSection(),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        V2Space.page,
+                        20,
+                        V2Space.page,
+                        0,
+                      ),
+                      child: Text(
+                        '재미와 자기 이해를 위한 안내예요. 예언이나 진단, 치료가 아니에요.',
+                        style: V2Text.cap,
+                      ),
                     ),
                   ],
                 ),
               ),
+            ),
+          ],
+        ),
       ),
-      body: _loading
-          ? const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(color: kMainRose),
-                  SizedBox(height: 12),
-                  Text('관계 이해 정보를 불러오는 중이에요'),
+    );
+  }
+
+  Widget _editOnlyPage() {
+    return V2Theme(
+      child: Scaffold(
+        appBar: const V2Header(title: '출생 정보'),
+        body: ListView(
+          padding: const EdgeInsets.all(V2Space.page),
+          children: [
+            if (_hasBirthProfile)
+              V2Card(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('저장된 출생 정보', style: V2Text.cap),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${_profile!.calendarType == BirthCalendarType.lunar ? '음력' : '양력'} ${_profile!.birthDate}'
+                      '${_profile!.lunarLeapMonth ? ' (윤달)' : ''}',
+                      style: V2Text.head,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _profile!.birthTime == null
+                          ? '태어난 시각 모름'
+                          : '태어난 시각 ${_profile!.birthTime}',
+                      style: V2Text.cap,
+                    ),
+                  ],
+                ),
+              )
+            else
+              Text('아직 출생 정보가 없어요. 사주와 운세를 볼 때만 써요.', style: V2Text.body),
+            const SizedBox(height: 16),
+            V2Button(
+              label: _hasBirthProfile ? '출생 정보 수정하기' : '출생 정보 입력하기',
+              onPressed: _openBirthSheet,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _todaySection() {
+    return V2Section(
+      title: '오늘',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_paired)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: V2Segmented<bool>(
+                segments: const [
+                  V2Segment(value: false, label: '나'),
+                  V2Segment(value: true, label: '우리'),
                 ],
+                selected: _we,
+                onChanged: (v) => setState(() => _we = v),
               ),
             )
-          : _profile == null && _errorMessage != null
-          ? _errorState()
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(18, 8, 18, 32),
+          else if (_hasActiveCouple == false)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: V2Banner(
+                message: '파트너와 연결하면 우리 운세, 우리 타로, 궁합도 볼 수 있어요.',
+                actionLabel: '연결하기',
+                onAction: () => openPartnerConnection(context),
+              ),
+            ),
+          if (_todayLoading)
+            const V2SkeletonList(count: 2)
+          else if (_todayFailed)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: V2Banner(
+                tone: V2BannerTone.err,
+                message: '오늘의 운세와 타로를 불러오지 못했어요.',
+                actionLabel: '다시 시도',
+                onAction: _loadAll,
+              ),
+            )
+          else ...[
+            _fortuneCard(),
+            const SizedBox(height: 10),
+            _tarotCard(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _fortuneCard() {
+    final today = _fortune;
+    final content = _we ? today?.relationship : today?.personal;
+    final needsProfile = !_we && today != null && content == null;
+    return V2Card(
+      key: const Key('hub_today_fortune'),
+      onTap: needsProfile ? _editThenReload : _openFortune,
+      semanticLabel: '오늘의 운세 열기',
+      child: Row(
+        children: [
+          const V2Art(icon: V2Icons.star, tone: V2Tone.honey, size: 52),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (!widget.editBirthProfileOnly) ...[
-                      Text(
-                        '관계 이해 허브',
-                        style: mainTitle(size: 26, color: kMainRose),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _selectedArea == _RelationshipArea.personal
-                            ? '내 감정과 관계 패턴을 먼저 살펴봐요.'
-                            : '두 사람의 응답이 모이면 관계 패턴을 함께 살펴봐요.',
-                        style: mainBody(size: 14, color: kMainSub, height: 1.5),
-                      ),
-                      if (_selectedArea == _RelationshipArea.personal) ...[
-                        const SizedBox(height: 16),
-                        _statusCard(),
-                      ],
-                    ],
-                    if (showBirthProfile &&
-                        _selectedArea == _RelationshipArea.personal) ...[
-                      const SizedBox(height: 24),
-                      Text(
-                        '출생 프로필',
-                        style: mainTitle(size: 26, color: kMainRose),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '나중에 관계 이해 콘텐츠를 맞춤화할 때 사용할 정보예요. '
-                        '출생 시각과 장소는 몰라도 괜찮아요.',
-                        style: mainBody(size: 14, color: kMainSub, height: 1.5),
-                      ),
-                      const SizedBox(height: 20),
-                      MainCard(
-                        padding: const EdgeInsets.all(18),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '달력 구분',
-                              style: mainBody(weight: FontWeight.w700),
-                            ),
-                            const SizedBox(height: 8),
-                            DropdownButtonFormField<BirthCalendarType>(
-                              initialValue: _calendarType,
-                              decoration: _decoration('달력 구분'),
-                              items: const [
-                                DropdownMenuItem(
-                                  value: BirthCalendarType.solar,
-                                  child: Text('양력'),
-                                ),
-                                DropdownMenuItem(
-                                  value: BirthCalendarType.lunar,
-                                  child: Text('음력'),
-                                ),
-                              ],
-                              onChanged: (value) {
-                                if (value != null) {
-                                  setState(() {
-                                    _calendarType = value;
-                                    if (value == BirthCalendarType.solar) {
-                                      _lunarLeapMonth = false;
-                                    }
-                                  });
-                                }
-                              },
-                            ),
-                            if (_calendarType == BirthCalendarType.lunar) ...[
-                              const SizedBox(height: 10),
-                              CheckboxListTile(
-                                key: const Key('lunar_leap_month_toggle'),
-                                contentPadding: EdgeInsets.zero,
-                                value: _lunarLeapMonth,
-                                onChanged: (value) => setState(
-                                  () => _lunarLeapMonth = value ?? false,
-                                ),
-                                title: const Text('윤달 생일이에요'),
-                                subtitle: const Text('음력 윤달이면 꼭 알려주세요.'),
-                                controlAffinity:
-                                    ListTileControlAffinity.leading,
-                              ),
-                            ],
-                            const SizedBox(height: 14),
-                            _pickerField(
-                              _birthDateController,
-                              '생년월일 (YYYY-MM-DD)',
-                              icon: Icons.calendar_month_outlined,
-                              onTap: _pickBirthDate,
-                            ),
-                            const SizedBox(height: 14),
-                            _pickerField(
-                              _birthTimeController,
-                              '출생 시각 (HH:mm, 선택)',
-                              icon: Icons.schedule_outlined,
-                              onTap: _pickBirthTime,
-                            ),
-                            const SizedBox(height: 14),
-                            DropdownButtonFormField<String>(
-                              initialValue: _birthCountry,
-                              decoration: _decoration('출생 국가·지역'),
-                              items: [
-                                for (final option in _birthCountryOptions)
-                                  DropdownMenuItem(
-                                    value: option.label,
-                                    child: Text(option.label),
-                                  ),
-                              ],
-                              onChanged: (value) {
-                                if (value != null) _selectBirthCountry(value);
-                              },
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              '국가의 대표 시간대를 사용해요. 도시·지역은 출생지에 적어주세요.',
-                              style: mainBody(size: 12, color: kMainMuted),
-                            ),
-                            const SizedBox(height: 14),
-                            _textField(_birthPlaceController, '출생지 (선택)'),
-                            if (_errorMessage != null) ...[
-                              const SizedBox(height: 14),
-                              Text(
-                                _errorMessage!,
-                                key: const Key('birth_profile_error'),
-                                style: mainBody(size: 13, color: kError),
-                              ),
-                            ],
-                            const SizedBox(height: 18),
-                            SizedBox(
-                              width: double.infinity,
-                              child: FilledButton(
-                                onPressed: _saving ? null : _save,
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: kMainRose,
-                                  foregroundColor: Colors.white,
-                                  shape: const StadiumBorder(),
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 14,
-                                  ),
-                                ),
-                                child: _saving
-                                    ? const SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Colors.white,
-                                        ),
-                                      )
-                                    : const Text('저장하기'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (_profile != null) ...[
-                        const SizedBox(height: 14),
-                        Text(
-                          '출생 프로필은 본인 계정에만 저장돼요.',
-                          style: mainBody(size: 12, color: kMainMuted),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ],
-                    if (!widget.editBirthProfileOnly) ...[
-                      const SizedBox(height: 18),
-                      if (_selectedArea == _RelationshipArea.personal) ...[
-                        _personalArea(),
-                        const SizedBox(height: 12),
-                        _sajuArea(),
-                        const SizedBox(height: 12),
-                        _tarotArea(),
-                        const SizedBox(height: 12),
-                        _mindcareArea(),
-                        const SizedBox(height: 12),
-                        _counselingArea(shared: false),
-                        if (_hasActiveCouple == false) ...[
-                          const SizedBox(height: 12),
-                          _coupleRestrictedArea(),
-                        ] else if (_hasActiveCouple == null) ...[
-                          const SizedBox(height: 12),
-                          _coupleCheckStateArea(),
-                        ],
-                      ] else ...[
-                        _coupleArea(),
-                        const SizedBox(height: 12),
-                        _compatibilityArea(),
-                        const SizedBox(height: 12),
-                        _sajuArea(couple: true),
-                        const SizedBox(height: 12),
-                        _tarotArea(couple: true),
-                        const SizedBox(height: 12),
-                        _counselingArea(shared: true),
-                      ],
-                    ],
-                  ],
+                Text(_we ? '오늘 우리의 운세' : '오늘의 운세', style: V2Text.cap),
+                const SizedBox(height: 2),
+                Text(
+                  content?.title.isNotEmpty == true
+                      ? content!.title
+                      : needsProfile
+                      ? '출생 정보를 알려 주세요'
+                      : '오늘의 흐름 보기',
+                  style: V2Text.bodyStrong,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  content?.summary.isNotEmpty == true
+                      ? content!.summary
+                      : needsProfile
+                      ? '생년월일을 입력하면 한 줄 운세가 나와요.'
+                      : '눌러서 오늘의 한 줄을 확인해요.',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: V2Text.cap,
                 ),
               ],
             ),
+          ),
+          const Icon(V2Icons.chevron, size: 20),
+        ],
+      ),
     );
   }
 
-  InputDecoration _decoration(String hint) => InputDecoration(
-    hintText: hint,
-    filled: true,
-    fillColor: kMainPaperSoft,
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: BorderSide.none,
-    ),
-  );
+  Future<void> _editThenReload() async {
+    if (await _openBirthSheet() && mounted) {
+      await _loadToday();
+    }
+  }
 
-  Widget _textField(
-    TextEditingController controller,
-    String hint, {
-    TextInputType? keyboardType,
-  }) {
-    return TextField(
-      controller: controller,
-      keyboardType: keyboardType,
-      decoration: _decoration(hint),
+  Widget _tarotCard() {
+    final today = _tarot;
+    final reading = _we ? today?.relationship : today?.personal;
+    final card = reading?.card;
+    return V2Card(
+      key: const Key('hub_today_tarot'),
+      onTap: _openTarot,
+      semanticLabel: '오늘의 타로 열기',
+      child: Row(
+        children: [
+          SizedBox(
+            width: 52,
+            child: card != null
+                ? TarotCardFace(cardKey: card.key, title: card.title, width: 52)
+                : const TarotCardBack(width: 52),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_we ? '오늘 우리의 타로' : '오늘의 타로', style: V2Text.cap),
+                const SizedBox(height: 2),
+                Text(
+                  card != null ? card.title : '오늘의 한 장을 뽑아 보세요',
+                  style: V2Text.bodyStrong,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  card != null ? card.plain : '하루에 한 장, 마음에 끌리는 카드를 골라요.',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: V2Text.cap,
+                ),
+              ],
+            ),
+          ),
+          const Icon(V2Icons.chevron, size: 20),
+        ],
+      ),
     );
   }
 
-  Widget _pickerField(
-    TextEditingController controller,
-    String hint, {
-    required IconData icon,
-    required VoidCallback onTap,
-  }) {
-    return TextField(
-      controller: controller,
-      readOnly: true,
-      onTap: onTap,
-      decoration: _decoration(
-        hint,
-      ).copyWith(suffixIcon: Icon(icon, color: kMainMuted)),
+  V2Chip _assessmentBadge() {
+    final status = _loadedAssessmentStatus ?? widget.assessmentStatus;
+    return switch (status) {
+      RelationshipAssessmentStatus.inProgress => const V2Chip(
+        label: '진행 중',
+        tone: V2Tone.honey,
+      ),
+      RelationshipAssessmentStatus.resultReady => const V2Chip(
+        label: '결과 있음',
+        tone: V2Tone.ok,
+      ),
+      _ => const V2Chip(label: '시작 전'),
+    };
+  }
+
+  Widget _knowSection() {
+    final sajuBadge = !_profileKnown
+        ? null
+        : _hasBirthProfile
+        ? const V2Chip(label: '준비됨', tone: V2Tone.ok)
+        : const V2Chip(label: '출생 정보 필요', tone: V2Tone.warn);
+    return V2Section(
+      title: '알아가기',
+      child: V2List(
+        children: [
+          V2ListTile(
+            key: const Key('hub_saju'),
+            icon: V2Icons.sparkle,
+            tone: V2Tone.sage,
+            title: _we ? '우리의 사주' : '사주',
+            subtitle: '태어난 날로 보는 나의 기질',
+            trailing: sajuBadge,
+            onTap: _openSaju,
+          ),
+          V2ListTile(
+            key: const Key('hub_assessments'),
+            icon: V2Icons.help,
+            tone: V2Tone.lilac,
+            title: '심리검사',
+            subtitle: '출생 정보 없이 바로 할 수 있어요',
+            trailing: _assessmentBadge(),
+            onTap: _openCatalog,
+          ),
+          V2ListTile(
+            key: const Key('hub_compatibility'),
+            icon: V2Icons.heart,
+            tone: V2Tone.rose,
+            title: '궁합',
+            subtitle: _paired ? '두 사람의 검사 결과로 보는 관계 패턴' : '파트너와 연결하면 볼 수 있어요',
+            trailing: _paired
+                ? const V2Chip(label: '연결됨', tone: V2Tone.ok)
+                : const V2Chip(label: '파트너 연결 후', icon: V2Icons.lock),
+            onTap: _paired
+                ? _openCompatibility
+                : () => openPartnerConnection(context),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _careSection() {
+    return V2Section(
+      title: '돌봄',
+      child: V2List(
+        children: [
+          V2ListTile(
+            key: const Key('hub_mindcare'),
+            icon: V2Icons.care,
+            tone: V2Tone.lilac,
+            title: '마음관리',
+            subtitle: '질문에 눌러서 답하며 마음을 정리해요',
+            onTap: _openMindcare,
+          ),
+          V2ListTile(
+            key: const Key('hub_counseling'),
+            icon: V2Icons.chat,
+            tone: V2Tone.sky,
+            title: 'AI 상담',
+            subtitle: 'AI 가이드와 이야기해요. 전문 상담이 아니에요',
+            onTap: () => _openCounseling(shared: false),
+          ),
+          V2ListTile(
+            key: const Key('hub_care_settings'),
+            icon: V2Icons.settings,
+            tone: V2Tone.neutral,
+            title: '돌봄 설정',
+            subtitle: '위치 사용 미리 정하기 · 긴급 연락처',
+            onTap: () => _push(const CareSettingsScreen()),
+          ),
+          if (_paired)
+            V2ListTile(
+              key: const Key('hub_shared_counseling'),
+              icon: V2Icons.couple,
+              tone: V2Tone.peach,
+              title: '함께 하는 상담',
+              subtitle: '두 사람이 함께 볼 수 있는 공간이에요',
+              onTap: () => _openCounseling(shared: true),
+            ),
+        ],
+      ),
     );
   }
 }

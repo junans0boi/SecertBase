@@ -1,8 +1,14 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
+import 'package:secret_base_app/v2/v2.dart';
+
 import '../../core/auth_service.dart';
-import '../../core/main_design.dart';
 import '../../core/tarot_api.dart';
+import 'relationship_common.dart';
+import 'share_card.dart';
+import 'widgets/tarot_card_art.dart';
 
 class TarotScreen extends StatefulWidget {
   final TarotApi? api;
@@ -27,8 +33,10 @@ class _TarotScreenState extends State<TarotScreen> {
   TarotApiException? _error;
   bool _loading = true;
   String? _drawingScope;
-  final Map<String, PageController> _deckControllers = {};
-  final Map<String, int> _selectedDeckIndex = {};
+  String? _drawError;
+  late String _scope = widget.relationshipFirst ? 'couple' : 'user';
+  final Map<String, String> _selected = {};
+  final Set<String> _justDrawn = {};
 
   @override
   void initState() {
@@ -42,12 +50,12 @@ class _TarotScreenState extends State<TarotScreen> {
 
   @override
   void dispose() {
-    for (final controller in _deckControllers.values) {
-      controller.dispose();
-    }
     if (_ownsApi) _api.close();
     super.dispose();
   }
+
+  void _openPartner() =>
+      (widget.onOpenPartner ?? () => openPartnerConnection(context))();
 
   Future<void> _load() async {
     setState(() {
@@ -60,6 +68,7 @@ class _TarotScreenState extends State<TarotScreen> {
       setState(() {
         _today = today;
         _loading = false;
+        if (_scope == 'couple' && today.relationship == null) _scope = 'user';
       });
     } catch (error) {
       if (!mounted) return;
@@ -72,595 +81,425 @@ class _TarotScreenState extends State<TarotScreen> {
     }
   }
 
-  Future<void> _draw(TarotReading reading, TarotDeckCard choice) async {
+  Future<void> _draw(TarotReading reading) async {
+    final key = _selected[reading.scope];
+    if (key == null || _drawingScope != null) return;
     setState(() {
       _drawingScope = reading.scope;
-      _error = null;
+      _drawError = null;
     });
     try {
-      final today = await _api.drawToday(
-        scope: reading.scope,
-        cardKey: choice.key,
-      );
+      final today = await _api.drawToday(scope: reading.scope, cardKey: key);
       if (!mounted) return;
       setState(() {
         _today = today;
         _drawingScope = null;
+        _justDrawn.add(reading.scope);
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _drawingScope = null;
-        _error = error is TarotApiException
-            ? error
-            : const TarotApiException('unknown_error');
+        _drawError =
+            error is TarotApiException && error.reason == 'network_error'
+            ? '네트워크 연결을 확인하고 다시 시도해 주세요. 고른 카드는 그대로예요.'
+            : '카드를 뒤집지 못했어요. 다시 시도해 주세요.';
       });
     }
   }
 
+  TarotReading? get _reading =>
+      _scope == 'couple' ? _today?.relationship : _today?.personal;
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: kMainBg,
-      appBar: AppBar(
-        backgroundColor: kMainBg,
-        title: Text(
-          widget.relationshipFirst ? '우리의 관계 타로' : '오늘의 타로',
-          style: mainTitle(size: 22),
+    return V2Theme(
+      child: Scaffold(
+        appBar: V2Header(
+          title: widget.relationshipFirst ? '우리의 관계 타로' : '오늘의 타로',
         ),
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: kMainLilac))
-          : _today == null
-          ? _errorState()
-          : SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(18, 12, 18, 34),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _today!.date,
-                    style: mainBody(
-                      size: 12,
-                      color: kMainSub,
-                      weight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  _scopeBadge(
-                    label: widget.relationshipFirst
-                        ? '우리 둘의 관계 타로'
-                        : '나만 보는 타로',
-                    couple: widget.relationshipFirst,
-                  ),
-                  const SizedBox(height: 5),
-                  Text('오늘의 한 장', style: mainTitle(size: 32, color: kMainRose)),
-                  const SizedBox(height: 5),
-                  Text(
-                    '카드가 답을 정해주기보다, 지금의 마음을 바라볼 질문을 건네요.',
-                    style: mainBody(size: 13, color: kMainSub, height: 1.55),
-                  ),
-                  if (_today!.catalogVersion.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      '메이저 아르카나 22장 · ${_today!.catalogVersion}',
-                      style: mainBody(size: 11, color: kMainMuted),
-                    ),
-                  ],
-                  const SizedBox(height: 22),
-                  if (widget.relationshipFirst &&
-                      _today!.relationship != null) ...[
-                    Text('우리의 관계 타로', style: mainTitle(size: 25)),
-                    const SizedBox(height: 8),
-                    _readingSection(_today!.relationship!),
-                    const SizedBox(height: 28),
-                  ],
-                  Text('나의 타로', style: mainTitle(size: 25)),
-                  const SizedBox(height: 8),
-                  if (_today!.personal != null)
-                    _readingSection(_today!.personal!),
-                  if (_today!.personal == null)
-                    _missingReading('개인 타로를 준비하지 못했어요.'),
-                  if (!widget.relationshipFirst &&
-                      _today!.relationship != null) ...[
-                    const SizedBox(height: 28),
-                    Text('우리의 관계 타로', style: mainTitle(size: 23)),
-                    const SizedBox(height: 8),
-                    _readingSection(_today!.relationship!),
-                  ],
-                  const SizedBox(height: 18),
-                  Text(
-                    '하루 한 장만 고를 수 있고, 선택한 카드는 오늘 하루 동안 바뀌지 않아요.',
-                    textAlign: TextAlign.center,
-                    style: mainBody(size: 12, color: kMainMuted),
-                  ),
-                ],
-              ),
-            ),
-    );
-  }
-
-  Widget _readingSection(TarotReading reading) {
-    if (!reading.drawn || reading.card == null) {
-      return _pickCard(reading);
-    }
-    return _card(reading, key: Key('tarot_${reading.scope}_card'));
-  }
-
-  Widget _pickCard(TarotReading reading) {
-    final busy = _drawingScope == reading.scope;
-    return MainCard(
-      key: Key('tarot_${reading.scope}_picker'),
-      color: kMainPaper,
-      padding: const EdgeInsets.fromLTRB(14, 17, 14, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            reading.scope == 'couple' ? '우리의 마음이 끌리는 한 장' : '마음이 끌리는 한 장',
-            style: mainBody(size: 16, color: kMainInk, weight: FontWeight.w800),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            '카드 뭉치에서 한 장을 골라 오늘의 질문을 받아보세요.',
-            key: Key('tarot_${reading.scope}_pick_help'),
-            style: mainBody(size: 13, color: kMainSub, height: 1.5),
-          ),
-          const SizedBox(height: 12),
-          if (busy)
-            const SizedBox(
-              height: 260,
-              child: Center(
-                child: CircularProgressIndicator(color: kMainLilac),
-              ),
-            )
-          else
-            _fanDeck(reading),
-        ],
+        body: _body(),
       ),
     );
   }
 
-  Widget _fanDeck(TarotReading reading) {
-    final count = reading.cards.length;
-    if (count == 0) {
-      return MainCard(
-        key: Key('tarot_${reading.scope}_empty_deck'),
-        color: kMainPaperSoft,
-        child: Text(
-          '오늘 선택할 카드 뭉치를 준비하지 못했어요. 잠시 후 다시 시도해주세요.',
-          style: mainBody(size: 13, color: kMainSub, height: 1.5),
-        ),
+  Widget _body() {
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.all(V2Space.page),
+        child: V2SkeletonList(count: 2),
       );
     }
-    final controller = _deckControllers.putIfAbsent(
-      reading.scope,
-      () => PageController(viewportFraction: 0.22),
-    );
-    final selectedIndex = _selectedDeckIndex[reading.scope] ?? 0;
-    return Column(
-      key: Key('tarot_${reading.scope}_arc_deck'),
-      children: [
-        SizedBox(
-          key: Key('tarot_${reading.scope}_card_strip'),
-          height: 190,
-          child: PageView.builder(
-            controller: controller,
-            itemCount: count,
-            padEnds: true,
-            clipBehavior: Clip.none,
-            onPageChanged: (index) {
-              if (!mounted) return;
-              setState(() => _selectedDeckIndex[reading.scope] = index);
-            },
-            itemBuilder: (context, index) {
-              final choice = reading.cards[index];
-              return AnimatedBuilder(
-                animation: controller,
-                child: _faceDownCard(
+    final today = _today;
+    if (today == null) return _errorState();
+    final reading = _reading;
+    final hasCouple = today.relationship != null;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(V2Space.page, 4, V2Space.page, 40),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(today.date, style: V2Text.cap),
+              const SizedBox(height: 4),
+              Text(
+                _scope == 'couple' ? '우리의 오늘의 한 장' : '오늘의 한 장',
+                style: V2Text.title,
+              ),
+              const SizedBox(height: 4),
+              Text('카드가 답을 정해 주기보다, 지금의 마음을 바라볼 질문을 건네요.', style: V2Text.cap),
+              const SizedBox(height: 14),
+              if (hasCouple)
+                V2Segmented<String>(
+                  segments: const [
+                    V2Segment(value: 'user', label: '나'),
+                    V2Segment(value: 'couple', label: '우리'),
+                  ],
+                  selected: _scope,
+                  onChanged: (v) => setState(() => _scope = v),
+                ),
+              const SizedBox(height: 18),
+              if (reading == null)
+                V2Card(
+                  key: const Key('tarot_missing_reading'),
+                  variant: V2CardVariant.soft,
+                  child: Text('타로를 준비하지 못했어요. 다시 시도해 주세요.', style: V2Text.body),
+                )
+              else if (!reading.drawn || reading.card == null)
+                _picker(reading)
+              else
+                _TarotResult(
+                  key: Key('tarot_${reading.scope}_card'),
                   reading: reading,
-                  choice: choice,
-                  selected: selectedIndex == index,
-                  onTap: () {
-                    if (selectedIndex != index) {
-                      _moveDeck(reading.scope, index);
-                    } else {
-                      _draw(reading, choice);
-                    }
-                  },
+                  flip: _justDrawn.contains(reading.scope),
                 ),
-                builder: (context, child) {
-                  final page = controller.hasClients && controller.page != null
-                      ? controller.page!
-                      : selectedIndex.toDouble();
-                  final distance = (page - index).abs().clamp(0.0, 1.0);
-                  final scale = 1.22 - (distance * 0.40);
-                  final opacity = 1.0 - (distance * 0.22);
-                  return Center(
-                    child: Opacity(
-                      opacity: opacity,
-                      child: Transform.scale(scale: scale, child: child),
-                    ),
-                  );
-                },
-              );
-            },
-          ),
-        ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            IconButton(
-              key: Key('tarot_${reading.scope}_previous'),
-              tooltip: '이전 카드',
-              onPressed: selectedIndex == 0
-                  ? null
-                  : () => _moveDeck(reading.scope, selectedIndex - 1),
-              icon: const Icon(Icons.chevron_left_rounded),
-              color: kMainLilac,
-            ),
-            SizedBox(
-              width: 92,
-              child: Text(
-                '카드 ${selectedIndex + 1} / $count',
-                textAlign: TextAlign.center,
-                style: mainBody(
-                  size: 12,
-                  color: kMainSub,
-                  weight: FontWeight.w800,
-                ),
-              ),
-            ),
-            IconButton(
-              key: Key('tarot_${reading.scope}_next'),
-              tooltip: '다음 카드',
-              onPressed: selectedIndex == count - 1
-                  ? null
-                  : () => _moveDeck(reading.scope, selectedIndex + 1),
-              icon: const Icon(Icons.chevron_right_rounded),
-              color: kMainLilac,
-            ),
-          ],
-        ),
-        Text(
-          '가운데 카드를 눌러 선택하세요',
-          textAlign: TextAlign.center,
-          style: mainBody(size: 12, color: kMainLilac, weight: FontWeight.w800),
-        ),
-      ],
-    );
-  }
-
-  void _moveDeck(String scope, int index) {
-    final controller = _deckControllers[scope];
-    if (controller == null || !controller.hasClients) return;
-    controller.animateToPage(
-      index,
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
-    );
-  }
-
-  Widget _faceDownCard({
-    required TarotReading reading,
-    required TarotDeckCard choice,
-    required bool selected,
-    required VoidCallback onTap,
-  }) {
-    return Semantics(
-      button: true,
-      label: selected
-          ? '타로 카드 ${choice.position}번 선택'
-          : '타로 카드 ${choice.position}번을 가운데로 이동',
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          key: Key('tarot_pick_${reading.scope}_${choice.key}'),
-          borderRadius: BorderRadius.circular(14),
-          onTap: onTap,
-          child: Ink(
-            width: 82,
-            height: 118,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              gradient: const LinearGradient(
-                colors: [Color(0xff514382), Color(0xff9e83d3)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              border: Border.all(
-                color: Colors.white.withAlpha(selected ? 230 : 150),
-                width: selected ? 1.8 : 1.2,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: selected
-                      ? kMainLilac.withAlpha(90)
-                      : const Color(0x22000000),
-                  blurRadius: selected ? 16 : 8,
-                  offset: const Offset(0, 5),
-                ),
-              ],
-            ),
-            child: Center(
-              child: Container(
-                margin: const EdgeInsets.all(5),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.white.withAlpha(110)),
-                ),
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+              if (!hasCouple) ...[
+                const SizedBox(height: 20),
+                V2Card(
+                  variant: V2CardVariant.soft,
+                  child: Row(
                     children: [
-                      const Icon(
-                        Icons.auto_awesome,
-                        size: 18,
-                        color: Colors.white,
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        choice.position.toString().padLeft(2, '0'),
-                        textAlign: TextAlign.center,
-                        style: mainBody(
-                          size: 12,
-                          color: Colors.white,
-                          weight: FontWeight.w800,
+                      const V2Art(icon: V2Icons.couple, size: 48),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('우리의 타로도 뽑아 볼까요?', style: V2Text.bodyStrong),
+                            const SizedBox(height: 2),
+                            Text(
+                              '파트너와 연결하면 둘을 위한 한 장이 열려요.',
+                              style: V2Text.cap,
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
+                const SizedBox(height: 10),
+                V2Button(
+                  label: '파트너 연결하기',
+                  variant: V2ButtonVariant.soft,
+                  onPressed: _openPartner,
+                ),
+              ],
+              const SizedBox(height: 20),
+              Text(
+                '하루에 한 장만 고를 수 있고, 고른 카드는 오늘 하루 바뀌지 않아요.',
+                textAlign: TextAlign.center,
+                style: V2Text.cap,
               ),
-            ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _card(TarotReading reading, {required Key key}) {
-    final card = reading.card!;
-    final isCouple = reading.scope == 'couple';
-    return MainCard(
-      key: key,
-      color: kMainPaper,
-      padding: const EdgeInsets.fromLTRB(16, 17, 16, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _scopeBadge(
-            label: isCouple ? '우리 둘의 관계 카드' : '나만 보는 카드',
-            couple: isCouple,
-          ),
-          const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _cardArtwork(card),
-              const SizedBox(width: 13),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      isCouple ? '우리의 오늘의 카드' : '나의 오늘의 카드',
-                      style: mainBody(
-                        size: 12,
-                        color: kMainLilac,
-                        weight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(card.title, style: mainTitle(size: 29)),
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: kMainLilacSoft,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        '정방향 · 오늘의 메시지',
-                        style: mainBody(
-                          size: 11,
-                          color: kMainLilac,
-                          weight: FontWeight.w800,
+  Widget _picker(TarotReading reading) {
+    final busy = _drawingScope == reading.scope;
+    final selected = _selected[reading.scope];
+    final p = V2Palette.of(context);
+    return Column(
+      key: Key('tarot_${reading.scope}_picker'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          reading.scope == 'couple' ? '우리의 마음이 끌리는 한 장' : '마음이 끌리는 한 장',
+          style: V2Text.head,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '카드 뭉치를 옆으로 넘기며 한 장을 골라 보세요.',
+          key: Key('tarot_${reading.scope}_pick_help'),
+          style: V2Text.cap,
+        ),
+        const SizedBox(height: 14),
+        if (reading.cards.isEmpty)
+          V2Card(
+            key: Key('tarot_${reading.scope}_empty_deck'),
+            variant: V2CardVariant.soft,
+            child: Text(
+              '오늘 고를 수 있는 카드가 아직 없어요. 잠시 뒤 다시 와 주세요.',
+              style: V2Text.body,
+            ),
+          )
+        else
+          SizedBox(
+            height: 232,
+            child: ListView.separated(
+              key: Key('tarot_${reading.scope}_card_strip'),
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+              itemCount: reading.cards.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 10),
+              itemBuilder: (context, i) {
+                final deckCard = reading.cards[i];
+                final isSel = selected == deckCard.key;
+                return Semantics(
+                  button: true,
+                  selected: isSel,
+                  label: '${i + 1}번째 카드${isSel ? ', 선택됨' : ''}',
+                  onTap: busy
+                      ? null
+                      : () => setState(
+                          () => _selected[reading.scope] = deckCard.key,
+                        ),
+                  child: ExcludeSemantics(
+                    child: GestureDetector(
+                      key: Key('tarot_pick_${reading.scope}_${deckCard.key}'),
+                      behavior: HitTestBehavior.opaque,
+                      onTap: busy
+                          ? null
+                          : () => setState(
+                              () => _selected[reading.scope] = deckCard.key,
+                            ),
+                      child: AnimatedContainer(
+                        duration: V2Motion.of(context, V2Motion.base),
+                        transform: Matrix4.translationValues(
+                          0,
+                          isSel ? -10 : 0,
+                          0,
+                        ),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: isSel ? p.primary : Colors.transparent,
+                            width: 3,
+                          ),
+                          boxShadow: isSel ? V2Shadow.level2 : V2Shadow.level1,
+                        ),
+                        child: const TarotCardBack(
+                          width: 112,
+                          excludeSemantics: true,
                         ),
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          const Divider(color: kMainLine, height: 1),
-          const SizedBox(height: 16),
-          Text(
-            '핵심 메시지',
-            style: mainBody(size: 12, color: kMainSub, weight: FontWeight.w800),
-          ),
-          const SizedBox(height: 7),
-          KeyedSubtree(
-            key: Key('tarot_${reading.scope}_result_message'),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
-              decoration: BoxDecoration(
-                color: kMainRoseSoft,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Text(
-                card.plain,
-                style: mainBody(
-                  size: 15,
-                  color: kMainInk,
-                  height: 1.6,
-                  weight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            '오늘의 질문',
-            style: mainBody(size: 12, color: kMainSub, weight: FontWeight.w800),
-          ),
-          const SizedBox(height: 5),
-          KeyedSubtree(
-            key: Key('tarot_${reading.scope}_result_question'),
-            child: Text(
-              card.reflection,
-              style: mainBody(size: 14, color: kMainInk, height: 1.6),
-            ),
-          ),
-          const SizedBox(height: 13),
-          Text(
-            reading.disclaimer,
-            style: mainBody(size: 11, color: kMainMuted, height: 1.4),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _cardArtwork(TarotCard card) {
-    return Container(
-      width: 76,
-      height: 106,
-      decoration: BoxDecoration(
-        gradient: kRoseGrad,
-        borderRadius: BorderRadius.circular(17),
-        boxShadow: [
-          BoxShadow(
-            color: kMainRose.withAlpha(45),
-            blurRadius: 12,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(_symbolFor(card.key), size: 34, color: Colors.white),
-          const SizedBox(height: 8),
-          Text(
-            'MAJOR ARCANA',
-            textAlign: TextAlign.center,
-            style: mainBody(
-              size: 7,
-              color: Colors.white,
-              weight: FontWeight.w800,
-              height: 1,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  IconData _symbolFor(String key) => switch (key) {
-    'the_fool' => Icons.explore_outlined,
-    'the_magician' => Icons.auto_fix_high_outlined,
-    'the_high_priestess' => Icons.nightlight_outlined,
-    'the_empress' => Icons.spa_outlined,
-    'the_emperor' => Icons.shield_outlined,
-    'the_hierophant' => Icons.menu_book_outlined,
-    'the_lovers' => Icons.favorite_border,
-    'the_chariot' => Icons.navigation_outlined,
-    'strength' => Icons.favorite_rounded,
-    'the_hermit' => Icons.lightbulb_outline,
-    'wheel_of_fortune' => Icons.sync,
-    'justice' => Icons.balance,
-    'the_hanged_man' => Icons.flip_camera_android_outlined,
-    'death' => Icons.restart_alt,
-    'temperance' => Icons.water_drop_outlined,
-    'the_devil' => Icons.link_outlined,
-    'the_tower' => Icons.flash_on_outlined,
-    'the_star' => Icons.star_outline,
-    'the_moon' => Icons.dark_mode_outlined,
-    'the_sun' => Icons.wb_sunny_outlined,
-    'judgement' => Icons.campaign_outlined,
-    'the_world' => Icons.public_outlined,
-    _ => Icons.auto_awesome,
-  };
-
-  Widget _errorState() => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: MainCard(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.cloud_off_outlined, color: kMainSub, size: 34),
-            const SizedBox(height: 10),
-            Text(
-              _error?.reason == 'network_error'
-                  ? '네트워크 연결을 확인하고 다시 시도해주세요.'
-                  : '오늘의 타로를 불러오지 못했어요.',
-              textAlign: TextAlign.center,
-              style: mainBody(size: 14, height: 1.5),
-            ),
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.center,
-              children: [
-                OutlinedButton(onPressed: _load, child: const Text('다시 시도')),
-                if (_error?.reason == 'active_couple_required' &&
-                    widget.onOpenPartner != null)
-                  FilledButton(
-                    onPressed: widget.onOpenPartner,
-                    child: const Text('파트너 연결하기'),
                   ),
-              ],
+                );
+              },
             ),
-          ],
-        ),
-      ),
-    ),
-  );
-
-  Widget _missingReading(String text) => MainCard(
-    key: const Key('tarot_missing_reading'),
-    color: kMainPaperSoft,
-    child: Text(text, style: mainBody(size: 13, color: kMainSub, height: 1.5)),
-  );
-
-  Widget _scopeBadge({required String label, required bool couple}) =>
-      Semantics(
-        container: true,
-        label: '타로 범위: $label',
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: couple ? kMainLilacSoft : kMainRoseSoft,
-            borderRadius: BorderRadius.circular(20),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
+        if (_drawError != null) ...[
+          const SizedBox(height: 8),
+          V2Banner(tone: V2BannerTone.err, message: _drawError!),
+        ],
+        const SizedBox(height: 14),
+        V2Button(
+          label: selected == null ? '카드를 한 장 골라 주세요' : '이 카드 뒤집기',
+          loading: busy,
+          onPressed: selected == null || busy ? null : () => _draw(reading),
+        ),
+      ],
+    );
+  }
+
+  Widget _errorState() {
+    final needsPartner = _error?.reason == 'active_couple_required';
+    return Column(
+      children: [
+        Expanded(
+          child: _error?.reason == 'network_error'
+              ? V2ErrorState.offline(onRetry: _load)
+              : V2ErrorState(title: '오늘의 타로를 불러오지 못했어요', onRetry: _load),
+        ),
+        if (needsPartner)
+          Padding(
+            padding: const EdgeInsets.all(V2Space.page),
+            child: V2Button(
+              label: '파트너 연결하기',
+              variant: V2ButtonVariant.soft,
+              onPressed: _openPartner,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// The drawn card: flips from back to face once (skipped for reduced motion
+/// and for cards drawn earlier today), then the reading.
+class _TarotResult extends StatefulWidget {
+  const _TarotResult({super.key, required this.reading, required this.flip});
+
+  final TarotReading reading;
+  final bool flip;
+
+  @override
+  State<_TarotResult> createState() => _TarotResultState();
+}
+
+class _TarotResultState extends State<_TarotResult>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this);
+  bool _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    final d = V2Motion.of(context, const Duration(milliseconds: 700));
+    _c.duration = d;
+    if (widget.flip && d > Duration.zero) {
+      _c.forward();
+    } else {
+      _c.value = 1;
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  void _share(TarotCard card) {
+    showShareCardSheet(
+      context,
+      fileName: 'secretbase-tarot.png',
+      caption: '오늘의 타로 · ${card.title}\n${card.plain}\n- 비밀기지',
+      card: ShareCard(
+        kind: '오늘의 타로',
+        title: card.title,
+        line: card.reflection.isNotEmpty ? card.reflection : card.plain,
+        gradient: V2Gradients.berry,
+        art: TarotCardFace(cardKey: card.key, title: card.title, width: 92),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reading = widget.reading;
+    final card = reading.card!;
+    final isCouple = reading.scope == 'couple';
+    final info = tarotCardInfo(card.key);
+    final p = V2Palette.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Center(
+          child: V2Chip(
+            label: isCouple ? '우리 둘의 관계 카드' : '나만 보는 카드',
+            tone: isCouple ? V2Tone.lilac : V2Tone.rose,
+            icon: isCouple ? V2Icons.couple : V2Icons.person,
+          ),
+        ),
+        const SizedBox(height: 14),
+        Center(
+          child: AnimatedBuilder(
+            animation: _c,
+            builder: (context, _) {
+              final t = Curves.easeInOut.transform(_c.value);
+              final angle = t * math.pi;
+              final showFront = t >= 0.5;
+              return Transform(
+                alignment: Alignment.center,
+                transform: Matrix4.identity()
+                  ..setEntry(3, 2, 0.001)
+                  ..rotateY(showFront ? angle - math.pi : angle),
+                child: showFront
+                    ? DecoratedBox(
+                        decoration: BoxDecoration(boxShadow: V2Shadow.level2),
+                        child: TarotCardFace(
+                          cardKey: card.key,
+                          title: card.title,
+                          width: 168,
+                        ),
+                      )
+                    : const TarotCardBack(width: 168),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          isCouple ? '우리의 오늘의 카드' : '나의 오늘의 카드',
+          textAlign: TextAlign.center,
+          style: V2Text.label.copyWith(color: p.primary, fontSize: 13),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          card.title,
+          textAlign: TextAlign.center,
+          style: V2Text.serif(size: 30, color: p.ink),
+        ),
+        if (info != null) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 6,
+            runSpacing: 6,
             children: [
-              Icon(
-                couple ? Icons.favorite_border_rounded : Icons.person_outline,
-                size: 15,
-                color: couple ? kMainLilac : kMainRose,
-              ),
-              const SizedBox(width: 5),
-              Text(
-                label,
-                style: mainBody(
-                  size: 12,
-                  color: couple ? kMainLilac : kMainRose,
-                  weight: FontWeight.w800,
-                ),
-              ),
+              for (final k in info.keywords)
+                V2Chip(label: k, tone: V2Tone.lilac),
             ],
           ),
+        ],
+        const SizedBox(height: 18),
+        Text('핵심 메시지', style: V2Text.cap),
+        const SizedBox(height: 6),
+        KeyedSubtree(
+          key: Key('tarot_${reading.scope}_result_message'),
+          child: V2Card(
+            color: p.primarySoft,
+            child: Text(
+              card.plain,
+              style: V2Text.body.copyWith(color: p.onPrimarySoft),
+            ),
+          ),
         ),
-      );
+        const SizedBox(height: 16),
+        Text('오늘의 질문', style: V2Text.cap),
+        const SizedBox(height: 6),
+        KeyedSubtree(
+          key: Key('tarot_${reading.scope}_result_question'),
+          child: Text(card.reflection, style: V2Text.body),
+        ),
+        if (!widget.flip) ...[
+          const SizedBox(height: 14),
+          const V2Chip(
+            label: '오늘 이미 뽑은 카드예요',
+            tone: V2Tone.neutral,
+            icon: V2Icons.check,
+          ),
+        ],
+        const SizedBox(height: 16),
+        V2Button(
+          label: '카드로 공유',
+          icon: V2Icons.share,
+          variant: V2ButtonVariant.soft,
+          onPressed: () => _share(card),
+        ),
+        if (reading.disclaimer.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text(reading.disclaimer, style: V2Text.cap),
+        ],
+      ],
+    );
+  }
 }

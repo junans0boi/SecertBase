@@ -3,10 +3,11 @@ import 'package:flutter/material.dart';
 import '../../core/assessment_attempt_api.dart';
 import '../../core/assessment_catalog_api.dart';
 import '../../core/auth_service.dart';
-import '../../core/main_design.dart';
+import 'package:secret_base_app/v2/v2.dart';
 import '../auth/partner_screen.dart';
 import 'assessment_attempt_screen.dart';
 import 'assessment_history_screen.dart';
+import 'assessment_ui.dart';
 
 class AssessmentCatalogScreen extends StatefulWidget {
   final AssessmentCatalogApi api;
@@ -65,82 +66,89 @@ class _AssessmentCatalogScreenState extends State<AssessmentCatalogScreen> {
 
   String _messageFor(Object error) => switch (error) {
     AssessmentCatalogApiException(reason: 'network_error') =>
-      '네트워크 연결을 확인하고 다시 시도해주세요.',
-    AssessmentCatalogApiException() => '검사 목록을 불러오지 못했어요.',
-    _ => '검사 목록을 불러오지 못했어요.',
+      '네트워크 연결을 확인하고 다시 시도해 주세요.',
+    AssessmentCatalogApiException() => '잠시 뒤 다시 시도해 주세요.',
+    _ => '잠시 뒤 다시 시도해 주세요.',
   };
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: kMainBg,
-      appBar: AppBar(
-        backgroundColor: kMainBg,
-        title: Text('검사 목록', style: mainTitle(size: 22)),
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: kMainRose))
-          : _errorMessage != null
-          ? _errorState()
-          : _assessments == null || _assessments!.isEmpty
-          ? _emptyState()
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
-              children: [
-                Text(
-                  widget.audienceFilter == AssessmentAudience.couple
-                      ? '우리의 관계를 이해하는 검사'
-                      : '나를 이해하는 검사',
-                  style: mainTitle(size: 28, color: kMainRose),
+    return V2Theme(
+      child: Scaffold(
+        appBar: const V2Header(title: '심리검사'),
+        body: _loading
+            ? const Padding(
+                padding: EdgeInsets.all(V2Space.page),
+                child: V2SkeletonList(count: 3),
+              )
+            : _errorMessage != null
+            ? KeyedSubtree(
+                key: const Key('assessment_catalog_error'),
+                child: V2ErrorState(
+                  title: '검사 목록을 불러오지 못했어요',
+                  body: _errorMessage,
+                  onRetry: _load,
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  '검사를 시작하면 답변이 저장되고, 제출 후 결과가 기록돼요. '
-                  '다시 검사해도 이전 기록은 남아 있어요.',
-                  style: mainBody(size: 13, color: kMainSub, height: 1.5),
+              )
+            : _assessments == null || _assessments!.isEmpty
+            ? const V2EmptyState(
+                title: '현재 준비된 검사가 없어요',
+                body: '새 검사가 생기면 여기에서 만날 수 있어요.',
+              )
+            : ListView(
+                padding: const EdgeInsets.fromLTRB(
+                  V2Space.page,
+                  4,
+                  V2Space.page,
+                  32,
                 ),
-                const SizedBox(height: 18),
-                if (widget.audienceFilter == null) ...[
-                  _section(
-                    '개인 검사',
-                    _assessments!
-                        .where(
-                          (assessment) =>
-                              assessment.audience ==
-                              AssessmentAudience.individual,
-                        )
-                        .toList(),
-                    enabled: true,
+                children: [
+                  Text(
+                    widget.audienceFilter == AssessmentAudience.couple
+                        ? '우리의 관계를 이해하는 검사'
+                        : '나를 이해하는 검사',
+                    style: V2Text.title,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '답변은 저장되고, 제출하면 결과가 기록돼요. 다시 검사해도 이전 기록은 남아 있어요. 출생 정보는 필요 없어요.',
+                    style: V2Text.cap,
                   ),
                   const SizedBox(height: 18),
-                  _section(
-                    '커플 검사',
-                    _assessments!
-                        .where(
-                          (assessment) =>
-                              assessment.audience == AssessmentAudience.couple,
-                        )
-                        .toList(),
-                    enabled: widget.hasActiveCouple,
-                  ),
-                ] else
-                  _section(
-                    widget.audienceFilter == AssessmentAudience.couple
-                        ? '커플 검사'
-                        : '개인 검사',
-                    _assessments!
-                        .where(
-                          (assessment) =>
-                              assessment.audience == widget.audienceFilter,
-                        )
-                        .toList(),
-                    enabled:
-                        widget.audienceFilter ==
-                            AssessmentAudience.individual ||
-                        widget.hasActiveCouple,
-                  ),
-              ],
-            ),
+                  if (widget.audienceFilter == null) ...[
+                    _section(
+                      '개인 검사',
+                      _assessments!
+                          .where(
+                            (a) => a.audience == AssessmentAudience.individual,
+                          )
+                          .toList(),
+                      enabled: true,
+                    ),
+                    const SizedBox(height: 18),
+                    _section(
+                      '커플 검사',
+                      _assessments!
+                          .where((a) => a.audience == AssessmentAudience.couple)
+                          .toList(),
+                      enabled: widget.hasActiveCouple,
+                    ),
+                  ] else
+                    _section(
+                      widget.audienceFilter == AssessmentAudience.couple
+                          ? '커플 검사'
+                          : '개인 검사',
+                      _assessments!
+                          .where((a) => a.audience == widget.audienceFilter)
+                          .toList(),
+                      enabled:
+                          widget.audienceFilter ==
+                              AssessmentAudience.individual ||
+                          widget.hasActiveCouple,
+                    ),
+                ],
+              ),
+      ),
     );
   }
 
@@ -154,18 +162,22 @@ class _AssessmentCatalogScreenState extends State<AssessmentCatalogScreen> {
       children: [
         Row(
           children: [
-            Text(title, style: mainTitle(size: 20)),
+            Text(title, style: V2Text.head),
             if (!enabled) ...[
               const SizedBox(width: 8),
-              Text('파트너 연결 후', style: mainBody(size: 12, color: kMainMuted)),
+              const V2Chip(
+                label: '파트너 연결 후',
+                tone: V2Tone.neutral,
+                icon: V2Icons.lock,
+              ),
             ],
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         ...assessments.map(
-          (assessment) => Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _assessmentCard(assessment, enabled: enabled),
+          (a) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _assessmentCard(a, enabled: enabled),
           ),
         ),
       ],
@@ -176,108 +188,59 @@ class _AssessmentCatalogScreenState extends State<AssessmentCatalogScreen> {
     AssessmentCatalogItem assessment, {
     required bool enabled,
   }) {
-    final status = switch (assessment.completionStatus) {
-      AssessmentCompletionStatus.notStarted => '아직 시작하지 않았어요',
-      AssessmentCompletionStatus.inProgress => '진행 중이에요',
-      AssessmentCompletionStatus.completed => '완료했어요',
+    final (statusText, statusTone) = switch (assessment.completionStatus) {
+      AssessmentCompletionStatus.notStarted => ('시작 전', V2Tone.neutral),
+      AssessmentCompletionStatus.inProgress => ('진행 중', V2Tone.honey),
+      AssessmentCompletionStatus.completed => ('완료', V2Tone.ok),
     };
+    final count = assessment.activeQuestionCount;
     return Opacity(
-      opacity: enabled ? 1 : 0.62,
-      child: MainCard(
-        padding: const EdgeInsets.all(16),
-        radius: 18,
+      opacity: enabled ? 1 : 0.7,
+      child: V2Card(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Text(
-                    assessment.title,
-                    style: mainBody(weight: FontWeight.w800),
-                  ),
-                ),
-                Text(
-                  assessment.version,
-                  style: mainBody(size: 12, color: kMainMuted),
-                ),
+                Expanded(child: Text(assessment.title, style: V2Text.head)),
+                if (enabled) V2Chip(label: statusText, tone: statusTone),
               ],
             ),
             const SizedBox(height: 6),
-            Text(
-              assessment.description,
-              style: mainBody(size: 13, color: kMainSub, height: 1.45),
-            ),
+            Text(assessment.description, style: V2Text.body),
             const SizedBox(height: 10),
             Text(
-              '후보 ${assessment.candidateQuestionCount}문항 · 실제 ${assessment.activeQuestionCount}문항',
-              style: mainBody(
-                size: 12,
-                color: kMainLilac,
-                weight: FontWeight.w700,
+              assessmentSizeLabel(count),
+              style: V2Text.bodyStrong.copyWith(
+                color: V2Palette.of(context).primary,
               ),
             ),
-            const SizedBox(height: 6),
-            Text(
-              assessment.dimensions
-                  .map((dimension) => dimension.title)
-                  .join(' · '),
-              style: mainBody(size: 12, color: kMainSub),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: enabled ? kMainRoseSoft : kMainPaperSoft,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        enabled ? status : '파트너 연결 후 이용할 수 있어요',
-                        style: mainBody(
-                          size: 12,
-                          color: enabled ? kMainRose : kMainMuted,
-                          weight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            if (!enabled) ...[
-              const SizedBox(height: 10),
-              OutlinedButton(
-                onPressed: _openPartnerConnection,
-                child: const Text('파트너 연결하기'),
-              ),
-            ] else ...[
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  key: Key('assessment_action_${assessment.code}'),
-                  onPressed: () => _openPrimaryAction(assessment),
-                  icon: Icon(
-                    assessment.completionStatus ==
-                            AssessmentCompletionStatus.completed
-                        ? Icons.insights_outlined
-                        : Icons.play_arrow_rounded,
-                    size: 18,
-                  ),
-                  label: Text(_actionLabel(assessment)),
-                ),
+            if (assessment.dimensions.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                assessment.dimensions.map((d) => d.title).join(' · '),
+                style: V2Text.cap,
               ),
             ],
+            const SizedBox(height: 14),
+            if (!enabled)
+              V2Button(
+                label: '파트너 연결하기',
+                variant: V2ButtonVariant.soft,
+                onPressed: _openPartnerConnection,
+              )
+            else
+              V2Button(
+                key: Key('assessment_action_${assessment.code}'),
+                label: _actionLabel(assessment),
+                icon:
+                    assessment.completionStatus ==
+                        AssessmentCompletionStatus.completed
+                    ? V2Icons.sparkle
+                    : V2Icons.chevron,
+                onPressed: () => _openPrimaryAction(assessment),
+              ),
           ],
         ),
       ),
@@ -336,29 +299,4 @@ class _AssessmentCatalogScreenState extends State<AssessmentCatalogScreen> {
       ),
     );
   }
-
-  Widget _errorState() => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: MainCard(
-        key: const Key('assessment_catalog_error'),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('검사 목록을 불러오지 못했어요', style: mainTitle(size: 20)),
-            const SizedBox(height: 8),
-            Text(
-              _errorMessage!,
-              textAlign: TextAlign.center,
-              style: mainBody(size: 13, color: kMainSub),
-            ),
-            const SizedBox(height: 14),
-            OutlinedButton(onPressed: _load, child: const Text('다시 시도')),
-          ],
-        ),
-      ),
-    ),
-  );
-
-  Widget _emptyState() => const Center(child: Text('현재 준비된 검사가 없어요'));
 }
