@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../core/auth_service.dart';
 import '../home/home_format.dart';
 import 'base_api.dart';
 
@@ -24,6 +25,16 @@ class CoupleStore extends ChangeNotifier {
   bool _disposed = false;
 
   String get partnerName => couple?.partnerName ?? '짝꿍';
+
+  String get myName {
+    try {
+      final user = AuthService().user;
+      final name = '${user?['Nickname'] ?? user?['UserName'] ?? ''}'.trim();
+      return name.isEmpty ? '나' : name;
+    } catch (_) {
+      return '나';
+    }
+  }
 
   Future<void> load() async {
     loading = true;

@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-import '../core/main_design.dart';
 import '../core/push/push_service.dart';
 import '../core/push/push_game_route.dart';
 import '../core/push/push_today_route.dart';
@@ -16,6 +15,7 @@ import 'archive/map_screen.dart';
 import 'archive/moment_loop_screen.dart';
 import 'home/home_screen.dart';
 import 'settings/settings_screen.dart';
+import '../v2/v2.dart';
 
 // 새 네이티브 의존성 없이 서버에 가벼운 요청을 보내 연결 여부를 판단한다.
 // ponytail: 서버 도달성 기준(인터넷은 되나 서버만 죽어도 오프라인으로 표시). 필요 시 connectivity_plus로 교체.
@@ -70,13 +70,17 @@ class _HomeShellState extends State<HomeShell> {
     if (mounted && _offline == online) setState(() => _offline = !online);
   }
 
-  late final List<Widget> _pages = [
-    HomeScreen(onNavigate: _handleHomeNavigation),
-    const MomentLoopScreen(),
-    const MapScreen(),
-    const ArcadeScreen(),
-    SettingsScreen(onNavigate: _handleHomeNavigation),
-  ];
+  // Tabs are built the first time they are opened and then kept alive
+  // (IndexedStack), so scroll position, drafts and loaded data survive switches.
+  final Set<int> _visited = {0};
+
+  Widget _buildPage(int i) => switch (i) {
+    0 => HomeScreen(onNavigate: _handleHomeNavigation),
+    1 => const MomentLoopScreen(),
+    2 => const MapScreen(),
+    3 => const ArcadeScreen(),
+    _ => SettingsScreen(onNavigate: _handleHomeNavigation),
+  };
 
   void _schedulePush() {
     if (!mounted || pendingPushTarget.value == null) return;
@@ -114,123 +118,68 @@ class _HomeShellState extends State<HomeShell> {
         }
     }
     if (page == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('알림의 대상을 열 수 없어요.')));
+      showV2Snack(context, '알림이 가리키는 화면을 열 수 없어요.', tone: V2Tone.err);
       return;
     }
     final destination = page;
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => destination));
   }
 
-  void _handleHomeNavigation(int target) {
-    switch (target) {
-      case 1:
-        setState(() => _index = 1);
-      case 2:
-        setState(() => _index = 2);
-      case 3:
-        setState(() => _index = 3);
-      case 4:
-        setState(() => _index = 4);
-    }
+  void _select(int index) {
+    if (index < 0 || index > 4) return;
+    setState(() {
+      _index = index;
+      _visited.add(index);
+    });
   }
+
+  void _handleHomeNavigation(int target) => _select(target);
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: kMainBg,
-      body: Column(
-        children: [
-          if (_offline)
-            Material(
-              color: kMainRose,
-              child: SafeArea(
+    return V2Theme(
+      child: Scaffold(
+        backgroundColor: V2Colors.bg,
+        body: Column(
+          children: [
+            if (_offline)
+              SafeArea(
                 bottom: false,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Center(
-                    child: Text(
-                      '인터넷 연결이 끊겼어요',
-                      style: mainBody(
-                        size: 12,
-                        color: Colors.white,
-                        weight: FontWeight.w700,
-                      ),
-                    ),
+                  padding: const EdgeInsets.fromLTRB(
+                    V2Space.x3,
+                    V2Space.x2,
+                    V2Space.x3,
+                    0,
                   ),
+                  child: const V2Banner.offline(),
+                ),
+              ),
+            Expanded(
+              child: SafeArea(
+                top: false,
+                bottom: false,
+                child: IndexedStack(
+                  index: _index,
+                  children: [
+                    for (var i = 0; i < 5; i++)
+                      _visited.contains(i)
+                          ? TickerMode(
+                              enabled: i == _index,
+                              child: _buildPage(i),
+                            )
+                          : const SizedBox.shrink(),
+                  ],
                 ),
               ),
             ),
-          Expanded(
-            child: SafeArea(top: false, bottom: false, child: _pages[_index]),
-          ),
-        ],
+          ],
+        ),
+        bottomNavigationBar: V2BottomTabBar(
+          currentIndex: _index,
+          onTap: _select,
+        ),
       ),
-      bottomNavigationBar: NavigationBarTheme(
-        data: NavigationBarThemeData(
-          backgroundColor: kMainPaper,
-          surfaceTintColor: Colors.transparent,
-          elevation: 8,
-          shadowColor: kMainRose.withAlpha(60),
-          indicatorColor: kMainRoseSoft,
-          iconTheme: WidgetStateProperty.resolveWith(
-            (states) => IconThemeData(
-              color: states.contains(WidgetState.selected)
-                  ? kMainRose
-                  : kMainMuted,
-            ),
-          ),
-          labelTextStyle: WidgetStateProperty.resolveWith(
-            (states) => mainBody(
-              size: 11,
-              color: states.contains(WidgetState.selected)
-                  ? kMainRose
-                  : kMainMuted,
-              weight: states.contains(WidgetState.selected)
-                  ? FontWeight.w800
-                  : FontWeight.w600,
-            ),
-          ),
-        ),
-        child: _navigationBar(),
-      ),
-    );
-  }
-
-  NavigationBar _navigationBar() {
-    return NavigationBar(
-      height: 72,
-      labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-      selectedIndex: _index,
-      onDestinationSelected: (index) => setState(() => _index = index),
-      destinations: const [
-        NavigationDestination(
-          icon: Icon(Icons.home_outlined),
-          selectedIcon: Icon(Icons.home_rounded),
-          label: '홈',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.auto_stories_outlined),
-          selectedIcon: Icon(Icons.auto_stories_rounded),
-          label: 'MomentLoop',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.map_outlined),
-          selectedIcon: Icon(Icons.map_rounded),
-          label: '지도',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.sports_esports_outlined),
-          selectedIcon: Icon(Icons.sports_esports_rounded),
-          label: '놀이',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.settings_outlined),
-          selectedIcon: Icon(Icons.settings_rounded),
-          label: '더보기',
-        ),
-      ],
     );
   }
 }

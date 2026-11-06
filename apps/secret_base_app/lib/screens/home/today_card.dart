@@ -165,7 +165,7 @@ class TodayCard extends StatelessWidget {
                 onPressed: null,
               )
             : V2Button(
-                label: '${partnerName}에게 콕 찌르기',
+                label: '$partnerName에게 콕 찌르기',
                 icon: Icons.touch_app_rounded,
                 loading: poking,
                 onPressed: onPoke,
