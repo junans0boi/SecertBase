@@ -36,6 +36,7 @@
   lastThrow, turnThrows: [{ result, resultName, sticks, nak, bonus, auto }],
   legalMoves: [{ moveIndex, steps, pieceId, pieceIds, backdoDir, from, to, path, finish, captures, stacks }],
   characters: { [user]: 'honggilldong'|'nolbu'|'miho' }, bgm,
+  theme: 'day'|'night',     // 판마다 서버가 무작위로 정하는 화면 테마(두 사람이 같은 값). 재대결은 다시 굴리고, 복원은 같은 값.
   stake, coinBonus: { [user]: n }, coinBonusCap,
   equippedItems,            // 두 사람 모두: { [user]: { yut_yut: { name, icon, grade, stats } } } (말 스킨은 폐지)
   characterStats,           // 두 사람 모두: { [user]: { power, calm, guard, luck, momentum } } 각 1~5

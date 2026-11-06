@@ -736,3 +736,12 @@ test('state payload carries both characters stat lines', () => {
   assert.deepEqual(view.characterStats.B, Yut.YUT_CHARACTER_STATS.nolbu);
   assert.notDeepEqual(view.characterStats.A, view.characterStats.B);
 });
+
+test('serializeYutState exposes the day/night theme and defaults old games to day', () => {
+  const g = game({});
+  assert.equal(Yut.serializeYutState(g).theme, 'day');
+  g.theme = 'night';
+  assert.equal(Yut.serializeYutState(g).theme, 'night');
+  g.theme = 'weird';
+  assert.equal(Yut.serializeYutState(g).theme, 'day');
+});

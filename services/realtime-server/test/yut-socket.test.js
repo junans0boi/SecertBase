@@ -429,3 +429,38 @@ test('game:yut:state carries both players yut skins, character stats and effecti
   assert.equal(view.effects[A].calmPct, 12);
   assert.ok(view.effects[B].controlPct > 1.2 && view.effects[B].controlPct <= 2.5);
 });
+
+test('the day/night theme is rolled by the server per game: both players get the same one, a rematch rolls again, restore keeps it', async t => {
+  const f = await fixture(t);
+  const { yutRuntime } = await import('../src/games/yut.js');
+  const original = yutRuntime.rollTheme;
+  t.after(() => { yutRuntime.rollTheme = original; });
+  const seq = ['night', 'day'];
+  yutRuntime.rollTheme = () => seq.shift() ?? 'day';
+  const pushed = [[], []];
+  f.clients.forEach((c, i) => c.on('game:yut:state', s => pushed[i].push(s.theme)));
+  const g0 = await startFromLobby(f);
+  assert.equal(g0.theme, 'night');
+  await flush();
+  assert.deepEqual([pushed[0].at(-1), pushed[1].at(-1)], ['night', 'night'], 'both players receive the same theme');
+  assert.equal((await f.call(0, 'game:yut:sync', {})).state.theme, 'night');
+  // 복원은 같은 테마.
+  const restored = [];
+  f.clients[1].on('game:yut:state', s => restored.push(s.theme));
+  assert.ok((await f.call(1, 'session:restore', {})).restored.includes('yut'));
+  await flush();
+  assert.equal(restored.at(-1), 'night');
+  // 재대결은 다시 굴린다(이번에는 낮).
+  await arrange(f, g => { g.winner = null; g.stake = 0; });
+  assert.equal((await f.call(0, 'game:restart:request', { gameType: 'yut' })).ok, true);
+  assert.equal((await f.call(1, 'game:restart:respond', { gameType: 'yut', accept: true })).accepted, true);
+  const g1 = await readGame(f);
+  assert.equal(g1.theme, 'day');
+  assert.notEqual(g1.gameId, g0.gameId);
+  // 이상한 값이 나와도 낮으로 안전하게.
+  yutRuntime.rollTheme = () => 'bogus';
+  await f.redis.del(gameKey(f));
+  assert.equal((await f.call(0, 'game:restart:request', { gameType: 'yut' })).ok, true);
+  await f.call(1, 'game:restart:respond', { gameType: 'yut', accept: true });
+  assert.equal((await readGame(f)).theme, 'day');
+});

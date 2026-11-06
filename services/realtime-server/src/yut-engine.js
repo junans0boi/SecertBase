@@ -786,6 +786,8 @@ export function serializeYutState(gameState, { now = Date.now() } = {}) {
     legalMoves: current && !winner && players.includes(current) ? legalMoves(gameState, current) : [],
     characters: gameState.characters ?? {},
     bgm: gameState.bgm ?? null,
+    // 낮/밤 화면 테마(서버가 판마다 정한다). 옛 판은 낮.
+    theme: gameState.theme === 'night' ? 'night' : 'day',
     stake: gameState.stake ?? 0,
     coinBonus: gameState.coinBonus ?? {},
     coinBonusCap: coinBonusCap(gameState.stake),
