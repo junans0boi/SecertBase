@@ -53,7 +53,11 @@ Map<String, dynamic> _mind({
     },
   ],
   'choices': choices,
-  'nextQuestion': {'key': state, 'text': '어떤 감정이 가까우세요?', 'allowFreeText': false},
+  'nextQuestion': {
+    'key': state,
+    'text': '어떤 감정이 가까우세요?',
+    'allowFreeText': false,
+  },
   ...extra,
 };
 
@@ -78,9 +82,11 @@ void main() {
       client: MockClient((r) async {
         requests.add(r);
         return _json(
-          _mind(choices: [
-            {'key': 'anxious', 'label': '불안해요'},
-          ]),
+          _mind(
+            choices: [
+              {'key': 'anxious', 'label': '불안해요'},
+            ],
+          ),
           201,
         );
       }),
@@ -98,56 +104,78 @@ void main() {
     expect(find.text('불안해요'), findsOneWidget);
     expect(find.text('도움이 필요하면'), findsOneWidget);
     expect(find.byKey(const Key('mindcare_flow_header')), findsOneWidget);
-    expect((await SharedPreferences.getInstance()).getBool(CarePrefs.consentKey), isTrue);
+    expect(
+      (await SharedPreferences.getInstance()).getBool(CarePrefs.consentKey),
+      isTrue,
+    );
   });
 
-  testWidgets('safety answer keeps location off by default and shows built-in contacts', (
+  testWidgets(
+    'safety answer keeps location off by default and shows built-in contacts',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({CarePrefs.consentKey: true});
+      Map<String, dynamic>? safetyBody;
+      final api = MindcareApi(
+        baseUrl: 'https://x.example',
+        token: 't',
+        client: MockClient((r) async {
+          if (r.url.path.endsWith('/sessions')) {
+            return _json(
+              _mind(
+                status: 'safety_pending',
+                state: 'safety',
+                choices: [
+                  {'key': 'safe_now', 'label': '지금은 안전해요'},
+                  {'key': 'need_help', 'label': '지금 도움이 필요해요'},
+                ],
+              ),
+              201,
+            );
+          }
+          if (r.url.path.endsWith('/safety')) {
+            safetyBody = jsonDecode(r.body) as Map<String, dynamic>;
+            return _json(
+              _mind(
+                status: 'safety_support',
+                state: 'safety',
+                extra: {
+                  'safety': {'status': 'needs_immediate_help'},
+                  'resourceVersion': 'v1',
+                  'locationMode': 'general',
+                  'resources': [
+                    {
+                      'key': 'e',
+                      'title': '지금 바로 도움',
+                      'description': 'd',
+                      'contact': '112 / 119',
+                    },
+                  ],
+                },
+              ),
+            );
+          }
+          return _json({'ok': true});
+        }),
+      );
+      await _pump(
+        tester,
+        MindcareScreen(api: api, locationProvider: _Granted()),
+      );
+      await tester.tap(find.text('지금 도움이 필요해요'));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(safetyBody!['safeNow'], isFalse);
+      expect(safetyBody!['locationPermission'], 'denied');
+      expect(safetyBody!.containsKey('adminArea'), isFalse);
+      for (final n in ['112', '119', '109', '1577-0199', '1366']) {
+        expect(find.text(n), findsOneWidget);
+      }
+    },
+  );
+
+  testWidgets('location is sent only when pre-chosen in settings', (
     tester,
   ) async {
-    SharedPreferences.setMockInitialValues({CarePrefs.consentKey: true});
-    Map<String, dynamic>? safetyBody;
-    final api = MindcareApi(
-      baseUrl: 'https://x.example',
-      token: 't',
-      client: MockClient((r) async {
-        if (r.url.path.endsWith('/sessions')) {
-          return _json(
-            _mind(status: 'safety_pending', state: 'safety', choices: [
-              {'key': 'safe_now', 'label': '지금은 안전해요'},
-              {'key': 'need_help', 'label': '지금 도움이 필요해요'},
-            ]),
-            201,
-          );
-        }
-        if (r.url.path.endsWith('/safety')) {
-          safetyBody = jsonDecode(r.body) as Map<String, dynamic>;
-          return _json(
-            _mind(status: 'safety_support', state: 'safety', extra: {
-              'safety': {'status': 'needs_immediate_help'},
-              'resourceVersion': 'v1',
-              'locationMode': 'general',
-              'resources': [
-                {'key': 'e', 'title': '지금 바로 도움', 'description': 'd', 'contact': '112 / 119'},
-              ],
-            }),
-          );
-        }
-        return _json({'ok': true});
-      }),
-    );
-    await _pump(tester, MindcareScreen(api: api, locationProvider: _Granted()));
-    await tester.tap(find.text('지금 도움이 필요해요'));
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(safetyBody!['safeNow'], isFalse);
-    expect(safetyBody!['locationPermission'], 'denied');
-    expect(safetyBody!.containsKey('adminArea'), isFalse);
-    for (final n in ['112', '119', '109', '1577-0199', '1366']) {
-      expect(find.text(n), findsOneWidget);
-    }
-  });
-
-  testWidgets('location is sent only when pre-chosen in settings', (tester) async {
     SharedPreferences.setMockInitialValues({
       CarePrefs.consentKey: true,
       CarePrefs.locationKey: true,
@@ -159,9 +187,13 @@ void main() {
       client: MockClient((r) async {
         if (r.url.path.endsWith('/sessions')) {
           return _json(
-            _mind(status: 'safety_pending', state: 'safety', choices: [
-              {'key': 'need_help', 'label': '지금 도움이 필요해요'},
-            ]),
+            _mind(
+              status: 'safety_pending',
+              state: 'safety',
+              choices: [
+                {'key': 'need_help', 'label': '지금 도움이 필요해요'},
+              ],
+            ),
             201,
           );
         }
@@ -212,72 +244,95 @@ void main() {
     expect(copied, '109');
   });
 
-  testWidgets('counseling shows crisis contacts from server safety fields and fallback badge', (
-    tester,
-  ) async {
-    SharedPreferences.setMockInitialValues({CarePrefs.consentKey: true});
-    final conv = {
-      'ok': true,
-      'session': {'id': 12, 'scope': 'private', 'title': '나의 상담', 'status': 'active'},
-      'messages': [
-        {'id': 1, 'sequence': 1, 'role': 'assistant', 'content': '천천히 이야기해도 괜찮아요.'},
-      ],
-    };
-    final api = CounselingApi(
-      baseUrl: 'https://x.example',
-      token: 't',
-      client: MockClient((r) async {
-        if (r.method == 'GET') return _json({'ok': true, 'sessions': []});
-        if (r.url.path.endsWith('/messages')) {
-          return _json({
-            ...conv,
-            'messages': [
-              ...(conv['messages'] as List),
-              {'id': 2, 'sequence': 2, 'role': 'user', 'content': '힘들어요'},
-              {'id': 3, 'sequence': 3, 'role': 'assistant', 'content': '아래 도움 기관을 확인해 주세요.'},
-            ],
-            'safety': {'required': true, 'status': 'pending'},
-            'resourceVersion': 'v1',
-            'locationMode': 'general',
-            'resources': <Object>[],
-          }, 201);
-        }
-        return _json(conv, 201);
-      }),
-    );
-    await _pump(tester, RelationshipCounselingScreen(api: api, shared: false));
-    expect(find.text('상담 시작하기'), findsOneWidget);
-    expect(find.textContaining('상담사와 채팅'), findsNothing);
-    await tester.tap(find.text('상담 시작하기'));
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.byKey(const Key('counseling_scope_card')), findsOneWidget);
-    expect(find.text('천천히 이야기해도 괜찮아요.'), findsOneWidget);
-    await tester.enterText(find.byType(TextField).first, '힘들어요');
-    await tester.tap(find.text('보내고 답변 받기'));
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('109'), findsOneWidget);
-    expect(find.text('1577-0199'), findsOneWidget);
-  });
+  testWidgets(
+    'counseling shows crisis contacts from server safety fields and fallback badge',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({CarePrefs.consentKey: true});
+      final conv = {
+        'ok': true,
+        'session': {
+          'id': 12,
+          'scope': 'private',
+          'title': '나의 상담',
+          'status': 'active',
+        },
+        'messages': [
+          {
+            'id': 1,
+            'sequence': 1,
+            'role': 'assistant',
+            'content': '천천히 이야기해도 괜찮아요.',
+          },
+        ],
+      };
+      final api = CounselingApi(
+        baseUrl: 'https://x.example',
+        token: 't',
+        client: MockClient((r) async {
+          if (r.method == 'GET') return _json({'ok': true, 'sessions': []});
+          if (r.url.path.endsWith('/messages')) {
+            return _json({
+              ...conv,
+              'messages': [
+                ...(conv['messages'] as List),
+                {'id': 2, 'sequence': 2, 'role': 'user', 'content': '힘들어요'},
+                {
+                  'id': 3,
+                  'sequence': 3,
+                  'role': 'assistant',
+                  'content': '아래 도움 기관을 확인해 주세요.',
+                },
+              ],
+              'safety': {'required': true, 'status': 'pending'},
+              'resourceVersion': 'v1',
+              'locationMode': 'general',
+              'resources': <Object>[],
+            }, 201);
+          }
+          return _json(conv, 201);
+        }),
+      );
+      await _pump(
+        tester,
+        RelationshipCounselingScreen(api: api, shared: false),
+      );
+      expect(find.text('상담 시작하기'), findsOneWidget);
+      expect(find.textContaining('상담사와 채팅'), findsNothing);
+      await tester.tap(find.text('상담 시작하기'));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const Key('counseling_scope_card')), findsOneWidget);
+      expect(find.text('천천히 이야기해도 괜찮아요.'), findsOneWidget);
+      await tester.enterText(find.byType(TextField).first, '힘들어요');
+      await tester.tap(find.text('보내고 답변 받기'));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('109'), findsOneWidget);
+      expect(find.text('1577-0199'), findsOneWidget);
+    },
+  );
 
-  testWidgets('돌봄 설정: location is off by default and needs OS permission to turn on', (
-    tester,
-  ) async {
-    SharedPreferences.setMockInitialValues({});
-    await _pump(tester, const CareSettingsScreen(locationProvider: _Denied()));
-    expect(await CarePrefs.locationEnabled(), isFalse);
-    for (final n in ['112', '119', '109', '1577-0199', '1366']) {
-      expect(find.text(n), findsOneWidget);
-    }
-    // Turning it on goes through the purpose sheet, then the OS (denied here).
-    await tester.tap(find.byType(V2Toggle));
-    await tester.pumpAndSettle();
-    expect(find.text('허용하기'), findsOneWidget);
-    await tester.tap(find.text('허용하기'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('위치를 켜지 못했어요'), findsOneWidget);
-    expect(await CarePrefs.locationEnabled(), isFalse);
-  });
+  testWidgets(
+    '돌봄 설정: location is off by default and needs OS permission to turn on',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await _pump(
+        tester,
+        const CareSettingsScreen(locationProvider: _Denied()),
+      );
+      expect(await CarePrefs.locationEnabled(), isFalse);
+      for (final n in ['112', '119', '109', '1577-0199', '1366']) {
+        expect(find.text(n), findsOneWidget);
+      }
+      // Turning it on goes through the purpose sheet, then the OS (denied here).
+      await tester.tap(find.byType(V2Toggle));
+      await tester.pumpAndSettle();
+      expect(find.text('허용하기'), findsOneWidget);
+      await tester.tap(find.text('허용하기'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('위치를 켜지 못했어요'), findsOneWidget);
+      expect(await CarePrefs.locationEnabled(), isFalse);
+    },
+  );
 }
 
 class _Denied implements SafetyLocationProvider {

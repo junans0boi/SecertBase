@@ -170,29 +170,30 @@ void main() {
     expect(find.text('심리검사'), findsOneWidget);
   });
 
-  testWidgets('today shows the fortune line and tarot card; 나/우리 toggles when paired', (
-    tester,
-  ) async {
-    await _pump(
-      tester,
-      RelationshipUnderstandingScreen(
-        api: _birthApi(),
-        hasActiveCouple: true,
-        fortuneApi: _fortuneApi(),
-        tarotApi: _tarotApi(),
-      ),
-    );
-    expect(find.text('차분하게 중심을 잡는 날'), findsOneWidget);
-    expect(find.text('서두르지 않으면 오늘은 잘 풀려요.'), findsOneWidget);
-    expect(find.text('별'), findsOneWidget);
-    expect(find.text('나'), findsOneWidget);
-    expect(find.text('우리'), findsOneWidget);
-    await tester.tap(find.text('우리'));
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('천천히 맞춰 가는 날'), findsOneWidget);
-    expect(find.text('연결됨'), findsOneWidget);
-    expect(find.text('함께 하는 상담'), findsOneWidget);
-  });
+  testWidgets(
+    'today shows the fortune line and tarot card; 나/우리 toggles when paired',
+    (tester) async {
+      await _pump(
+        tester,
+        RelationshipUnderstandingScreen(
+          api: _birthApi(),
+          hasActiveCouple: true,
+          fortuneApi: _fortuneApi(),
+          tarotApi: _tarotApi(),
+        ),
+      );
+      expect(find.text('차분하게 중심을 잡는 날'), findsOneWidget);
+      expect(find.text('서두르지 않으면 오늘은 잘 풀려요.'), findsOneWidget);
+      expect(find.text('별'), findsOneWidget);
+      expect(find.text('나'), findsOneWidget);
+      expect(find.text('우리'), findsOneWidget);
+      await tester.tap(find.text('우리'));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('천천히 맞춰 가는 날'), findsOneWidget);
+      expect(find.text('연결됨'), findsOneWidget);
+      expect(find.text('함께 하는 상담'), findsOneWidget);
+    },
+  );
 
   testWidgets('unpaired hub offers connection and hides the toggle', (
     tester,
@@ -243,11 +244,13 @@ void main() {
       tester,
       RelationshipUnderstandingScreen(
         editBirthProfileOnly: true,
-        api: _birthApi(onRequest: (r) {
-          if (r.method == 'PATCH') {
-            patched = jsonDecode(r.body) as Map<String, dynamic>;
-          }
-        }),
+        api: _birthApi(
+          onRequest: (r) {
+            if (r.method == 'PATCH') {
+              patched = jsonDecode(r.body) as Map<String, dynamic>;
+            }
+          },
+        ),
       ),
     );
     await tester.pumpAndSettle();

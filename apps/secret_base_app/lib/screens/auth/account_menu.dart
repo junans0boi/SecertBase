@@ -11,7 +11,8 @@ import 'withdraw_screen.dart';
 /// 연결 전에도 닿는 계정 메뉴: 고객센터·약관·개인정보처리방침·로그아웃·회원 탈퇴.
 Future<void> showAccountSheet(BuildContext context) {
   final auth = AuthService();
-  final nick = '${auth.user?['Nickname'] ?? auth.user?['UserName'] ?? ''}'.trim();
+  final nick = '${auth.user?['Nickname'] ?? auth.user?['UserName'] ?? ''}'
+      .trim();
   final email = '${auth.user?['Email'] ?? auth.user?['email'] ?? ''}'.trim();
   final paired = auth.user?['PartnerCode']?.toString().isNotEmpty == true;
   final rootContext = context;

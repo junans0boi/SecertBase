@@ -151,14 +151,15 @@ class _PasswordResetScreenState extends State<PasswordResetScreen> {
     final (title, body, button) = switch (_step) {
       _ResetStep.email => ('비밀번호를 잊으셨나요?', _emailStep(), _sendButton()),
       _ResetStep.code => ('메일을 보냈어요', _codeStep(), _codeButton()),
-      _ResetStep.password => ('새 비밀번호를 만들어요', _passwordStep(), _confirmButton()),
+      _ResetStep.password => (
+        '새 비밀번호를 만들어요',
+        _passwordStep(),
+        _confirmButton(),
+      ),
       _ResetStep.done => ('비밀번호를 바꿨어요', _doneStep(), _doneButton()),
     };
     return AuthFrame(
-      header: V2Header(
-        title: '비밀번호 재설정',
-        onBack: _loading ? () {} : null,
-      ),
+      header: V2Header(title: '비밀번호 재설정', onBack: _loading ? () {} : null),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -180,10 +181,7 @@ class _PasswordResetScreenState extends State<PasswordResetScreen> {
   Widget _emailStep() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      Text(
-        '가입한 이메일을 알려주세요. 비밀번호를 다시 만드는 6자리 코드를 보내드려요.',
-        style: V2Text.cap,
-      ),
+      Text('가입한 이메일을 알려주세요. 비밀번호를 다시 만드는 6자리 코드를 보내드려요.', style: V2Text.cap),
       const SizedBox(height: V2Space.x5),
       V2TextField(
         label: '이메일',
@@ -220,10 +218,7 @@ class _PasswordResetScreenState extends State<PasswordResetScreen> {
         TextSpan(
           style: V2Text.body,
           children: [
-            TextSpan(
-              text: _emailCtrl.text.trim(),
-              style: V2Text.bodyStrong,
-            ),
+            TextSpan(text: _emailCtrl.text.trim(), style: V2Text.bodyStrong),
             const TextSpan(text: '으로 재설정 코드를 보냈어요.'),
           ],
         ),

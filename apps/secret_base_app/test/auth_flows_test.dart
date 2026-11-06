@@ -72,7 +72,9 @@ void main() {
   }
 
   group('onboarding', () {
-    testWidgets('three cards, skip works, and it is remembered', (tester) async {
+    testWidgets('three cards, skip works, and it is remembered', (
+      tester,
+    ) async {
       bigView(tester);
       var done = 0;
       await tester.pumpWidget(
@@ -105,30 +107,41 @@ void main() {
   });
 
   group('login', () {
-    testWidgets('terms links are always visible; wrong password shows a message',
-        (tester) async {
-      bigView(tester);
-      _routes['/api/auth/login'] = (401, {'ok': false, 'reason': 'invalid_credentials'});
-      await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
-      expect(find.text('이용약관'), findsOneWidget);
-      expect(find.text('개인정보처리방침'), findsOneWidget);
-      expect(find.text('이메일로 가입하기'), findsOneWidget);
+    testWidgets(
+      'terms links are always visible; wrong password shows a message',
+      (tester) async {
+        bigView(tester);
+        _routes['/api/auth/login'] = (
+          401,
+          {'ok': false, 'reason': 'invalid_credentials'},
+        );
+        await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
+        expect(find.text('이용약관'), findsOneWidget);
+        expect(find.text('개인정보처리방침'), findsOneWidget);
+        expect(find.text('이메일로 가입하기'), findsOneWidget);
 
-      await tester.tap(find.text('이메일로 로그인'));
-      await tester.pumpAndSettle();
-      expect(find.text('비밀번호를 잊으셨나요?'), findsOneWidget);
-      await tester.enterText(find.byType(TextField).at(0), 'minji@example.test');
-      await tester.enterText(find.byType(TextField).at(1), 'wrongpass1');
-      await tester.tap(find.widgetWithText(TextButton, '로그인'));
-      await tester.pumpAndSettle();
-      expect(find.text('이메일이나 비밀번호가 맞지 않아요. 다시 확인해 주세요.'), findsOneWidget);
-      // password is sent as typed (no trimming)
-      final login = _requests.firstWhere((r) => r.url.path == '/api/auth/login');
-      expect(jsonDecode(login.body)['password'], 'wrongpass1');
-    });
+        await tester.tap(find.text('이메일로 로그인'));
+        await tester.pumpAndSettle();
+        expect(find.text('비밀번호를 잊으셨나요?'), findsOneWidget);
+        await tester.enterText(
+          find.byType(TextField).at(0),
+          'minji@example.test',
+        );
+        await tester.enterText(find.byType(TextField).at(1), 'wrongpass1');
+        await tester.tap(find.widgetWithText(TextButton, '로그인'));
+        await tester.pumpAndSettle();
+        expect(find.text('이메일이나 비밀번호가 맞지 않아요. 다시 확인해 주세요.'), findsOneWidget);
+        // password is sent as typed (no trimming)
+        final login = _requests.firstWhere(
+          (r) => r.url.path == '/api/auth/login',
+        );
+        expect(jsonDecode(login.body)['password'], 'wrongpass1');
+      },
+    );
 
-    testWidgets('empty fields explain what is missing before any request',
-        (tester) async {
+    testWidgets('empty fields explain what is missing before any request', (
+      tester,
+    ) async {
       bigView(tester);
       await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
       await tester.tap(find.text('이메일로 로그인'));
@@ -163,15 +176,19 @@ void main() {
       expect(find.text('생일을 선택해 주세요.'), findsOneWidget);
     });
 
-    testWidgets('submit needs a strong password and the required consents',
-        (tester) async {
+    testWidgets('submit needs a strong password and the required consents', (
+      tester,
+    ) async {
       bigView(tester);
       await toStepTwo(tester);
       TextButton submit() =>
           tester.widget(find.widgetWithText(TextButton, '가입하기'));
       expect(submit().onPressed, isNull);
 
-      await tester.enterText(find.byType(TextField).at(0), 'minji@example.test');
+      await tester.enterText(
+        find.byType(TextField).at(0),
+        'minji@example.test',
+      );
       await tester.enterText(find.byType(TextField).at(1), 'abcdefgh');
       await tester.pump();
       expect(find.text('8자 이상'), findsOneWidget);
@@ -185,7 +202,9 @@ void main() {
       expect(_requests, isEmpty);
     });
 
-    testWidgets('registers with itemised consents, then signs in', (tester) async {
+    testWidgets('registers with itemised consents, then signs in', (
+      tester,
+    ) async {
       bigView(tester);
       _routes['/api/auth/register'] = (200, {'ok': true});
       await tester.pumpWidget(
@@ -204,7 +223,10 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('다음'));
       await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField).at(0), 'minji@example.test');
+      await tester.enterText(
+        find.byType(TextField).at(0),
+        'minji@example.test',
+      );
       await tester.enterText(find.byType(TextField).at(1), 'abcdefg1');
       for (final t in ['만 14세 이상이에요', '이용약관에 동의해요', '개인정보 수집·이용에 동의해요']) {
         await tester.tap(find.text('(필수) $t'));
@@ -212,7 +234,9 @@ void main() {
       }
       await tester.tap(find.widgetWithText(TextButton, '가입하기'));
       await tester.pumpAndSettle();
-      final reg = _requests.firstWhere((r) => r.url.path == '/api/auth/register');
+      final reg = _requests.firstWhere(
+        (r) => r.url.path == '/api/auth/register',
+      );
       final body = jsonDecode(reg.body) as Map;
       expect(body['consents'], {
         'age14': true,
@@ -225,12 +249,19 @@ void main() {
       expect(AuthService().token, 't');
     });
 
-    testWidgets('an email that already exists offers login and reset',
-        (tester) async {
+    testWidgets('an email that already exists offers login and reset', (
+      tester,
+    ) async {
       bigView(tester);
-      _routes['/api/auth/register'] = (400, {'ok': false, 'reason': 'email_already_exists'});
+      _routes['/api/auth/register'] = (
+        400,
+        {'ok': false, 'reason': 'email_already_exists'},
+      );
       await toStepTwo(tester);
-      await tester.enterText(find.byType(TextField).at(0), 'minji@example.test');
+      await tester.enterText(
+        find.byType(TextField).at(0),
+        'minji@example.test',
+      );
       await tester.enterText(find.byType(TextField).at(1), 'abcdefg1');
       await tester.tap(find.text('전체 동의'));
       await tester.pump();
@@ -274,11 +305,14 @@ void main() {
       await teardown(tester); // cancels the resend timer
     });
 
-    testWidgets('mail not configured shows a friendly retry banner',
-        (tester) async {
+    testWidgets('mail not configured shows a friendly retry banner', (
+      tester,
+    ) async {
       bigView(tester);
-      _routes['/api/auth/password-reset/request'] =
-          (503, {'ok': false, 'reason': 'mail_unavailable'});
+      _routes['/api/auth/password-reset/request'] = (
+        503,
+        {'ok': false, 'reason': 'mail_unavailable'},
+      );
       await tester.pumpWidget(
         const MaterialApp(
           home: PasswordResetScreen(initialEmail: 'minji@example.test'),
@@ -291,12 +325,15 @@ void main() {
       expect(find.textContaining('mail_unavailable'), findsNothing);
     });
 
-    testWidgets('a wrong code explains itself and stays on the code step',
-        (tester) async {
+    testWidgets('a wrong code explains itself and stays on the code step', (
+      tester,
+    ) async {
       bigView(tester);
       _routes['/api/auth/password-reset/request'] = (200, {'ok': true});
-      _routes['/api/auth/password-reset/verify'] =
-          (400, {'ok': false, 'reason': 'invalid_code'});
+      _routes['/api/auth/password-reset/verify'] = (
+        400,
+        {'ok': false, 'reason': 'invalid_code'},
+      );
       await tester.pumpWidget(
         const MaterialApp(
           home: PasswordResetScreen(initialEmail: 'minji@example.test'),
@@ -321,8 +358,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
 
-    testWidgets('shows my code, invite text and personal archive entry',
-        (tester) async {
+    testWidgets('shows my code, invite text and personal archive entry', (
+      tester,
+    ) async {
       await pumpPartner(tester);
       expect(find.text('내 코드를 상대에게 보내 주세요'), findsOneWidget);
       expect(find.text('K7M2QX'), findsWidgets);
@@ -332,8 +370,9 @@ void main() {
       await teardown(tester);
     });
 
-    testWidgets('unpaired users still reach logout, withdraw, support, terms',
-        (tester) async {
+    testWidgets('unpaired users still reach logout, withdraw, support, terms', (
+      tester,
+    ) async {
       await pumpPartner(tester);
       await tester.tap(find.byTooltip('계정 메뉴'));
       await tester.pumpAndSettle();
@@ -344,8 +383,9 @@ void main() {
       await teardown(tester);
     });
 
-    testWidgets('unknown code and connected code get different messages',
-        (tester) async {
+    testWidgets('unknown code and connected code get different messages', (
+      tester,
+    ) async {
       await pumpPartner(tester);
       await tester.tap(find.text('상대에게 코드를 받았어요'));
       await tester.pumpAndSettle();
@@ -353,7 +393,10 @@ void main() {
       final send = find.widgetWithText(TextButton, '연결 요청 보내기');
       expect(tester.widget<TextButton>(send).onPressed, isNull);
 
-      _routes['/api/pairing/requests'] = (404, {'ok': false, 'reason': 'recipient_not_found'});
+      _routes['/api/pairing/requests'] = (
+        404,
+        {'ok': false, 'reason': 'recipient_not_found'},
+      );
       await tester.enterText(find.byType(TextField), 'abc123');
       await tester.pump();
       await tester.tap(send);
@@ -362,7 +405,10 @@ void main() {
       final post = _requests.lastWhere((r) => r.method == 'POST');
       expect(jsonDecode(post.body), {'recipientCode': 'ABC123'});
 
-      _routes['/api/pairing/requests'] = (409, {'ok': false, 'reason': 'active_couple_exists'});
+      _routes['/api/pairing/requests'] = (
+        409,
+        {'ok': false, 'reason': 'active_couple_exists'},
+      );
       await tester.tap(send);
       await tester.pumpAndSettle();
       expect(find.text('이미 연결된 코드예요'), findsOneWidget);
@@ -371,27 +417,36 @@ void main() {
       await teardown(tester);
     });
 
-    testWidgets('a sent request shows the waiting card with cancel',
-        (tester) async {
-      _routes['/api/pairing/requests'] = (200, {
-        'sent': [
-          {'id': 7, 'status': 'pending', 'recipientNickname': '서윤'},
-        ],
-        'received': [],
-      });
+    testWidgets('a sent request shows the waiting card with cancel', (
+      tester,
+    ) async {
+      _routes['/api/pairing/requests'] = (
+        200,
+        {
+          'sent': [
+            {'id': 7, 'status': 'pending', 'recipientNickname': '서윤'},
+          ],
+          'received': [],
+        },
+      );
       await pumpPartner(tester);
       expect(find.textContaining('서윤님의 수락을'), findsOneWidget);
       expect(find.text('요청 취소'), findsOneWidget);
       await teardown(tester);
     });
 
-    testWidgets('a received request can be accepted or declined', (tester) async {
-      _routes['/api/pairing/requests'] = (200, {
-        'sent': [],
-        'received': [
-          {'id': 9, 'status': 'pending', 'senderNickname': '서윤'},
-        ],
-      });
+    testWidgets('a received request can be accepted or declined', (
+      tester,
+    ) async {
+      _routes['/api/pairing/requests'] = (
+        200,
+        {
+          'sent': [],
+          'received': [
+            {'id': 9, 'status': 'pending', 'senderNickname': '서윤'},
+          ],
+        },
+      );
       await pumpPartner(tester);
       expect(find.text('서윤님이 연결을 요청했어요'), findsOneWidget);
       expect(find.text('수락하기'), findsOneWidget);
@@ -399,8 +454,9 @@ void main() {
       await teardown(tester);
     });
 
-    testWidgets('failed request list shows a retry banner, not a crash',
-        (tester) async {
+    testWidgets('failed request list shows a retry banner, not a crash', (
+      tester,
+    ) async {
       _routes['/api/pairing/requests'] = (500, {'ok': false});
       await pumpPartner(tester);
       expect(find.textContaining('연결 요청을 불러오지 못했어요'), findsOneWidget);
@@ -410,8 +466,9 @@ void main() {
   });
 
   group('withdraw', () {
-    testWidgets('cancelling is the big button; confirm needs the phrase',
-        (tester) async {
+    testWidgets('cancelling is the big button; confirm needs the phrase', (
+      tester,
+    ) async {
       bigView(tester);
       await AuthService().loginWithEmail('minji@example.test', 'abcdefg1');
       await tester.pumpWidget(const MaterialApp(home: WithdrawScreen()));
@@ -433,7 +490,9 @@ void main() {
   });
 
   group('connecting', () {
-    testWidgets('loading, failed and offline are different screens', (tester) async {
+    testWidgets('loading, failed and offline are different screens', (
+      tester,
+    ) async {
       bigView(tester);
       await tester.pumpWidget(
         MaterialApp(
@@ -486,8 +545,9 @@ void main() {
   });
 
   group('consent checks', () {
-    testWidgets('all-agree toggles every item; marketing is optional',
-        (tester) async {
+    testWidgets('all-agree toggles every item; marketing is optional', (
+      tester,
+    ) async {
       bigView(tester);
       var v = const ConsentValue();
       await tester.pumpWidget(
@@ -495,10 +555,8 @@ void main() {
           home: V2Theme(
             child: Scaffold(
               body: StatefulBuilder(
-                builder: (context, set) => ConsentChecks(
-                  value: v,
-                  onChanged: (n) => set(() => v = n),
-                ),
+                builder: (context, set) =>
+                    ConsentChecks(value: v, onChanged: (n) => set(() => v = n)),
               ),
             ),
           ),
@@ -520,10 +578,15 @@ void main() {
   });
 
   group('google signup and celebration', () {
-    testWidgets('Google first sign-in must add birthday and consents',
-        (tester) async {
+    testWidgets('Google first sign-in must add birthday and consents', (
+      tester,
+    ) async {
       bigView(tester);
-      final gUser = {..._user, 'SignupRequired': true, 'AuthProvider': 'google'};
+      final gUser = {
+        ..._user,
+        'SignupRequired': true,
+        'AuthProvider': 'google',
+      };
       _routes['/api/auth/login'] = (200, {'token': 't', 'user': gUser});
       _routes['/api/user/profile/1'] = (200, {'user': gUser});
       _routes['/api/auth/complete-signup'] = (200, {'ok': true});
@@ -553,8 +616,9 @@ void main() {
       expect(body['birth_date'], matches(RegExp(r'^\d{4}-\d{2}-\d{2}$')));
     });
 
-    testWidgets('celebration shows the checklist and the notification sheet',
-        (tester) async {
+    testWidgets('celebration shows the checklist and the notification sheet', (
+      tester,
+    ) async {
       bigView(tester);
       final paired = {..._user, 'PartnerCode': 'ZZZ999', 'PartnerName': '서윤'};
       _routes['/api/auth/login'] = (200, {'token': 't', 'user': paired});
@@ -571,7 +635,10 @@ void main() {
       expect(find.text('1/3'), findsOneWidget);
       await tester.pump(const Duration(seconds: 2));
       await tester.pumpAndSettle();
-      expect(find.text('나중에'), findsOneWidget); // pre-prompt sheet, before the OS
+      expect(
+        find.text('나중에'),
+        findsOneWidget,
+      ); // pre-prompt sheet, before the OS
       await tester.tap(find.text('나중에'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('홈으로 가기'));

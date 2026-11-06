@@ -103,7 +103,8 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
   }
 
   void _onAuthChanged() {
-    final paired = _auth.token != null &&
+    final paired =
+        _auth.token != null &&
         _auth.user?['PartnerCode']?.toString().isNotEmpty == true;
     if (_auth.token == null) {
       _wasPaired = null;
@@ -252,7 +253,8 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
     }
 
     // 6. Paired but not connected -> 입장 중 / 실패 / 오프라인
-    final failed = _socket.status == '연결 실패' ||
+    final failed =
+        _socket.status == '연결 실패' ||
         _socket.status == '연결 끊김' ||
         _socket.status.startsWith('입장 실패');
     return ConnectingScreen(

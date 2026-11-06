@@ -39,7 +39,9 @@ Widget _host(TarotApi api, {bool reduced = true, VoidCallback? onPartner}) =>
     );
 
 void main() {
-  testWidgets('pick a face-down card, flip, and see the reading', (tester) async {
+  testWidgets('pick a face-down card, flip, and see the reading', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(800, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -101,54 +103,56 @@ void main() {
     expect(find.textContaining('이름이나 생일은 카드에 들어가지 않아요'), findsOneWidget);
   });
 
-  testWidgets('already drawn today shows the card, toggle, and partner CTA works', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(800, 1600);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    final api = TarotApi(
-      baseUrl: 'https://x.example',
-      token: 't',
-      client: MockClient(
-        (request) async => _json({
-          'ok': true,
-          'date': '2026-09-10',
-          'catalogVersion': 'tarot-major-v1',
-          'redrawAvailable': false,
-          'personal': _drawn('user', 'the_star', '별'),
-          'relationship': _drawn('couple', 'the_sun', '태양'),
-        }),
-      ),
-    );
-    await tester.pumpWidget(_host(api));
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('별'), findsOneWidget);
-    expect(find.text('오늘 이미 뽑은 카드예요'), findsOneWidget);
-    await tester.tap(find.text('우리'));
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('태양'), findsOneWidget);
-    expect(find.text('우리 둘의 관계 카드'), findsOneWidget);
-  });
-
-  testWidgets('error state offers retry and partner connect without callbacks', (
-    tester,
-  ) async {
-    var partner = 0;
-    final api = TarotApi(
-      baseUrl: 'https://x.example',
-      token: 't',
-      client: MockClient(
-        (request) async => http.Response(
-          jsonEncode({'ok': false, 'reason': 'active_couple_required'}),
-          409,
+  testWidgets(
+    'already drawn today shows the card, toggle, and partner CTA works',
+    (tester) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final api = TarotApi(
+        baseUrl: 'https://x.example',
+        token: 't',
+        client: MockClient(
+          (request) async => _json({
+            'ok': true,
+            'date': '2026-09-10',
+            'catalogVersion': 'tarot-major-v1',
+            'redrawAvailable': false,
+            'personal': _drawn('user', 'the_star', '별'),
+            'relationship': _drawn('couple', 'the_sun', '태양'),
+          }),
         ),
-      ),
-    );
-    await tester.pumpWidget(_host(api, onPartner: () => partner++));
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('다시 시도'), findsOneWidget);
-    await tester.tap(find.text('파트너 연결하기'));
-    expect(partner, 1);
-  });
+      );
+      await tester.pumpWidget(_host(api));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('별'), findsOneWidget);
+      expect(find.text('오늘 이미 뽑은 카드예요'), findsOneWidget);
+      await tester.tap(find.text('우리'));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('태양'), findsOneWidget);
+      expect(find.text('우리 둘의 관계 카드'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'error state offers retry and partner connect without callbacks',
+    (tester) async {
+      var partner = 0;
+      final api = TarotApi(
+        baseUrl: 'https://x.example',
+        token: 't',
+        client: MockClient(
+          (request) async => http.Response(
+            jsonEncode({'ok': false, 'reason': 'active_couple_required'}),
+            409,
+          ),
+        ),
+      );
+      await tester.pumpWidget(_host(api, onPartner: () => partner++));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('다시 시도'), findsOneWidget);
+      await tester.tap(find.text('파트너 연결하기'));
+      expect(partner, 1);
+    },
+  );
 }

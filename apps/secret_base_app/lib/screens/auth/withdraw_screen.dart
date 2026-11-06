@@ -144,7 +144,10 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
               ] else
                 Padding(
                   padding: const EdgeInsets.only(bottom: V2Space.x4),
-                  child: Text('Google 계정으로 가입해서 비밀번호는 필요 없어요.', style: V2Text.cap),
+                  child: Text(
+                    'Google 계정으로 가입해서 비밀번호는 필요 없어요.',
+                    style: V2Text.cap,
+                  ),
                 ),
               V2TextField(
                 label: '확인 문구',

@@ -231,7 +231,10 @@ void main() {
       find.byKey(const Key('assessment_result_disclaimer')),
       findsOneWidget,
     );
-    expect(find.text('원할 때만 결과를 쉬운 말로 풀어 볼 수 있어요. AI가 쓴 설명이에요.'), findsOneWidget);
+    expect(
+      find.text('원할 때만 결과를 쉬운 말로 풀어 볼 수 있어요. AI가 쓴 설명이에요.'),
+      findsOneWidget,
+    );
     await tester.ensureVisible(
       find.byKey(const Key('request_personal_explanation')),
     );

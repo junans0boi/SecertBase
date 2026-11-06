@@ -156,7 +156,8 @@ class AuthService extends ChangeNotifier {
     String fullName,
     String nickname,
     String birthDate,
-  ) async => await registerAccount(
+  ) async =>
+      await registerAccount(
         email: email,
         password: password,
         fullName: fullName,
@@ -603,7 +604,8 @@ class AuthService extends ChangeNotifier {
     if (error is GoogleSignInException) {
       return switch (error.code) {
         GoogleSignInExceptionCode.canceled => 'Google 로그인을 취소했어요.',
-        GoogleSignInExceptionCode.interrupted => 'Google 로그인이 중단됐어요. 다시 시도해 주세요.',
+        GoogleSignInExceptionCode.interrupted =>
+          'Google 로그인이 중단됐어요. 다시 시도해 주세요.',
         GoogleSignInExceptionCode.clientConfigurationError =>
           '지금은 Google 로그인을 쓸 수 없어요. 이메일로 로그인해 주세요.',
         GoogleSignInExceptionCode.providerConfigurationError =>

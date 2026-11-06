@@ -87,9 +87,7 @@ class _PartnerScreenState extends State<PartnerScreen> {
       final data = await Clipboard.getData(Clipboard.kTextPlain);
       final text = (data?.text ?? '').trim().toUpperCase();
       final mine = _myCode?.toUpperCase();
-      if (mounted &&
-          RegExp(r'^[A-Z0-9]{6}$').hasMatch(text) &&
-          text != mine) {
+      if (mounted && RegExp(r'^[A-Z0-9]{6}$').hasMatch(text) && text != mine) {
         setState(() => _clipboardCode = text);
       }
     } catch (_) {}
@@ -161,11 +159,7 @@ class _PartnerScreenState extends State<PartnerScreen> {
     if (ok) {
       await _loadRequests();
     } else {
-      showV2Snack(
-        context,
-        '요청을 처리하지 못했어요. 다시 시도해 주세요.',
-        tone: V2Tone.err,
-      );
+      showV2Snack(context, '요청을 처리하지 못했어요. 다시 시도해 주세요.', tone: V2Tone.err);
     }
   }
 
@@ -323,10 +317,7 @@ class _PartnerScreenState extends State<PartnerScreen> {
       padding: EdgeInsets.all(compact ? V2Space.x4 : V2Space.x5),
       child: Column(
         children: [
-          Text(
-            '내 초대 코드',
-            style: V2Text.label.copyWith(color: Colors.white),
-          ),
+          Text('내 초대 코드', style: V2Text.label.copyWith(color: Colors.white)),
           const SizedBox(height: V2Space.x2),
           Semantics(
             label: '내 초대 코드 ${code.split('').join(' ')}',
@@ -378,7 +369,8 @@ class _PartnerScreenState extends State<PartnerScreen> {
         V2Button(
           label: '초대 문구 복사',
           icon: V2Icons.share,
-          onPressed: () => _copy(_inviteText(code), '초대 문구를 복사했어요. 메시지에 붙여넣어 보내 주세요.'),
+          onPressed: () =>
+              _copy(_inviteText(code), '초대 문구를 복사했어요. 메시지에 붙여넣어 보내 주세요.'),
         ),
       ],
       const SizedBox(height: V2Space.x1),
@@ -478,12 +470,16 @@ class _PartnerScreenState extends State<PartnerScreen> {
           V2Button(
             label: '수락하기',
             loading: _busy,
-            onPressed: _busy ? null : () => _respond(item['id'] as int, 'accept'),
+            onPressed: _busy
+                ? null
+                : () => _respond(item['id'] as int, 'accept'),
           ),
           V2Button(
             label: '거절',
             variant: V2ButtonVariant.text,
-            onPressed: _busy ? null : () => _respond(item['id'] as int, 'reject'),
+            onPressed: _busy
+                ? null
+                : () => _respond(item['id'] as int, 'reject'),
           ),
         ],
       ),
@@ -497,7 +493,11 @@ class _PartnerScreenState extends State<PartnerScreen> {
         children: [
           V2AvatarPair(me: _myName, partner: name),
           const SizedBox(height: V2Space.x4),
-          Text('$name님의 수락을\n기다리고 있어요', textAlign: TextAlign.center, style: V2Text.head),
+          Text(
+            '$name님의 수락을\n기다리고 있어요',
+            textAlign: TextAlign.center,
+            style: V2Text.head,
+          ),
           const SizedBox(height: V2Space.x2),
           Text(
             V2Text.keepAll('수락하면 바로 연결돼요. 이 화면을 열어 두지 않아도 돼요.'),
@@ -508,7 +508,9 @@ class _PartnerScreenState extends State<PartnerScreen> {
           V2Button(
             label: '요청 취소',
             variant: V2ButtonVariant.soft,
-            onPressed: _busy ? null : () => _respond(item['id'] as int, 'cancel'),
+            onPressed: _busy
+                ? null
+                : () => _respond(item['id'] as int, 'cancel'),
           ),
         ],
       ),
@@ -618,12 +620,7 @@ class PartnerConnectionSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final name = partnerName ?? '상대';
     final (title, description, icon, tone) = switch (true) {
-      _ when paired => (
-        '연결됨',
-        '$name님과 연결되어 있어요.',
-        V2Icons.heart,
-        V2Tone.rose,
-      ),
+      _ when paired => ('연결됨', '$name님과 연결되어 있어요.', V2Icons.heart, V2Tone.rose),
       _ when hasRequestError => (
         '상태를 확인할 수 없어요',
         '연결 요청을 다시 불러오면 최신 상태를 확인할 수 있어요.',
@@ -664,7 +661,10 @@ class PartnerConnectionSummary extends StatelessWidget {
           Container(
             width: 44,
             height: 44,
-            decoration: BoxDecoration(color: colors.soft, shape: BoxShape.circle),
+            decoration: BoxDecoration(
+              color: colors.soft,
+              shape: BoxShape.circle,
+            ),
             child: Icon(icon, color: colors.text),
           ),
           const SizedBox(width: V2Space.x3),

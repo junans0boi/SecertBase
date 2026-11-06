@@ -67,6 +67,7 @@ class PushService {
     }
     return granted;
   }
+
   static const _askedKey = 'push_permission_asked';
 
   Future<void> _enqueue(Future<void> Function() operation) {
