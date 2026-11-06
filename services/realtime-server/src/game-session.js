@@ -52,12 +52,10 @@ export const resolveLobbyJoinForResume = async (socket, io, redis, { roomCode, g
 
   const viewerCount = getViewerCount(io, roomCode, gameType);
   const game = JSON.parse(rawState);
-  const keepPendingSettlement = gameType === 'gostop' &&
-    game.settlementStatus === 'pending';
 
   // 유예 중(정리 예약됨)인 판은 이어하기 대상이다. 예약이 없고 뷰어도 없으면 오래된 상태다.
   const graceActive = scheduler?.isPending?.(cleanupKey(roomCode, gameType)) ?? false;
-  if (viewerCount === 0 && !keepPendingSettlement && !graceActive) {
+  if (viewerCount === 0 && !graceActive) {
     // Active state exists but nobody is viewing — stale. Delete it so normal lobby proceeds.
     await redis.del(key).catch(() => {});
     return null;
@@ -132,15 +130,5 @@ const _maybeCleanupGame = async (io, redis, roomCode, gameType, scheduler = null
   }
   const key = activeGameKey(roomCode, gameType);
   if (!key) return;
-  if (gameType === 'gostop') {
-    const raw = await redis.get(key).catch(() => null);
-    if (raw) {
-      try {
-        if (JSON.parse(raw).settlementStatus === 'pending') return;
-      } catch (_) {
-        // Malformed state is safe to clean up below.
-      }
-    }
-  }
   await redis.del(key).catch(() => {});
 };
