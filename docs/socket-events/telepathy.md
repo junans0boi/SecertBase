@@ -7,7 +7,7 @@
 ## 규칙
 
 - **밸런스 게임**: 문제마다 A·B 두 보기 중 하나를 둘이 몰래 고른다. 둘 다 고르면(또는 마감이 지나면) 함께 공개하고, 같은 쪽이면 **통했다**.
-- 한 판 **10문제**(로비 옵션 `rounds` 5 / 10 / 15). 문제당 **15초**(`turnDeadline`). 공개 연출(`revealUntil`, 3.5초) 동안은 다음 문제 시간을 세지 않는다.
+- 한 판 **10문제**(로비 옵션 `rounds` 5 / 10 / 15). 문제당 **15초**(`turnDeadline`). 새 판의 첫 문제만 규칙 안내를 읽도록 **+25초**(`TELEPATHY_FIRST_EXTRA_MS`, 재대결 제외)이고 `turnMs`도 그만큼 늘어 타이머 링이 맞는다. 공개 연출(`revealUntil`, 3.5초) 동안은 다음 문제 시간을 세지 않는다.
 - 시간이 지나면 안 고른 사람은 **시간 초과**(`null`) → 그 문제는 불일치.
 - **연속 3문제 둘 다 시간 초과**면 판 종료(`both_away`). 한 사람만 연속 3번 시간 초과여도 판 종료(`away`, `awayPlayer`). 직접 고르면 연속 횟수는 0.
 - 점수 = 통한 수. 연속으로 통하면 `streak`(🔥 표시), 판의 최고 연속 `bestStreak`.
@@ -32,6 +32,11 @@
 | 로비 | `game:lobby:join` / `game:lobby:set_option`(`rounds`: 10\|5\|15, `spicy`: `'off'`\|`'on'`) / `game:lobby:start`, `gameType: 'telepathy'`. 서버가 판을 만들고(`metadata.serverStart = true`) `game:telepathy:state`를 보낸다. 첫 마감 = 로비 카운트다운 종료(`startsAt`) + 15초. 게임 화면에 시작 버튼 없음. |
 | 재대결 | `game:restart:request` / `game:restart:respond` (`gameType: 'telepathy'`). 같은 두 사람·같은 문제 수·매운맛 설정으로 새 판(`gameId` 새로, 가방에서 새 문제). 시리즈는 이어진다. 첫 마감 = 지금 + 1.5초 + 15초. |
 | 복원 | `session:restore` → 진행 중이면 그 소켓에 `game:telepathy:state`(내 이번 선택 `myPick` 포함), ack의 `restored`에 `'telepathy'`. 끝난 판도 상태는 보내지만 `restored`에는 넣지 않는다. 서버가 재시작돼 타이머가 없으면 다시 건다. |
+
+## 재대결 동시 요청
+
+두 사람이 거의 동시에 `game:restart:request`를 보내면(또는 상대 요청이 남아 있을 때 내가 요청하면) 서버가 **서로 동의한 것으로 보고** 바로 새 판을 시작한다(ack `{ ok: true, started: true }`).
+새 판이 시작되면 방 전체에 `game:restart:started { gameType }`를 보내 열려 있는 재대결 창이 닫히게 한다(공용, 모든 재대결 게임).
 
 ## 클라이언트 → 서버
 

@@ -1436,6 +1436,13 @@ class SocketService extends ChangeNotifier {
       notifyListeners();
     });
 
+    // 새 판이 시작됐다(동의된 재대결·동시 요청 포함): 열려 있는 재대결 창과 대기 표시를 모두 닫는다.
+    socket.on('game:restart:started', (data) {
+      restartPending = false;
+      restartWaiting = false;
+      notifyListeners();
+    });
+
     socket.on('game:restart:declined', (data) {
       restartWaiting = false;
       restartPending = false;

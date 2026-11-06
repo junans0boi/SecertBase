@@ -816,6 +816,52 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
     afkWatcher.clearAll();
     for (const mod of GAME_MODULES) mod.dispose?.();
   });
+  // 동의된 재대결을 실제로 시작한다. respond(수락)와 request(서로 동시에 요청)가 함께 쓴다.
+  // 방 잠금 안에서 불러야 한다. 성공하면 방 전체에 game:restart:started를 보내
+  // 열려 있는 재대결 창이 모두 닫히게 한다.
+  const performRestart = async (roomCode, gameType, requestedBy, responderId) => {
+    const presence = getPresence(io, roomCode);
+    if (presence.length !== 2) {
+      return { ok: false, reason: "need_two_players" };
+    }
+
+    const orderedPlayers = await getOrderedPlayers(roomCode, presence);
+    const [p1, p2] = orderedPlayers;
+    if (!p1 || !p2) {
+      return { ok: false, reason: "need_two_players" };
+    }
+
+    const restartModule = GAME_MODULE_BY_TYPE.get(gameType);
+    if (restartModule?.restart) {
+      const restarted = await restartModule.restart(roomCode, kit, { p1, p2, orderedPlayers, requestedBy });
+      if (restarted && restarted.ok === false) {
+        io.to(roomCode).emit("game:restart:declined", { by: responderId, reason: restarted.reason });
+        return restarted;
+      }
+    } else if (gameType === "marble") {
+      const previousText = await redis.get(marbleGameKey(roomCode));
+      const previous = previousText ? JSON.parse(previousText) : {};
+      await startMarbleGame(roomCode, p1, p2, previous.characters ?? {});
+    } else if (gameType === "tank") {
+      await restartTankGame(roomCode, p1, p2);
+    } else if (gameType === "bomb") {
+      const previousBombText = await redis.get(bombGameKey(roomCode));
+      const previousBombDuration = previousBombText ? Math.round((JSON.parse(previousBombText).duration ?? 30000) / 1000) : 30;
+      const gameState = createBombGameState(orderedPlayers, previousBombDuration);
+      await redis.set(bombGameKey(roomCode), JSON.stringify(gameState), "EX", 300);
+      scheduleBombExplosion(roomCode, gameState);
+      io.to(roomCode).emit("game:bomb:started", {
+        currentPlayer: gameState.currentPlayer,
+        duration: Math.round(gameState.duration / 1000),
+        startTime: gameState.startTime,
+        quiz: { category: gameState.currentQuiz.category, question: gameState.currentQuiz.question },
+      });
+    }
+
+    io.to(roomCode).emit("game:restart:started", { gameType });
+    return { ok: true, accepted: true };
+  };
+
   installSocketAuthentication(io, config.JWT_SECRET, resolveSocketSession);
   io.on("connection", (socket) => {
     installHandlerSafetyNet(socket, console, (event, args) => {
@@ -2360,14 +2406,27 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         ack({ ok: false, reason: "unsupported_game" });
         return;
       }
-      await redis.set(
-        restartKey(roomCode),
-        JSON.stringify({ by: userId, gameType, at: Date.now() }),
-        "EX",
-        RESTART_REQUEST_TTL_SEC,
-      );
-      socket.to(roomCode).emit("game:restart:requested", { by: userId, gameType });
-      ack({ ok: true });
+      await withRoomLock(roomCode, async () => {
+        // 상대가 먼저(또는 동시에) 같은 게임의 재대결을 요청해 두었다면 서로 동의한 것이다.
+        const rawOther = await redis.get(restartKey(roomCode));
+        let other = null;
+        try { other = rawOther ? JSON.parse(rawOther) : null; } catch { other = null; }
+        if (other && other.by !== userId && other.gameType === gameType) {
+          await redis.del(restartKey(roomCode));
+          const result = await performRestart(roomCode, gameType, other.by, userId);
+          if (result.ok === false) { ack(result); return; }
+          ack({ ok: true, started: true });
+          return;
+        }
+        await redis.set(
+          restartKey(roomCode),
+          JSON.stringify({ by: userId, gameType, at: Date.now() }),
+          "EX",
+          RESTART_REQUEST_TTL_SEC,
+        );
+        socket.to(roomCode).emit("game:restart:requested", { by: userId, gameType });
+        ack({ ok: true });
+      });
     });
 
     socket.on("game:restart:respond", async (payload, ackRaw) => {
@@ -2393,48 +2452,8 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         return;
       }
 
-      const presence = getPresence(io, roomCode);
-      if (presence.length !== 2) {
-        ack({ ok: false, reason: "need_two_players" });
-        return;
-      }
-
-      const orderedPlayers = await getOrderedPlayers(roomCode, presence);
-      const [p1, p2] = orderedPlayers;
-      if (!p1 || !p2) {
-        ack({ ok: false, reason: "need_two_players" });
-        return;
-      }
-
-      const restartModule = GAME_MODULE_BY_TYPE.get(gameType);
-      if (restartModule?.restart) {
-        const restarted = await restartModule.restart(roomCode, kit, { p1, p2, orderedPlayers, requestedBy: request.by });
-        if (restarted && restarted.ok === false) {
-          io.to(roomCode).emit("game:restart:declined", { by: userId, reason: restarted.reason });
-          ack(restarted);
-          return;
-        }
-      } else if (gameType === "marble") {
-        const previousText = await redis.get(marbleGameKey(roomCode));
-        const previous = previousText ? JSON.parse(previousText) : {};
-        await startMarbleGame(roomCode, p1, p2, previous.characters ?? {});
-      } else if (gameType === "tank") {
-        await restartTankGame(roomCode, p1, p2);
-      } else if (gameType === "bomb") {
-        const previousBombText = await redis.get(bombGameKey(roomCode));
-        const previousBombDuration = previousBombText ? Math.round((JSON.parse(previousBombText).duration ?? 30000) / 1000) : 30;
-        const gameState = createBombGameState(orderedPlayers, previousBombDuration);
-        await redis.set(bombGameKey(roomCode), JSON.stringify(gameState), "EX", 300);
-        scheduleBombExplosion(roomCode, gameState);
-        io.to(roomCode).emit("game:bomb:started", {
-          currentPlayer: gameState.currentPlayer,
-          duration: Math.round(gameState.duration / 1000),
-          startTime: gameState.startTime,
-          quiz: { category: gameState.currentQuiz.category, question: gameState.currentQuiz.question },
-        });
-      }
-
-      ack({ ok: true, accepted: true });
+      const result = await performRestart(roomCode, gameType, request.by, userId);
+      ack(result);
       }); // withRoomLock
     });
 

@@ -3,7 +3,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { fixture, flush } from './support/socket-harness.js';
-import { TELEPATHY_BAG_TTL_SEC, TELEPATHY_REVEAL_MS, TELEPATHY_TURN_MS } from '../src/games/telepathy.js';
+import {
+  TELEPATHY_BAG_TTL_SEC,
+  TELEPATHY_FIRST_EXTRA_MS,
+  TELEPATHY_REVEAL_MS,
+  TELEPATHY_TURN_MS,
+} from '../src/games/telepathy.js';
 
 const A = 'ALPHA-code';
 const B = 'BETA-code';
@@ -51,7 +56,7 @@ test('telepathy: the lobby start builds the game from server options without a s
   assert.ok(s.question.a && s.question.b && s.question.emojiA && s.question.id);
   assert.deepEqual(s.picked, { [A]: false, [B]: false });
   assert.equal(s.score, 0);
-  assert.equal(s.turnMs, TELEPATHY_TURN_MS);
+  assert.equal(s.turnMs, TELEPATHY_TURN_MS + TELEPATHY_FIRST_EXTRA_MS, 'first question window');
   assert.equal(typeof s.serverNow, 'number');
   assert.ok(s.turnDeadline >= NOW + 5300 + TELEPATHY_TURN_MS, 'the first deadline counts after the lobby countdown');
   assert.equal(s.series.games, 0);
@@ -256,4 +261,83 @@ test('telepathy: the old select event is gone', async (t) => {
   await assert.rejects(
     f.clients[0].timeout(300).emitWithAck('game:telepathy:select', { choice: 'tea', options: ['tea', 'coffee'] }),
   );
+});
+
+test('telepathy: the first question gets extra time so a new player can read the rules, and the ring says so', async (t) => {
+  const f = await fixture(t);
+  const states = collect(f);
+  await start(t, f);
+  const first = states[0].at(-1);
+  const total = TELEPATHY_TURN_MS + TELEPATHY_FIRST_EXTRA_MS;
+  assert.equal(first.turnMs, total, 'turnMs matches the real window so the ring starts full');
+  assert.equal(first.turnDeadline, NOW + 5300 + total);
+  assert.equal(first.turnDeadline - first.serverNow, 5300 + total);
+  // 15초가 지나도 1번 문제는 그대로, 규칙을 읽고 나서 고를 수 있다.
+  f.tick(5300 + TELEPATHY_TURN_MS + 1000);
+  await flush();
+  assert.equal(states[0].at(-1).round, 1);
+  assert.equal((await f.call(0, 'game:telepathy:pick', { choice: 'A', round: 1 })).ok, true);
+  // 늦게라도 안 고르면 마감에 넘어간다.
+  f.tick(first.turnDeadline - Date.now());
+  await flush();
+  const s = states[1].at(-1);
+  assert.equal(s.round, 2);
+  assert.equal(s.lastRound.outcome, 'timeout');
+  assert.equal(s.turnMs, TELEPATHY_TURN_MS, 'later questions are back to 15 seconds');
+  assert.equal(s.turnDeadline - s.revealUntil, TELEPATHY_TURN_MS);
+});
+
+test('telepathy: a rematch does not get the extra first-question time', async (t) => {
+  const f = await fixture(t);
+  const states = collect(f);
+  await start(t, f, { rounds: 5 });
+  assert.equal((await f.call(1, 'game:restart:request', { gameType: 'telepathy' })).ok, true);
+  assert.equal((await f.call(0, 'game:restart:respond', { accept: true, gameType: 'telepathy' })).ok, true);
+  await flush();
+  const fresh = states[0].at(-1);
+  assert.equal(fresh.turnMs, TELEPATHY_TURN_MS);
+});
+
+test('telepathy: both pressing the rematch button at once starts one new game for both', async (t) => {
+  const f = await fixture(t);
+  const states = collect(f);
+  await start(t, f, { rounds: 5 });
+  const firstId = states[0].at(-1).gameId;
+  const started = [[], []];
+  const requested = [[], []];
+  f.clients.forEach((c, i) => {
+    c.on('game:restart:started', (e) => started[i].push(e));
+    c.on('game:restart:requested', (e) => requested[i].push(e));
+  });
+  const [a, b] = await Promise.all([
+    f.call(0, 'game:restart:request', { gameType: 'telepathy' }),
+    f.call(1, 'game:restart:request', { gameType: 'telepathy' }),
+  ]);
+  await flush();
+  assert.equal(a.ok && b.ok, true);
+  assert.equal([a, b].filter((r) => r.started).length, 1, 'the second request completes the agreement');
+  const fresh = states[0].at(-1);
+  assert.notEqual(fresh.gameId, firstId);
+  assert.equal(states[1].at(-1).gameId, fresh.gameId);
+  assert.deepEqual(started[0], [{ gameType: 'telepathy' }]);
+  assert.deepEqual(started[1], [{ gameType: 'telepathy' }]);
+  // 먼저 처리된 요청의 알림은 갔을 수 있지만, 판이 시작된 뒤에는 수락할 요청이 남지 않는다.
+  const stale = await f.call(0, 'game:restart:respond', { accept: true, gameType: 'telepathy' });
+  assert.equal(stale.reason, 'no_restart_request');
+  assert.equal(states[0].filter((x) => x.gameId === fresh.gameId && x.round === 1).length, 1, 'only one new game');
+});
+
+test('telepathy: a request and the partner request later still counts as agreement', async (t) => {
+  const f = await fixture(t);
+  const states = collect(f);
+  await start(t, f, { rounds: 5 });
+  const firstId = states[0].at(-1).gameId;
+  assert.deepEqual(await f.call(0, 'game:restart:request', { gameType: 'telepathy' }), { ok: true });
+  const second = await f.call(1, 'game:restart:request', { gameType: 'telepathy' });
+  assert.deepEqual(second, { ok: true, started: true });
+  await flush();
+  assert.notEqual(states[0].at(-1).gameId, firstId);
+  // 같은 사람이 두 번 눌러도 합의가 되지는 않는다.
+  assert.deepEqual(await f.call(0, 'game:restart:request', { gameType: 'telepathy' }), { ok: true });
+  assert.deepEqual(await f.call(0, 'game:restart:request', { gameType: 'telepathy' }), { ok: true });
 });

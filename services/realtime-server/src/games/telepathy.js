@@ -20,6 +20,11 @@ import {
 export const TELEPATHY_GAME_TYPE = "telepathy";
 /** 한 문제 선택 시간. */
 export const TELEPATHY_TURN_MS = 15_000;
+/**
+ * 새 판의 첫 문제에만 얹는 여유 시간. 처음 하는 사람이 규칙 안내(첫 한 번 뜨는 창)를 읽는 동안
+ * 1번 문제가 시간 초과로 넘어가지 않게 한다. 마감시각과 turnMs에 함께 반영돼 타이머 링이 맞는다.
+ */
+export const TELEPATHY_FIRST_EXTRA_MS = 25_000;
 /** 공개 연출(동시 뒤집기 → 빛줄기) 동안은 다음 문제 시간을 세지 않는다. */
 export const TELEPATHY_REVEAL_MS = 3_500;
 /** 재대결 직후 첫 문제 전 여유. */
@@ -94,7 +99,7 @@ export function publicTelepathyState(state, viewer = null) {
     picked,
     timeouts: state.timeouts,
     turnDeadline: playing ? state.turnDeadline : null,
-    turnMs: TELEPATHY_TURN_MS,
+    turnMs: state.turnMs ?? TELEPATHY_TURN_MS,
     revealUntil: state.revealUntil ?? null,
     revealMs: TELEPATHY_REVEAL_MS,
     score: state.score,
@@ -139,7 +144,7 @@ async function drawForRoom(kit, roomCode, rounds, spicy) {
   return drawn.questions;
 }
 
-async function beginGame(kit, roomCode, { players, gameId, firstDeadline, rounds, spicy }) {
+async function beginGame(kit, roomCode, { players, gameId, firstDeadline, firstTurnMs = TELEPATHY_TURN_MS, rounds, spicy }) {
   clearTimer(kit, roomCode);
   const questions = await drawForRoom(kit, roomCode, rounds, spicy);
   const state = {
@@ -158,6 +163,7 @@ async function beginGame(kit, roomCode, { players, gameId, firstDeadline, rounds
     streak: 0,
     bestStreak: 0,
     turnDeadline: firstDeadline,
+    turnMs: firstTurnMs,
     revealUntil: null,
     result: null,
     series: await loadSeries(kit, roomCode),
@@ -231,6 +237,7 @@ async function resolveRound(kit, roomCode, state) {
   } else {
     state.round += 1;
     state.turnDeadline = state.revealUntil + TELEPATHY_TURN_MS;
+    state.turnMs = TELEPATHY_TURN_MS;
     await saveState(kit, roomCode, state);
     scheduleRound(kit, roomCode, state);
   }
@@ -314,7 +321,8 @@ const telepathy = {
       await beginGame(kit, roomCode, {
         players: ctx.players.slice(0, 2),
         gameId: ctx.gameId ?? kit.randomUUID(),
-        firstDeadline: (ctx.startsAt ?? Date.now()) + TELEPATHY_TURN_MS,
+        firstDeadline: (ctx.startsAt ?? Date.now()) + TELEPATHY_TURN_MS + TELEPATHY_FIRST_EXTRA_MS,
+        firstTurnMs: TELEPATHY_TURN_MS + TELEPATHY_FIRST_EXTRA_MS,
         rounds: options.rounds,
         spicy: options.spicy === "on",
       });
