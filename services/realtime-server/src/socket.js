@@ -84,17 +84,6 @@ import {
   TURN_TIME_MS as TANK_TURN_TIME_MS,
 } from "./fortress-engine.js";
 
-import {
-  createGostopGameState,
-  playHandCard,
-  selectDeckCapture,
-  declareShake,
-  playBomb,
-  declareGoStop,
-  resolveGostopTerminalState,
-  serializeFor as serializeGostopFor,
-  forfeitGostop,
-} from "./gostop-engine.js";
 import { createAfkWatcher, afkGameTypeForEvent } from "./game-afk.js";
 import { GAME_MODULES } from "./games/index.js";
 import { createSeriesStore } from "./games/series.js";
@@ -448,7 +437,6 @@ const withLobbyLock = (key, fn) => {
 
 const roomKey = (roomCode) => `room:${roomCode}:state`;
 const yutGameKey = (roomCode) => `yut:${roomCode}:game`;
-const gostopGameKey = (roomCode) => `gostop:${roomCode}:game`;
 const bombGameKey = (roomCode) => `bomb:${roomCode}:game`;
 const gameLobbyKey = (roomCode, gameType) => `lobby:${roomCode}:${gameType}`;
 const rpsGameKey = (roomCode) => `rps:${roomCode}:game`;
@@ -827,12 +815,6 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
   // 차례인 사람이 90초 동안 아무것도 하지 않으면(60초에 경고) 상대의 기권승이다.
   // 지는 쪽이 앱을 꺼 버려도 판이 무한 대기하거나 정산 없이 사라지지 않는다.
   const notPicked = (startRolls, players) => players.find((p) => startRolls?.[p] == null) ?? null;
-  const emitGostopRoom = async (roomCode, eventName, state) => {
-    const sockets = await io.in(roomCode).fetchSockets();
-    for (const sock of sockets) {
-      if (sock.data.userId) sock.emit(eventName, serializeGostopFor(state, sock.data.userId));
-    }
-  };
   // 판돈 게임의 기권 정산: 정산 → 결과 기록 → 상태 삭제.
   const settleForfeit = async (roomCode, { gameType, missionKey, key, winner, loser, stake, gameId }) => {
     if (winner && loser && stake > 0) {
@@ -874,32 +856,6 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         io.to(roomCode).emit("game:marble:ended", { winner, winReason: "forfeit", finalScores: null });
         await redis.del(marbleGameKey(roomCode));
         await recordGameOutcome(roomCode, { winner, players: s.playersOrder, gameType: "marble" });
-      },
-    },
-    gostop: {
-      key: gostopGameKey,
-      playersOf: (s) => s.players ?? [],
-      waitingOn: (s) => {
-        if (["finished", "nageori", "chongtong"].includes(s.phase)) return null;
-        if (s.settlementStatus === "pending") return null;
-        if (s.phase === "shake_choice") return s.shakePlayerId ?? null;
-        return s.players?.[s.currentPlayerIdx] ?? null;
-      },
-      forfeit: async (roomCode, s, loser, winner) => {
-        const finished = forfeitGostop(s, winner);
-        const st = finished.settlement;
-        if (st && st.amount > 0) {
-          const wallet = await settleAndEmitWallet(io, roomCode, st.winnerId, st.loserId, st.amount, finished.gameId ?? `gostop:${roomCode}:forfeit`);
-          if (!wallet.ok) {
-            const pending = { ...finished, settlementStatus: "pending", settlementError: wallet.reason ?? "wallet_settlement_failed" };
-            await redis.set(gostopGameKey(roomCode), JSON.stringify(pending), "EX", 7200);
-            await emitGostopRoom(roomCode, "game:gostop:settlement_pending", pending);
-            return;
-          }
-        }
-        await recordGameOutcome(roomCode, { winner, players: s.players, gameType: "gostop", stake: st?.amount ?? 0, gameId: finished.gameId ?? null });
-        await redis.del(gostopGameKey(roomCode));
-        await emitGostopRoom(roomCode, "game:gostop:ended", { ...finished, settlementStatus: "settled" });
       },
     },
     bowling: {
@@ -1399,13 +1355,11 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       try {
         // 활성 게임 세션 확인
         const yutKey = `yut:${roomCode}:game`;
-        const gostopKey = gostopGameKey(roomCode);
         const bombKey = `bomb:${roomCode}:game`;
         const marbleKey = marbleGameKey(roomCode);
 
-        const [yutGame, gostopGame, bombGame, marbleGame] = await Promise.all([
+        const [yutGame, bombGame, marbleGame] = await Promise.all([
           redis.get(yutKey),
-          redis.get(gostopKey),
           redis.get(bombKey),
           redis.get(marbleKey),
         ]);
@@ -1416,13 +1370,6 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
           const game = JSON.parse(yutGame);
           if (game.players) {
             activeGames.yut = serializeYutGame(game);
-          }
-        }
-
-        if (gostopGame) {
-          const game = JSON.parse(gostopGame);
-          if (game.players?.includes(socket.data.userId)) {
-            activeGames.gostop = serializeGostopFor(game, socket.data.userId);
           }
         }
 
@@ -1452,7 +1399,7 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
         // session:restore itself must reserve the viewer room. Otherwise a
         // reconnecting socket can render the game but the old viewer's
         // disconnect immediately deletes the last active Redis state.
-        const restoredGameType = ['yut', 'marble', 'gostop']
+        const restoredGameType = ['yut', 'marble']
           .find((type) => activeGames[type]);
         if (restoredGameType) {
           sessionScheduler.cancel(`${roomCode}:${restoredGameType}`);
@@ -3665,276 +3612,6 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       }
       ack({ ok: true });
       });
-    });
-
-    // ── 고스톱 (2인 맞고) ──────────────────────────────────────────────
-    // 상대 손패 숨김이 필요하므로 per-viewer 직렬화로 개별 emit
-    const emitGostop = (eventName, state) => {
-      const roomCode = socket.data.roomCode;
-      const room = io.sockets.adapter.rooms.get(roomCode);
-      if (!room) return;
-      for (const sid of room) {
-        const s = io.sockets.sockets.get(sid);
-        const uid = s?.data?.userId;
-        if (!uid) continue;
-        s.emit(eventName, serializeGostopFor(state, uid));
-      }
-    };
-
-    // 종료 처리: 지갑 정산이 성공한 뒤에만 게임 상태를 지운다.
-    // 실패하면 Redis에 pending 상태를 남겨 재시도할 수 있게 한다.
-    const finishGostop = async (roomCode, state) => {
-      const st = state.settlement;
-      if (st && st.amount > 0) {
-        const gameRef = state.gameId ?? `gostop:${roomCode}:legacy:${state.turn ?? 0}`;
-        const wallet = await settleAndEmitWallet(
-          io, roomCode, st.winnerId, st.loserId, st.amount, gameRef,
-        );
-        if (!wallet.ok) {
-          const pending = {
-            ...state,
-            settlementStatus: 'pending',
-            settlementError: wallet.reason ?? 'wallet_settlement_failed',
-          };
-          await redis.set(gostopGameKey(roomCode), JSON.stringify(pending), "EX", 7200);
-          emitGostop("game:gostop:settlement_pending", pending);
-          return false;
-        }
-      }
-      if (st) {
-        await Promise.all([
-          saveGameResult(roomCode, st.winnerId, st.loserId, 'gostop', st.amount ?? 0),
-          grantGameXpAndMissions(st.winnerId, st.loserId, 'gostop'),
-        ]);
-      }
-      await redis.del(gostopGameKey(roomCode));
-      emitGostop("game:gostop:ended", { ...state, settlementStatus: 'settled' });
-      return true;
-    };
-
-    // 나가리: 배수 이월 + 선 유지로 자동 재배분
-    const handleGostopResult = async (roomCode, state) => {
-      if (state.phase === 'finished') {
-        await finishGostop(roomCode, state);
-        return;
-      }
-      if (state.phase === 'nageori') {
-        io.to(roomCode).emit("game:gostop:nageori", {
-          baseMultiplier: state.baseMultiplier,
-        });
-        const next = createGostopGameState(state.players[0], state.players[1], {
-          perPointBet: state.perPointBet,
-          baseMultiplier: state.baseMultiplier,
-          firstPlayerIdx: state.firstPlayerIdx,
-          gameId: state.gameId,
-        });
-        if (next.phase === 'finished') {
-          emitGostop("game:gostop:started", next);
-          await finishGostop(roomCode, next);
-          return;
-        }
-        await redis.set(gostopGameKey(roomCode), JSON.stringify(next), "EX", 7200);
-        emitGostop("game:gostop:started", next);
-        return;
-      }
-      await redis.set(gostopGameKey(roomCode), JSON.stringify(state), "EX", 7200);
-      emitGostop("game:gostop:updated", state);
-    };
-
-    socket.on("game:gostop:new", async (payload, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const { roomCode, userId } = socket.data;
-      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
-
-      await withRoomLock(roomCode, async () => {
-        const presence = getPresence(io, roomCode);
-        if (presence.length !== 2) return ack({ ok: false, reason: "need_two_players" });
-
-        const schema = z.object({
-          perPointBet: z.union([
-            z.literal(0), z.literal(100), z.literal(500), z.literal(1000),
-          ]).optional().default(100),
-        });
-        const parsed = schema.safeParse(payload ?? {});
-        if (!parsed.success) return ack({ ok: false, reason: "invalid_payload" });
-
-        const existing = await redis.get(gostopGameKey(roomCode));
-        if (existing) return ack({ ok: false, reason: "game_in_progress" });
-
-        const orderedPlayers = await getOrderedPlayers(roomCode, presence);
-        if (orderedPlayers.length !== 2) return ack({ ok: false, reason: "need_two_players" });
-
-        const [p1, p2] = orderedPlayers;
-        // 점당 금액은 로비에서 합의된 서버 기록만 사용한다(payload의 perPointBet 무시).
-        const pendingGostop = await consumePendingGame(roomCode, "gostop");
-        const state = createGostopGameState(p1, p2, {
-          perPointBet: GOSTOP_STAKES.has(pendingGostop.stake) ? pendingGostop.stake : 0,
-          gameId: `gostop:${pendingGostop.gameId}`,
-        });
-
-        if (state.phase === 'finished') {
-          // 총통 즉시 승리
-          emitGostop("game:gostop:started", state);
-          await finishGostop(roomCode, state);
-          return ack({ ok: true });
-        }
-
-        await redis.set(gostopGameKey(roomCode), JSON.stringify(state), "EX", 7200);
-        emitGostop("game:gostop:started", state);
-        ack({ ok: true });
-      });
-    });
-
-    socket.on("game:gostop:play", async (payload, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const { roomCode, userId } = socket.data;
-      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
-
-      const schema = z.object({ cardId: z.string().min(1) });
-      const parsed = schema.safeParse(payload);
-      if (!parsed.success) return ack({ ok: false, reason: "invalid_payload" });
-
-      await withRoomLock(roomCode, async () => {
-        const raw = await redis.get(gostopGameKey(roomCode));
-        if (!raw) return ack({ ok: false, reason: "no_game" });
-
-        let result;
-        try {
-          result = playHandCard(JSON.parse(raw), userId, parsed.data.cardId);
-        } catch (err) {
-          return ack({ ok: false, reason: err.message });
-        }
-        await handleGostopResult(roomCode, result);
-        ack({ ok: true });
-      });
-    });
-
-    socket.on("game:gostop:shake", async (payload, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const { roomCode, userId } = socket.data;
-      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
-
-      const parsed = z.object({ decision: z.enum(["shake", "pass"]) }).safeParse(payload);
-      if (!parsed.success) return ack({ ok: false, reason: "invalid_payload" });
-
-      await withRoomLock(roomCode, async () => {
-        const raw = await redis.get(gostopGameKey(roomCode));
-        if (!raw) return ack({ ok: false, reason: "no_game" });
-        let result;
-        try {
-          result = declareShake(JSON.parse(raw), userId, parsed.data.decision);
-        } catch (err) {
-          return ack({ ok: false, reason: err.message });
-        }
-        await handleGostopResult(roomCode, result);
-        ack({ ok: true });
-      });
-    });
-
-    socket.on("game:gostop:bomb", async (payload, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const { roomCode, userId } = socket.data;
-      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
-
-      const parsed = z.object({ month: z.number().int().min(1).max(12) }).safeParse(payload);
-      if (!parsed.success) return ack({ ok: false, reason: "invalid_payload" });
-
-      await withRoomLock(roomCode, async () => {
-        const raw = await redis.get(gostopGameKey(roomCode));
-        if (!raw) return ack({ ok: false, reason: "no_game" });
-        let result;
-        try {
-          result = playBomb(JSON.parse(raw), userId, parsed.data.month);
-        } catch (err) {
-          return ack({ ok: false, reason: err.message });
-        }
-        await handleGostopResult(roomCode, result);
-        ack({ ok: true });
-      });
-    });
-
-    socket.on("game:gostop:pick", async (payload, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const { roomCode, userId } = socket.data;
-      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
-
-      const schema = z.object({ fieldCardId: z.string().min(1) });
-      const parsed = schema.safeParse(payload);
-      if (!parsed.success) return ack({ ok: false, reason: "invalid_payload" });
-
-      await withRoomLock(roomCode, async () => {
-        const raw = await redis.get(gostopGameKey(roomCode));
-        if (!raw) return ack({ ok: false, reason: "no_game" });
-
-        let result;
-        try {
-          result = selectDeckCapture(JSON.parse(raw), userId, parsed.data.fieldCardId);
-        } catch (err) {
-          return ack({ ok: false, reason: err.message });
-        }
-        await handleGostopResult(roomCode, result);
-        ack({ ok: true });
-      });
-    });
-
-    socket.on("game:gostop:gostop", async (payload, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const { roomCode, userId } = socket.data;
-      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
-
-      const schema = z.object({ decision: z.enum(["go", "stop"]) });
-      const parsed = schema.safeParse(payload);
-      if (!parsed.success) return ack({ ok: false, reason: "invalid_payload" });
-
-      await withRoomLock(roomCode, async () => {
-        const raw = await redis.get(gostopGameKey(roomCode));
-        if (!raw) return ack({ ok: false, reason: "no_game" });
-
-        let result;
-        try {
-          result = declareGoStop(JSON.parse(raw), userId, parsed.data.decision);
-        } catch (err) {
-          return ack({ ok: false, reason: err.message });
-        }
-        await handleGostopResult(roomCode, result);
-        ack({ ok: true });
-      });
-    });
-
-    socket.on("game:gostop:settlement_retry", async (_, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const { roomCode, userId } = socket.data;
-      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
-
-      await withRoomLock(roomCode, async () => {
-        const raw = await redis.get(gostopGameKey(roomCode));
-        if (!raw) return ack({ ok: false, reason: "no_pending_settlement" });
-        const state = JSON.parse(raw);
-        if (state.phase !== 'finished' || state.settlementStatus !== 'pending') {
-          return ack({ ok: false, reason: "no_pending_settlement" });
-        }
-        const completed = await finishGostop(roomCode, state);
-        ack(completed
-          ? { ok: true }
-          : { ok: false, reason: 'wallet_settlement_failed' });
-      });
-    });
-
-    // 재접속 복원용 현재 상태 조회
-    socket.on("game:gostop:state", async (payload, ackRaw) => {
-      const ack = normalizeAck(ackRaw);
-      const { roomCode, userId } = socket.data;
-      if (!roomCode || !userId) return ack({ ok: false, reason: "not_joined" });
-
-      const raw = await redis.get(gostopGameKey(roomCode));
-      if (!raw) return ack({ ok: false, reason: "no_game" });
-      const storedState = JSON.parse(raw);
-      const state = resolveGostopTerminalState(storedState);
-      if (state.phase !== storedState.phase) {
-        // 이미 양쪽 손패가 소진된 구버전 상태를 조회 시점에 복구한다.
-        await handleGostopResult(roomCode, state);
-      }
-      ack({ ok: true, state: serializeGostopFor(state, userId) });
     });
 
     socket.on("disconnect", () => {
