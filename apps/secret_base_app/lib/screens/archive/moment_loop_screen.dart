@@ -1,95 +1,28 @@
-import 'dart:typed_data';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:video_player/video_player.dart';
-import 'package:video_thumbnail/video_thumbnail.dart';
 
 import '../../core/auth_service.dart';
 import '../../core/http/api_client.dart';
-import '../../core/main_design.dart';
-import '../../core/main_hero.dart';
+import '../../core/today_api.dart';
 import '../../features/moment_loop/application/moment_loop_controller.dart';
 import '../../features/moment_loop/application/upload_outbox.dart';
 import '../../features/moment_loop/data/moment_loop_repository.dart';
-import '../../features/moment_loop/data/moment_image_compressor.dart';
 import '../../features/moment_loop/domain/moment.dart';
 import '../../features/moment_loop/domain/moment_edit.dart';
-import '../../features/moment_loop/domain/photo_date.dart';
-import '../../features/moment_loop/presentation/moment_loop_state_view.dart';
-import 'map_screen.dart';
+import '../../v2/v2.dart';
+import 'moment/couple_names.dart';
+import 'moment/moment_composer.dart';
+import 'moment/moment_detail.dart';
+import 'moment/moment_feed.dart';
+import 'moment/moment_format.dart';
+import 'moment/moment_sheets.dart';
 
-// ── Video thumbnail cache ─────────────────────────────────────────────────────
-final _videoThumbCache = <String, Uint8List?>{};
+enum _FeedTab { today, week, past }
 
-class _VideoThumb extends StatefulWidget {
-  final String url;
-  final double iconSize;
-  final Widget fallback;
-  const _VideoThumb({
-    required this.url,
-    required this.iconSize,
-    required this.fallback,
-  });
-  @override
-  State<_VideoThumb> createState() => _VideoThumbState();
-}
-
-class _VideoThumbState extends State<_VideoThumb> {
-  late Future<Uint8List?> _future;
-
-  @override
-  void initState() {
-    super.initState();
-    _future = _load();
-  }
-
-  Future<Uint8List?> _load() async {
-    if (_videoThumbCache.containsKey(widget.url)) {
-      return _videoThumbCache[widget.url];
-    }
-    final bytes = await VideoThumbnail.thumbnailData(
-      video: widget.url,
-      imageFormat: ImageFormat.JPEG,
-      maxWidth: 400,
-      quality: 60,
-    );
-    _videoThumbCache[widget.url] = bytes;
-    return bytes;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<Uint8List?>(
-      future: _future,
-      builder: (_, snap) {
-        final bytes = snap.data;
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            if (bytes != null)
-              Image.memory(bytes, fit: BoxFit.cover)
-            else
-              Container(color: const Color(0xFF1A1A2E)),
-            Center(
-              child: Icon(
-                Icons.play_circle_rounded,
-                color: Colors.white70,
-                size: widget.iconSize,
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-// ── Screen ────────────────────────────────────────────────────────────────────
-
+/// 기록 (구 MomentLoop): 오늘 카드, 오늘/이번 주/지난 기록, 작성기.
 class MomentLoopScreen extends StatefulWidget {
   final http.Client? client;
   final String? baseUrl;
@@ -103,6 +36,13 @@ class MomentLoopScreen extends StatefulWidget {
   /// Opens the composer right away with 오늘의 순간 switched on.
   final bool openComposer;
 
+  /// Pre-links a 비밀지도 place in the composer ("이 장소에서 순간 남기기").
+  final int? initialPinId;
+  final String? initialPinName;
+
+  /// Where the "연결하러 가기" button of the unpaired state goes.
+  final VoidCallback? onGoPairing;
+
   const MomentLoopScreen({
     super.key,
     this.client,
@@ -114,6 +54,9 @@ class MomentLoopScreen extends StatefulWidget {
     this.initialDraftId,
     this.mediaPicker,
     this.openComposer = false,
+    this.initialPinId,
+    this.initialPinName,
+    this.onGoPairing,
   });
 
   @override
@@ -126,41 +69,22 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
   late final MomentLoopController _controller;
   late final bool _ownsController;
   late final UploadOutbox _outbox;
-  bool _openedInitialTarget = false;
+  TodayApi? _todayApi;
+
+  _FeedTab _tab = _FeedTab.today;
   bool _gridView = true;
-  String? _storageError;
+  bool _openedInitialTarget = false;
   late DateTime _weekStart;
-  final Set<String> _seenSessionIds = {};
-  String? _selectedTag;
+  TodayState? _today;
+  bool _todayLoading = true;
+  bool _todayFailed = false;
+  String? _partner;
+  String? _storageError;
+  int _lastDraftCount = 0;
+  bool _hadFailure = false;
 
-  List<Map<String, dynamic>> get _posts => _controller.state.moments
-      .map((moment) => moment.toLegacyMap())
-      .toList(growable: false);
-
-  List<String> _momentTags(Object? value) {
-    if (value is List) {
-      return value.map((tag) => '$tag').toList(growable: false);
-    }
-    if (value is String && value.isNotEmpty) {
-      return value
-          .split(',')
-          .map((tag) => tag.trim())
-          .where((tag) => tag.isNotEmpty)
-          .toList();
-    }
-    return const ['#momentloop'];
-  }
-
-  String? get _error {
-    final error = _controller.state.error;
-    if (error == null) return null;
-    final code = error is MomentLoopException ? error.code : '$error';
-    return switch (code) {
-      'active_couple_required' => '커플 연결 후 MomentLoop를 사용할 수 있어요',
-      'unauthorized' => '로그인 정보가 없어요',
-      _ => '기록을 불러오지 못했어요',
-    };
-  }
+  String get _baseUrl => widget.baseUrl ?? _auth.baseUrl;
+  String get _myName => CoupleNames.myNickname(_auth);
 
   int? get _userId {
     if (widget.userId != null) return widget.userId;
@@ -169,81 +93,109 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     return int.tryParse('$value');
   }
 
+  String get _partnerName {
+    if (_partner != null) return _partner!;
+    final me = _userId;
+    for (final m in _controller.state.moments) {
+      if (m.userId != me && (m.userName ?? '').trim().isNotEmpty) {
+        return m.userName!.trim();
+      }
+    }
+    return CoupleNames.cachedPartner ?? '상대';
+  }
+
+  String? get _errorCode {
+    final error = _controller.state.error;
+    if (error == null) return null;
+    return error is MomentLoopException ? error.code : '$error';
+  }
+
+  bool get _unpaired => _errorCode == 'active_couple_required';
+
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
-    _weekStart = _mondayOf(now);
+    _weekStart = mondayOf(DateTime.now());
+    _apiClient = ApiClient(
+      baseUrl: _baseUrl,
+      tokenProvider: () => _auth.token,
+      client: widget.client,
+    );
     if (widget.controller != null) {
       _controller = widget.controller!;
       _ownsController = false;
     } else {
-      _apiClient = ApiClient(
-        baseUrl: widget.baseUrl ?? _auth.baseUrl,
-        tokenProvider: () => _auth.token,
-        client: widget.client,
-      );
       _controller = MomentLoopController(
         repository: HttpMomentLoopRepository(apiClient: _apiClient),
         currentUserId: () => _userId,
       );
       _ownsController = true;
     }
-    _controller.addListener(_onControllerChanged);
+    _controller.addListener(_onChanged);
     _outbox = widget.outbox ?? UploadOutbox.instance;
-    _outbox.addListener(_onControllerChanged);
+    _outbox.addListener(_onOutboxChanged);
     _outbox.feedRevision.addListener(_onFeedChanged);
+    _lastDraftCount = _outbox.drafts.length;
     unawaited(_loadViewMode());
     unawaited(_initializeOutbox());
-    _loadPosts(initial: true);
+    unawaited(_loadPartner());
+    unawaited(_loadToday());
+    unawaited(_loadPosts());
     if (widget.openComposer && widget.initialDraftId == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(_startCreatePostFlow(todayMoment: true));
+        if (mounted) unawaited(_openComposer());
       });
     }
   }
 
   @override
   void dispose() {
-    _controller.removeListener(_onControllerChanged);
-    _outbox.removeListener(_onControllerChanged);
+    _controller.removeListener(_onChanged);
+    _outbox.removeListener(_onOutboxChanged);
     _outbox.feedRevision.removeListener(_onFeedChanged);
-    if (_ownsController) {
-      _controller.dispose();
-      _apiClient.close();
-    }
+    if (_ownsController) _controller.dispose();
+    _todayApi?.close();
+    _apiClient.close();
     super.dispose();
   }
 
-  void _onControllerChanged() {
+  void _onChanged() {
     if (mounted) setState(() {});
+  }
+
+  void _onOutboxChanged() {
+    if (!mounted) return;
+    final drafts = _outbox.drafts;
+    final failed = drafts.any((d) => d.status == UploadDraftStatus.failed);
+    if (drafts.length < _lastDraftCount && !failed && !_hadFailure) {
+      showV2Snack(context, '기록을 올렸어요');
+    }
+    _hadFailure = failed;
+    _lastDraftCount = drafts.length;
+    setState(() {});
+  }
+
+  void _onFeedChanged() {
+    if (!mounted) return;
+    unawaited(_loadPosts());
+    unawaited(_loadToday());
   }
 
   Future<void> _loadViewMode() async {
     try {
-      final preferences = await SharedPreferences.getInstance();
-      final gridView = preferences.getBool('moment_loop_grid_view') ?? true;
-      if (mounted && gridView != _gridView) {
-        setState(() => _gridView = gridView);
-      }
-    } catch (_) {
-      // The list remains usable if platform preferences are temporarily absent.
-    }
+      final prefs = await SharedPreferences.getInstance();
+      final grid = prefs.getBool('moment_loop_grid_view') ?? true;
+      if (mounted && grid != _gridView) setState(() => _gridView = grid);
+    } catch (_) {}
   }
 
   Future<void> _toggleViewMode() async {
     final next = !_gridView;
     setState(() => _gridView = next);
     try {
-      final preferences = await SharedPreferences.getInstance();
-      await preferences.setBool('moment_loop_grid_view', next);
-    } catch (_) {
-      // Keep the in-memory choice for this screen even if persistence fails.
-    }
-  }
-
-  void _onFeedChanged() {
-    if (mounted) unawaited(_loadPosts());
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('moment_loop_grid_view', next);
+    } catch (_) {}
   }
 
   Future<void> _initializeOutbox() async {
@@ -262,92 +214,45 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     unawaited(
       _outbox.resume().catchError((Object _) {
         if (mounted) {
-          setState(() => _storageError = '임시저장을 읽지 못했어요. 저장 공간을 확인해주세요');
+          setState(() => _storageError = '임시저장을 읽지 못했어요. 저장 공간을 확인해 주세요.');
         }
       }),
     );
   }
 
-  static DateTime _mondayOf(DateTime d) {
-    final day = DateTime(d.year, d.month, d.day);
-    return day.subtract(Duration(days: day.weekday - 1));
+  Future<void> _loadPartner() async {
+    final name = await CoupleNames.loadPartner(
+      _apiClient,
+      userKey: '${_userId ?? ''}',
+    );
+    if (mounted && name != null) setState(() => _partner = name);
   }
 
-  List<DateTime> get _weekDays =>
-      List.generate(7, (i) => _weekStart.add(Duration(days: i)));
-
-  bool get _isCurrentWeek {
-    final now = _mondayOf(DateTime.now());
-    return _weekStart.isAtSameMomentAs(now);
-  }
-
-  List<List<Map<String, dynamic>>> get _groups {
-    final groupMap = <String, List<Map<String, dynamic>>>{};
-    for (final post in _posts) {
-      final sid = '${post['session_id'] ?? ''}'.trim();
-      final key = sid.isNotEmpty
-          ? sid
-          : 'solo_${post['id']}'; // fallback: each old post is its own group
-      groupMap.putIfAbsent(key, () => []).add(post);
-    }
-    final groups = groupMap.values.map((g) {
-      g.sort((a, b) {
-        final order = (a['position'] as int? ?? 0).compareTo(
-          b['position'] as int? ?? 0,
-        );
-        return order != 0
-            ? order
-            : (a['id'] as int? ?? 0).compareTo(b['id'] as int? ?? 0);
+  Future<void> _loadToday() async {
+    _todayApi ??= TodayApi(
+      baseUrl: _baseUrl,
+      token: _auth.token ?? '',
+      client: widget.client,
+    );
+    try {
+      final state = await _todayApi!.fetchState();
+      if (!mounted) return;
+      setState(() {
+        _today = state;
+        _todayLoading = false;
+        _todayFailed = false;
       });
-      return g;
-    }).toList();
-    groups.sort((a, b) {
-      final da =
-          DateTime.tryParse('${a.first['captured_at'] ?? ''}') ?? DateTime(0);
-      final db =
-          DateTime.tryParse('${b.first['captured_at'] ?? ''}') ?? DateTime(0);
-      return db.compareTo(da);
-    });
-    return groups;
-  }
-
-  String _sessionKeyOf(List<Map<String, dynamic>> group) {
-    final sid = '${group.first['session_id'] ?? ''}'.trim();
-    return sid.isNotEmpty ? sid : 'solo_${group.first['id']}';
-  }
-
-  Map<String, List<List<Map<String, dynamic>>>> get _groupsByDate {
-    final map = <String, List<List<Map<String, dynamic>>>>{};
-    for (final group in _groups) {
-      final key = _dateKey(
-        group.first['taken_at'] ?? group.first['captured_at'],
-      );
-      map.putIfAbsent(key, () => []).add(group);
-    }
-    return map;
-  }
-
-  List<String> get _allTags {
-    final seen = <String>{};
-    for (final post in _posts) {
-      for (final t in _momentTags(post['tags'])) {
-        if (t != '#momentloop') seen.add(t);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _todayLoading = false;
+          _todayFailed = true;
+        });
       }
     }
-    final list = seen.toList()..sort();
-    return list;
   }
 
-  List<List<Map<String, dynamic>>> get _filteredGroups {
-    if (_selectedTag == null) return _groups;
-    return _groups
-        .where(
-          (g) => g.any((p) => _momentTags(p['tags']).contains(_selectedTag)),
-        )
-        .toList();
-  }
-
-  Future<void> _loadPosts({bool initial = false}) async {
+  Future<void> _loadPosts() async {
     await _controller.loadWeek(_weekStart);
     if (!mounted ||
         _openedInitialTarget ||
@@ -357,47 +262,61 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     }
     if (_controller.state.status != MomentLoopStatus.ready) return;
     _openedInitialTarget = true;
-    final groups = _groups
-        .where((g) => g.any((p) => p['id'] == widget.initialPostId))
-        .toList();
+    final groups = groupMoments(
+      _controller.state.moments,
+    ).where((g) => g.any((p) => p.id == widget.initialPostId)).toList();
     if (groups.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('이 순간을 찾을 수 없어요')));
+      showV2Snack(context, '이 순간을 찾을 수 없어요', tone: V2Tone.warn);
     } else {
-      _openDetail(groups.single, initialPostId: widget.initialPostId);
+      _openDetail(groups.first, initialPostId: widget.initialPostId);
     }
   }
 
-  Future<void> _startCreatePostFlow({bool todayMoment = false}) async {
+  Future<void> _refresh() async {
+    await Future.wait([_loadPosts(), _loadToday()]);
+  }
+
+  // ── Composer / drafts ──────────────────────────────────────────────────────
+
+  Future<void> _openComposer({bool todayMoment = true}) async {
     final created = await Navigator.of(context).push<Object?>(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) => _CreateMomentPage(
+        builder: (_) => MomentComposerPage(
           controller: _controller,
           outbox: _outbox,
-          initialMedia: const [],
           mediaPicker: widget.mediaPicker,
           startWithTodayMoment: todayMoment,
+          initialPinId: widget.initialPinId,
+          initialPinName: widget.initialPinName,
         ),
       ),
     );
-    if (!mounted) return;
-    if (created is DateTime) {
-      setState(() => _weekStart = _mondayOf(created));
-      _resumeUploads();
-      await _loadPosts();
-    }
+    if (!mounted || created is! DateTime) return;
+    _showDate(created);
+    _resumeUploads();
+    await _loadPosts();
   }
 
-  Future<void> _editPost(Map<String, dynamic> post) async {
-    final matches = _controller.state.moments.where((p) => p.id == post['id']);
+  void _showDate(DateTime date) {
+    final day = dateOnly(date);
+    final thisWeek = mondayOf(DateTime.now());
+    setState(() {
+      if (day == dateOnly(DateTime.now())) {
+        _tab = _FeedTab.today;
+      } else if (mondayOf(day) == thisWeek) {
+        _tab = _FeedTab.week;
+        _weekStart = thisWeek;
+      } else {
+        _tab = _FeedTab.past;
+      }
+    });
+  }
+
+  Future<void> _editMoment(Moment post) async {
+    final matches = _controller.state.moments.where((p) => p.id == post.id);
     if (matches.isEmpty) {
-      // The feed refreshed and this post vanished while the viewer was open.
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('이 순간을 찾을 수 없어요')));
+      if (mounted) showV2Snack(context, '이 순간을 찾을 수 없어요', tone: V2Tone.warn);
       return;
     }
     final selected = matches.first;
@@ -413,15 +332,14 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
       capturedAt: DateTime.tryParse(first.capturedAt ?? '') ?? DateTime.now(),
       sessionId: first.sessionId ?? '',
       mapPinId: first.mapPinId,
-      tags: _momentTags(first.extra['tags']),
+      tags: _tagsOf(first.extra['tags']),
     );
     final result = await Navigator.of(context).push<DateTime>(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) => _CreateMomentPage(
+        builder: (_) => MomentComposerPage(
           controller: _controller,
           outbox: _outbox,
-          initialMedia: const [],
           mediaPicker: widget.mediaPicker,
           edit: MomentEdit(
             original: original,
@@ -432,10 +350,21 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
       ),
     );
     if (result != null && mounted) {
-      // Close the stale detail; the feed will refresh as the worker checkpoints.
-      Navigator.of(context).pop();
+      Navigator.of(context).pop(); // the stale detail
       _resumeUploads();
     }
+  }
+
+  List<String> _tagsOf(Object? value) {
+    if (value is List) return value.map((t) => '$t').toList(growable: false);
+    if (value is String && value.isNotEmpty) {
+      return value
+          .split(',')
+          .map((t) => t.trim())
+          .where((t) => t.isNotEmpty)
+          .toList();
+    }
+    return const ['#momentloop'];
   }
 
   Future<void> _openDraft(String id) async {
@@ -443,29 +372,24 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     final edit = await _outbox.readEdit(id);
     if (!mounted) return;
     if (draft == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('이 임시저장을 찾을 수 없어요')));
+      showV2Snack(context, '이 임시저장을 찾을 수 없어요', tone: V2Tone.warn);
       return;
     }
     if (_outbox.drafts.any(
       (d) => d.id == id && d.status == UploadDraftStatus.uploading,
     )) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('이 순간을 업로드하고 있어요')));
+      showV2Snack(context, '지금 올리는 중이에요');
       return;
     }
     final saved = await Navigator.of(context).push<DateTime>(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) => _CreateMomentPage(
+        builder: (_) => MomentComposerPage(
           controller: _controller,
           outbox: _outbox,
           draftId: id,
           initialDraft: draft,
           edit: edit,
-          initialMedia: const [],
           mediaPicker: widget.mediaPicker,
         ),
       ),
@@ -474,3933 +398,410 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
   }
 
   void _showDrafts() {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (sheetContext) => AnimatedBuilder(
-        animation: _outbox,
-        builder: (_, _) => SafeArea(
-          child: SizedBox(
-            height: MediaQuery.sizeOf(context).height * .55,
-            child: Column(
-              children: [
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('임시저장된 순간'),
-                ),
-                Expanded(
-                  child: ListView(
-                    children: _outbox.drafts
-                        .map(
-                          (draft) => ListTile(
-                            key: Key('moment_draft_${draft.id}'),
-                            title: Text(
-                              draft.caption,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            subtitle: Text(
-                              draft.status == UploadDraftStatus.failed
-                                  ? '업로드 실패 · ${draft.uploadedCount}/${draft.fileCount} 완료'
-                                  : '업로드 대기 · ${draft.uploadedCount}/${draft.fileCount} 완료',
-                            ),
-                            onTap: draft.status == UploadDraftStatus.uploading
-                                ? null
-                                : () {
-                                    Navigator.pop(sheetContext);
-                                    unawaited(_openDraft(draft.id));
-                                  },
-                            trailing:
-                                draft.status == UploadDraftStatus.uploading
-                                ? const SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : IconButton(
-                                    tooltip: '다시 업로드',
-                                    onPressed: _resumeUploads,
-                                    icon: const Icon(Icons.refresh),
-                                  ),
-                          ),
-                        )
-                        .toList(),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+    showV2Sheet<void>(
+      context,
+      title: '올리는 중인 기록',
+      subtitle: '올리지 못한 기록은 이유와 함께 보여 드려요',
+      builder: (sheetContext) => MomentDraftsSheet(
+        outbox: _outbox,
+        onRetry: _resumeUploads,
+        onOpenDraft: (id) {
+          Navigator.pop(sheetContext);
+          unawaited(_openDraft(id));
+        },
       ),
     );
   }
 
-  void _openDetail(List<Map<String, dynamic>> group, {int? initialPostId}) {
+  // ── Detail ─────────────────────────────────────────────────────────────────
+
+  void _openDetail(List<Moment> group, {int? initialPostId}) {
+    final locked = group.first.todayLocked && group.first.userId != _userId;
+    if (locked) {
+      showV2Snack(context, '내 순간을 남기면 $_partnerName의 순간이 열려요');
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => _PostDetailPage(
+        builder: (_) => MomentDetailPage(
           group: group,
-          auth: _auth,
           myUserId: _userId,
+          myName: _myName,
+          partnerName: _partnerName,
           initialPostId: initialPostId,
-          onEdit: _editPost,
-          onDelete: _deletePost,
-          onReactionToggle: (sessionId, emoji) =>
+          onEdit: _editMoment,
+          onDelete: _deleteMoment,
+          onReaction: (sessionId, emoji) =>
               _controller.toggleReaction(sessionId: sessionId, emoji: emoji),
-          onDesignateToday: (id) => _controller.designateToday(id),
-          onRemoveTodayDesignation: _controller.removeTodayDesignation,
-        ),
-      ),
-    );
-  }
-
-  Future<void> _deletePost(Map<String, dynamic> post) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('삭제할까요?'),
-        content: const Text('이 순간과 사진을 영구 삭제해요.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('취소'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('삭제', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    try {
-      await _controller.deleteMoment(int.parse('${post['id']}'));
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('순간을 삭제하지 못했어요')));
-      }
-    }
-  }
-
-  String _myNickname() {
-    final u = _auth.user;
-    return '${u?['Nickname'] ?? u?['nickname'] ?? u?['UserName'] ?? u?['userName'] ?? '나'}';
-  }
-
-  void _openStoryViewer(
-    List<List<Map<String, dynamic>>> groups,
-    int startGroupIndex,
-  ) {
-    if (groups.isEmpty) return;
-    Navigator.of(context).push(
-      PageRouteBuilder(
-        opaque: false,
-        barrierColor: Colors.black87,
-        pageBuilder: (_, a, b) => _StoryViewer(
-          groups: groups,
-          startGroupIndex: startGroupIndex,
-          auth: _auth,
-          myUserId: _userId,
-          myNickname: _myNickname(),
-          seenSessionIds: _seenSessionIds,
-          onSeen: (sessionKey) {
-            if (mounted) setState(() => _seenSessionIds.add(sessionKey));
+          onDesignateToday: (id) async {
+            await _controller.designateToday(id);
+            unawaited(_loadToday());
+          },
+          onRemoveTodayDesignation: () async {
+            await _controller.removeTodayDesignation();
+            unawaited(_loadToday());
           },
         ),
       ),
     );
   }
 
-  Future<void> _pickWeek() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _weekStart,
-      firstDate: DateTime(2024),
-      lastDate: DateTime.now(),
-      helpText: '주를 선택하세요',
-      builder: (context, child) => Theme(
-        data: Theme.of(context).copyWith(
-          colorScheme: ColorScheme.light(
-            primary: kMainRose,
-            onPrimary: Colors.white,
-            surface: kMainPaper,
-          ),
-        ),
-        child: child!,
-      ),
-    );
-    if (picked != null && mounted) {
-      setState(() => _weekStart = _mondayOf(picked));
+  Future<bool> _deleteMoment(Moment post) async {
+    try {
+      await _controller.deleteMoment(post.id);
+      unawaited(_loadToday());
+      if (mounted) showV2Snack(context, '순간을 지웠어요');
+      return true;
+    } catch (_) {
+      if (mounted) {
+        showV2Snack(context, '지우지 못했어요. 다시 시도해 주세요.', tone: V2Tone.err);
+      }
+      return false;
     }
   }
 
-  void _showCalendarSheet() {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetCtx) => _MonthCalendarSheet(
+  void _showCalendar() {
+    final days = <String>{};
+    for (final m in _controller.state.moments) {
+      final d = momentDay(m);
+      if (d != null) days.add(dayKey(d));
+    }
+    showV2Sheet<void>(
+      context,
+      title: '날짜로 찾기',
+      builder: (sheetContext) => MomentCalendarSheet(
         month: _weekStart,
-        postDateKeys: _groupsByDate.keys.toSet(),
-        onDayTap: (day) {
-          Navigator.pop(sheetCtx);
+        daysWithMoments: days,
+        onDay: (day) {
+          Navigator.pop(sheetContext);
           setState(() {
-            _weekStart = _mondayOf(day);
+            _weekStart = mondayOf(day);
+            _tab = _FeedTab.week;
           });
-          unawaited(_loadPosts());
         },
       ),
     );
   }
 
+  // ── Build ──────────────────────────────────────────────────────────────────
+
+  bool get _isCurrentWeek => _weekStart == mondayOf(DateTime.now());
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: kMainCream,
-      floatingActionButton: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: kRoseGrad,
-          borderRadius: BorderRadius.circular(99),
-          boxShadow: [
-            BoxShadow(
-              color: kMainRose.withAlpha(90),
-              blurRadius: 18,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: FloatingActionButton.extended(
-          onPressed: _startCreatePostFlow,
-          tooltip: '순간 남기기',
-          backgroundColor: Colors.transparent,
-          foregroundColor: Colors.white,
-          elevation: 0,
-          focusElevation: 0,
-          hoverElevation: 0,
-          highlightElevation: 0,
-          shape: const StadiumBorder(),
-          icon: const Icon(Icons.add_rounded, size: 22),
-          label: Text(
-            '순간 남기기',
-            style: mainBody(
-              size: 13,
-              color: Colors.white,
-              weight: FontWeight.w800,
-            ),
-          ),
-        ),
-      ),
-      body: SafeArea(
-        top: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Header ──────────────────────────────────────────────────────
-            Stack(
-              children: [
-                const MainTabHeader(
-                  title: 'MomentLoop',
-                  subtitle: '우리 둘의 날짜별 기록',
-                  safeTop: true,
-                ),
-                if (Navigator.of(context).canPop())
-                  Positioned(
-                    right: 16,
-                    bottom: 12,
-                    child: GestureDetector(
-                      onTap: () => Navigator.maybePop(context),
-                      child: Semantics(
-                        button: true,
-                        label: '뒤로가기',
-                        child: Container(
-                          width: 38,
-                          height: 38,
-                          decoration: BoxDecoration(
-                            color: kMainPaper,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: kMainLine),
-                          ),
-                          child: const Icon(
-                            Icons.close_rounded,
-                            size: 18,
-                            color: kMainSub,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-
-            const SizedBox(height: 14),
-            if (_storageError != null)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Text(_storageError!),
-              ),
-            if (_outbox.drafts.isNotEmpty)
-              ListTile(
+    final p = V2Palette.of(context);
+    final drafts = _outbox.drafts;
+    return V2Theme(
+      child: Scaffold(
+        backgroundColor: p.bg,
+        appBar: V2Header(
+          title: '기록',
+          actions: [
+            if (drafts.isNotEmpty)
+              V2IconButton(
                 key: const Key('moment_drafts_entry'),
-                dense: true,
-                leading: const Icon(Icons.cloud_upload_outlined),
-                title: Text('임시저장 ${_outbox.drafts.length}개'),
-                onTap: _showDrafts,
+                icon: V2Icons.refresh,
+                tooltip: '올리는 중인 기록 ${drafts.length}개',
+                dot: drafts.any((d) => d.status == UploadDraftStatus.failed),
+                onPressed: _showDrafts,
               ),
-
-            // ── Story highlights ─────────────────────────────────────────────
-            if (_posts.isNotEmpty)
-              _HighlightStrip(
-                groups: _groups,
-                auth: _auth,
-                myUserId: _userId,
-                seenSessionIds: _seenSessionIds,
-                sessionKeyOf: _sessionKeyOf,
-                onTap: (idx) => _openStoryViewer(_groups, idx),
+            if (!_unpaired)
+              V2IconButton(
+                key: const Key('moment_add'),
+                icon: V2Icons.add,
+                tooltip: '순간 남기기',
+                onPressed: () => _openComposer(),
               ),
-
-            if (_posts.isNotEmpty) const SizedBox(height: 12),
-
-            // ── Week navigator ───────────────────────────────────────────────
-            _WeekNavigator(
-              weekStart: _weekStart,
-              isCurrentWeek: _isCurrentWeek,
-              onPrev: () => setState(
-                () => _weekStart = _weekStart.subtract(const Duration(days: 7)),
-              ),
-              onNext: _isCurrentWeek
-                  ? null
-                  : () => setState(
-                      () =>
-                          _weekStart = _weekStart.add(const Duration(days: 7)),
-                    ),
-              onPickWeek: _pickWeek,
-            ),
-
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      _isCurrentWeek ? '이번 주의 순간' : '선택한 주의 순간',
-                      style: mainTitle(size: 20, color: kMainInk),
-                    ),
-                  ),
-                  IconButton(
-                    key: const Key('moment_calendar_btn'),
-                    tooltip: '달력으로 날짜 선택',
-                    onPressed: _showCalendarSheet,
-                    icon: const Icon(Icons.calendar_month_rounded),
-                  ),
-                  IconButton(
-                    key: const Key('moment_view_toggle'),
-                    tooltip: _gridView ? '목록으로 보기' : '격자로 보기',
-                    onPressed: _toggleViewMode,
-                    icon: Icon(
-                      _gridView
-                          ? Icons.view_list_rounded
-                          : Icons.grid_view_rounded,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // ── Tag filter ───────────────────────────────────────────────────
-            if (_allTags.isNotEmpty)
-              _TagFilterRow(
-                tags: _allTags,
-                selected: _selectedTag,
-                onChanged: (tag) => setState(
-                  () => _selectedTag = _selectedTag == tag ? null : tag,
-                ),
-              ),
-
-            const SizedBox(height: 4),
-
-            // ── Day list ─────────────────────────────────────────────────────
-            Expanded(
-              child: MomentLoopStateView(
-                state: _controller.state,
-                loading: () => const Center(
-                  child: CircularProgressIndicator(color: kMainRose),
-                ),
-                failure: (_) => _ErrorState(
-                  message: _error ?? '기록을 불러오지 못했어요',
-                  onRetry: _loadPosts,
-                ),
-                child: RefreshIndicator(
-                  color: kMainRose,
-                  onRefresh: _loadPosts,
-                  child: _buildWeekContent(),
-                ),
-              ),
-            ),
           ],
         ),
+        body: SafeArea(top: false, child: _body(p)),
       ),
     );
   }
 
-  Widget _buildWeekContent() {
-    final filtered = _filteredGroups;
-
-    // Build byDate from filtered groups so the tag filter affects day sections
-    final byDate = <String, List<List<Map<String, dynamic>>>>{};
-    for (final group in filtered) {
-      final key = _dateKey(
-        group.first['taken_at'] ?? group.first['captured_at'],
+  Widget _body(V2Palette p) {
+    final state = _controller.state;
+    if (_unpaired) {
+      return V2EmptyState.unpaired(
+        onAction:
+            widget.onGoPairing ??
+            () => Navigator.of(context).popUntil((r) => r.isFirst),
       );
-      byDate.putIfAbsent(key, () => []).add(group);
     }
+    final failed = state.status == MomentLoopStatus.failure;
+    final loading =
+        state.status != MomentLoopStatus.ready && state.moments.isEmpty && !failed;
+    final me = _userId;
+    final partner = _partnerName;
+    final drafts = _outbox.drafts;
+    final offline = _errorCode == 'network_error';
 
-    final daysWithGroups = _weekDays
-        .where((d) => (byDate[_dateKey(d.toIso8601String())] ?? []).isNotEmpty)
-        .toList();
+    final groups = groupMoments(state.moments);
+    final today = dateOnly(DateTime.now());
+    final thisWeek = mondayOf(today);
 
-    if (daysWithGroups.isEmpty) {
-      return _selectedTag != null
-          ? _TagEmptyState(
-              tag: _selectedTag!,
-              onClear: () => setState(() => _selectedTag = null),
-            )
-          : _WeekEmptyState(
-              isCurrentWeek: _isCurrentWeek,
-              onRefresh: _loadPosts,
-              onCreate: _startCreatePostFlow,
+    final Widget feed;
+    if (failed && state.moments.isEmpty) {
+      feed = offline
+          ? V2ErrorState.offline(onRetry: _refresh)
+          : V2ErrorState(
+              title: '기록을 불러오지 못했어요',
+              body: '잠시 후 다시 시도해 주세요.',
+              onRetry: _refresh,
             );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(0, 8, 0, 120),
-      itemCount: daysWithGroups.length,
-      itemBuilder: (context, i) {
-        final day = daysWithGroups[i];
-        final dayGroups = byDate[_dateKey(day.toIso8601String())]!;
-        return _gridView
-            ? _DayGridSection(
-                day: day,
-                groups: dayGroups,
-                auth: _auth,
-                myUserId: _userId,
-                onTap: _openDetail,
-              )
-            : _DaySection(
-                day: day,
-                groups: dayGroups,
-                auth: _auth,
-                myUserId: _userId,
-                onTap: _openDetail,
-              );
-      },
-    );
-  }
-}
-
-// ── Tag Filter Row ────────────────────────────────────────────────────────────
-
-class _TagFilterRow extends StatelessWidget {
-  final List<String> tags;
-  final String? selected;
-  final ValueChanged<String> onChanged;
-
-  const _TagFilterRow({
-    required this.tags,
-    required this.selected,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 42,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: tags.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 8),
-        itemBuilder: (_, i) {
-          final tag = tags[i];
-          final active = tag == selected;
-          return FilterChip(
-            key: Key('tag_filter_$tag'),
-            label: Text(tag),
-            selected: active,
-            onSelected: (_) => onChanged(tag),
-            selectedColor: kMainRose.withAlpha(30),
-            checkmarkColor: kMainRose,
-            labelStyle: mainBody(
-              size: 12,
-              color: active ? kMainRose : kMainSub,
-              weight: active ? FontWeight.w700 : FontWeight.w400,
-            ),
-            side: BorderSide(color: active ? kMainRose : kMainLine),
-            backgroundColor: kMainPaper,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-          );
-        },
-      ),
-    );
-  }
-}
-
-// ── Tag Empty State ───────────────────────────────────────────────────────────
-
-class _TagEmptyState extends StatelessWidget {
-  final String tag;
-  final VoidCallback onClear;
-
-  const _TagEmptyState({required this.tag, required this.onClear});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.label_off_outlined, size: 48, color: kMainLine),
-          const SizedBox(height: 12),
-          Text(
-            '"$tag" 태그가 붙은 순간이 없어요',
-            style: mainBody(size: 14, color: kMainSub),
-          ),
-          const SizedBox(height: 12),
-          TextButton(onPressed: onClear, child: const Text('필터 지우기')),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Month Calendar Sheet ──────────────────────────────────────────────────────
-
-class _MonthCalendarSheet extends StatefulWidget {
-  final DateTime month;
-  final Set<String> postDateKeys;
-  final ValueChanged<DateTime> onDayTap;
-
-  const _MonthCalendarSheet({
-    required this.month,
-    required this.postDateKeys,
-    required this.onDayTap,
-  });
-
-  @override
-  State<_MonthCalendarSheet> createState() => _MonthCalendarSheetState();
-}
-
-class _MonthCalendarSheetState extends State<_MonthCalendarSheet> {
-  late DateTime _month;
-
-  @override
-  void initState() {
-    super.initState();
-    _month = DateTime(widget.month.year, widget.month.month);
-  }
-
-  String _key(DateTime d) => d.toIso8601String().substring(0, 10);
-
-  @override
-  Widget build(BuildContext context) {
-    final first = DateTime(_month.year, _month.month, 1);
-    final lastDay = DateTime(_month.year, _month.month + 1, 0).day;
-    // Monday-first: 0=Mon … 6=Sun
-    final startOffset = (first.weekday - 1) % 7;
-    final totalCells = startOffset + lastDay;
-    final rows = (totalCells / 7).ceil();
-
-    const headers = ['월', '화', '수', '목', '금', '토', '일'];
-
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Month header
-            Row(
-              children: [
-                IconButton(
-                  tooltip: '이전 달',
-                  icon: const Icon(Icons.chevron_left_rounded),
-                  onPressed: () => setState(
-                    () => _month = DateTime(_month.year, _month.month - 1),
-                  ),
-                ),
-                Expanded(
-                  child: Text(
-                    '${_month.year}년 ${_month.month}월',
-                    textAlign: TextAlign.center,
-                    style: mainTitle(size: 16, color: kMainInk),
-                  ),
-                ),
-                IconButton(
-                  tooltip: '다음 달',
-                  icon: const Icon(Icons.chevron_right_rounded),
-                  onPressed:
-                      DateTime(
-                        _month.year,
-                        _month.month + 1,
-                      ).isAfter(DateTime.now())
-                      ? null
-                      : () => setState(
-                          () =>
-                              _month = DateTime(_month.year, _month.month + 1),
-                        ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            // Day-of-week headers
-            Row(
-              children: headers
-                  .map(
-                    (h) => Expanded(
-                      child: Text(
-                        h,
-                        textAlign: TextAlign.center,
-                        style: mainBody(size: 12, color: kMainSub),
-                      ),
-                    ),
-                  )
-                  .toList(),
-            ),
-            const SizedBox(height: 4),
-            // Calendar grid
-            for (int row = 0; row < rows; row++)
-              Row(
-                children: List.generate(7, (col) {
-                  final cellIndex = row * 7 + col;
-                  final day = cellIndex - startOffset + 1;
-                  if (day < 1 || day > lastDay) {
-                    return const Expanded(child: SizedBox(height: 44));
-                  }
-                  final date = DateTime(_month.year, _month.month, day);
-                  final hasPost = widget.postDateKeys.contains(_key(date));
-                  final isToday = _key(date) == _key(DateTime.now());
-                  return Expanded(
-                    child: GestureDetector(
-                      onTap: () => widget.onDayTap(date),
-                      child: SizedBox(
-                        height: 44,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              width: 32,
-                              height: 32,
-                              decoration: isToday
-                                  ? BoxDecoration(
-                                      color: kMainRose.withAlpha(20),
-                                      shape: BoxShape.circle,
-                                      border: Border.all(color: kMainRose),
-                                    )
-                                  : null,
-                              alignment: Alignment.center,
-                              child: Text(
-                                '$day',
-                                style: mainBody(
-                                  size: 13,
-                                  color: isToday ? kMainRose : kMainInk,
-                                  weight: isToday
-                                      ? FontWeight.w700
-                                      : FontWeight.w400,
-                                ),
-                              ),
-                            ),
-                            if (hasPost)
-                              Container(
-                                width: 5,
-                                height: 5,
-                                decoration: const BoxDecoration(
-                                  color: kMainRose,
-                                  shape: BoxShape.circle,
-                                ),
-                              )
-                            else
-                              const SizedBox(height: 5),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Highlight Strip (Story Circles) ──────────────────────────────────────────
-
-class _HighlightStrip extends StatelessWidget {
-  final List<List<Map<String, dynamic>>> groups;
-  final AuthService auth;
-  final int? myUserId;
-  final Set<String> seenSessionIds;
-  final String Function(List<Map<String, dynamic>>) sessionKeyOf;
-  final ValueChanged<int> onTap;
-
-  const _HighlightStrip({
-    required this.groups,
-    required this.auth,
-    required this.myUserId,
-    required this.seenSessionIds,
-    required this.sessionKeyOf,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 98,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 18),
-        itemCount: groups.length,
-        itemBuilder: (context, i) {
-          final group = groups[i];
-          final first = group.first;
-          final sessionKey = sessionKeyOf(group);
-          final seen = seenSessionIds.contains(sessionKey);
-          final isMine = '${first['user_id']}' == '$myUserId';
-          // Representative thumbnail: first media item in group
-          final thumbPost = group.firstWhere(
-            (p) =>
-                '${p['media_url'] ?? ''}'.trim().isNotEmpty &&
-                p['media_type'] != 'text',
-            orElse: () => first,
-          );
-          final mediaUrl = '${thumbPost['media_url'] ?? ''}'.trim();
-          final hasMedia =
-              mediaUrl.isNotEmpty && thumbPost['media_type'] != 'text';
-          final isVideo = thumbPost['media_type'] == 'video';
-          final count = group.length;
-
-          return GestureDetector(
-            onTap: () => onTap(i),
-            child: Padding(
-              padding: const EdgeInsets.only(right: 14),
-              child: Column(
-                children: [
-                  Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Container(
-                        width: 70,
-                        height: 70,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: seen
-                              ? null
-                              : (isMine ? kRoseGrad : kSkyGrad),
-                          color: seen ? kMainLine : null,
-                          boxShadow: seen
-                              ? null
-                              : [
-                                  BoxShadow(
-                                    color: (isMine ? kMainRose : kMainSky)
-                                        .withAlpha(60),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                        ),
-                        padding: const EdgeInsets.all(2.5),
-                        child: Container(
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: kMainBg,
-                          ),
-                          padding: const EdgeInsets.all(2),
-                          child: ClipOval(
-                            child: hasMedia && !isVideo
-                                ? Image.network(
-                                    _mediaUrl(auth.baseUrl, mediaUrl),
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, _, _) =>
-                                        _StoryFallback(isMine: isMine),
-                                  )
-                                : hasMedia && isVideo
-                                ? _VideoThumb(
-                                    url: _mediaUrl(auth.baseUrl, mediaUrl),
-                                    iconSize: 22,
-                                    fallback: _StoryFallback(isMine: isMine),
-                                  )
-                                : _StoryFallback(isMine: isMine),
-                          ),
-                        ),
-                      ),
-                      if (count > 1)
-                        Positioned(
-                          right: -2,
-                          bottom: -2,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 5,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isMine ? kMainRose : kMainSky,
-                              borderRadius: BorderRadius.circular(99),
-                              border: Border.all(color: kMainBg, width: 1.5),
-                            ),
-                            child: Text(
-                              '$count',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    isMine ? '나' : '상대',
-                    style: mainBody(
-                      size: 11,
-                      color: seen
-                          ? kMainMuted
-                          : (isMine ? kMainRose : kMainSky),
-                      weight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _StoryFallback extends StatelessWidget {
-  final bool isMine;
-  const _StoryFallback({required this.isMine});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: isMine ? kMainRoseSoft : kMainSkySoft,
-      child: Icon(
-        Icons.notes_rounded,
-        color: isMine ? kMainRose : kMainSky,
-        size: 22,
-      ),
-    );
-  }
-}
-
-// ── Story Viewer ──────────────────────────────────────────────────────────────
-
-class _StoryViewer extends StatefulWidget {
-  final List<List<Map<String, dynamic>>> groups;
-  final int startGroupIndex;
-  final AuthService auth;
-  final int? myUserId;
-  final String myNickname;
-  final Set<String> seenSessionIds;
-  final ValueChanged<String> onSeen;
-
-  const _StoryViewer({
-    required this.groups,
-    required this.startGroupIndex,
-    required this.auth,
-    required this.myUserId,
-    required this.myNickname,
-    required this.seenSessionIds,
-    required this.onSeen,
-  });
-
-  @override
-  State<_StoryViewer> createState() => _StoryViewerState();
-}
-
-class _StoryViewerState extends State<_StoryViewer>
-    with SingleTickerProviderStateMixin {
-  late final PageController _groupPageCtrl;
-  late int _groupIdx;
-  int _mediaIdx = 0;
-  late AnimationController _progress;
-  static const _storyDuration = Duration(seconds: 10);
-
-  List<Map<String, dynamic>> get _currentGroup => widget.groups[_groupIdx];
-  Map<String, dynamic> get _currentPost => _currentGroup[_mediaIdx];
-
-  @override
-  void initState() {
-    super.initState();
-    _groupIdx = widget.startGroupIndex.clamp(0, widget.groups.length - 1);
-    _groupPageCtrl = PageController(initialPage: _groupIdx);
-    _progress = AnimationController(vsync: this, duration: _storyDuration)
-      ..addStatusListener((status) {
-        if (status == AnimationStatus.completed) _advanceMedia();
-      })
-      ..forward();
-    _markSeen();
-  }
-
-  @override
-  void dispose() {
-    _groupPageCtrl.dispose();
-    _progress.dispose();
-    super.dispose();
-  }
-
-  String _sessionKey(List<Map<String, dynamic>> group) {
-    final sid = '${group.first['session_id'] ?? ''}'.trim();
-    return sid.isNotEmpty ? sid : 'solo_${group.first['id']}';
-  }
-
-  void _markSeen() {
-    final key = _sessionKey(_currentGroup);
-    WidgetsBinding.instance.addPostFrameCallback((_) => widget.onSeen(key));
-  }
-
-  void _restartProgress() {
-    _progress
-      ..reset()
-      ..forward();
-  }
-
-  void _advanceMedia() {
-    if (_mediaIdx < _currentGroup.length - 1) {
-      setState(() => _mediaIdx++);
-      _restartProgress();
+    } else if (loading) {
+      feed = const SingleChildScrollView(
+        padding: EdgeInsets.all(V2Space.page),
+        physics: NeverScrollableScrollPhysics(),
+        child: MomentFeedSkeleton(),
+      );
     } else {
-      _goToGroup(_groupIdx + 1);
-    }
-  }
-
-  void _retreatMedia() {
-    if (_mediaIdx > 0) {
-      setState(() => _mediaIdx--);
-      _restartProgress();
-    } else {
-      _goToGroup(_groupIdx - 1);
-    }
-  }
-
-  void _goToGroup(int idx) {
-    if (idx < 0 || idx >= widget.groups.length) {
-      Navigator.of(context).pop();
-      return;
-    }
-    _groupPageCtrl.jumpToPage(idx);
-  }
-
-  void _onGroupPageChanged(int idx) {
-    setState(() {
-      _groupIdx = idx;
-      _mediaIdx = 0;
-    });
-    _restartProgress();
-    _markSeen();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final group = _currentGroup;
-    final post = _currentPost;
-    final isMine = '${post['user_id']}' == '${widget.myUserId}';
-    final author = isMine
-        ? widget.myNickname
-        : '${post['Nickname'] ?? post['nickname'] ?? post['UserName'] ?? '상대'}';
-    final caption = '${post['caption'] ?? ''}'.trim();
-    final timeAgo = _timeAgo(post['captured_at']);
-
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          // ── Outer PageView for group navigation (swipe) ────────────────
-          PageView.builder(
-            controller: _groupPageCtrl,
-            onPageChanged: _onGroupPageChanged,
-            itemCount: widget.groups.length,
-            itemBuilder: (context, groupIdx) {
-              final g = widget.groups[groupIdx];
-              final mediaI = groupIdx == _groupIdx ? _mediaIdx : 0;
-              final p = g[mediaI.clamp(0, g.length - 1)];
-              final mUrl = '${p['media_url'] ?? ''}'.trim();
-              final vid = p['media_type'] == 'video';
-              final hasMed = mUrl.isNotEmpty && p['media_type'] != 'text';
-              final cap = '${p['caption'] ?? ''}'.trim();
-
-              return GestureDetector(
-                onTapUp: (details) {
-                  if (groupIdx != _groupIdx) return;
-                  final x = details.globalPosition.dx;
-                  final w = MediaQuery.of(context).size.width;
-                  if (x < w / 3) {
-                    _retreatMedia();
-                  } else {
-                    _advanceMedia();
-                  }
-                },
-                onVerticalDragEnd: (details) {
-                  if ((details.primaryVelocity ?? 0) > 200) {
-                    Navigator.of(context).pop();
-                  }
-                },
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    if (hasMed && !vid)
-                      Image.network(
-                        _mediaUrl(widget.auth.baseUrl, mUrl),
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) =>
-                            const ColoredBox(color: Colors.black),
-                      )
-                    else if (hasMed && vid)
-                      _VideoDetailPlayer(
-                        url: _mediaUrl(widget.auth.baseUrl, mUrl),
-                      )
-                    else
-                      Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(32),
-                          child: Text(
-                            cap.isEmpty ? '말없이 남긴 순간' : cap,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 22,
-                              height: 1.6,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      ),
-                    // top gradient
-                    Positioned.fill(
-                      child: DecoratedBox(
-                        decoration: const BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment(0, 0.35),
-                            colors: [Colors.black54, Colors.transparent],
-                          ),
-                        ),
-                      ),
-                    ),
-                    // bottom gradient
-                    if (cap.isNotEmpty)
-                      Positioned.fill(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.bottomCenter,
-                              end: const Alignment(0, 0.5),
-                              colors: const [
-                                Color(0x99000000),
-                                Colors.transparent,
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              );
-            },
-          ),
-
-          // ── Progress bars (current group's media) ──────────────────────
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 8,
-            left: 12,
-            right: 12,
-            child: Row(
-              children: List.generate(group.length, (i) {
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(2),
-                      child: SizedBox(
-                        height: 2.5,
-                        child: i < _mediaIdx
-                            ? const ColoredBox(color: Colors.white)
-                            : i == _mediaIdx
-                            ? AnimatedBuilder(
-                                animation: _progress,
-                                builder: (_, a) => LinearProgressIndicator(
-                                  value: _progress.value,
-                                  backgroundColor: Colors.white30,
-                                  valueColor: const AlwaysStoppedAnimation(
-                                    Colors.white,
-                                  ),
-                                  minHeight: 2.5,
-                                ),
-                              )
-                            : const ColoredBox(color: Colors.white30),
-                      ),
-                    ),
-                  ),
-                );
-              }),
-            ),
-          ),
-
-          // ── Header: author + time + close ──────────────────────────────
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 20,
-            left: 16,
-            right: 16,
-            child: Row(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isMine ? kMainRoseSoft : kMainSkySoft,
-                    border: Border.all(color: Colors.white38),
-                  ),
-                  child: Center(
-                    child: Text(
-                      author.isEmpty ? '?' : author.characters.first,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w900,
-                        color: isMine ? kMainRose : kMainSky,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        author,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 14,
-                        ),
-                      ),
-                      Text(
-                        timeAgo,
-                        style: const TextStyle(
-                          color: Colors.white60,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                GestureDetector(
-                  onTap: () => Navigator.of(context).pop(),
-                  child: const Icon(
-                    Icons.close_rounded,
-                    color: Colors.white,
-                    size: 26,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // ── Caption ────────────────────────────────────────────────────
-          if (caption.isNotEmpty)
-            Positioned(
-              bottom: MediaQuery.of(context).padding.bottom + 32,
-              left: 20,
-              right: 20,
-              child: Text(
-                caption,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  height: 1.55,
-                  shadows: [Shadow(blurRadius: 8, color: Colors.black54)],
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Week Empty State ──────────────────────────────────────────────────────────
-
-class _WeekEmptyState extends StatelessWidget {
-  final bool isCurrentWeek;
-  final VoidCallback onRefresh;
-  final VoidCallback onCreate;
-  const _WeekEmptyState({
-    required this.isCurrentWeek,
-    required this.onRefresh,
-    required this.onCreate,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(24, 48, 24, 120),
-      children: [
-        ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 300),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 88,
-                height: 88,
-                decoration: BoxDecoration(
-                  color: kMainRoseSoft,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: kMainLine, width: 2),
-                ),
-                child: const Icon(
-                  Icons.favorite_rounded,
-                  size: 38,
-                  color: kMainRose,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                isCurrentWeek ? '이번 주 첫 순간을 남겨보세요' : '이 주에 남긴 순간이 없어요',
-                textAlign: TextAlign.center,
-                style: mainBody(
-                  size: 17,
-                  color: kMainInk,
-                  weight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 7),
-              Text(
-                isCurrentWeek
-                    ? '사진·짧은 영상·한 문장 중 하나면 충분해요.'
-                    : '다른 주를 탐색하거나 새로운 순간을 남겨보세요.',
-                textAlign: TextAlign.center,
-                style: mainBody(size: 13, color: kMainMuted, height: 1.5),
-              ),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                key: const Key('moment_empty_create'),
-                onPressed: onCreate,
-                icon: const Icon(Icons.add_photo_alternate_outlined),
-                label: const Text('순간 남기기'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: kMainRose,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 14,
-                  ),
-                  shape: const StadiumBorder(),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextButton(onPressed: onRefresh, child: const Text('새로고침')),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ── Week Navigator ────────────────────────────────────────────────────────────
-
-class _WeekNavigator extends StatelessWidget {
-  final DateTime weekStart;
-  final bool isCurrentWeek;
-  final VoidCallback onPrev;
-  final VoidCallback? onNext;
-  final VoidCallback onPickWeek;
-
-  const _WeekNavigator({
-    required this.weekStart,
-    required this.isCurrentWeek,
-    required this.onPrev,
-    required this.onNext,
-    required this.onPickWeek,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final weekEnd = weekStart.add(const Duration(days: 6));
-    final sameMonth = weekStart.month == weekEnd.month;
-    final label = sameMonth
-        ? '${weekStart.month}월 ${weekStart.day}일 — ${weekEnd.day}일'
-        : '${weekStart.month}월 ${weekStart.day}일 — ${weekEnd.month}월 ${weekEnd.day}일';
-
-    return Semantics(
-      container: true,
-      label: isCurrentWeek ? '이번 주 기록 기간' : '선택한 주 기록 기간',
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 18),
-        child: Container(
-          height: 52,
-          decoration: BoxDecoration(
-            color: kMainPaper,
-            borderRadius: BorderRadius.circular(99),
-            border: Border.all(color: kMainLine),
-            boxShadow: [
-              BoxShadow(
-                color: kMainRose.withAlpha(18),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              _NavBtn(
-                icon: Icons.chevron_left_rounded,
-                label: '이전 주',
-                onTap: onPrev,
-              ),
-              Expanded(
-                child: GestureDetector(
-                  onTap: onPickWeek,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            label,
-                            textAlign: TextAlign.center,
-                            style: mainBody(
-                              size: 14,
-                              color: kMainInk,
-                              weight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          const Icon(
-                            Icons.calendar_month_outlined,
-                            size: 14,
-                            color: kMainSub,
-                          ),
-                        ],
-                      ),
-                      if (isCurrentWeek)
-                        Text(
-                          '이번 주',
-                          style: mainBody(
-                            size: 10,
-                            color: kMainRose,
-                            weight: FontWeight.w700,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-              _NavBtn(
-                icon: Icons.chevron_right_rounded,
-                label: '다음 주',
-                onTap: onNext,
-                disabled: onNext == null,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _NavBtn extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback? onTap;
-  final bool disabled;
-  const _NavBtn({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.disabled = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      enabled: !disabled,
-      label: label,
-      excludeSemantics: true,
-      onTap: disabled ? null : onTap,
-      child: Tooltip(
-        message: label,
-        child: GestureDetector(
-          onTap: disabled ? null : onTap,
-          child: SizedBox(
-            width: 48,
-            height: 52,
-            child: Icon(
-              icon,
-              size: 24,
-              color: disabled ? kMainLine : kMainRose,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Day Section ───────────────────────────────────────────────────────────────
-
-class _DayGridSection extends StatelessWidget {
-  final DateTime day;
-  final List<List<Map<String, dynamic>>> groups;
-  final AuthService auth;
-  final int? myUserId;
-  final ValueChanged<List<Map<String, dynamic>>> onTap;
-
-  const _DayGridSection({
-    required this.day,
-    required this.groups,
-    required this.auth,
-    required this.myUserId,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 10, 18, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 9),
-            child: Text(
-              '${day.month}월 ${day.day}일 · ${_weekdayLabel(day.weekday)}',
-              style: mainBody(color: kMainMuted, weight: FontWeight.w700),
-            ),
-          ),
-          GridView.builder(
-            key: const Key('moment_three_column_grid'),
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              crossAxisSpacing: 7,
-              mainAxisSpacing: 7,
-            ),
-            itemCount: groups.length,
-            itemBuilder: (context, index) {
-              final group = groups[index];
-              final first = group.first;
-              final media = group.firstWhere(
-                (post) =>
-                    '${post['media_url'] ?? ''}'.trim().isNotEmpty &&
-                    post['media_type'] != 'text',
-                orElse: () => first,
-              );
-              final url = '${media['media_url'] ?? ''}'.trim();
-              final hasImage =
-                  url.isNotEmpty &&
-                  media['media_type'] == 'image' &&
-                  first['today_locked'] != true;
-              final isVideo =
-                  media['media_type'] == 'video' &&
-                  first['today_locked'] != true;
-              final isMine = '${first['user_id']}' == '$myUserId';
-              return Semantics(
-                button: true,
-                label: '순간 ${index + 1}, ${group.length}개 항목',
-                child: GestureDetector(
-                  onTap: () => onTap(group),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        if (hasImage)
-                          Image.network(
-                            _mediaUrl(auth.baseUrl, url),
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) =>
-                                _StoryFallback(isMine: isMine),
-                          )
-                        else
-                          ColoredBox(
-                            color: isMine ? kMainRoseSoft : kMainSkySoft,
-                            child: Center(
-                              child: Icon(
-                                first['today_locked'] == true
-                                    ? Icons.lock_outline_rounded
-                                    : isVideo
-                                    ? Icons.play_circle_outline_rounded
-                                    : Icons.notes_rounded,
-                                color: isMine ? kMainRose : kMainSky,
-                                size: 30,
-                              ),
-                            ),
-                          ),
-                        if (group.length > 1)
-                          Positioned(
-                            top: 6,
-                            right: 6,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 7,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withAlpha(150),
-                                borderRadius: BorderRadius.circular(99),
-                              ),
-                              child: Text(
-                                '${group.length}',
-                                style: mainBody(
-                                  color: Colors.white,
-                                  size: 11,
-                                  weight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                          ),
-                        if ((first['caption'] as String?)?.isNotEmpty == true)
-                          Positioned(
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            child: Container(
-                              padding: const EdgeInsets.fromLTRB(7, 18, 7, 6),
-                              decoration: const BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [Colors.transparent, Colors.black54],
-                                ),
-                              ),
-                              child: Text(
-                                first['caption'] as String,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: mainBody(
-                                  color: Colors.white,
-                                  size: 10,
-                                  weight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-String _weekdayLabel(int weekday) =>
-    const ['월', '화', '수', '목', '금', '토', '일'][weekday - 1];
-
-class _DaySection extends StatelessWidget {
-  final DateTime day;
-  final List<List<Map<String, dynamic>>> groups;
-  final AuthService auth;
-  final int? myUserId;
-  final ValueChanged<List<Map<String, dynamic>>> onTap;
-
-  const _DaySection({
-    required this.day,
-    required this.groups,
-    required this.auth,
-    required this.myUserId,
-    required this.onTap,
-  });
-
-  static const _dayShort = ['월', '화', '수', '목', '금', '토', '일'];
-
-  @override
-  Widget build(BuildContext context) {
-    if (groups.isEmpty) return const SizedBox.shrink();
-
-    final dayName = _dayShort[day.weekday - 1];
-    final isToday =
-        _dateKey(day.toIso8601String()) ==
-        _dateKey(DateTime.now().toIso8601String());
-    final totalMedia = groups.fold(0, (sum, g) => sum + g.length);
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 0, 18, 10),
-            child: Row(
-              children: [
-                Text(
-                  '$dayName  ${day.day}',
-                  style: mainTitle(
-                    size: 22,
-                    color: isToday ? kMainRose : kMainInk,
-                  ),
-                ),
-                if (isToday) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 7,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: kMainRoseSoft,
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                    child: Text(
-                      '오늘',
-                      style: mainBody(
-                        size: 11,
-                        color: kMainRose,
-                        weight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ],
-                const Spacer(),
-                Text(
-                  '${groups.length}개 게시글 · $totalMedia장',
-                  style: mainBody(size: 12, color: kMainMuted),
-                ),
-              ],
-            ),
-          ),
-          // ── Vertical feed ─────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18),
-            child: Column(
-              children: [
-                for (var i = 0; i < groups.length; i++)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: i == 0
-                        ? _FeaturedMomentCard(
-                            group: groups[i],
-                            auth: auth,
-                            myUserId: myUserId,
-                            onTap: () => onTap(groups[i]),
-                          )
-                        : _CompactMomentCard(
-                            group: groups[i],
-                            auth: auth,
-                            myUserId: myUserId,
-                            onTap: () => onTap(groups[i]),
-                          ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-const _momentCardShadow = [
-  BoxShadow(color: Color(0x14B43250), blurRadius: 16, offset: Offset(0, 5)),
-];
-
-class _MomentThumb extends StatelessWidget {
-  final List<Map<String, dynamic>> group;
-  final AuthService auth;
-  final double iconSize;
-
-  const _MomentThumb({
-    required this.group,
-    required this.auth,
-    required this.iconSize,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final thumbPost = group.firstWhere(
-      (p) =>
-          '${p['media_url'] ?? ''}'.trim().isNotEmpty &&
-          p['media_type'] != 'text',
-      orElse: () => group.first,
-    );
-    final mediaUrl = '${thumbPost['media_url'] ?? ''}'.trim();
-    final isVideo = thumbPost['media_type'] == 'video';
-    final hasMedia = mediaUrl.isNotEmpty && thumbPost['media_type'] != 'text';
-    final fallback = Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFFFFD0E8), Color(0xFFFFA8C8), Color(0xFFFF9670)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Center(
-        child: Icon(
-          Icons.photo_outlined,
-          size: iconSize,
-          color: Colors.white.withAlpha(190),
-        ),
-      ),
-    );
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        if (hasMedia && !isVideo)
-          Image.network(
-            _mediaUrl(auth.baseUrl, mediaUrl),
-            fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => fallback,
-          )
-        else if (hasMedia && isVideo)
-          _VideoThumb(
-            url: _mediaUrl(auth.baseUrl, mediaUrl),
-            iconSize: iconSize + 6,
-            fallback: fallback,
-          )
-        else
-          fallback,
-        if (group.length > 1)
-          Positioned(
-            top: 8,
-            right: 8,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-              decoration: BoxDecoration(
-                color: Colors.black54,
-                borderRadius: BorderRadius.circular(99),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.collections_rounded,
-                    color: Colors.white,
-                    size: 11,
-                  ),
-                  const SizedBox(width: 3),
-                  Text(
-                    '${group.length}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _FeaturedMomentCard extends StatelessWidget {
-  final List<Map<String, dynamic>> group;
-  final AuthService auth;
-  final int? myUserId;
-  final VoidCallback onTap;
-
-  const _FeaturedMomentCard({
-    required this.group,
-    required this.auth,
-    required this.myUserId,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final first = group.first;
-    final caption = '${first['caption'] ?? ''}'.trim();
-    final isMine = '${first['user_id']}' == '$myUserId';
-    final color = isMine ? kMainRose : kMainSky;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: kMainPaper,
-          borderRadius: BorderRadius.circular(26),
-          boxShadow: _momentCardShadow,
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              height: 150,
-              width: double.infinity,
-              child: _MomentThumb(group: group, auth: auth, iconSize: 34),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    caption.isEmpty ? '말없이 남긴 순간' : caption,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: mainBody(
-                      size: 14,
-                      color: kMainInk,
-                      weight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 9,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isMine ? kMainRoseSoft : kMainSkySoft,
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                        child: Text(
-                          isMine ? 'MY' : '상대',
-                          style: mainBody(
-                            size: 10,
-                            color: color,
-                            weight: FontWeight.w900,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        _timeLabel(first['captured_at']),
-                        style: mainBody(size: 11, color: kMainMuted),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CompactMomentCard extends StatelessWidget {
-  final List<Map<String, dynamic>> group;
-  final AuthService auth;
-  final int? myUserId;
-  final VoidCallback onTap;
-
-  const _CompactMomentCard({
-    required this.group,
-    required this.auth,
-    required this.myUserId,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final first = group.first;
-    final caption = '${first['caption'] ?? ''}'.trim();
-    final isMine = '${first['user_id']}' == '$myUserId';
-    final author = _authorName(first, isMine);
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: kMainPaper,
-          borderRadius: BorderRadius.circular(22),
-          boxShadow: _momentCardShadow,
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Row(
-          children: [
-            SizedBox(
-              width: 70,
-              height: 70,
-              child: _MomentThumb(group: group, auth: auth, iconSize: 22),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      caption.isEmpty ? '말없이 남긴 순간' : caption,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: mainBody(
-                        size: 13,
-                        color: kMainInk,
-                        weight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Row(
-                      children: [
-                        Container(
-                          width: 7,
-                          height: 7,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: isMine ? kMainRose : kMainSky,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            '$author · ${_timeLabel(first['captured_at'])} · ${group.length}장',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: mainBody(size: 11, color: kMainMuted),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Post Detail Page (tap from day section) ───────────────────────────────────
-
-class _PostDetailPage extends StatefulWidget {
-  final List<Map<String, dynamic>> group;
-  final AuthService auth;
-  final int? myUserId;
-  final int? initialPostId;
-  final Future<void> Function(Map<String, dynamic>) onEdit;
-  final Future<void> Function(Map<String, dynamic>) onDelete;
-  final Future<List<MomentReaction>> Function(String sessionId, String emoji)
-  onReactionToggle;
-  final Future<void> Function(int postId) onDesignateToday;
-  final Future<void> Function() onRemoveTodayDesignation;
-
-  const _PostDetailPage({
-    required this.group,
-    required this.auth,
-    required this.myUserId,
-    this.initialPostId,
-    required this.onEdit,
-    required this.onDelete,
-    required this.onReactionToggle,
-    required this.onDesignateToday,
-    required this.onRemoveTodayDesignation,
-  });
-
-  @override
-  State<_PostDetailPage> createState() => _PostDetailPageState();
-}
-
-class _PostDetailPageState extends State<_PostDetailPage> {
-  late final PageController _pageCtrl;
-  int _current = 0;
-  List<Map<String, dynamic>> _reactions = [];
-  bool _reacting = false;
-  bool _designatingToday = false;
-
-  static const _emojiOptions = ['❤️', '😍', '🥰', '😂', '😮'];
-
-  String get _sessionId {
-    final sid = '${widget.group.first['session_id'] ?? ''}'.trim();
-    return sid.isNotEmpty ? sid : '';
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    final target = widget.group.indexWhere(
-      (p) => p['id'] == widget.initialPostId,
-    );
-    _current = target < 0 ? 0 : target;
-    _pageCtrl = PageController(initialPage: _current);
-    _loadReactions();
-  }
-
-  @override
-  void dispose() {
-    _pageCtrl.dispose();
-    super.dispose();
-  }
-
-  void _loadReactions() {
-    final raw = widget.group.first['session_reactions'];
-    if (raw is List) {
-      _reactions = raw.map((r) => Map<String, dynamic>.from(r as Map)).toList();
-    }
-  }
-
-  String? _myEmoji() {
-    final uid = '${widget.myUserId}';
-    for (final r in _reactions) {
-      if ('${r['user_id']}' == uid) return '${r['emoji']}';
-    }
-    return null;
-  }
-
-  int _emojiCount(String emoji) =>
-      _reactions.where((r) => r['emoji'] == emoji).length;
-
-  Future<void> _toggleReaction(String emoji) async {
-    if (_sessionId.isEmpty || _reacting) return;
-    setState(() => _reacting = true);
-    try {
-      final updated = await widget.onReactionToggle(_sessionId, emoji);
-      if (!mounted) return;
-      setState(() => _reactions = updated.map((r) => r.toJson()).toList());
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('반응을 저장하지 못했어요')));
-      }
-    } finally {
-      if (mounted) setState(() => _reacting = false);
-    }
-  }
-
-  bool _isMine(Map<String, dynamic> post) =>
-      '${post['user_id']}' == '${widget.myUserId}';
-
-  Future<void> _designateTodayMoment(Map<String, dynamic> post) async {
-    final postId = int.tryParse('${post['id']}');
-    if (postId == null || _designatingToday) return;
-
-    setState(() => _designatingToday = true);
-    try {
-      await widget.onDesignateToday(postId);
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('오늘의 순간으로 선택했어요')));
-    } on MomentLoopException catch (error) {
-      if (!mounted) return;
-      final message = switch (error.code) {
-        'today_loop_locked' => '오늘의 루프가 열린 뒤에는 바꿀 수 없어요',
-        'today_moment_not_found' => '오늘 작성한 내 순간만 선택할 수 있어요',
-        _ => '오늘의 순간으로 선택하지 못했어요',
+      feed = switch (_tab) {
+        _FeedTab.today => _todayFeed(groups, today, me, partner),
+        _FeedTab.week => _weekFeed(groups, me, partner),
+        _FeedTab.past => _pastFeed(groups, thisWeek, me, partner),
       };
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('네트워크 연결을 확인해주세요')));
-    } finally {
-      if (mounted) setState(() => _designatingToday = false);
     }
-  }
 
-  Future<void> _removeTodayDesignation() async {
-    if (_designatingToday) return;
-    setState(() => _designatingToday = true);
-    try {
-      await widget.onRemoveTodayDesignation();
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('오늘의 순간 선택을 해제했어요')));
-    } on MomentLoopException catch (error) {
-      if (!mounted) return;
-      final message = error.code == 'today_loop_locked'
-          ? '오늘의 루프가 열린 뒤에는 해제할 수 없어요'
-          : '오늘의 순간 선택을 해제하지 못했어요';
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
-    } finally {
-      if (mounted) setState(() => _designatingToday = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final post = widget.group[_current];
-    final isMine = _isMine(post);
-    final caption = '${post['caption'] ?? ''}'.trim();
-    final author = _authorName(post, isMine);
-    final time = _timeLabel(post['captured_at']);
-    final myEmoji = _myEmoji();
-    final takenAt = DateTime.tryParse('${post['taken_at'] ?? ''}')?.toLocal();
-
-    return Scaffold(
-      backgroundColor: Colors.black,
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          tooltip: '닫기',
-          icon: const Icon(Icons.close_rounded, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            V2Space.page,
+            V2Space.x2,
+            V2Space.page,
+            V2Space.x3,
+          ),
+          child: MomentTodayCard(
+            state: _today,
+            loading: _todayLoading,
+            failed: _todayFailed,
+            myName: _myName,
+            partnerName: partner,
+            onCompose: () => _openComposer(),
+            onOpenLoop: () => setState(() => _tab = _FeedTab.today),
+          ),
         ),
-        title: takenAt != null
-            ? Text(
-                '${takenAt.month}월 ${takenAt.day}일 · ${_dayNameFull(takenAt)}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                ),
-              )
-            : null,
-        centerTitle: true,
-        actions: [
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
-            onSelected: (value) async {
-              final nav = Navigator.of(context);
-              if (value == 'today') {
-                await _designateTodayMoment(post);
-              } else if (value == 'today_remove') {
-                await _removeTodayDesignation();
-              } else if (value == 'edit') {
-                await widget.onEdit(post);
-                if (!mounted) return;
-                setState(() {});
-              } else if (value == 'delete') {
-                await widget.onDelete(post);
-                if (!mounted) return;
-                nav.pop();
-              }
-            },
-            itemBuilder: (_) => [
-              PopupMenuItem(
-                value: 'today',
-                enabled: !_designatingToday,
-                child: const Text('오늘의 순간으로 선택'),
-              ),
-              PopupMenuItem(
-                value: 'today_remove',
-                enabled: !_designatingToday,
-                child: const Text('오늘의 순간 선택 해제'),
-              ),
-              const PopupMenuItem(value: 'edit', child: Text('수정')),
-              if (isMine)
-                PopupMenuItem(
-                  value: 'delete',
-                  enabled: post['media_edit_locked'] != true,
-                  child: const Text('삭제'),
-                ),
+        if (drafts.isNotEmpty || _storageError != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              V2Space.page,
+              0,
+              V2Space.page,
+              V2Space.x3,
+            ),
+            child: _storageError != null
+                ? V2Banner(tone: V2BannerTone.err, message: _storageError!)
+                : MomentUploadBanner(
+                    drafts: drafts,
+                    onRetry: _resumeUploads,
+                    onOpen: _showDrafts,
+                  ),
+          ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: V2Space.page),
+          child: V2Segmented<_FeedTab>(
+            segments: const [
+              V2Segment(value: _FeedTab.today, label: '오늘'),
+              V2Segment(value: _FeedTab.week, label: '이번 주'),
+              V2Segment(value: _FeedTab.past, label: '지난 기록'),
             ],
+            selected: _tab,
+            onChanged: (t) => setState(() {
+              _tab = t;
+              if (t == _FeedTab.week) _weekStart = mondayOf(DateTime.now());
+            }),
           ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // ── Media PageView ────────────────────────────────────────────
-          Expanded(
-            child: PageView.builder(
-              controller: _pageCtrl,
-              itemCount: widget.group.length,
-              onPageChanged: (i) => setState(() => _current = i),
-              itemBuilder: (context, i) {
-                final p = widget.group[i];
-                final mediaUrl = '${p['media_url'] ?? ''}'.trim();
-                final isVideo = p['media_type'] == 'video';
-                final hasMedia =
-                    mediaUrl.isNotEmpty && p['media_type'] != 'text';
-
-                if (hasMedia && !isVideo) {
-                  return InteractiveViewer(
-                    child: Image.network(
-                      _mediaUrl(widget.auth.baseUrl, mediaUrl),
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, _, _) => const Center(
-                        child: Icon(
-                          Icons.broken_image_outlined,
-                          color: Colors.white38,
-                          size: 48,
-                        ),
-                      ),
-                    ),
-                  );
-                }
-                if (hasMedia && isVideo) {
-                  return _VideoDetailPlayer(
-                    url: _mediaUrl(widget.auth.baseUrl, mediaUrl),
-                  );
-                }
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Text(
-                      '${p['caption'] ?? ''}'.isEmpty
-                          ? '말없이 남긴 순간'
-                          : '${p['caption']}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        height: 1.6,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-
-          // ── Bottom info + reactions ────────────────────────────────────
-          Container(
-            color: Colors.black,
-            padding: EdgeInsets.fromLTRB(
-              20,
-              14,
-              20,
-              MediaQuery.of(context).padding.bottom + 12,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Page dots
-                if (widget.group.length > 1) ...[
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(widget.group.length, (i) {
-                      return Container(
-                        width: i == _current ? 16 : 6,
-                        height: 6,
-                        margin: const EdgeInsets.symmetric(horizontal: 3),
-                        decoration: BoxDecoration(
-                          color: i == _current ? Colors.white : Colors.white30,
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                      );
-                    }),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-
-                // Author row
-                Row(
-                  children: [
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: isMine ? kMainRoseSoft : kMainSkySoft,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Center(
-                        child: Text(
-                          author.isEmpty ? '?' : author.characters.first,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w900,
-                            color: isMine ? kMainRose : kMainSky,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          author,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13,
-                          ),
-                        ),
-                        Text(
-                          time,
-                          style: const TextStyle(
-                            color: Colors.white38,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-
-                if (caption.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    caption,
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 14,
-                      height: 1.55,
-                    ),
-                  ),
-                ],
-
-                const SizedBox(height: 16),
-                // ── Emoji reaction bar ────────────────────────────────────
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: _emojiOptions.map((emoji) {
-                    final count = _emojiCount(emoji);
-                    final isSelected = myEmoji == emoji;
-                    return GestureDetector(
-                      onTap: () => _toggleReaction(emoji),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isSelected ? kMainRoseSoft : Colors.white10,
-                          borderRadius: BorderRadius.circular(99),
-                          border: Border.all(
-                            color: isSelected ? kMainRose : Colors.transparent,
-                            width: 1.5,
-                          ),
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              emoji,
-                              style: TextStyle(fontSize: isSelected ? 26 : 22),
-                            ),
-                            if (count > 0) ...[
-                              const SizedBox(height: 2),
-                              Text(
-                                '$count',
-                                style: TextStyle(
-                                  color: isSelected
-                                      ? kMainRose
-                                      : Colors.white60,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 12),
-                // ── Comment button ────────────────────────────────────────
-                GestureDetector(
-                  onTap: () => showModalBottomSheet<void>(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (_) => _CommentSheet(
-                      postId: int.parse('${post['id']}'),
-                      myUserId: widget.myUserId,
-                      auth: widget.auth,
-                    ),
-                  ),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    decoration: BoxDecoration(
-                      color: Colors.white10,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.chat_bubble_outline_rounded,
-                          color: Colors.white54,
-                          size: 16,
-                        ),
-                        SizedBox(width: 6),
-                        Text(
-                          '댓글 보기',
-                          style: TextStyle(color: Colors.white54, fontSize: 13),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CommentSheet extends StatefulWidget {
-  final int postId;
-  final int? myUserId;
-  final AuthService auth;
-
-  const _CommentSheet({
-    required this.postId,
-    required this.myUserId,
-    required this.auth,
-  });
-
-  @override
-  State<_CommentSheet> createState() => _CommentSheetState();
-}
-
-class _CommentSheetState extends State<_CommentSheet> {
-  late final ApiClient _api;
-  final _ctrl = TextEditingController();
-  List<Map<String, dynamic>> _comments = [];
-  bool _loading = true;
-  bool _loadFailed = false;
-  bool _submitting = false;
-  bool _deleting = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _api = ApiClient(
-      baseUrl: widget.auth.baseUrl,
-      tokenProvider: () => widget.auth.token,
-    );
-    _load();
-  }
-
-  @override
-  void dispose() {
-    _api.close();
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _load() async {
-    if (!_loading || _loadFailed) {
-      setState(() {
-        _loading = true;
-        _loadFailed = false;
-      });
-    }
-    try {
-      final body = await _api.getJson('/api/setlog/${widget.postId}/comments');
-      if (!mounted) return;
-      final list = body['comments'];
-      setState(() {
-        _comments = (list is List)
-            ? list.map((c) => Map<String, dynamic>.from(c as Map)).toList()
-            : [];
-        _loading = false;
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _loadFailed = true;
-        });
-      }
-    }
-  }
-
-  Future<void> _submit() async {
-    final text = _ctrl.text.trim();
-    if (text.isEmpty || _submitting) return;
-    setState(() => _submitting = true);
-    try {
-      final body = await _api.postJson(
-        '/api/setlog/${widget.postId}/comments',
-        body: {'body': text},
-      );
-      if (!mounted) return;
-      final comment = body['comment'];
-      if (comment != null) {
-        setState(
-          () => _comments.add(Map<String, dynamic>.from(comment as Map)),
-        );
-      }
-      _ctrl.clear();
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('댓글을 저장하지 못했어요')));
-      }
-    } finally {
-      if (mounted) setState(() => _submitting = false);
-    }
-  }
-
-  Future<void> _delete(Map<String, dynamic> comment) async {
-    if (_deleting) return;
-    _deleting = true;
-    final commentId = comment['id'];
-    try {
-      await _api.deleteJson('/api/setlog/${widget.postId}/comments/$commentId');
-      if (!mounted) return;
-      setState(() => _comments.removeWhere((c) => c['id'] == commentId));
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('댓글을 삭제하지 못했어요')));
-      }
-    } finally {
-      _deleting = false;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bottom = MediaQuery.of(context).viewInsets.bottom;
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF1A1A1A),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      padding: EdgeInsets.only(bottom: bottom),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              '댓글',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.all(24),
-                child: CircularProgressIndicator(
-                  color: Colors.white38,
-                  strokeWidth: 2,
-                ),
-              )
-            else if (_loadFailed)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text(
-                      '댓글을 불러오지 못했어요',
-                      style: TextStyle(color: Colors.white54, fontSize: 13),
-                    ),
-                    TextButton(onPressed: _load, child: const Text('다시 시도')),
-                  ],
-                ),
-              )
-            else if (_comments.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Text(
-                  '아직 댓글이 없어요',
-                  style: TextStyle(color: Colors.white38, fontSize: 13),
-                ),
-              )
-            else
-              ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(context).size.height * 0.45,
-                ),
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: _comments.length,
-                  itemBuilder: (_, i) {
-                    final c = _comments[i];
-                    final isMine = '${c['user_id']}' == '${widget.myUserId}';
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${c['author'] ?? '?'}',
-                                  style: TextStyle(
-                                    color: isMine ? kMainRose : kMainSky,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '${c['body']}',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    height: 1.4,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (isMine)
-                            Semantics(
-                              button: true,
-                              label: '댓글 삭제',
-                              excludeSemantics: true,
-                              onTap: () => _delete(c),
-                              child: GestureDetector(
-                                onTap: () => _delete(c),
-                                child: const Padding(
-                                  padding: EdgeInsets.only(left: 8, top: 2),
-                                  child: Icon(
-                                    Icons.close_rounded,
-                                    color: Colors.white38,
-                                    size: 16,
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-            const Divider(color: Colors.white12, height: 1),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _ctrl,
-                      style: const TextStyle(color: Colors.white, fontSize: 14),
-                      decoration: const InputDecoration(
-                        hintText: '댓글 남기기…',
-                        hintStyle: TextStyle(color: Colors.white38),
-                        border: InputBorder.none,
-                      ),
-                      onSubmitted: (_) => _submit(),
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: '댓글 보내기',
-                    onPressed: _submitting ? null : _submit,
-                    icon: Icon(
-                      Icons.send_rounded,
-                      color: _submitting ? Colors.white24 : kMainRose,
-                      size: 20,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
         ),
-      ),
+        if (failed && state.moments.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              V2Space.page,
+              V2Space.x3,
+              V2Space.page,
+              0,
+            ),
+            child: offline
+                ? V2Banner.offline()
+                : V2Banner(
+                    tone: V2BannerTone.warn,
+                    message: '최신 기록을 불러오지 못했어요',
+                    actionLabel: '다시 시도',
+                    onAction: _refresh,
+                  ),
+          ),
+        Expanded(child: feed),
+      ],
     );
   }
-}
 
-class _VideoDetailPlayer extends StatefulWidget {
-  final String url;
-  const _VideoDetailPlayer({required this.url});
-
-  @override
-  State<_VideoDetailPlayer> createState() => _VideoDetailPlayerState();
-}
-
-class _VideoDetailPlayerState extends State<_VideoDetailPlayer> {
-  late final VideoPlayerController _ctrl;
-  bool _ready = false;
-  bool _failed = false;
-  bool _muted = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = VideoPlayerController.networkUrl(Uri.parse(widget.url));
-    _ctrl
-        .initialize()
-        .then((_) {
-          if (!mounted) return;
-          setState(() => _ready = true);
-          _ctrl
-            ..setLooping(true)
-            ..play();
-        })
-        .catchError((_) {
-          if (!mounted) return;
-          setState(() => _failed = true);
-        });
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_failed) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.videocam_off_outlined, color: Colors.white70),
-            const SizedBox(height: 8),
-            Text(
-              '영상을 불러오지 못했어요',
-              style: mainBody(size: 12, color: Colors.white70),
-            ),
-          ],
-        ),
-      );
-    }
-    if (!_ready) {
-      return const Center(
-        child: CircularProgressIndicator(color: Colors.white),
-      );
-    }
-    return GestureDetector(
-      onTap: () {
-        setState(() => _muted = !_muted);
-        _ctrl.setVolume(_muted ? 0 : 1);
-      },
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          AspectRatio(
-            aspectRatio: _ctrl.value.aspectRatio,
-            child: VideoPlayer(_ctrl),
-          ),
-          Positioned(
-            right: 16,
-            bottom: 16,
-            child: Icon(
-              _muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-              color: Colors.white70,
-            ),
-          ),
-        ],
+  Widget _scroll(List<Widget> children) => RefreshIndicator(
+    onRefresh: _refresh,
+    child: ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(
+        V2Space.page,
+        V2Space.x2,
+        V2Space.page,
+        V2Space.x12,
       ),
-    );
-  }
-}
-
-// ── Error State ───────────────────────────────────────────────────────────────
-
-class _ErrorState extends StatelessWidget {
-  final String message;
-  final VoidCallback onRetry;
-  const _ErrorState({required this.message, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.cloud_off_outlined, size: 40, color: kMainMuted),
-          const SizedBox(height: 12),
-          Text(message, style: mainBody(color: kMainSub)),
-          const SizedBox(height: 14),
-          FilledButton(
-            onPressed: onRetry,
-            style: FilledButton.styleFrom(
-              backgroundColor: kMainInk,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('다시 불러오기'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Create Page ───────────────────────────────────────────────────────────────
-
-class _PickedMomentMedia {
-  final String name;
-  final Uint8List bytes;
-  final bool isVideo;
-  final Moment? post;
-  final String? clientRequestId;
-  final String key;
-  _PickedMomentMedia({
-    required this.name,
-    required this.bytes,
-    required this.isVideo,
-    this.post,
-    this.clientRequestId,
-  }) : key = post != null
-           ? 'post_${post.id}'
-           : clientRequestId ?? UploadOutbox.newId();
-
-  factory _PickedMomentMedia.fromMedia(MomentMedia media) => _PickedMomentMedia(
-    name: media.name,
-    bytes: media.bytes,
-    isVideo: media.isVideo,
-    clientRequestId: media.clientRequestId,
+      children: children,
+    ),
   );
-  factory _PickedMomentMedia.fromPost(Moment post) => _PickedMomentMedia(
-    name: post.mediaUrl?.split('/').last ?? '기존 기록',
-    bytes: Uint8List(0),
-    isVideo: post.isVideo,
-    post: post,
+
+  Widget _toolbar({required bool weekNav, String? label}) => MomentWeekToolbar(
+    weekStart: _weekStart,
+    isCurrentWeek: _isCurrentWeek,
+    showWeekNav: weekNav,
+    label: label,
+    onPrev: () => setState(
+      () => _weekStart = _weekStart.subtract(const Duration(days: 7)),
+    ),
+    onNext: _isCurrentWeek
+        ? null
+        : () => setState(() => _weekStart = _weekStart.add(const Duration(days: 7))),
+    onCalendar: _showCalendar,
+    gridView: _gridView,
+    onToggleView: _toggleViewMode,
   );
-  MomentMedia toMedia() => MomentMedia(
-    name: name,
-    bytes: bytes,
-    isVideo: isVideo,
-    clientRequestId: clientRequestId,
-  );
-  MomentEditItem toEditItem() => post != null
-      ? MomentEditItem.existing(post!)
-      : MomentEditItem.added(toMedia());
-}
 
-class _SelectedMapLocation {
-  final int? id;
-  final String name;
-  final String? category;
-  const _SelectedMapLocation({
-    required this.id,
-    required this.name,
-    this.category,
-  });
-  bool get isNew => id == null;
-}
-
-class _MapLocationPickerResult {
-  final _SelectedMapLocation? location;
-  final bool openMap;
-  const _MapLocationPickerResult.location(this.location) : openMap = false;
-  const _MapLocationPickerResult.openMap() : location = null, openMap = true;
-}
-
-class _CreateMomentPage extends StatefulWidget {
-  final MomentLoopController controller;
-  final UploadOutbox outbox;
-  final List<_PickedMomentMedia> initialMedia;
-  final MomentDraft? initialDraft;
-  final MomentEdit? edit;
-  final String? draftId;
-  final Future<List<MomentMedia>> Function()? mediaPicker;
-  final bool startWithTodayMoment;
-  const _CreateMomentPage({
-    required this.controller,
-    required this.outbox,
-    required this.initialMedia,
-    this.initialDraft,
-    this.edit,
-    this.draftId,
-    this.mediaPicker,
-    this.startWithTodayMoment = false,
-  });
-
-  @override
-  State<_CreateMomentPage> createState() => _CreateMomentPageState();
-}
-
-class _CreateMomentPageState extends State<_CreateMomentPage> {
-  final _captionCtrl = TextEditingController();
-  final _imagePicker = ImagePicker();
-  late final List<_PickedMomentMedia> _pickedMedia;
-  List<Map<String, dynamic>> _mapPins = [];
-  _SelectedMapLocation? _selectedLocation;
-  bool _saving = false;
-  bool _loadingLocations = false;
-  bool _todayMoment = false;
-  bool _useTodayPrompt = false;
-  DateTime _momentDate = _dateOnly(DateTime.now());
-  bool _dateTouched = false;
-
-  static const _maxMedia = 10;
-  bool _picking = false;
-  bool get _editing => widget.edit != null;
-  bool get _dateLocked =>
-      widget.edit?.original.any((p) => p.mediaEditLocked) == true;
-  bool get _mediaLocked =>
-      _dateLocked || (_editing && widget.edit!.fields.sessionId.isEmpty);
-  MomentDraft? get _initial => widget.initialDraft ?? widget.edit?.fields;
-
-  @override
-  void initState() {
-    super.initState();
-    final initial = _initial;
-    if (initial == null) _todayMoment = widget.startWithTodayMoment;
-    _pickedMedia = widget.edit != null
-        ? widget.edit!.items
-              .map(
-                (item) => item.post != null
-                    ? _PickedMomentMedia.fromPost(item.post!)
-                    : _PickedMomentMedia.fromMedia(item.media!),
-              )
-              .toList()
-        : initial != null
-        ? initial.media.map(_PickedMomentMedia.fromMedia).toList()
-        : List<_PickedMomentMedia>.of(widget.initialMedia);
-    if (initial != null) {
-      _captionCtrl.text = initial.caption;
-      _momentDate = _dateOnly(initial.takenAt);
-      _dateTouched = true;
-      _todayMoment = initial.todayMoment;
-      if (initial.mapPinId != null) {
-        _selectedLocation = _SelectedMapLocation(
-          id: initial.mapPinId,
-          name: widget.edit?.original.first.linkedPlaceName ?? '연결된 위치',
-        );
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _captionCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _showMediaPicker() async {
-    if (_mediaLocked || _saving || _picking) return;
-    final remaining = _maxMedia - _pickedMedia.length;
-    if (remaining <= 0) return;
-    _picking = true;
-    try {
-      if (widget.mediaPicker != null) {
-        final picked = await widget.mediaPicker!();
-        final normalized = <_PickedMomentMedia>[];
-        for (final item in picked.take(remaining)) {
-          normalized.add(
-            _PickedMomentMedia.fromMedia(
-              item.isVideo
-                  ? item
-                  : MomentMedia(
-                      name: _jpegName(item.name),
-                      bytes: compressMomentImage(item.bytes),
-                      isVideo: false,
-                      clientRequestId: item.clientRequestId,
-                    ),
-            ),
-          );
-        }
-        if (mounted) {
-          setState(() {
-            final room = _maxMedia - _pickedMedia.length;
-            _pickedMedia.addAll(normalized.take(room < 0 ? 0 : room));
-          });
-        }
-        return;
-      }
-      final files = await _imagePicker.pickMultipleMedia(limit: remaining);
-      if (files.isEmpty) return;
-      final media = <_PickedMomentMedia>[];
-      final wantsSuggestion = _pickedMedia.isEmpty && !_dateTouched;
-      DateTime? suggested;
-      for (final file in files) {
-        final isVideo = _isVideoFile(file.name);
-        if (isVideo) {
-          final bytes = await file.readAsBytes();
-          if (bytes.length > 30 * 1024 * 1024) {
-            _toast('영상은 30MB 이하만 올릴 수 있어요');
-            continue;
-          }
-          media.add(
-            _PickedMomentMedia(name: file.name, bytes: bytes, isVideo: true),
-          );
-        } else {
-          final bytes = await file.readAsBytes();
-          if (wantsSuggestion && suggested == null && media.isEmpty) {
-            suggested = await exifCaptureDate(bytes);
-          }
-          final compressed = compressMomentImage(bytes);
-          media.add(
-            _PickedMomentMedia(
-              name: _jpegName(file.name),
-              bytes: compressed,
-              isVideo: false,
-            ),
-          );
-        }
-      }
-      if (wantsSuggestion && suggested == null) {
-        try {
-          suggested = _dateOnly(await files.first.lastModified());
-        } catch (_) {}
-      }
-      if (!mounted) return;
-      setState(() {
-        final room = _maxMedia - _pickedMedia.length;
-        _pickedMedia.addAll(media.take(room < 0 ? 0 : room));
-        final today = _dateOnly(DateTime.now());
-        if (suggested != null &&
-            !suggested.isAfter(today) &&
-            suggested != _momentDate) {
-          _momentDate = suggested;
-          if (suggested != today) {
-            _todayMoment = false;
-            _useTodayPrompt = false;
-          }
-        }
-      });
-    } catch (_) {
-      _toast('미디어를 불러오지 못했어요');
-    } finally {
-      _picking = false;
-    }
-  }
-
-  String _jpegName(String name) {
-    final stem = name.contains('.')
-        ? name.substring(0, name.lastIndexOf('.'))
-        : name;
-    return '$stem.jpg';
-  }
-
-  void _reorderMedia(int oldIndex, int newIndex) {
-    if (_saving ||
-        oldIndex == newIndex ||
-        oldIndex < 0 ||
-        oldIndex >= _pickedMedia.length) {
-      return;
-    }
-    setState(() {
-      final item = _pickedMedia.removeAt(oldIndex);
-      _pickedMedia.insert(newIndex.clamp(0, _pickedMedia.length), item);
-    });
-  }
-
-  static bool _isVideoFile(String name) {
-    final ext = name.split('.').last.toLowerCase();
-    return ['mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v', '3gp'].contains(ext);
-  }
-
-  Future<void> _loadMapPins() async {
-    if (_loadingLocations) return;
-    setState(() => _loadingLocations = true);
-    try {
-      final pins = await widget.controller.loadMapPins();
-      if (!mounted) return;
-      setState(() {
-        _mapPins = pins
-            .map(
-              (pin) => {
-                'id': pin.id,
-                'place_name': pin.name,
-                'category': pin.category,
-              },
-            )
-            .toList();
-      });
-    } catch (_) {
-      _toast('비밀지도 위치를 불러오지 못했어요');
-    } finally {
-      if (mounted) setState(() => _loadingLocations = false);
-    }
-  }
-
-  Future<void> _pickLocation() async {
-    await _loadMapPins();
-    if (!mounted) return;
-    final picked = await showModalBottomSheet<_MapLocationPickerResult?>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => _MapLocationPickerSheet(
-        pins: _mapPins,
-        selected: _selectedLocation,
-        loading: _loadingLocations,
-      ),
+  Widget _emptyFor({required String title, String? body, bool cta = true}) {
+    return V2EmptyState(
+      key: const Key('moment_empty'),
+      illustration: const V2SceneIllustration(V2Scene.photo),
+      title: title,
+      body: body,
+      actionLabel: cta ? '순간 남기기' : null,
+      onAction: cta ? () => _openComposer() : null,
     );
-    if (!mounted || picked == null) return;
-    if (picked.openMap) {
-      await Navigator.of(context).push<void>(
-        MaterialPageRoute(
-          fullscreenDialog: true,
-          builder: (_) => const MapScreen(closeAsModal: true),
-        ),
-      );
-      if (!mounted) return;
-      await _loadMapPins();
-      if (!mounted) return;
-      await _pickLocation();
-      return;
-    }
-    final location = picked.location;
-    if (location != null) setState(() => _selectedLocation = location);
   }
 
-  Future<void> _saveMoment() async {
-    if (_saving) return;
-    final caption = _captionCtrl.text.trim();
-    if (caption.isEmpty && _pickedMedia.isEmpty) {
-      _toast('오늘 남기고 싶은 장면을 적어주세요');
-      return;
-    }
-    setState(() => _saving = true);
-    final now = DateTime.now();
-    final momentAt = DateTime(
-      _momentDate.year,
-      _momentDate.month,
-      _momentDate.day,
-      now.hour,
-      now.minute,
-      now.second,
-    );
-    // All media in this upload share the same session_id
-    final sessionId = _initial?.sessionId ?? UploadOutbox.newId();
-
-    try {
-      final draft = MomentDraft(
-        caption: caption,
-        takenAt: _momentDate,
-        capturedAt: _editing ? _initial!.capturedAt : momentAt,
-        sessionId: sessionId,
-        todayMoment: !_editing && _todayMoment,
-        mapPinId: _selectedLocation?.id,
-        tags: _initial?.tags ?? const ['#momentloop'],
-        media: _pickedMedia
-            .where((media) => media.post == null)
-            .map((media) => media.toMedia())
-            .toList(),
-      );
-      if (widget.draftId != null) {
-        await widget.outbox.replace(
-          widget.draftId!,
-          draft,
-          editItems: _editing
-              ? _pickedMedia.map((m) => m.toEditItem()).toList()
-              : null,
-        );
-      } else if (_editing) {
-        await widget.outbox.enqueueEdit(
-          MomentEdit(
-            original: widget.edit!.original,
-            fields: draft,
-            items: _pickedMedia.map((m) => m.toEditItem()).toList(),
+  Widget _todayFeed(
+    List<List<Moment>> groups,
+    DateTime today,
+    int? me,
+    String partner,
+  ) {
+    final todays = groups.where((g) => momentDay(g.first) == today).toList();
+    return _scroll([
+      _toolbar(weekNav: false, label: '오늘의 기록'),
+      if (todays.isEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: V2Space.x4),
+          child: _emptyFor(
+            title: '오늘은 아직 기록이 없어요',
+            body: '사진 한 장, 한 줄이면 충분해요.',
           ),
-        );
-      } else {
-        await widget.outbox.enqueue(draft);
-      }
-      if (mounted) Navigator.pop(context, _momentDate);
-    } on MomentLoopException catch (error) {
-      _toast(switch (error.code) {
-        'today_loop_date_locked' => '공개된 오늘의 순간은 날짜를 바꿀 수 없어요',
-        'today_loop_locked' => '공개된 오늘의 순간은 사진을 추가·삭제할 수 없어요',
-        'draft_busy' => '이 순간을 업로드하고 있어요. 완료 후 수정해주세요',
-        _ => '임시저장하지 못했어요. 입력한 내용은 화면에 남아 있어요',
-      });
-    } catch (_) {
-      _toast('기기에 임시저장하지 못했어요. 저장 공간을 확인해주세요');
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
+        )
+      else
+        MomentDaySection(
+          day: today,
+          groups: todays,
+          gridView: _gridView,
+          baseUrl: _baseUrl,
+          myUserId: me,
+          myName: _myName,
+          partnerName: partner,
+          onTap: _openDetail,
+        ),
+    ]);
   }
 
-  bool get _isMomentToday => _momentDate == _dateOnly(DateTime.now());
-
-  Future<void> _pickMomentDate() async {
-    final today = _dateOnly(DateTime.now());
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _momentDate,
-      firstDate: DateTime(2020),
-      lastDate: today,
-      helpText: '기록 날짜',
-      builder: (context, child) => Theme(
-        data: Theme.of(context).copyWith(
-          colorScheme: ColorScheme.light(
-            primary: kMainRose,
-            onPrimary: Colors.white,
-            surface: kMainPaper,
-          ),
-        ),
-        child: child!,
-      ),
-    );
-    if (picked == null || !mounted) return;
-    setState(() {
-      _momentDate = _dateOnly(picked);
-      _dateTouched = true;
-      if (_momentDate != today) {
-        _todayMoment = false;
-        _useTodayPrompt = false;
-      }
-    });
-  }
-
-  void _toast(String msg) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg, style: mainBody(color: Colors.white)),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final totalMedia = _pickedMedia.length;
-    final canAddMore = totalMedia < _maxMedia && !_mediaLocked && !_saving;
-
-    return Scaffold(
-      backgroundColor: kMainPaper,
-      appBar: AppBar(
-        backgroundColor: kMainPaper,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        leading: IconButton(
-          tooltip: '닫기',
-          onPressed: _saving ? null : () => Navigator.pop(context, false),
-          icon: const Icon(Icons.close_rounded),
-          color: kMainInk,
-        ),
-        centerTitle: true,
-        title: Text(
-          _editing
-              ? '순간 수정'
-              : widget.draftId != null
-              ? '임시저장 수정'
-              : '새 순간',
-          style: mainTitle(size: 24),
-        ),
-        actions: [
-          TextButton(
-            onPressed: _saving ? null : _saveMoment,
-            child: _saving
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Text(
-                    _editing || widget.draftId != null ? '저장' : '공유',
-                    style: mainBody(
-                      color: kMainRose,
-                      weight: FontWeight.w900,
-                      size: 16,
-                    ),
-                  ),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
-          children: [
-            // ── Media horizontal scroll ───────────────────────────────────
-            SizedBox(
-              height: 80,
-              child: totalMedia == 0
-                  ? GestureDetector(
-                      onTap: canAddMore ? _showMediaPicker : null,
-                      child: Container(
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          color: kMainRoseSoft,
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(color: kMainLine, width: 1.5),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(
-                              Icons.add_photo_alternate_outlined,
-                              size: 22,
-                              color: kMainRose,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '사진·영상 추가 (최대 10개)',
-                              style: mainBody(
-                                color: kMainRose,
-                                size: 13,
-                                weight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  : Row(
-                      children: [
-                        Expanded(
-                          child: ReorderableListView.builder(
-                            key: const Key('moment_media_reorder_list'),
-                            scrollDirection: Axis.horizontal,
-                            buildDefaultDragHandles: false,
-                            itemExtent: 80,
-                            itemCount: totalMedia,
-                            onReorderItem: _mediaLocked
-                                ? (_, _) {}
-                                : _reorderMedia,
-                            itemBuilder: (context, i) {
-                              final media = _pickedMedia[i];
-                              return Semantics(
-                                key: ValueKey('media_${media.name}'),
-                                label: '미디어 ${media.name}',
-                                child: ReorderableDelayedDragStartListener(
-                                  key: ValueKey(media.key),
-                                  index: i,
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(right: 8),
-                                    child: Stack(
-                                      children: [
-                                        ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            10,
-                                          ),
-                                          child: SizedBox(
-                                            width: 72,
-                                            height: 72,
-                                            child: media.isVideo
-                                                ? Container(
-                                                    color: const Color(
-                                                      0xFF1A1A2E,
-                                                    ),
-                                                    child: const Center(
-                                                      child: Icon(
-                                                        Icons.videocam_rounded,
-                                                        color: Colors.white54,
-                                                        size: 22,
-                                                      ),
-                                                    ),
-                                                  )
-                                                : media.post != null
-                                                ? Image.network(
-                                                    _mediaUrl(
-                                                      AuthService().baseUrl,
-                                                      media.post!.mediaUrl ??
-                                                          '',
-                                                    ),
-                                                    fit: BoxFit.cover,
-                                                    errorBuilder: (_, _, _) =>
-                                                        const Icon(
-                                                          Icons.photo_outlined,
-                                                        ),
-                                                  )
-                                                : Image.memory(
-                                                    media.bytes,
-                                                    fit: BoxFit.cover,
-                                                  ),
-                                          ),
-                                        ),
-                                        if (!_mediaLocked)
-                                          Positioned(
-                                            top: 3,
-                                            right: 3,
-                                            child: GestureDetector(
-                                              onTap: _saving
-                                                  ? null
-                                                  : () => setState(
-                                                      () => _pickedMedia
-                                                          .removeAt(i),
-                                                    ),
-                                              child: Container(
-                                                width: 18,
-                                                height: 18,
-                                                decoration: BoxDecoration(
-                                                  color: Colors.black54,
-                                                  borderRadius:
-                                                      BorderRadius.circular(9),
-                                                ),
-                                                child: const Icon(
-                                                  Icons.close_rounded,
-                                                  size: 12,
-                                                  color: Colors.white,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        if (!_mediaLocked && totalMedia > 1)
-                                          const Positioned(
-                                            left: 3,
-                                            bottom: 3,
-                                            child: Icon(
-                                              Icons.drag_indicator_rounded,
-                                              color: Colors.white,
-                                              size: 16,
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                        if (canAddMore)
-                          GestureDetector(
-                            onTap: _showMediaPicker,
-                            child: Container(
-                              width: 72,
-                              height: 72,
-                              decoration: BoxDecoration(
-                                color: kMainPaperSoft,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: kMainLine),
-                              ),
-                              child: const Icon(
-                                Icons.add_rounded,
-                                color: kMainSub,
-                                size: 22,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-            ),
-
-            const SizedBox(height: 16),
-            if (_dateLocked)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 12),
-                child: Text(
-                  '공개된 오늘의 순간은 사진 추가·삭제와 날짜 변경이 잠겨 있어요. 글·위치는 수정할 수 있어요.',
-                ),
-              ),
-            if (_editing && !_dateLocked && _initial!.sessionId.isEmpty)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 12),
-                child: Text('이전 형식의 기록은 글·날짜·위치를 수정할 수 있어요.'),
-              ),
-
-            _MomentDateTile(
-              key: const Key('moment_date_tile'),
-              date: _momentDate,
-              onTap: _saving || _dateLocked ? null : _pickMomentDate,
-            ),
-
-            const SizedBox(height: 8),
-
-            if (!_editing)
-              SwitchListTile.adaptive(
-                value: _todayMoment,
-                onChanged: _saving || !_isMomentToday
-                    ? null
-                    : (value) => setState(() {
-                        _todayMoment = value;
-                        if (!value) _useTodayPrompt = false;
-                      }),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                // ON must be unmistakable: a pale track was read as "off".
-                activeTrackColor: kMainRose,
-                activeThumbColor: Colors.white,
-                title: Text(
-                  '오늘의 순간으로 남기기',
-                  style: mainBody(size: 15, weight: FontWeight.w900),
-                ),
-                subtitle: Text(
-                  _isMomentToday
-                      ? '오늘의 루프에 사용할 기록으로 지정해요'
-                      : '오늘 날짜의 순간만 지정할 수 있어요',
-                  style: mainBody(size: 12, color: kMainMuted),
-                ),
-              ),
-
-            if (_todayMoment) ...[
-              const SizedBox(height: 4),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: FilterChip(
-                  selected: _useTodayPrompt,
-                  onSelected: _saving
-                      ? null
-                      : (value) => setState(() => _useTodayPrompt = value),
-                  avatar: const Icon(Icons.lightbulb_outline_rounded, size: 17),
-                  label: const Text('오늘 가장 기억에 남은 순간은?'),
-                  selectedColor: kMainHoneySoft,
-                  checkmarkColor: kMainInk,
-                  side: const BorderSide(color: kMainLine),
-                ),
-              ),
-            ],
-
-            const SizedBox(height: 12),
-
-            // ── Caption ───────────────────────────────────────────────────
-            TextField(
-              controller: _captionCtrl,
-              minLines: 4,
-              maxLines: 8,
-              textInputAction: TextInputAction.newline,
-              style: mainBody(size: 16, color: kMainInk, height: 1.55),
-              decoration: InputDecoration(
-                hintText: _useTodayPrompt
-                    ? '그 순간을 한 문장으로 남겨보세요'
-                    : '오늘 남기고 싶은 장면을 적어주세요',
-                hintStyle: mainBody(size: 16, color: kMainMuted),
-                filled: true,
-                fillColor: kMainPaperSoft,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(18),
-                  borderSide: BorderSide.none,
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(18),
-                  borderSide: const BorderSide(color: kMainRose, width: 1.5),
-                ),
-                contentPadding: const EdgeInsets.all(18),
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            // ── Location ──────────────────────────────────────────────────
-            _LocationAddButton(
-              location: _selectedLocation,
-              loading: _loadingLocations,
-              onTap: _saving ? null : _pickLocation,
-              onClear: _saving
-                  ? null
-                  : () => setState(() => _selectedLocation = null),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Location widgets ──────────────────────────────────────────────────────────
-
-class _LocationAddButton extends StatelessWidget {
-  final _SelectedMapLocation? location;
-  final bool loading;
-  final VoidCallback? onTap;
-  final VoidCallback? onClear;
-
-  const _LocationAddButton({
-    required this.location,
-    required this.loading,
-    required this.onTap,
-    required this.onClear,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final selected = location;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: selected == null ? kMainPaperSoft : kMainRoseSoft,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: selected == null ? kMainLine : kMainRose),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.location_on_rounded, color: kMainRose, size: 22),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    selected?.name ?? '위치 추가',
-                    style: mainBody(
-                      size: 15,
-                      color: kMainInk,
-                      weight: FontWeight.w800,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (selected != null) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      selected.isNew ? '비밀지도에 새 위치로 저장돼요' : '비밀지도와 연결돼요',
-                      style: mainBody(size: 12, color: kMainMuted),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            if (loading)
-              const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            else if (selected != null)
-              IconButton(
-                onPressed: onClear,
-                icon: const Icon(Icons.close_rounded, size: 18),
-                color: kMainMuted,
-                style: IconButton.styleFrom(
-                  fixedSize: const Size(34, 34),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              )
-            else
-              const Icon(Icons.chevron_right_rounded, color: kMainMuted),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MapLocationPickerSheet extends StatefulWidget {
-  final List<Map<String, dynamic>> pins;
-  final _SelectedMapLocation? selected;
-  final bool loading;
-
-  const _MapLocationPickerSheet({
-    required this.pins,
-    required this.selected,
-    required this.loading,
-  });
-
-  @override
-  State<_MapLocationPickerSheet> createState() =>
-      _MapLocationPickerSheetState();
-}
-
-class _MapLocationPickerSheetState extends State<_MapLocationPickerSheet> {
-  final _searchCtrl = TextEditingController();
-
-  @override
-  void dispose() {
-    _searchCtrl.dispose();
-    super.dispose();
-  }
-
-  List<Map<String, dynamic>> get _filteredPins {
-    final query = _searchCtrl.text.trim().toLowerCase();
-    if (query.isEmpty) return widget.pins;
-    return widget.pins.where((pin) {
-      final name = '${pin['place_name'] ?? ''}'.toLowerCase();
-      final category = '${pin['category'] ?? ''}'.toLowerCase();
-      return name.contains(query) || category.contains(query);
+  Widget _weekFeed(
+    List<List<Moment>> groups,
+    int? me,
+    String partner,
+  ) {
+    final end = _weekStart.add(const Duration(days: 7));
+    final inWeek = groups.where((g) {
+      final d = momentDay(g.first);
+      return d != null && !d.isBefore(_weekStart) && d.isBefore(end);
     }).toList();
+    final days = <DateTime, List<List<Moment>>>{};
+    for (final g in inWeek) {
+      days.putIfAbsent(momentDay(g.first)!, () => []).add(g);
+    }
+    final ordered = days.keys.toList()..sort((a, b) => b.compareTo(a));
+    return _scroll([
+      _toolbar(weekNav: true),
+      if (ordered.isEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: V2Space.x4),
+          child: _isCurrentWeek
+              ? _emptyFor(
+                  title: '이번 주 첫 순간을 남겨 보세요',
+                  body: '사진·짧은 영상·한 줄 중 하나면 충분해요.',
+                )
+              : _emptyFor(title: '이 주에는 기록이 없어요', cta: false),
+        )
+      else
+        for (final d in ordered)
+          MomentDaySection(
+            day: d,
+            groups: days[d]!,
+            gridView: _gridView,
+            baseUrl: _baseUrl,
+            myUserId: me,
+            myName: _myName,
+            partnerName: partner,
+            onTap: _openDetail,
+          ),
+    ]);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final bottom = MediaQuery.of(context).viewInsets.bottom;
-    final pins = _filteredPins;
-
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.82,
-      ),
-      decoration: const BoxDecoration(
-        color: kMainPaper,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      padding: EdgeInsets.fromLTRB(18, 12, 18, bottom + 18),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: kMainLine,
-                borderRadius: BorderRadius.circular(99),
-              ),
-            ),
+  Widget _pastFeed(
+    List<List<Moment>> groups,
+    DateTime thisWeek,
+    int? me,
+    String partner,
+  ) {
+    final past = groups.where((g) {
+      final d = momentDay(g.first);
+      return d != null && d.isBefore(thisWeek);
+    }).toList();
+    final months = <DateTime, List<List<Moment>>>{};
+    for (final g in past) {
+      final d = momentDay(g.first)!;
+      months.putIfAbsent(DateTime(d.year, d.month), () => []).add(g);
+    }
+    final ordered = months.keys.toList()..sort((a, b) => b.compareTo(a));
+    return _scroll([
+      _toolbar(weekNav: false, label: '달별로 모아 봤어요'),
+      if (ordered.isEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: V2Space.x4),
+          child: _emptyFor(
+            title: '지난 기록이 아직 없어요',
+            body: '지난주까지 남긴 기록이 여기에 쌓여요.',
+            cta: false,
           ),
-          const SizedBox(height: 18),
-          Text('비밀지도 위치', style: mainTitle(size: 22)),
-          const SizedBox(height: 6),
-          Text(
-            '이미 등록한 위치를 검색하거나 비밀지도에서 새로 추가하세요.',
-            style: mainBody(size: 13, color: kMainMuted),
+        )
+      else
+        for (final m in ordered)
+          MomentMonthSection(
+            month: m,
+            groups: months[m]!,
+            bothDays: _bothDays(months[m]!, me),
+            gridView: _gridView,
+            baseUrl: _baseUrl,
+            myUserId: me,
+            myName: _myName,
+            partnerName: partner,
+            onTap: _openDetail,
           ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _searchCtrl,
-                  textInputAction: TextInputAction.search,
-                  style: mainBody(size: 15, color: kMainInk),
-                  onChanged: (_) => setState(() {}),
-                  decoration: InputDecoration(
-                    hintText: '등록한 위치 검색',
-                    hintStyle: mainBody(size: 14, color: kMainMuted),
-                    filled: true,
-                    fillColor: kMainPaperSoft,
-                    prefixIcon: const Icon(Icons.search_rounded),
-                    suffixIcon: _searchCtrl.text.isEmpty
-                        ? null
-                        : IconButton(
-                            onPressed: () {
-                              _searchCtrl.clear();
-                              setState(() {});
-                            },
-                            icon: const Icon(Icons.close_rounded),
-                          ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              IconButton.filled(
-                onPressed: () => Navigator.pop(
-                  context,
-                  const _MapLocationPickerResult.openMap(),
-                ),
-                icon: const Icon(Icons.add_location_alt_outlined),
-                tooltip: '비밀지도에서 추가',
-                style: IconButton.styleFrom(
-                  backgroundColor: kMainRose,
-                  foregroundColor: Colors.white,
-                  fixedSize: const Size(48, 48),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Flexible(
-            child: widget.loading
-                ? const Center(child: CircularProgressIndicator())
-                : pins.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.map_outlined,
-                            color: kMainMuted,
-                            size: 34,
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            widget.pins.isEmpty
-                                ? '비밀지도에 저장된 위치가 없어요'
-                                : '검색 결과가 없어요',
-                            style: mainBody(size: 14, color: kMainMuted),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                : ListView.separated(
-                    itemCount: pins.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final pin = pins[index];
-                      final id = int.tryParse('${pin['id']}');
-                      final name = '${pin['place_name'] ?? '이름 없는 위치'}';
-                      final category = '${pin['category'] ?? '비밀지도'}';
-                      final selected = widget.selected?.id == id;
-                      return InkWell(
-                        onTap: () => Navigator.pop(
-                          context,
-                          _MapLocationPickerResult.location(
-                            _SelectedMapLocation(
-                              id: id,
-                              name: name,
-                              category: category,
-                            ),
-                          ),
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 13,
-                          ),
-                          decoration: BoxDecoration(
-                            color: selected ? kMainRoseSoft : kMainPaperSoft,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: selected ? kMainRose : kMainLine,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                selected
-                                    ? Icons.radio_button_checked_rounded
-                                    : Icons.place_outlined,
-                                color: selected ? kMainRose : kMainInk,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      name,
-                                      style: mainBody(
-                                        size: 15,
-                                        color: kMainInk,
-                                        weight: FontWeight.w900,
-                                      ),
-                                    ),
-                                    Text(
-                                      category,
-                                      style: mainBody(
-                                        size: 12,
-                                        color: kMainMuted,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
-    );
+    ]);
   }
-}
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
-
-class _MomentDateTile extends StatelessWidget {
-  final DateTime date;
-  final VoidCallback? onTap;
-
-  const _MomentDateTile({super.key, required this.date, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final isToday = date == _dateOnly(DateTime.now());
-    const days = ['월', '화', '수', '목', '금', '토', '일'];
-    final label =
-        '${date.year}.${date.month.toString().padLeft(2, '0')}.${date.day.toString().padLeft(2, '0')} (${days[date.weekday - 1]})';
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: isToday ? kMainPaperSoft : kMainRoseSoft,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: isToday ? kMainLine : kMainRose),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.event_rounded, color: kMainRose, size: 22),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('기록 날짜', style: mainBody(size: 12, color: kMainMuted)),
-                  Text(
-                    isToday ? '$label · 오늘' : label,
-                    style: mainBody(
-                      size: 15,
-                      color: kMainInk,
-                      weight: FontWeight.w800,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right_rounded, color: kMainMuted),
-          ],
-        ),
-      ),
-    );
+  /// Days of the month where both of us left a moment.
+  int _bothDays(List<List<Moment>> groups, int? me) {
+    final mine = <String>{};
+    final theirs = <String>{};
+    for (final g in groups) {
+      final d = momentDay(g.first);
+      if (d == null) continue;
+      (g.first.userId == me ? mine : theirs).add(dayKey(d));
+    }
+    return mine.intersection(theirs).length;
   }
-}
-
-String _dateKey(dynamic value) {
-  final date = value is DateTime
-      ? value
-      : DateTime.tryParse('${value ?? ''}')?.toLocal();
-  if (date == null) return '';
-  return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-}
-
-String _authorName(Map<String, dynamic> post, bool isMine) {
-  if (isMine) return '나';
-  return '${post['Nickname'] ?? post['nickname'] ?? post['UserName'] ?? post['userName'] ?? '상대'}';
-}
-
-String _timeLabel(dynamic value) {
-  final date = DateTime.tryParse('${value ?? ''}')?.toLocal();
-  if (date == null) return '';
-  final hour = date.hour > 12
-      ? date.hour - 12
-      : (date.hour == 0 ? 12 : date.hour);
-  final ampm = date.hour >= 12 ? '오후' : '오전';
-  return '$ampm $hour:${date.minute.toString().padLeft(2, '0')}';
-}
-
-String _dayNameFull(DateTime d) {
-  const names = ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일'];
-  return names[d.weekday - 1];
-}
-
-String _mediaUrl(String baseUrl, String mediaUrl) {
-  if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) {
-    return mediaUrl;
-  }
-  return '$baseUrl$mediaUrl';
-}
-
-String _timeAgo(dynamic value) {
-  final date = DateTime.tryParse('${value ?? ''}')?.toLocal();
-  if (date == null) return '';
-  final diff = DateTime.now().difference(date);
-  if (diff.inSeconds < 60) return '방금';
-  if (diff.inMinutes < 60) return '${diff.inMinutes}분 전';
-  if (diff.inHours < 24) return '${diff.inHours}시간 전';
-  if (diff.inDays < 7) return '${diff.inDays}일 전';
-  return '${date.month}월 ${date.day}일';
 }
