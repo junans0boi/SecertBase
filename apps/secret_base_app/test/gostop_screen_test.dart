@@ -524,6 +524,38 @@ void main() {
     },
   );
 
+  testWidgets(
+    'a failed settlement says so and does not claim the loser was short of coins',
+    (tester) async {
+      await pumpScreen(tester);
+      c.debugApplyState(state(phase: 'finished', current: opp));
+      c.debugApplyEnded({
+        'gameId': 'g1',
+        'reason': 'stop',
+        'winner': opp,
+        'loser': me,
+        'receipt': {
+          'reason': 'stop',
+          'winner': opp,
+          'loser': me,
+          'points': {'base': 7, 'go': 0, 'total': 7},
+          'multipliers': <dynamic>[],
+          'multiplier': 1,
+          'perPointBet': 500,
+          'amount': 3500,
+          'transferred': 0,
+          'settlement': 'failed',
+          'winnerScore': {'total': 7},
+          'loserScore': {'total': 0},
+        },
+        'captures': {me: <dynamic>[], opp: <dynamic>[]},
+      });
+      await settle(tester, ms: 6000);
+      expect(find.textContaining('코인 정산이 지연되고 있어요'), findsOneWidget);
+      expect(find.textContaining('코인이 모자라'), findsNothing);
+    },
+  );
+
   testWidgets('나가리 receipt moves no coins', (tester) async {
     await pumpScreen(tester);
     c.debugApplyState(state(phase: 'nagari', current: me));

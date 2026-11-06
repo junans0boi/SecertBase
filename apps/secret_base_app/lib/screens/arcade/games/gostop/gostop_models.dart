@@ -300,7 +300,8 @@ class HReceipt {
     );
   }
 
-  bool get capped => settlement == 'capped' || transferred < amount;
+  /// 진 쪽 코인이 모자라 일부만 옮겨졌다. 정산 실패('failed')나 이미 처리된 판('already')은 아니다.
+  bool get capped => settlement == 'capped';
 }
 
 /// 끝난 판 알림(`game:gostop:ended`).
