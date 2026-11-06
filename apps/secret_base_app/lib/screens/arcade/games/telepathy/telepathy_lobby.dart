@@ -250,6 +250,21 @@ class TelepathyLobbyView extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
+            '⚠️ 각오하고 시작하세요!',
+            style: tpSans(size: 17, color: kTpWarn, weight: FontWeight.w800),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            '진짜 어마어마하게 매운맛이에요. 얼굴이 화끈거려도 책임 못 져요.',
+            style: tpSans(
+              size: 13.5,
+              color: kTpWarn,
+              weight: FontWeight.w700,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
             '🔞 19+ 성인 전용',
             style: tpSans(size: 14, color: kTpWarn, weight: FontWeight.w700),
           ),

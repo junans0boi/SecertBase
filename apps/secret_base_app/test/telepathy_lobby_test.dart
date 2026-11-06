@@ -102,6 +102,7 @@ void main() {
   ) async {
     await pump(tester, view(heat: 'spicy'), size: const Size(390, 1000));
     expect(find.textContaining('19+ 성인 전용'), findsNothing);
+    expect(find.textContaining('각오하고 시작하세요'), findsNothing);
     expect(find.text('분위기 있는 스킨십·장소·속옷 취향'), findsOneWidget);
     expect(find.textContaining('BDSM'), findsNothing);
     await pump(
@@ -109,6 +110,8 @@ void main() {
       view(heat: 'nuclear', canStart: false, label: '상대의 동의를 기다리는 중'),
       size: const Size(390, 1000),
     );
+    expect(find.text('⚠️ 각오하고 시작하세요!'), findsOneWidget);
+    expect(find.textContaining('어마어마하게 매운맛'), findsOneWidget);
     expect(find.text('🔞 19+ 성인 전용'), findsOneWidget);
     expect(find.textContaining('만 19세 이상'), findsOneWidget);
     expect(find.textContaining('BDSM'), findsWidgets);
