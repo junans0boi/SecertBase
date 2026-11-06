@@ -11,6 +11,7 @@ test('each option game has defaults that are among its allowed values', () => {
   assert.deepEqual(defaultLobbyOptions('penalty'), { cells: 3 });
   assert.deepEqual(defaultLobbyOptions('pirate'), { holes: 8 });
   assert.deepEqual(defaultLobbyOptions('uno'), { mode: 'go_wild' });
+  assert.deepEqual(defaultLobbyOptions('catch'), { rounds: 6 });
   assert.deepEqual(defaultLobbyOptions('blackjack'), {});
 });
 
@@ -20,6 +21,8 @@ test('only listed values pass validation, with no type coercion', () => {
   assert.equal(isValidLobbyOption('penalty', 'cells', '6'), false);
   assert.equal(isValidLobbyOption('pirate', 'holes', 7), false);
   assert.equal(isValidLobbyOption('uno', 'mode', 'classic'), true);
+  assert.equal(isValidLobbyOption('catch', 'rounds', 8), true);
+  assert.equal(isValidLobbyOption('catch', 'rounds', 5), false);
   assert.equal(isValidLobbyOption('uno', 'cells', 3), false);
   assert.equal(isValidLobbyOption('blackjack', 'cells', 3), false);
   assert.equal(isValidLobbyOption('penalty', '__proto__', 3), false, 'prototype keys are not options');
