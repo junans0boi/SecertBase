@@ -26,18 +26,37 @@ function seeded(seed) {
   };
 }
 
-const sample = (over = {}) => ({ id: 'food-001', cat: 'food', a: '짜장면', b: '짬뽕', emojiA: '🥢', emojiB: '🌶️', spicy: false, ...over });
+/** 순한 분야 + 살짝 매운맛 = 옛 320문제(19+ 제외). */
+const BANK320 = TELEPATHY_BANK.filter((q) => q.heat !== 'nuclear');
 
-test('the bank has 320 questions, 40 in each of the 8 categories, with stable ids', () => {
-  assert.equal(TELEPATHY_BANK.length, 320);
-  assert.equal(TELEPATHY_CATEGORIES.length, 8);
-  for (const { id } of TELEPATHY_CATEGORIES) {
+const sample = (over = {}) => ({ id: 'food-001', cat: 'food', a: '짜장면', b: '짬뽕', emojiA: '🥢', emojiB: '🌶️', heat: 'mild', spicy: false, ...over });
+
+test('the bank has 320 regular questions (8 categories x 40) plus 100+ nuclear ones, with stable ids', () => {
+  assert.equal(BANK320.length, 320);
+  assert.equal(TELEPATHY_CATEGORIES.length, 9);
+  for (const { id } of TELEPATHY_CATEGORIES.filter((c) => c.id !== 'nuclear')) {
     const list = TELEPATHY_BANK.filter((q) => q.cat === id);
     assert.equal(list.length, 40, id);
     assert.deepEqual(list.map((q) => q.id), list.map((_, i) => `${id}-${String(i + 1).padStart(3, '0')}`));
   }
-  assert.equal(TELEPATHY_BANK.filter((q) => q.spicy).length, 40);
-  assert.ok(TELEPATHY_BANK.every((q) => q.spicy === (q.cat === 'spicy')));
+  const nuclear = TELEPATHY_BANK.filter((q) => q.cat === 'nuclear');
+  assert.ok(nuclear.length >= 100, `nuclear count ${nuclear.length}`);
+  assert.deepEqual(nuclear.map((q) => q.id), nuclear.map((_, i) => `nuc-${String(i + 1).padStart(3, '0')}`));
+  assert.ok(nuclear.every((q) => q.heat === 'nuclear' && q.spicy === true));
+  assert.equal(TELEPATHY_BANK.filter((q) => q.heat === 'spicy').length, 40);
+  assert.ok(TELEPATHY_BANK.filter((q) => q.heat === 'mild').every((q) => q.spicy === false));
+  assert.equal(new Set(TELEPATHY_BANK.map((q) => q.id)).size, TELEPATHY_BANK.length);
+});
+
+test('the question bank never names the 19+ level or uses off-limits subjects', () => {
+  // 가이드라인: 성인 커플 사이의 장난만. 미성년·가족·동의 없음·폭력·동물·비하 표현은 은행에 없다.
+  const banned = /교복|학생|미성년|아기|엄마|아빠|부모|가족|형제|동생|누나|언니|오빠|강제|억지|때리|폭력|묶|짐승|걸레|변태|바보|멍청/;
+  for (const q of TELEPATHY_BANK.filter((x) => x.heat === 'nuclear')) {
+    for (const text of [q.a, q.b]) {
+      assert.doesNotMatch(text, banned, `${q.id}: ${text}`);
+      assert.doesNotMatch(text, /핵|nuclear/i, `${q.id}: the level name stays out of questions`);
+    }
+  }
 });
 
 test('every option is Korean only, at most 14 characters and never repeated anywhere in the bank', () => {
@@ -66,7 +85,7 @@ test('validation rejects duplicates, long or non-Korean options and mislabelled 
   bad([sample({ a: '짬뽕' })], /same/);
   bad([sample({ cat: 'snack', id: 'snack-001' })], /unknown cat/);
   bad([sample({ id: 'date-001' })], /prefix/);
-  bad([sample({ spicy: true })], /spicy/);
+  bad([sample({ heat: 'spicy' })], /spicy/);
   bad([sample({ id: 'spicy-001', cat: 'spicy', spicy: false })], /spicy/);
   bad([sample({ emojiA: '' })], /emojiA/);
   bad([sample({ emojiB: 'B' })], /emojiB/);
@@ -74,7 +93,7 @@ test('validation rejects duplicates, long or non-Korean options and mislabelled 
 
 test('a draw takes at most two per category, never repeats inside a game and skips spicy when off', () => {
   for (let seed = 1; seed <= 50; seed++) {
-    const { questions, bag } = drawQuestions(emptyBag(), TELEPATHY_BANK, 10, { spicy: false, random: seeded(seed) });
+    const { questions, bag } = drawQuestions(emptyBag(), BANK320, 10, { heat: 'mild', random: seeded(seed) });
     assert.equal(questions.length, 10);
     assert.equal(new Set(questions.map((q) => q.id)).size, 10);
     assert.ok(questions.every((q) => !q.spicy));
@@ -88,7 +107,7 @@ test('a draw takes at most two per category, never repeats inside a game and ski
 test('the draw does not mutate the stored bag', () => {
   const bag = { order: TELEPATHY_BANK.map((q) => q.id), recent: [], refills: 0 };
   const copy = structuredClone(bag);
-  drawQuestions(bag, TELEPATHY_BANK, 10, { spicy: true, random: seeded(3) });
+  drawQuestions(bag, BANK320, 10, { heat: 'spicy', random: seeded(3) });
   assert.deepEqual(bag, copy);
 });
 
@@ -97,7 +116,7 @@ test('32 games of 10 in a row never repeat a question (spicy on uses the whole b
     let bag = emptyBag();
     const seen = new Set();
     for (let game = 0; game < 32; game++) {
-      const drawn = drawQuestions(bag, TELEPATHY_BANK, 10, { spicy: true, random: seeded(seed) });
+      const drawn = drawQuestions(bag, BANK320, 10, { heat: 'spicy', random: seeded(seed) });
       bag = drawn.bag;
       assert.equal(drawn.questions.length, 10);
       for (const q of drawn.questions) {
@@ -115,7 +134,7 @@ test('with spicy off the 280 regular questions last 28 games without a repeat', 
   const seen = new Set();
   const random = seeded(5);
   for (let game = 0; game < 28; game++) {
-    const drawn = drawQuestions(bag, TELEPATHY_BANK, 10, { spicy: false, random });
+    const drawn = drawQuestions(bag, BANK320, 10, { heat: 'mild', random });
     bag = drawn.bag;
     for (const q of drawn.questions) {
       assert.ok(!q.spicy);
@@ -127,11 +146,11 @@ test('with spicy off the 280 regular questions last 28 games without a repeat', 
 });
 
 test('15 questions with spicy off still fill the game by allowing a third per category', () => {
-  const { questions } = drawQuestions(emptyBag(), TELEPATHY_BANK, 15, { spicy: false, random: seeded(8) });
+  const { questions } = drawQuestions(emptyBag(), BANK320, 15, { heat: 'mild', random: seeded(8) });
   assert.equal(questions.length, 15);
   const counts = Object.values(Object.groupBy(questions, (q) => q.cat)).map((l) => l.length);
   assert.ok(Math.max(...counts) <= 3);
-  const on = drawQuestions(emptyBag(), TELEPATHY_BANK, 15, { spicy: true, random: seeded(8) }).questions;
+  const on = drawQuestions(emptyBag(), BANK320, 15, { heat: 'spicy', random: seeded(8) }).questions;
   assert.ok(Object.values(Object.groupBy(on, (q) => q.cat)).every((l) => l.length <= 2));
 });
 
@@ -140,18 +159,18 @@ test('an exhausted bag is reshuffled with the latest 50 questions pushed to the 
   const random = seeded(11);
   const history = [];
   for (let game = 0; game < 32; game++) {
-    const drawn = drawQuestions(bag, TELEPATHY_BANK, 10, { spicy: true, random });
+    const drawn = drawQuestions(bag, BANK320, 10, { heat: 'spicy', random });
     bag = drawn.bag;
     history.push(...drawn.questions.map((q) => q.id));
   }
   assert.equal(bag.order.length, 0);
   const recent50 = history.slice(-TELEPATHY_RECENT_LIMIT);
   assert.deepEqual(bag.recent, recent50);
-  const next = drawQuestions(bag, TELEPATHY_BANK, 10, { spicy: true, random });
+  const next = drawQuestions(bag, BANK320, 10, { heat: 'spicy', random });
   assert.equal(next.bag.refills, 2);
   assert.ok(next.questions.every((q) => !recent50.includes(q.id)), 'recent questions do not come straight back');
   // 새 가방: 앞 270개에는 최근 50개가 없고, 맨 뒤 50개가 최근 문제(오래된 순)다.
-  const order = refillOrder(TELEPATHY_BANK, recent50, seeded(4));
+  const order = refillOrder(BANK320, recent50, seeded(4));
   assert.equal(order.length, 320);
   assert.equal(new Set(order).size, 320);
   assert.deepEqual(order.slice(-50), recent50);
@@ -161,7 +180,7 @@ test('an exhausted bag is reshuffled with the latest 50 questions pushed to the 
 test('a partly used bag tops up from a fresh shuffle without repeating inside the game', () => {
   const keep = TELEPATHY_BANK.filter((q) => q.cat === 'food').slice(0, 3).map((q) => q.id);
   const bag = { order: keep, recent: [], refills: 4 };
-  const { questions, bag: next } = drawQuestions(bag, TELEPATHY_BANK, 10, { spicy: true, random: seeded(2) });
+  const { questions, bag: next } = drawQuestions(bag, BANK320, 10, { heat: 'spicy', random: seeded(2) });
   assert.equal(questions.length, 10);
   assert.equal(new Set(questions.map((q) => q.id)).size, 10);
   assert.equal(next.refills, 5);
@@ -172,7 +191,7 @@ test('a partly used bag tops up from a fresh shuffle without repeating inside th
 
 test('unknown or duplicated ids in a stored bag are ignored', () => {
   const bag = { order: ['nope-001', 'food-001', 'food-001', 'light-001'], recent: ['ghost'], refills: 'x' };
-  const { questions } = drawQuestions(bag, TELEPATHY_BANK, 2, { spicy: true, random: seeded(1) });
+  const { questions } = drawQuestions(bag, BANK320, 2, { heat: 'spicy', random: seeded(1) });
   assert.deepEqual(questions.map((q) => q.id).sort(), ['food-001', 'light-001']);
 });
 
@@ -214,4 +233,63 @@ test('the room series adds games, the match ratio and the best streak without wi
   assert.equal(two.ratio, 73);
   assert.equal(two.bestStreak, 4);
   assert.equal(two.wins, undefined);
+});
+
+test('heat decides which categories mix in: mild is regular only, spicy adds the spicy ones, nuclear skips mild', () => {
+  const draw = (heat, seed = 5) => drawQuestions(emptyBag(), TELEPATHY_BANK, 10, { heat, random: seeded(seed) }).questions;
+  for (let seed = 1; seed <= 40; seed++) {
+    assert.ok(draw('mild', seed).every((q) => q.heat === 'mild'));
+    assert.ok(draw('spicy', seed).every((q) => q.heat === 'mild' || q.heat === 'spicy'));
+    const hot = draw('nuclear', seed);
+    assert.equal(hot.length, 10);
+    assert.ok(hot.every((q) => q.heat === 'nuclear' || q.heat === 'spicy'), 'no mild question in a 19+ game');
+    assert.equal(hot.filter((q) => q.heat === 'nuclear').length, 7);
+    assert.equal(hot.filter((q) => q.heat === 'spicy').length, 3);
+  }
+  const five = drawQuestions(emptyBag(), TELEPATHY_BANK, 5, { heat: 'nuclear', random: seeded(1) }).questions;
+  assert.equal(five.filter((q) => q.heat === 'spicy').length, 1);
+  const fifteen = drawQuestions(emptyBag(), TELEPATHY_BANK, 15, { heat: 'nuclear', random: seeded(1) }).questions;
+  assert.equal(fifteen.filter((q) => q.heat === 'spicy').length, 4);
+});
+
+test('nuclear games do not repeat a question for as many games as the pool allows', () => {
+  const nuclearCount = TELEPATHY_BANK.filter((q) => q.heat === 'nuclear').length;
+  const spicyCount = TELEPATHY_BANK.filter((q) => q.heat === 'spicy').length;
+  // 한 판 7 + 3: 어느 쪽 풀이 먼저 바닥나는지가 반복 없이 할 수 있는 판 수.
+  const games = Math.min(Math.floor(nuclearCount / 7), Math.floor(spicyCount / 3));
+  assert.ok(games >= 13, `games without repeat ${games}`);
+  for (const seed of [1, 9, 77, 4242]) {
+    let bag = emptyBag();
+    const seen = new Set();
+    const random = seeded(seed);
+    for (let game = 0; game < games; game++) {
+      const drawn = drawQuestions(bag, TELEPATHY_BANK, 10, { heat: 'nuclear', random });
+      bag = drawn.bag;
+      for (const q of drawn.questions) {
+        assert.ok(!seen.has(q.id), `seed ${seed}: ${q.id} repeated in game ${game + 1}`);
+        seen.add(q.id);
+      }
+    }
+    assert.equal(seen.size, games * 10);
+  }
+});
+
+test('after the nuclear pool runs dry the bag reshuffles and keeps filling games', () => {
+  let bag = emptyBag();
+  const random = seeded(3);
+  for (let game = 0; game < 40; game++) {
+    const drawn = drawQuestions(bag, TELEPATHY_BANK, 10, { heat: 'nuclear', random });
+    bag = drawn.bag;
+    assert.equal(drawn.questions.length, 10);
+    assert.equal(new Set(drawn.questions.map((q) => q.id)).size, 10);
+    assert.ok(drawn.questions.every((q) => q.heat !== 'mild'));
+  }
+  assert.ok(bag.refills >= 2);
+});
+
+test('the legacy spicy flag still means the spicy level', () => {
+  const on = drawQuestions(emptyBag(), TELEPATHY_BANK, 10, { spicy: true, random: seeded(2) }).questions;
+  assert.ok(on.every((q) => q.heat !== 'nuclear'));
+  const off = drawQuestions(emptyBag(), TELEPATHY_BANK, 10, { random: seeded(2) }).questions;
+  assert.ok(off.every((q) => q.heat === 'mild'));
 });

@@ -18,7 +18,8 @@ export const LOBBY_OPTIONS = Object.freeze({
   }),
   telepathy: Object.freeze({
     rounds: Object.freeze({ values: Object.freeze([10, 5, 15]), default: 10 }),
-    spicy: Object.freeze({ values: Object.freeze(["off", "on"]), default: "off" }),
+    // mild 순한맛 / spicy 살짝 매운맛 / nuclear 19+ (성인 두 사람이 직접 동의해야 시작)
+    heat: Object.freeze({ values: Object.freeze(["mild", "spicy", "nuclear"]), default: "mild" }),
   }),
   yut: Object.freeze({
     pieces: Object.freeze({ values: Object.freeze([4, 3, 2]), default: 4 }),

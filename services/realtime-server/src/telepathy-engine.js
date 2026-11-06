@@ -15,8 +15,30 @@ export const TELEPATHY_CATEGORIES = Object.freeze([
   Object.freeze({ id: "romance", label: "연애·로맨스" }),
   Object.freeze({ id: "whatif", label: "만약에" }),
   Object.freeze({ id: "spicy", label: "살짝 매운맛" }),
+  Object.freeze({ id: "nuclear", label: "19+ 은밀한 질문" }),
 ]);
 const CATEGORY_IDS = new Set(TELEPATHY_CATEGORIES.map((c) => c.id));
+/** 문제 id 접두사: 대부분 분야 id와 같고, 19+ 분야만 `nuc-001`. */
+export const telepathyIdPrefix = (cat) => (cat === "nuclear" ? "nuc" : cat);
+
+/** 로비 옵션 `heat` 값. */
+export const TELEPATHY_HEATS = Object.freeze(["mild", "spicy", "nuclear"]);
+/** 분야 → 수위. 19+ 분야만 nuclear, 살짝 매운맛 분야만 spicy, 나머지는 mild. */
+export const heatOfCategory = (cat) => (cat === "nuclear" ? "nuclear" : cat === "spicy" ? "spicy" : "mild");
+/**
+ * 수위별로 섞이는 분야.
+ * - mild: 순한 분야만(매운맛·19+ 없음).
+ * - spicy: 순한 분야 + 살짝 매운맛.
+ * - nuclear: 19+ 분야 + 살짝 매운맛만. 순한 분야는 섞지 않는다(분위기가 깨지지 않게).
+ */
+export function heatAllows(heat, cat) {
+  const h = heatOfCategory(cat);
+  if (heat === "nuclear") return h === "nuclear" || h === "spicy";
+  if (heat === "spicy") return h === "mild" || h === "spicy";
+  return h === "mild";
+}
+/** 19+ 판에서 한 판 문제의 몇 %까지가 '살짝 매운맛' 분야인지(나머지는 19+). */
+export const TELEPATHY_NUCLEAR_SPICY_SHARE = 0.3;
 
 /** 보기 하나의 최대 글자 수. */
 export const TELEPATHY_OPTION_MAX = 14;
@@ -51,7 +73,7 @@ export function validateTelepathyBank(bank) {
     }
     const idMatch = typeof q.id === "string" ? ID_FORMAT.exec(q.id) : null;
     if (!idMatch) errors.push(`${where}: id must look like "food-001"`);
-    else if (idMatch[1] !== q.cat) errors.push(`${where}: id prefix must match cat`);
+    else if (idMatch[1] !== telepathyIdPrefix(q.cat)) errors.push(`${where}: id prefix must match cat`);
     if (ids.has(q.id)) errors.push(`${where}: duplicate id`);
     ids.add(q.id);
     if (!CATEGORY_IDS.has(q.cat)) errors.push(`${where}: unknown cat "${q.cat}"`);
@@ -71,8 +93,9 @@ export function validateTelepathyBank(bank) {
       }
     }
     if (q.a === q.b) errors.push(`${where}: a and b are the same`);
+    if (q.heat !== heatOfCategory(q.cat)) errors.push(`${where}: heat must match the category`);
     if (typeof q.spicy !== "boolean") errors.push(`${where}: spicy must be boolean`);
-    else if (q.spicy !== (q.cat === "spicy")) errors.push(`${where}: spicy must match the spicy category`);
+    else if (q.spicy !== (q.heat !== "mild")) errors.push(`${where}: spicy must be true exactly for spicy and nuclear questions`);
     const pair = [q.a, q.b].sort().join("|");
     if (pairs.has(pair)) errors.push(`${where}: duplicate question`);
     pairs.add(pair);
@@ -127,18 +150,29 @@ function sanitizeBag(bag, byId) {
 
 /**
  * 가방에서 n문제를 꺼낸다(입력은 바꾸지 않는다) → { questions, bag }.
- * - spicy=false면 매운맛 문제는 건너뛴다(가방에는 남아 다음 재셔플 때 함께 섞인다).
- * - 같은 분야는 판당 TELEPATHY_CATEGORY_CAP개까지. 남은 문제가 가장 많은 분야부터 꺼내
- *   분야별 남은 수가 고르게 줄어든다 → 10문제 기준 320문제를 32판 동안 한 번씩 다 쓴다.
- * - 가방에서 n개를 못 채우면 다시 섞어(최근 50개는 뒤로) 이어서 꺼낸다.
+ * - heat에 맞는 분야만 쓴다(heatAllows). 안 맞는 문제는 가방에 남아 다음 재셔플 때 함께 섞인다.
+ * - mild/spicy: 같은 분야는 판당 TELEPATHY_CATEGORY_CAP개까지. 남은 문제가 가장 많은 분야부터 꺼내
+ *   분야별 남은 수가 고르게 줄어든다 → 10문제 기준 순한맛 280개는 28판, 매운맛 켜기 320개는 32판 동안
+ *   한 번씩 다 쓴다.
+ * - nuclear: 한 판의 30%(내림)까지만 '살짝 매운맛' 분야, 나머지는 19+ 분야(10문제 = 7 + 3).
+ * - 가방에서 n개를 못 채우면 다시 섞어(최근 50개는 뒤로) 이어서 꺼낸다. 그래도 모자라면 분야 상한을 푼다.
+ * - 옛 호출 { spicy: true }는 heat 'spicy'와 같다.
  */
-export function drawQuestions(bag, bank, n, { spicy = false, random = Math.random } = {}) {
+export function drawQuestions(bag, bank, n, { heat, spicy = false, random = Math.random } = {}) {
+  const level = TELEPATHY_HEATS.includes(heat) ? heat : spicy ? "spicy" : "mild";
   const byId = new Map(bank.map((q) => [q.id, q]));
-  const eligible = (q) => spicy || !q.spicy;
+  const eligible = (q) => heatAllows(level, q.cat);
   const pool = bank.filter(eligible);
   const count = Math.max(0, Math.min(n, pool.length));
   const categories = new Set(pool.map((q) => q.cat)).size;
-  const cap = Math.max(TELEPATHY_CATEGORY_CAP, Math.ceil(count / Math.max(1, categories)));
+  const evenCap = Math.max(TELEPATHY_CATEGORY_CAP, Math.ceil(count / Math.max(1, categories)));
+  const spicyCap = Math.floor(count * TELEPATHY_NUCLEAR_SPICY_SHARE);
+  let relaxed = false;
+  const capOf = (cat) => {
+    if (relaxed) return Infinity;
+    if (level === "nuclear") return cat === "nuclear" ? count - spicyCap : spicyCap;
+    return evenCap;
+  };
   const state = sanitizeBag(bag, byId);
   const picked = [];
   const pickedSet = new Set();
@@ -151,7 +185,7 @@ export function drawQuestions(bag, bank, n, { spicy = false, random = Math.rando
       for (const id of order) {
         if (pickedSet.has(id)) continue;
         const q = byId.get(id);
-        if (!eligible(q) || (perCat.get(q.cat) ?? 0) >= cap) continue;
+        if (!eligible(q) || (perCat.get(q.cat) ?? 0) >= capOf(q.cat)) continue;
         const g = groups.get(q.cat);
         if (g) g.left += 1;
         else groups.set(q.cat, { first: id, left: 1 });
@@ -174,6 +208,10 @@ export function drawQuestions(bag, bank, n, { spicy = false, random = Math.rando
     recent = [...recent, ...picked].slice(-TELEPATHY_RECENT_LIMIT);
     order = refillOrder(bank, recent, random);
     refills += 1;
+    takeFrom(order);
+  }
+  if (picked.length < count) {
+    relaxed = true;
     takeFrom(order);
   }
   const shown = shuffle(picked, random);

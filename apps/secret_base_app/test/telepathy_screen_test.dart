@@ -17,6 +17,7 @@ Map<String, dynamic> question({
 }) => {
   'id': id,
   'cat': 'food',
+  'heat': 'mild',
   'a': a,
   'b': b,
   'emojiA': ea,
@@ -54,6 +55,7 @@ Map<String, dynamic> tState({
   String gameId = 'g1',
   Map<String, dynamic>? q,
   String? myPick,
+  String heat = 'mild',
 }) {
   final now = DateTime.now().millisecondsSinceEpoch;
   return {
@@ -63,7 +65,7 @@ Map<String, dynamic> tState({
     'players': ['A', 'B'],
     'round': round,
     'rounds': rounds,
-    'spicy': false,
+    'heat': heat,
     'question': status == 'playing' ? (q ?? question()) : null,
     'picked': picked,
     'timeouts': {'A': 0, 'B': 0},
@@ -148,8 +150,8 @@ void main() {
       );
       await pump(tester, size: size);
       expect(tester.takeException(), isNull);
-      expect(find.text('1/10번째'), findsOneWidget);
-      expect(find.text('마음이 끌리는 쪽을 눌러 주세요'), findsOneWidget);
+      expect(find.text('1 / 10'), findsOneWidget);
+      expect(find.text('내가 고른 건 상대에게 보이지 않아요'), findsOneWidget);
       expect(find.bySemanticsLabel('선택지 A, 가나다라마바사아자차카타파하'), findsOneWidget);
       expect(find.text('VS'), findsOneWidget);
       expect(find.text('준호'), findsWidgets);
@@ -176,8 +178,8 @@ void main() {
     final c = TelepathyController.instance;
     expect(c.myPick, 'B');
     expect(c.myPickRound, 1);
-    expect(find.text('내 선택'), findsOneWidget);
     expect(find.text('상대가 고르는 중이에요…'), findsOneWidget);
+    expect(find.bySemanticsLabel('선택지 B, 짬뽕'), findsOneWidget);
     expect(find.text('골랐어요'), findsOneWidget);
     // 두 번 눌러도 다시 고를 수 없다.
     await tester.tap(find.bySemanticsLabel('선택지 A, 짜장면'));
@@ -215,16 +217,21 @@ void main() {
       await tester.pump();
       // 연출 중에는 방금 푼 문제가 계속 보인다.
       expect(find.bySemanticsLabel('선택지 B, 짬뽕'), findsOneWidget);
-      expect(find.text('두 사람의 선택을 공개해요…'), findsOneWidget);
+      expect(find.text('1 / 10'), findsOneWidget);
       await tester.pump(const Duration(milliseconds: 1600));
-      expect(find.text('🔥 3연속'), findsOneWidget);
-      expect(find.text('통했어요! 3문제 연속이에요'), findsOneWidget);
-      expect(find.bySemanticsLabel('🐰이(가) 고른 쪽'), findsNothing);
+      expect(find.text('통했어요!'), findsOneWidget);
+      expect(find.text('마음이 같네요'), findsOneWidget);
+      expect(find.text('3연속'), findsOneWidget);
+      expect(
+        find.text('짬뽕'),
+        findsWidgets,
+        reason: 'both capsules name the shared pick',
+      );
       await tester.pump(const Duration(milliseconds: 2200));
       await tester.pump(const Duration(milliseconds: 500));
       // 다음 문제.
       expect(find.bySemanticsLabel('선택지 A, 피자'), findsOneWidget);
-      expect(find.text('2/10번째'), findsOneWidget);
+      expect(find.text('2 / 10'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await finish(tester);
     },
@@ -242,8 +249,9 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 1600));
-    expect(find.text('엇갈림'), findsOneWidget);
-    expect(find.text('이번엔 엇갈렸어요. 다음엔 통할 거예요'), findsOneWidget);
+    expect(find.text('이번엔 엇갈렸어요'), findsOneWidget);
+    expect(find.text('다음엔 통할 거예요'), findsOneWidget);
+    expect(find.text('≠'), findsOneWidget);
     await tester.pump(const Duration(milliseconds: 2400));
     c.applyState(
       tState(
@@ -257,7 +265,8 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 1600));
     expect(find.text('시간 초과'), findsOneWidget);
-    expect(find.text('시간이 지나 이번 문제는 넘어가요'), findsOneWidget);
+    expect(find.text('시간이 지났어요'), findsOneWidget);
+    expect(find.text('이번 문제는 넘어가요'), findsOneWidget);
     await finish(tester);
   });
 
@@ -275,9 +284,9 @@ void main() {
         ),
       );
       await pump(tester);
-      expect(find.text('두 사람의 선택을 공개해요…'), findsNothing);
-      expect(find.text('4/10번째'), findsOneWidget);
-      expect(find.text('통한 2'), findsOneWidget);
+      expect(find.text('다음 문제까지 1초'), findsNothing);
+      expect(find.text('4 / 10'), findsOneWidget);
+      expect(find.bySemanticsLabel('10문제 중 4번째, 통한 문제 2개'), findsOneWidget);
       await finish(tester);
     },
   );
@@ -333,17 +342,43 @@ void main() {
       await tester.pump(const Duration(milliseconds: 800));
       expect(find.text('알아가는 중'), findsOneWidget);
       expect(find.text('1/2'), findsOneWidget);
-      expect(find.text('🔥 1'), findsOneWidget);
-      expect(find.textContaining('짜장면'), findsWidgets);
-      expect(find.textContaining('나 짜장면'), findsOneWidget);
-      expect(find.textContaining('준호 밖 데이트'), findsOneWidget);
+      expect(find.bySemanticsLabel('최고 연속 1문제'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel(RegExp('1번째 짜장면 또는 짬뽕. 나는 짜장면, 준호은 짜장면. 통했어요')),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsLabel(
+          RegExp('2번째 집 데이트 또는 밖 데이트. 나는 집 데이트, 준호은 밖 데이트. 엇갈렸어요'),
+        ),
+        findsOneWidget,
+      );
       expect(find.text('이번 방 2판 · 통한 비율 73% · 최고 연속 5'), findsOneWidget);
-      expect(find.text('한 판 더!'), findsOneWidget);
+      expect(find.text('한 판 더'), findsOneWidget);
       expect(find.textContaining('승리'), findsNothing);
       expect(tester.takeException(), isNull);
       await finish(tester);
     },
   );
+
+  testWidgets('a 19+ game shows a small 19+ tag, the other levels do not', (
+    tester,
+  ) async {
+    TelepathyController.instance.applyState(tState(heat: 'nuclear'));
+    await pump(tester);
+    expect(find.text('🔞 19+'), findsOneWidget);
+    expect(find.bySemanticsLabel('19세 이상 전용'), findsOneWidget);
+    expect(find.textContaining('핵폭탄'), findsNothing);
+    await finish(tester);
+    for (final heat in ['mild', 'spicy']) {
+      TelepathyController.instance.applyState(
+        tState(heat: heat, gameId: 'g-$heat'),
+      );
+      await pump(tester);
+      expect(find.text('🔞 19+'), findsNothing, reason: heat);
+      await finish(tester);
+    }
+  });
 
   test('state parsing keeps unknown picks as timeouts', () {
     final s = TelepathyState.fromMap(
@@ -352,6 +387,9 @@ void main() {
     expect(s.history.single.picks['B'], isNull);
     expect(s.history.single.timedOut, isTrue);
     expect(s.question?.emojiOf('B'), '🌶️');
+    expect(s.heat, 'mild');
+    expect(s.adultOnly, isFalse);
+    expect(TelepathyState.fromMap(tState(heat: 'nuclear')).adultOnly, isTrue);
     expect(s.opponentOf('A'), 'B');
   });
 }

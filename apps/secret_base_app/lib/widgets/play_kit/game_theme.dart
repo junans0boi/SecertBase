@@ -283,21 +283,22 @@ class GameTheme {
     displayFont: _batang,
   );
 
-  /// 텔레파시: 별빛 편지(밤하늘 남보라 + 별가루).
+  /// 텔레파시: 별빛 편지 — 깊은 밤하늘 + 얇은 금빛 선(모던 클래식 목업 B안). 카드는 헤어라인 한 겹,
+  /// 강조는 달빛 금 하나, 상대는 새벽 청색. 서체는 Gowun Batang(제목·숫자) + Noto Sans KR(본문).
   static const starlight = GameTheme(
     id: 'starlight',
     texture: GameTexture.starlight,
     dark: true,
-    backdrop: [Color(0xFF0C0B2E), Color(0xFF1B1950), Color(0xFF0A0A24)],
-    surface: Color(0xFF1F1D57),
-    surfaceBorder: Color(0x55CDBEFF),
-    accent: Color(0xFFFFB6D5),
-    accentSoft: Color(0x33FFB6D5),
-    gold: Color(0xFFF6D98E),
-    ink: Color(0xFFF6F3FF),
-    subInk: Color(0xCCCFCAF2),
-    me: Color(0xFF8FD6FF),
-    opponent: Color(0xFFFFA9CB),
+    backdrop: [Color(0xFF111436), Color(0xFF0D0F2B), Color(0xFF0D0F2B)],
+    surface: Color(0xFF171B47),
+    surfaceBorder: Color(0x29BEC8FF),
+    accent: Color(0xFFF0CF86),
+    accentSoft: Color(0x33F0CF86),
+    gold: Color(0xFFF0CF86),
+    ink: Color(0xFFF3F1FF),
+    subInk: Color(0xFFA9ADD6),
+    me: Color(0xFFF0CF86),
+    opponent: Color(0xFF9DB1FF),
     displayFont: _batang,
   );
 
@@ -438,7 +439,8 @@ class _BackdropPainter extends CustomPainter {
       case GameTexture.atelier:
         _atelier(canvas, size);
     }
-    // 비네트: 가장자리를 살짝 눌러 시선을 가운데로.
+    // 비네트: 가장자리를 살짝 눌러 시선을 가운데로(별빛 편지는 평평한 밤하늘이라 쓰지 않는다).
+    if (theme.texture == GameTexture.starlight) return;
     canvas.drawRect(
       rect,
       Paint()
@@ -888,69 +890,27 @@ class _BackdropPainter extends CustomPainter {
   void _starlight(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    // 성운: 보라·파랑·장밋빛 안개.
-    _spotlight(
-      canvas,
-      size,
-      Offset(w * 0.18, h * 0.16),
-      w * 0.75,
-      const Color(0x4D5B3FC4),
+    // 위쪽에서 번지는 남색 빛 한 겹.
+    final glow = Rect.fromLTWH(-w * 0.1, -h * 0.18, w * 1.2, h * 0.62);
+    canvas.drawOval(
+      glow,
+      Paint()
+        ..shader = const RadialGradient(
+          colors: [Color(0xFF1C2160), Color(0x001C2160)],
+          stops: [0, 0.95],
+        ).createShader(glow),
     );
-    _spotlight(
-      canvas,
-      size,
-      Offset(w * 0.9, h * 0.52),
-      w * 0.7,
-      const Color(0x3A2F67D8),
-    );
-    _spotlight(
-      canvas,
-      size,
-      Offset(w * 0.45, h * 1.02),
-      w * 0.8,
-      const Color(0x33C0508F),
-    );
-    // 은하수: 대각선 띠를 따라 촘촘한 별가루.
+    // 흩어진 별은 아주 조금만(조용한 밤하늘).
     final rnd = math.Random(41);
-    final dust = Paint();
-    final band = (w * h / 260).round();
-    for (int i = 0; i < band; i++) {
-      final t = rnd.nextDouble();
-      final spread = (rnd.nextDouble() + rnd.nextDouble() - 1) * h * 0.11;
-      final x = -w * 0.1 + t * w * 1.2;
-      final y = h * 0.7 - t * h * 0.55 + spread;
-      dust.color = Color.fromRGBO(
-        225,
-        215,
-        255,
-        0.08 + rnd.nextDouble() * 0.22,
-      );
-      canvas.drawCircle(Offset(x, y), 0.3 + rnd.nextDouble() * 0.7, dust);
-    }
-    // 흩어진 별.
-    final stars = (w * h / 1500).round();
-    for (int i = 0; i < stars; i++) {
+    final star = Paint();
+    final count = (w * h / 14000).round().clamp(8, 28);
+    for (int i = 0; i < count; i++) {
       final c = Offset(rnd.nextDouble() * w, rnd.nextDouble() * h);
-      final r = 0.35 + math.pow(rnd.nextDouble(), 3).toDouble() * 1.5;
-      final warm = rnd.nextDouble() > 0.82;
-      dust.color = (warm ? const Color(0xFFFFE9B8) : const Color(0xFFF2EEFF))
-          .withValues(alpha: 0.35 + rnd.nextDouble() * 0.6);
-      canvas.drawCircle(c, r, dust);
+      star.color = Colors.white.withValues(
+        alpha: 0.25 + rnd.nextDouble() * 0.3,
+      );
+      canvas.drawCircle(c, 0.6 + rnd.nextDouble() * 0.7, star);
     }
-    // 반짝이는 큰 별 몇 개: 십자 빛 + 번짐.
-    for (int i = 0; i < 9; i++) {
-      final c = Offset(rnd.nextDouble() * w, rnd.nextDouble() * h * 0.92);
-      final len = 4.0 + rnd.nextDouble() * 6;
-      _spotlight(canvas, size, c, len * 2.4, const Color(0x55F6D98E));
-      final ray = Paint()
-        ..strokeWidth = 1
-        ..strokeCap = StrokeCap.round
-        ..color = const Color(0xCCFFF4D6);
-      canvas.drawLine(c.translate(-len, 0), c.translate(len, 0), ray);
-      canvas.drawLine(c.translate(0, -len), c.translate(0, len), ray);
-      canvas.drawCircle(c, 1.3, Paint()..color = Colors.white);
-    }
-    _goldFrame(canvas, size, 10, 0.32);
   }
 
   /// 풀밭 낮: 하늘 위 구름, 먼 언덕, 흩날리는 나뭇잎, 아래쪽 잔디 결.
