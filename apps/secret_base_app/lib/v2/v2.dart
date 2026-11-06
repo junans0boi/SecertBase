@@ -10,6 +10,7 @@ library;
 export 'theme.dart';
 export 'tokens.dart';
 export 'typography.dart';
+export 'widgets/app_frame.dart';
 export 'widgets/avatar.dart';
 export 'widgets/badge.dart';
 export 'widgets/banner.dart';

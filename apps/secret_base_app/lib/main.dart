@@ -195,6 +195,7 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
       // 2.0 is the whole app's theme (games included). Game screens keep
       // their own explicit per-game styling on top of it.
       theme: buildV2Theme(),
+      builder: (context, child) => V2AppFrame(child: child),
       // Dev-only 2.0 component gallery (/#/v2-gallery); absent in release.
       routes: kDebugMode
           ? {V2GalleryScreen.routeName: (_) => const V2GalleryScreen()}
