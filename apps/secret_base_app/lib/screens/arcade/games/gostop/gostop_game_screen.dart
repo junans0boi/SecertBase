@@ -35,7 +35,16 @@ class _Fx {
   final int totalMs;
   final Widget Function(double ms) build;
 
+  bool _disposed = false;
+
   _Fx(this.id, this.ctl, this.delayMs, this.totalMs, this.build);
+
+  /// 화면이 먼저 닫혀도, 연출이 먼저 끝나도 한 번만 정리한다.
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    ctl.dispose();
+  }
 }
 
 class _GostopGameScreenState extends State<GostopGameScreen>
@@ -88,7 +97,9 @@ class _GostopGameScreenState extends State<GostopGameScreen>
   );
 
   Set<String> _hidden = {};
-  DateTime _busyUntil = DateTime.fromMillisecondsSinceEpoch(0);
+  // 진행 중인 연출 수(0이면 한가함). 타이머로 세어서 테스트의 가짜 시계에서도 같게 동작한다.
+  int _holds = 0;
+  bool _resultQueued = false;
   String? _selectedId;
   bool _shakeOn = false;
 
@@ -143,7 +154,7 @@ class _GostopGameScreenState extends State<GostopGameScreen>
       t.cancel();
     }
     for (final f in _fx) {
-      f.ctl.dispose();
+      f.dispose();
     }
     _quake.dispose();
     super.dispose();
@@ -158,12 +169,28 @@ class _GostopGameScreenState extends State<GostopGameScreen>
     _timers.add(timer);
   }
 
-  bool get _busy => DateTime.now().isBefore(_busyUntil);
+  bool get _busy => _holds > 0;
 
   void _busyFor(int ms) {
-    final until = DateTime.now().add(Duration(milliseconds: ms));
-    if (until.isAfter(_busyUntil)) _busyUntil = until;
-    _after(ms + 30, () => setState(() {}));
+    _holds++;
+    _after(ms + 30, () {
+      _holds--;
+      if (_holds == 0) _showResultWhenIdle();
+      setState(() {});
+    });
+  }
+
+  // 결과는 마지막 연출(먹은 패가 날아가는 것 등)이 끝난 뒤에 보여 준다.
+  void _showResultWhenIdle() {
+    final r = c.result;
+    if (r == null || _showResult || _resultQueued || _resultFor != r.gameId) {
+      return;
+    }
+    _resultQueued = true;
+    _after(700, () {
+      _resultQueued = false;
+      setState(() => _showResult = true);
+    });
   }
 
   // ── 위치 ──────────────────────────────────────────────────────────────────
@@ -221,7 +248,7 @@ class _GostopGameScreenState extends State<GostopGameScreen>
     ctl.forward().whenCompleteOrCancel(() {
       onEnd?.call();
       if (mounted) setState(() => _fx.remove(fx));
-      ctl.dispose();
+      fx.dispose();
     });
     _busyFor(total);
   }
@@ -301,10 +328,8 @@ class _GostopGameScreenState extends State<GostopGameScreen>
     if (r != null && r.gameId != _resultFor) {
       _resultFor = r.gameId;
       _showResult = false;
-      final wait = _busy
-          ? _busyUntil.difference(DateTime.now()).inMilliseconds
-          : 0;
-      _after(wait + 700, () => setState(() => _showResult = true));
+      _resultQueued = false;
+      if (!_busy) _showResultWhenIdle();
     }
     setState(() {});
   }
@@ -1099,58 +1124,57 @@ class _GostopGameScreenState extends State<GostopGameScreen>
   ) {
     final t = _theme;
     final me = c.me;
-    final children = <Widget>[];
+    final extras = <Widget>[];
+    final main = <Widget>[];
     if (myTurn) {
-      children.add(
+      main.add(
         TurnTimerRing(theme: t, deadline: deadline, size: 40, tickSound: true),
       );
-      children.add(const SizedBox(width: 8));
+      main.add(const SizedBox(width: 8));
     }
     if (myTurn && v.phase == 'playing') {
       final shakeable =
           selected != null && v.shakeable.contains(selected.month);
       if (shakeable) {
-        children.add(
-          _ToggleChip(
-            theme: t,
-            label: '흔들기 ×2',
-            on: _shakeOn,
-            onTap: () => setState(() => _shakeOn = !_shakeOn),
+        extras.add(
+          Expanded(
+            child: _ToggleChip(
+              theme: t,
+              label: '${selected.month}월 흔들기 ×2',
+              on: _shakeOn,
+              onTap: () => setState(() => _shakeOn = !_shakeOn),
+            ),
           ),
         );
-        children.add(const SizedBox(width: 6));
       }
       for (final m in v.bombable) {
-        children.add(
+        extras.add(
           Expanded(
             child: GameSecondaryButton(
               theme: t,
               label: '$m월 폭탄',
               icon: Icons.bolt_rounded,
-              height: 46,
+              height: 40,
               onPressed: _canPlay ? () => c.bomb(m) : null,
             ),
           ),
         );
-        children.add(const SizedBox(width: 6));
       }
       if ((v.dotan[me] ?? 0) > 0) {
-        children.add(
+        extras.add(
           Expanded(
             child: GameSecondaryButton(
               theme: t,
               label: '더미 뒤집기 (${v.dotan[me]})',
               icon: Icons.flip_rounded,
-              height: 46,
+              height: 40,
               onPressed: _canPlay ? c.dotan : null,
             ),
           ),
         );
-        children.add(const SizedBox(width: 6));
       }
-      children.add(
+      main.add(
         Expanded(
-          flex: 2,
           child: GamePrimaryButton(
             theme: t,
             label: selected == null
@@ -1167,15 +1191,16 @@ class _GostopGameScreenState extends State<GostopGameScreen>
         ),
       );
     } else {
+      final who = c.displayName(c.opponent);
       final text = switch (v.phase) {
-        'chongtong' => '${c.displayName(c.opponent)}님이 총통을 고르는 중…',
-        'go_stop' when !myTurn => '${c.displayName(c.opponent)}님이 고/스톱을 고르는 중…',
-        'choice' when !myTurn => '${c.displayName(c.opponent)}님이 패를 고르는 중…',
+        'chongtong' when !myTurn => '$who님이 총통을 고르는 중…',
+        'go_stop' when !myTurn => '$who님이 고/스톱을 고르는 중…',
+        'choice' when !myTurn => '$who님이 패를 고르는 중…',
         'choice' => '위 패널에서 가져올 패를 고르세요',
         'go_stop' => '고 or 스톱?',
         _ => myTurn ? '연출이 끝나면 낼 수 있어요' : '${c.displayName(v.current)}님의 차례',
       };
-      children.add(
+      main.add(
         Expanded(
           child: GamePrimaryButton(
             theme: t,
@@ -1189,7 +1214,24 @@ class _GostopGameScreenState extends State<GostopGameScreen>
     }
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 2, 12, 0),
-      child: Row(children: children),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (extras.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                children: [
+                  for (var i = 0; i < extras.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 6),
+                    extras[i],
+                  ],
+                ],
+              ),
+            ),
+          Row(children: main),
+        ],
+      ),
     );
   }
 
@@ -1327,8 +1369,8 @@ class _ToggleChip extends StatelessWidget {
         onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          height: 46,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: on
