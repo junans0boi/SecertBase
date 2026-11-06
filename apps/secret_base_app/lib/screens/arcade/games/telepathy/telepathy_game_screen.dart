@@ -19,7 +19,7 @@ const _kHowToLines = [
   '매 문제마다 둘 중 마음에 드는 쪽을 몰래 골라요.',
   '두 사람이 같은 쪽을 고르면 "통했어요!" 별이 하나 켜져요.',
   '연속으로 통하면 🔥 연속 기록이 쌓여요.',
-  '한 문제는 15초. 시간이 지나면 그 문제는 엇갈린 걸로 넘어가요.',
+  '한 문제는 15초(첫 문제는 규칙을 읽도록 더 길어요). 시간이 지나면 그 문제는 엇갈린 걸로 넘어가요.',
   '연속 3문제를 고르지 않으면 판이 끝나요. 이기고 지는 건 없어요.',
 ];
 
@@ -63,7 +63,6 @@ class _TelepathyGameScreenState extends State<TelepathyGameScreen>
   String? _bannerSub;
   int _toastSeq = 0;
   String? _toast;
-  Object? _confettiId;
   final Set<int> _soundsPlayed = {};
 
   @override
@@ -126,7 +125,6 @@ class _TelepathyGameScreenState extends State<TelepathyGameScreen>
       _gameId = s.gameId;
       _shownRound = s.lastRound?.round ?? 0;
       _revealing = null;
-      _confettiId = null;
       _soundsPlayed.clear();
       _reveal.reset();
       if (!first && s.playing) _banner('새 판 시작!', '${s.rounds}문제');
@@ -163,7 +161,6 @@ class _TelepathyGameScreenState extends State<TelepathyGameScreen>
       if (r.matched) {
         GameSfx.instance.play(GameSound.sparkle);
         HapticFeedback.heavyImpact();
-        if (mounted) setState(() => _confettiId = '${_gameId}_${r.round}');
         if (r.streak >= 3) GameSfx.instance.play(GameSound.cheer);
       } else {
         GameSfx.instance.play(r.timedOut ? GameSound.warn : GameSound.aww);
@@ -228,6 +225,7 @@ class _TelepathyGameScreenState extends State<TelepathyGameScreen>
         gameType: _kGameType,
         child: GameBackdrop(
           theme: theme,
+          frame: false,
           child: SafeArea(
             child: ListenableBuilder(
               listenable: Listenable.merge([_c, _socket]),
@@ -250,11 +248,11 @@ class _TelepathyGameScreenState extends State<TelepathyGameScreen>
         Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: Column(
-                children: [
-                  GameTopBar(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: GameTopBar(
                     theme: theme,
                     title: '텔레파시',
                     gameType: _kGameType,
@@ -263,20 +261,20 @@ class _TelepathyGameScreenState extends State<TelepathyGameScreen>
                     onRequestRestart: () => _socket.requestRestart(_kGameType),
                     onHelp: _help,
                   ),
-                  if (s == null)
-                    Expanded(
-                      child: _Preparing(theme: theme, sway: _sway),
-                    )
-                  else ...[
-                    _bond(s, me, opp),
-                    const SizedBox(height: 4),
-                    _progress(s),
-                    const SizedBox(height: 8),
-                    Expanded(child: _stage(s, me, opp)),
-                    _footer(),
-                  ],
-                ],
-              ),
+                ),
+                if (s == null)
+                  Expanded(child: _Preparing(sway: _sway))
+                else
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: LayoutBuilder(
+                        builder: (context, box) =>
+                            _content(s, me, opp, compact: box.maxHeight < 560),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ),
@@ -289,15 +287,6 @@ class _TelepathyGameScreenState extends State<TelepathyGameScreen>
           ),
         ),
         Positioned.fill(
-          child: IgnorePointer(
-            child: ConfettiBurst(
-              trigger: _confettiId,
-              colors: [theme.gold, theme.accent, theme.me, Colors.white],
-              count: 46,
-            ),
-          ),
-        ),
-        Positioned.fill(
           child: GameTurnBanner(
             theme: theme,
             id: _bannerId,
@@ -307,8 +296,8 @@ class _TelepathyGameScreenState extends State<TelepathyGameScreen>
           ),
         ),
         Positioned(
-          top: 126,
-          right: 18,
+          top: 130,
+          right: 20,
           child: ReactionBubble(
             theme: theme,
             forPlayer: opp,
@@ -316,238 +305,208 @@ class _TelepathyGameScreenState extends State<TelepathyGameScreen>
           ),
         ),
         Positioned(
-          top: 126,
-          left: 18,
+          top: 130,
+          left: 20,
           child: ReactionBubble(
             theme: theme,
             forPlayer: me,
             gameType: _kGameType,
           ),
         ),
-        if (showResult) Positioned.fill(child: _result(s, me, opp)),
+        if (s != null && s.playing)
+          Positioned(
+            right: 14,
+            bottom: 10,
+            child: ReactionButton(theme: theme, gameType: _kGameType),
+          ),
+        if (showResult)
+          Positioned.fill(
+            child: TelepathyResultPage(
+              state: s,
+              me: me,
+              partner: opp,
+              nameOf: _c.displayName,
+              onRematch: () => _socket.requestRestart(_kGameType),
+              rematchWaiting: _socket.restartWaiting,
+            ),
+          ),
       ],
     );
   }
 
-  // 위쪽: 나 ── (타이머 / 판정) ── 상대. 통하면 빛줄기가 뻗는다.
-  Widget _bond(TelepathyState s, String? me, String? opp) {
+  // ── 연출 값 ──────────────────────────────────────────────────────────────
+
+  bool get _afterVerdict =>
+      _revealing != null && _reveal.value >= TelepathyReveal.verdict;
+
+  Widget _content(
+    TelepathyState s,
+    String? me,
+    String? opp, {
+    required bool compact,
+  }) {
     final r = _revealing;
+    final q = r?.question ?? s.question ?? s.lastRound?.question;
+    // 연출 중에는 방금 공개된 문제를 아직 점·점수에 넣지 않는다.
+    final visible = r == null
+        ? s.history
+        : s.history.where((h) => h.round < r.round).toList();
+    return AnimatedBuilder(
+      animation: Listenable.merge([_reveal, _sway]),
+      builder: (context, _) => Column(
+        children: [
+          SizedBox(height: compact ? 4 : 8),
+          _players(s, me, opp),
+          SizedBox(height: compact ? 8 : 14),
+          TelepathyProgressRow(
+            current: r?.round ?? s.round,
+            total: s.rounds,
+            results: [for (final h in visible) h.matched],
+            score: visible.where((h) => h.matched).length,
+            currentHit: r != null && r.matched && _afterVerdict,
+          ),
+          SizedBox(height: compact ? 8 : 16),
+          if (q != null) ...[
+            TelepathyCategoryChip(
+              label: q.categoryLabel,
+              adultOnly: s.adultOnly,
+            ),
+            SizedBox(height: compact ? 4 : 8),
+            Text(
+              '더 끌리는 쪽은?',
+              textAlign: TextAlign.center,
+              style: tpSerif(size: compact ? 22 : 25, height: 1.3),
+            ),
+          ],
+          SizedBox(height: compact ? 10 : 20),
+          Expanded(
+            child: q == null
+                ? const SizedBox()
+                : _stage(s, q, r, me, opp, compact),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 나 ── (타이머/통함/엇갈림) ── 상대. 통하면 연결선이 금빛 실선으로 이어진다.
+  Widget _players(TelepathyState s, String? me, String? opp) {
+    final r = _revealing;
+    final verdict = _afterVerdict;
     final iPicked = _c.iPicked;
     final oppPicked = _c.partnerPicked;
     String? myStatus;
     String? oppStatus;
-    if (s.playing && r == null) {
+    var myGold = false;
+    var oppGold = false;
+    if (r != null && verdict) {
+      String of(String? id) {
+        final c = r.picks[id];
+        return c == null ? '시간 초과' : r.question.textOf(c);
+      }
+
+      myStatus = of(me);
+      oppStatus = of(opp);
+    } else if (s.playing && r == null) {
       myStatus = iPicked ? '골랐어요' : '고르는 중…';
       oppStatus = oppPicked ? '골랐어요' : '고르는 중…';
+      myGold = iPicked;
+      oppGold = oppPicked;
     }
-    return AnimatedBuilder(
-      animation: Listenable.merge([_reveal, _sway]),
-      builder: (context, _) {
-        final v = _reveal.value;
-        final beam = r != null && r.matched
-            ? Curves.easeOutCubic.transform(
-                telepathySpan(
-                  v,
-                  TelepathyReveal.verdict,
-                  TelepathyReveal.beamEnd,
-                ),
-              )
-            : 0.0;
-        Widget center;
-        if (r != null && v >= TelepathyReveal.verdict) {
-          center = _verdictBadge(r);
-        } else if (r == null && s.playing) {
-          center = TurnTimerRing(
-            theme: theme,
+    final matched = r != null && r.matched && verdict;
+    final missed = r != null && !r.matched && verdict;
+    final beam = matched
+        ? Curves.easeOutCubic.transform(
+            telepathySpan(
+              _reveal.value,
+              TelepathyReveal.verdict,
+              TelepathyReveal.beamEnd,
+            ),
+          )
+        : 0.0;
+    final tone = matched
+        ? TelepathyLinkTone.gold
+        : missed
+        ? TelepathyLinkTone.broken
+        : TelepathyLinkTone.idle;
+    final mode = matched
+        ? TelepathyRingMode.match
+        : missed
+        ? TelepathyRingMode.miss
+        : (r == null && s.playing
+              ? TelepathyRingMode.timer
+              : TelepathyRingMode.idle);
+    return SizedBox(
+      height: 60,
+      child: Row(
+        children: [
+          Expanded(
+            flex: 5,
+            child: TelepathyCapsule(
+              name: _c.displayName(me),
+              mine: true,
+              status: myStatus,
+              statusGold: myGold,
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: TelepathyLink(tone: tone, progress: beam),
+            ),
+          ),
+          TelepathyRing(
+            mode: mode,
             deadline: _c.deadline,
-            size: 46,
-            tickSound: !iPicked,
-          );
-        } else {
-          center = const SizedBox(width: 46, height: 46);
-        }
-        return SizedBox(
-          height: 86,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TelepathyAvatar(
-                theme: theme,
-                emoji: _c.emojiOf(me),
-                name: _c.displayName(me),
-                mine: true,
-                status: myStatus,
-                glowing: (r == null && iPicked) || (r != null && beam > 0),
-              ),
-              Expanded(
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: CustomPaint(
-                        painter: TelepathyBeamPainter(
-                          theme: theme,
-                          beam: beam,
-                          shimmer: (_sway.value + v * 3) % 1.0,
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      top: 1,
-                      child: Center(child: center),
-                    ),
-                  ],
-                ),
-              ),
-              TelepathyAvatar(
-                theme: theme,
-                emoji: _c.emojiOf(opp),
-                name: _c.displayName(opp),
-                mine: false,
-                status: oppStatus,
-                glowing: (r == null && oppPicked) || (r != null && beam > 0),
-              ),
-            ],
+            tickSound: s.playing && r == null && !iPicked,
           ),
-        );
-      },
-    );
-  }
-
-  /// 끈 가운데: 판정 원(💞 / 시간 초과 / 엇갈림) + 아래에 한 줄 글자.
-  Widget _verdictBadge(TelepathyRound r) {
-    final t = theme;
-    final String text;
-    final Color color;
-    if (r.matched) {
-      text = r.streak >= 2 ? '🔥 ${r.streak}연속' : '통했어요';
-      color = t.gold;
-    } else {
-      text = r.timedOut ? '시간 초과' : '엇갈림';
-      color = t.subInk;
-    }
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 46,
-          height: 46,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: const Color(0xFF16143F),
-            border: Border.all(color: color.withValues(alpha: 0.85), width: 2),
-            boxShadow: r.matched
-                ? [
-                    BoxShadow(
-                      color: t.gold.withValues(alpha: 0.7),
-                      blurRadius: 18,
-                      spreadRadius: 1,
-                    ),
-                  ]
-                : null,
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: TelepathyLink(tone: tone, progress: beam, fromRight: true),
+            ),
           ),
-          child: r.matched
-              ? const Text('💞', style: TextStyle(fontSize: 24))
-              : Icon(
-                  r.timedOut ? Icons.timer_off_rounded : Icons.close_rounded,
-                  color: color,
-                  size: 24,
-                ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          text,
-          maxLines: 1,
-          style: t.body(size: 12.5, color: color, weight: FontWeight.w900),
-        ),
-      ],
+          Expanded(
+            flex: 5,
+            child: TelepathyCapsule(
+              name: _c.displayName(opp),
+              mine: false,
+              status: oppStatus,
+              statusGold: oppGold,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  // 진행 점 + 통한 수 + 연속.
-  Widget _progress(TelepathyState s) {
-    final r = _revealing;
-    // 연출 중에는 방금 공개된 문제를 아직 점에 넣지 않는다.
-    final visible = r == null
-        ? s.history
-        : s.history.where((h) => h.round < r.round).toList();
-    final results = [for (final h in visible) h.matched];
-    final cur = r == null ? s.round : r.round;
-    final score = visible.where((h) => h.matched).length;
-    final streak = visible.isEmpty ? 0 : visible.last.streak;
-    return Column(
-      children: [
-        TelepathyProgressDots(
-          theme: theme,
-          total: s.rounds,
-          current: cur,
-          results: results,
-        ),
-        const SizedBox(height: 6),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            GameChip(
-              theme: theme,
-              label: '${cur.clamp(1, s.rounds)}/${s.rounds}번째',
-              leading: '💌',
-            ),
-            const SizedBox(width: 6),
-            GameChip(
-              theme: theme,
-              label: '통한 $score',
-              leading: '⭐',
-              emphasized: score > 0,
-            ),
-            if (streak >= 2) ...[
-              const SizedBox(width: 6),
-              GameChip(
-                theme: theme,
-                label: '$streak연속',
-                leading: '🔥',
-                color: theme.accent,
-                emphasized: true,
-              ),
-            ],
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _stage(TelepathyState s, String? me, String? opp) {
-    final r = _revealing;
-    final TelepathyQuestion? q =
-        r?.question ?? s.question ?? s.lastRound?.question;
-    if (q == null) return const SizedBox.shrink();
+  Widget _stage(
+    TelepathyState s,
+    TelepathyQuestion q,
+    TelepathyRound? r,
+    String? me,
+    String? opp,
+    bool compact,
+  ) {
+    final reveal = r != null;
+    final verdict = _afterVerdict;
+    // 카드 아래: 여백 26 + 안내/판정(약 56) + 다음 문제 안내(22) + 아래 여백.
+    final below = compact ? 104.0 : 130.0;
     return LayoutBuilder(
       builder: (context, box) {
-        final compact = box.maxHeight < 360;
+        final cardsH = (box.maxHeight - below).clamp(150.0, 262.0).toDouble();
         return Column(
           children: [
             SizedBox(
-              height: compact ? 26 : 34,
-              child: Center(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    '${q.categoryLabel} · 더 끌리는 쪽은?',
-                    style: theme.display(size: compact ? 16 : 19),
-                  ),
-                ),
-              ),
-            ),
-            Expanded(
+              height: cardsH,
               child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 340),
+                duration: const Duration(milliseconds: 320),
                 switchInCurve: Curves.easeOutCubic,
                 transitionBuilder: (child, anim) => FadeTransition(
                   opacity: anim,
                   child: SlideTransition(
                     position: Tween(
-                      begin: const Offset(0.08, 0),
+                      begin: const Offset(0, 0.04),
                       end: Offset.zero,
                     ).animate(anim),
                     child: child,
@@ -559,16 +518,82 @@ class _TelepathyGameScreenState extends State<TelepathyGameScreen>
                 ),
               ),
             ),
-            AnimatedBuilder(
-              animation: _reveal,
-              builder: (context, _) => _caption(s, r),
+            SizedBox(height: compact ? 14 : 26),
+            if (reveal && verdict)
+              _verdict(r)
+            else if (reveal)
+              const SizedBox(height: 48)
+            else
+              _hint(s),
+            const Spacer(),
+            SizedBox(
+              height: 22,
+              child: reveal
+                  ? Text(
+                      s.finished
+                          ? '곧 결과가 나와요'
+                          : '다음 문제까지 ${((1 - _reveal.value) * kTelepathyRevealDuration.inMilliseconds / 1000).ceil().clamp(1, 9)}초',
+                      style: tpSans(size: 12.5, color: kTpSub),
+                    )
+                  : null,
             ),
+            SizedBox(height: compact ? 8 : 24),
           ],
         );
       },
     );
   }
 
+  Widget _hint(TelepathyState s) {
+    final second = !_c.iPicked
+        ? '고르면 바로 확정돼요'
+        : _c.partnerPicked
+        ? '둘 다 골랐어요. 곧 공개!'
+        : '상대가 고르는 중이에요…';
+    return Column(
+      children: [
+        Text(
+          '내가 고른 건 상대에게 보이지 않아요',
+          textAlign: TextAlign.center,
+          style: tpSans(size: 13.5, color: kTpSub, height: 1.5),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          second,
+          textAlign: TextAlign.center,
+          style: tpSans(
+            size: 12,
+            color: _c.iPicked && _c.partnerPicked ? kTpGold : kTpSub,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _verdict(TelepathyRound r) {
+    if (r.matched) {
+      return TelepathyVerdict(
+        matched: true,
+        title: '통했어요!',
+        sub: '마음이 같네요',
+        streak: r.streak,
+      );
+    }
+    if (r.timedOut) {
+      return const TelepathyVerdict(
+        matched: false,
+        title: '시간이 지났어요',
+        sub: '이번 문제는 넘어가요',
+      );
+    }
+    return const TelepathyVerdict(
+      matched: false,
+      title: '이번엔 엇갈렸어요',
+      sub: '다음엔 통할 거예요',
+    );
+  }
+
+  /// 좌우 카드 + 가운데 VS 메달. 공개 때 두 카드가 함께 뒤집힌다.
   Widget _cards(
     TelepathyState s,
     TelepathyQuestion q,
@@ -576,177 +601,89 @@ class _TelepathyGameScreenState extends State<TelepathyGameScreen>
     String? me,
     String? opp,
   ) {
-    return LayoutBuilder(
-      builder: (context, box) => _cardStack(
-        s,
-        q,
-        r,
-        me,
-        opp,
-        ((box.maxHeight - 34) / 2).clamp(88.0, 150.0).toDouble(),
-      ),
-    );
-  }
-
-  Widget _cardStack(
-    TelepathyState s,
-    TelepathyQuestion q,
-    TelepathyRound? r,
-    String? me,
-    String? opp,
-    double cardHeight,
-  ) {
-    return AnimatedBuilder(
-      animation: Listenable.merge([_reveal, _sway]),
-      builder: (context, _) {
-        final v = _reveal.value;
-        final flip = r == null
-            ? 0.0
-            : Curves.easeInOutCubic.transform(
-                telepathySpan(
-                  v,
-                  TelepathyReveal.flipStart,
-                  TelepathyReveal.flipEnd,
-                ),
-              );
-        final verdict = r != null && v >= TelepathyReveal.verdict;
-        TelepathyCard card(String letter) {
-          final marks = <TelepathyMark>[];
-          if (r != null) {
-            if (r.picks[me] == letter) {
-              marks.add(
-                TelepathyMark(
-                  emoji: _c.emojiOf(me).isEmpty ? '🙂' : _c.emojiOf(me),
-                  mine: true,
-                  name: _c.displayName(me),
-                ),
-              );
-            }
-            if (r.picks[opp] == letter) {
-              marks.add(
-                TelepathyMark(
-                  emoji: _c.emojiOf(opp).isEmpty ? '🙂' : _c.emojiOf(opp),
-                  mine: false,
-                  name: _c.displayName(opp),
-                ),
-              );
-            }
-          }
-          final mine = _c.myPick;
-          final mode = r != null
-              ? TelepathyCardMode.idle
-              : !_c.iPicked
-              ? TelepathyCardMode.idle
-              : mine == letter
-              ? TelepathyCardMode.picked
-              : TelepathyCardMode.dimmed;
-          return TelepathyCard(
-            theme: theme,
-            letter: letter,
-            emoji: q.emojiOf(letter),
-            text: q.textOf(letter),
-            mode: mode,
-            flip: flip,
-            marks: marks,
-            glow: r != null && r.matched && marks.length == 2 && verdict,
-            faded: r != null && marks.isEmpty,
-            minHeight: cardHeight,
-            onTap: r == null && s.playing && !_c.iPicked
-                ? () => _pick(letter)
-                : null,
+    final v = _reveal.value;
+    final flip = r == null
+        ? 0.0
+        : Curves.easeInOutCubic.transform(
+            telepathySpan(
+              v,
+              TelepathyReveal.flipStart,
+              TelepathyReveal.flipEnd,
+            ),
           );
+    final back = r != null && flip > 0.5;
+    final verdict = _afterVerdict;
+    final myName = _c.displayName(me);
+    final oppName = _c.displayName(opp);
+    TelepathyMark myMark() => TelepathyMark(
+      initial: telepathyInitial(myName),
+      mine: true,
+      name: myName,
+    );
+    TelepathyMark oppMark() => TelepathyMark(
+      initial: telepathyInitial(oppName),
+      mine: false,
+      name: oppName,
+    );
+
+    TelepathyOptionCard card(String letter) {
+      var state = TelepathyCardState.idle;
+      final marks = <TelepathyMark>[];
+      if (r == null || !back) {
+        // 고르는 중(또는 뒤집히기 전): 내가 고른 쪽만 금색 테두리 + 체크 + 내 표시.
+        if (_c.iPicked && _c.myPick == letter) {
+          state = TelepathyCardState.selected;
+          marks.add(myMark());
         }
-
-        final lit = r != null && r.matched && verdict;
-        return Stack(
-          alignment: Alignment.center,
-          children: [
-            Column(
-              children: [
-                Expanded(child: Align(child: card('A'))),
-                const SizedBox(height: 34),
-                Expanded(child: Align(child: card('B'))),
-              ],
-            ),
-            TelepathyVsMedallion(
-              theme: theme,
-              label: lit ? '💞' : null,
-              lit: lit,
-              pulse: _sway.value,
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _caption(TelepathyState s, TelepathyRound? r) {
-    final String text;
-    Color color = theme.subInk;
-    if (r != null) {
-      if (_reveal.value < TelepathyReveal.verdict) {
-        text = '두 사람의 선택을 공개해요…';
-      } else if (r.matched) {
-        text = r.streak >= 2 ? '통했어요! ${r.streak}문제 연속이에요' : '통했어요! 마음이 같네요';
-        color = theme.gold;
-      } else if (r.timedOut) {
-        text = '시간이 지나 이번 문제는 넘어가요';
       } else {
-        text = '이번엔 엇갈렸어요. 다음엔 통할 거예요';
+        final mineHere = r.picks[me] == letter;
+        final theirsHere = r.picks[opp] == letter;
+        if (mineHere) marks.add(myMark());
+        if (theirsHere) marks.add(oppMark());
+        if (r.matched) {
+          state = mineHere ? TelepathyCardState.hit : TelepathyCardState.dim;
+        } else if (mineHere) {
+          state = TelepathyCardState.mine;
+        } else if (theirsHere) {
+          state = TelepathyCardState.theirs;
+        }
       }
-    } else if (!s.playing) {
-      text = '';
-    } else if (!_c.iPicked) {
-      text = '마음이 끌리는 쪽을 눌러 주세요';
-    } else if (_c.partnerPicked) {
-      text = '둘 다 골랐어요. 곧 공개!';
-      color = theme.gold;
-    } else {
-      text = '상대가 고르는 중이에요…';
+      return TelepathyOptionCard(
+        letter: letter,
+        emoji: q.emojiOf(letter),
+        text: q.textOf(letter),
+        cardState: state,
+        flip: flip,
+        marks: marks,
+        onTap: r == null && s.playing && !_c.iPicked
+            ? () => _pick(letter)
+            : null,
+      );
     }
-    return SizedBox(
-      height: 40,
-      child: Center(
-        child: Text(
-          text,
-          textAlign: TextAlign.center,
-          maxLines: 2,
-          style: theme.body(size: 13.5, color: color, weight: FontWeight.w800),
+
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Row(
+          children: [
+            Expanded(child: card('A')),
+            const SizedBox(width: 12),
+            Expanded(child: card('B')),
+          ],
         ),
-      ),
-    );
-  }
-
-  Widget _footer() {
-    return SizedBox(
-      height: 50,
-      child: Align(
-        alignment: Alignment.centerRight,
-        child: ReactionButton(theme: theme, gameType: _kGameType),
-      ),
-    );
-  }
-
-  Widget _result(TelepathyState s, String? me, String? opp) {
-    return TelepathyResultCard(
-      theme: theme,
-      state: s,
-      me: me,
-      partner: opp,
-      nameOf: _c.displayName,
-      myEmoji: _c.emojiOf(me),
-      partnerEmoji: _c.emojiOf(opp),
-      onRematch: () => _socket.requestRestart(_kGameType),
-      rematchWaiting: _socket.restartWaiting,
+        TelepathyVsMedallion(
+          hit: r != null && r.matched && verdict,
+          off: r != null && !r.matched && verdict,
+        ),
+      ],
     );
   }
 }
 
 class _Preparing extends StatelessWidget {
-  final GameTheme theme;
   final Animation<double> sway;
 
-  const _Preparing({required this.theme, required this.sway});
+  const _Preparing({required this.sway});
 
   @override
   Widget build(BuildContext context) {
@@ -756,17 +693,14 @@ class _Preparing extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Transform.rotate(
-              angle: (sway.value - 0.5) * 0.3,
-              child: const Text('💌', style: TextStyle(fontSize: 76)),
+            Opacity(
+              opacity: 0.6 + sway.value * 0.4,
+              child: const TelepathySigil(size: 72, overlap: 0.35),
             ),
-            const SizedBox(height: 14),
-            Text('판을 준비하는 중', style: theme.display(size: 24)),
+            const SizedBox(height: 18),
+            Text('판을 준비하는 중', style: tpSerif(size: 24)),
             const SizedBox(height: 4),
-            Text(
-              '별빛 편지를 쓰고 있어요',
-              style: theme.body(size: 13, color: theme.subInk),
-            ),
+            Text('곧 첫 질문이 열려요', style: tpSans(size: 13, color: kTpSub)),
           ],
         ),
       ),

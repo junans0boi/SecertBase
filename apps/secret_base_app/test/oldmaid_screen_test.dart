@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secret_base_app/core/socket_service.dart';
 import 'package:secret_base_app/screens/arcade/games/oldmaid/oldmaid_controller.dart';
+import 'package:secret_base_app/screens/arcade/games/oldmaid/oldmaid_widgets.dart';
 import 'package:secret_base_app/screens/arcade/games/oldmaid_screen.dart';
+import 'package:secret_base_app/widgets/play_kit/modern_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const me = 'ME-code';
@@ -144,7 +146,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
   }
 
-  /// 연출(나눠 주기·뽑기)을 끝까지 돌린다. 반복 애니메이션(찻잔 김) 때문에 settle은 쓰지 않는다.
+  /// 연출(나눠 주기·뽑기)을 끝까지 돌린다. 타이머 링이 계속 갱신되므로 settle은 쓰지 않는다.
   Future<void> run(WidgetTester tester, [int ms = 2400]) async {
     for (var t = 0; t < ms; t += 100) {
       await tester.pump(const Duration(milliseconds: 100));
@@ -153,6 +155,13 @@ void main() {
 
   Rect rectOf(WidgetTester tester, String key) =>
       tester.getRect(find.byKey(ValueKey(key)));
+
+  /// 버린 짝 더미가 [n]쌍을 보여 주는가.
+  Finder pile(int n) =>
+      find.byWidgetPredicate((w) => w is OldMaidDiscardStack && w.pairs == n);
+
+  ModButton mainButton(WidgetTester tester) =>
+      tester.widget<ModButton>(find.byType(ModButton));
 
   testWidgets('shows the preparing state until the server sends the game', (
     tester,
@@ -186,8 +195,8 @@ void main() {
       expect(o0.left, greaterThanOrEqualTo(0));
       expect(oLast.right, lessThanOrEqualTo(360));
       expect(o0.bottom, lessThan(first.top), reason: '상대 손이 내 손 위에 있다');
-      expect(find.text('카드 $n장'), findsOneWidget);
-      expect(find.text('2쌍'), findsOneWidget);
+      expect(find.text('카드 $n장 · 조커 보유'), findsOneWidget);
+      expect(pile(2), findsOneWidget);
       expect(find.textContaining('code'), findsNothing, reason: '사용자 코드 노출 금지');
     });
   }
@@ -198,12 +207,13 @@ void main() {
     await open(tester);
     c.handleState(state(oppCount: 8));
     await run(tester);
-    expect(find.text('상대 카드 한 장을 골라요'), findsOneWidget);
-    expect(find.text('이 카드 뽑기'), findsNothing);
+    expect(find.text('상대 카드를 한 장 골라요'), findsOneWidget);
+    expect(find.text('이 카드 뽑기'), findsOneWidget);
+    expect(mainButton(tester).onPressed, isNull, reason: '고르기 전에는 못 누른다');
     await tester.tapAt(rectOf(tester, 'om-opp-3').center);
     await tester.pump(const Duration(milliseconds: 200));
-    expect(find.text('이 카드 뽑기'), findsOneWidget);
-    expect(find.text('한 번 더 누르거나 아래 버튼으로 뽑아요'), findsOneWidget);
+    expect(mainButton(tester).onPressed, isNotNull);
+    expect(find.text('이 카드로 정했어요'), findsOneWidget);
   });
 
   testWidgets(
@@ -233,7 +243,7 @@ void main() {
       expect(find.textContaining('뺏겼어요'), findsNothing);
       expect(find.byKey(const ValueKey('om-fx-matched')), findsOneWidget);
       await run(tester);
-      expect(find.text('3쌍'), findsOneWidget);
+      expect(pile(3), findsOneWidget);
       expect(find.byKey(const ValueKey('om-fx-drawn')), findsNothing);
       expect(find.text('민지가 내 카드를 고르는 중…'), findsOneWidget);
     },
@@ -350,11 +360,11 @@ void main() {
       ),
     );
     await run(tester, 1200);
-    expect(find.text('조커를 피했어요!'), findsOneWidget);
+    expect(find.text('도둑을 잡았어요!'), findsOneWidget);
     expect(find.text('마지막 조커는 민지에게 남았어요'), findsOneWidget);
     expect(find.text('이번 방 전적'), findsOneWidget);
-    expect(find.text('조커: 민지'), findsOneWidget);
-    await tester.tap(find.text('한 판 더!'));
+    expect(find.text('민지의 마지막 손패'), findsOneWidget);
+    await tester.tap(find.text('재대결'));
     await tester.pump(const Duration(milliseconds: 200));
     expect(socket.restartWaiting, isTrue);
     expect(find.text('상대의 수락을 기다리는 중…'), findsOneWidget);
@@ -363,7 +373,7 @@ void main() {
     c.handleState(state(gameId: 'g2', drawCount: 0));
     await run(tester);
     expect(socket.restartWaiting, isFalse);
-    expect(find.text('조커를 피했어요!'), findsNothing);
+    expect(find.text('도둑을 잡았어요!'), findsNothing);
   });
 
   testWidgets('result overlay: losing with the joker', (tester) async {

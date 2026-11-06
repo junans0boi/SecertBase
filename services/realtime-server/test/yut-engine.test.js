@@ -304,19 +304,19 @@ test('a landing move resets every opponent piece on the landing square', () => {
   ]);
 });
 
-test('resolveCapture rolls defense once for the whole stack and caps it at 10%', () => {
+test('resolveCapture rolls defense once for the whole stack and caps it (≤10%)', () => {
   const opponentPieces = [
     { id: 0, position: 3, lastPos: 2, finished: false },
     { id: 1, position: 3, lastPos: 2, finished: false },
   ];
   const rolls = [];
-  // 100%를 달라고 해도 10%까지만: 0.09(=9) 막힘, 0.11(=11) 잡힘.
-  const blocked = resolveCapture(3, opponentPieces, { resistPct: 100, safePct: 100, random: () => { rolls.push(0.09); return 0.09; } });
+  // 100%를 달라고 해도 상한(9%)까지만: 0.08 막힘, 0.10 잡힘.
+  const blocked = resolveCapture(3, opponentPieces, { resistPct: 100, safePct: 100, random: () => { rolls.push(0.08); return 0.08; } });
   assert.equal(rolls.length, 1, 'one roll, not one per piece or per item');
   assert.deepEqual(blocked.capturedPieces, []);
   assert.deepEqual(blocked.blockedPieces.map((piece) => piece.id), [0, 1]);
   assert.deepEqual(opponentPieces.map((piece) => piece.position), [3, 3]);
-  const caught = resolveCapture(3, opponentPieces, { resistPct: 100, safePct: 100, random: () => 0.11 });
+  const caught = resolveCapture(3, opponentPieces, { resistPct: 100, safePct: 100, random: () => 0.1 });
   assert.deepEqual(caught.capturedPieces.map((piece) => piece.id), [0, 1]);
 });
 
@@ -437,7 +437,7 @@ const seeded = (seed) => () => {
 };
 const queue = (values) => { let i = 0; return () => values[i++] ?? 0.99; };
 const MAX_ITEMS = {
-  yut_control_pct: 15, yut_mo_rate_pct: 8, yut_overturn_pct: 10, yut_backdo_bonus_pct: 25,
+  yut_control_pct: 15, yut_mo_rate_pct: 8, yut_overturn_pct: 10, yut_backdo_bonus_pct: 25, yut_backdo_shield_pct: 25,
   piece_catch_resist_pct: 15, piece_safe_zone_pct: 15,
   yut_win_coin_pct: 15, piece_catch_coin_bonus: 25, yut_catch_bonus: 300,
 };
@@ -479,12 +479,14 @@ test('sticks always match the result over many boosted throws', () => {
   assert.equal(raw.result, YUT_RESULTS.GEOL, '5% roll is above the capped control chance');
 });
 
-test('throw item effects are summed under one cap; defense is capped at 10%', () => {
+test('throw-raising effects are summed under one cap; every other effect has its own cap', () => {
   const fx = Yut.yutItemEffects(MAX_ITEMS);
-  const throwSum = fx.controlPct + fx.moRatePct + fx.overturnPct + fx.backdoBonusPct;
+  const throwSum = fx.controlPct + fx.moRatePct + fx.overturnPct;
   assert.ok(throwSum <= Yut.THROW_ITEM_CAP_PCT + 1e-9, `sum ${throwSum}`);
   assert.ok(fx.controlPct > fx.moRatePct, 'shares keep their proportions');
   assert.equal(fx.defensePct, Yut.DEFENSE_CAP_PCT);
+  assert.equal(fx.backdoBonusPct, Yut.BACKDO_BONUS_CAP_PCT);
+  assert.equal(fx.calmPct, Yut.CALM_CAP_PCT);
   const small = Yut.yutItemEffects({ yut_control_pct: 1, piece_safe_zone_pct: 3 });
   assert.equal(small.controlPct, 1, 'small loadouts are untouched');
   assert.equal(small.defensePct, 3);
@@ -647,4 +649,99 @@ test('serializeYutState exposes legal moves for the current player and the deadl
   assert.equal(view.serverNow, 100);
   assert.equal(view.turnDeadline, 123);
   assert.deepEqual(view.players, ['A', 'B']);
+});
+
+test('serializeYutState exposes the capped, effective item effects of both players', () => {
+  const g = game({ effects: { A: Yut.yutItemEffects(MAX_ITEMS), B: Yut.yutItemEffects({ yut_control_pct: 1 }) } });
+  const view = Yut.serializeYutState(g);
+  const sum = (e) => e.controlPct + e.moRatePct + e.overturnPct;
+  assert.ok(sum(view.effects.A) <= Yut.THROW_ITEM_CAP_PCT + 1e-9, 'shown numbers are the capped ones, not the raw item stats');
+  assert.equal(view.effects.A.defensePct, Yut.DEFENSE_CAP_PCT);
+  assert.equal(view.effects.B.controlPct, 1);
+  assert.equal(view.effects.B.defensePct, 0);
+});
+
+// ── 캐릭터 능력치(티켓 27) ────────────────────────────────────────────────────
+
+test('each character has five 1–5 stats with the same total, and a distinct identity', () => {
+  const ids = Object.keys(Yut.YUT_CHARACTER_STATS);
+  assert.deepEqual(ids.sort(), ['honggilldong', 'miho', 'nolbu']);
+  const keys = new Set();
+  for (const id of ids) {
+    const stats = Yut.YUT_CHARACTER_STATS[id];
+    assert.deepEqual(Object.keys(stats).sort(), [...Yut.YUT_STAT_KEYS].sort());
+    for (const v of Object.values(stats)) assert.ok(Number.isInteger(v) && v >= 1 && v <= 5, `${id} ${v}`);
+    assert.equal(Object.values(stats).reduce((a, b) => a + b, 0), 15, `${id} total keeps characters fair`);
+    keys.add(JSON.stringify(stats));
+  }
+  assert.equal(keys.size, 3, 'no two characters share the same stat line');
+  // 정체성: 놀부는 힘, 미호는 행운, 홍길동은 침착·방어가 가장 높다.
+  const best = (k) => ids.reduce((a, b) => (Yut.YUT_CHARACTER_STATS[b][k] > Yut.YUT_CHARACTER_STATS[a][k] ? b : a));
+  assert.equal(best('power'), 'nolbu');
+  assert.equal(best('luck'), 'miho');
+  assert.equal(best('calm'), 'honggilldong');
+  assert.equal(best('guard'), 'honggilldong');
+  assert.deepEqual(Yut.yutCharacterStats('nobody'), { power: 3, calm: 3, guard: 3, luck: 3, momentum: 3 });
+});
+
+test('stat levels become effects: level 1 gives nothing, level 5 the maximum', () => {
+  const none = Yut.characterEffects('nolbu'); // 침착 1
+  assert.equal(none.calmPct, 0);
+  const hong = Yut.characterEffects('honggilldong');
+  assert.equal(hong.calmPct, 12);
+  assert.equal(hong.defensePct, 4.5);
+  const miho = Yut.characterEffects('miho'); // 행운 5
+  assert.equal(miho.backdoBonusPct, 8);
+  assert.equal(miho.winCoinPct, 4);
+  const nolbu = Yut.characterEffects('nolbu'); // 힘 5
+  assert.ok(nolbu.controlPct > hong.controlPct);
+});
+
+test('character stats and skin effects share the caps', () => {
+  const nolbuWithBolt = Yut.yutItemEffects({ yut_control_pct: 15, yut_overturn_pct: 10 }, 'nolbu');
+  assert.ok(nolbuWithBolt.controlPct + nolbuWithBolt.overturnPct + nolbuWithBolt.moRatePct <= Yut.THROW_ITEM_CAP_PCT + 1e-9);
+  const honggil = Yut.yutItemEffects({ piece_catch_resist_pct: 15 }, 'honggilldong');
+  assert.equal(honggil.defensePct, Yut.DEFENSE_CAP_PCT);
+  assert.equal(Yut.yutItemEffects({ yut_backdo_shield_pct: 25 }, 'honggilldong').calmPct, Yut.CALM_CAP_PCT);
+  // 판돈이 없으면 코인 효과는 그냥 쌓이지 않는다(상한 0).
+  const g = game({ stake: 0, effects: { A: Yut.yutItemEffects({}, 'miho'), B: Yut.yutItemEffects({}, 'nolbu') } });
+  Yut.applyThrow(g, 'A', { random: queue([0.1, 0.1, 0.1, 0.1, 0.99, 0.99]) });
+  assert.equal(g.coinBonus.A ?? 0, 0);
+});
+
+test('침착: a backdo is thrown again with the character calm chance; sticks match the new result', () => {
+  const calm = { ...Yut.yutItemEffects({}), calmPct: 15 };
+  const g = game({ a: [3], effects: { A: calm, B: Yut.yutItemEffects({}) } });
+  // 첫 던지기: 빽도(표시 막대만 납작) → 침착 굴림 통과(0.1<15%) → 다시 던져 개(막대 0·2번 납작은 아님: 2개 납작).
+  const r = Yut.applyThrow(g, 'A', { random: queue([0.1, 0.9, 0.9, 0.9, /*calm*/ 0.001, 0.1, 0.1, 0.9, 0.9]) });
+  assert.equal(r.ok, true);
+  assert.equal(r.throwResult.resultName, '개');
+  assert.equal(Yut.resultFromSticks(r.throwResult.sticks), r.throwResult.result);
+  assert.deepEqual(r.itemEffects, [{ player: 'A', stat: 'yut_backdo_shield_pct', amount: 0 }]);
+  // 침착 굴림에 실패하면 빽도 그대로.
+  const h = game({ a: [3], effects: { A: calm, B: Yut.yutItemEffects({}) } });
+  const r2 = Yut.applyThrow(h, 'A', { random: queue([0.1, 0.9, 0.9, 0.9, 0.9]) });
+  assert.equal(r2.throwResult.resultName, '빽도');
+  assert.deepEqual(r2.itemEffects, []);
+  // 침착이 없으면 굴리지 않는다.
+  const k = game({ a: [3] });
+  assert.equal(Yut.applyThrow(k, 'A', { random: queue([0.1, 0.9, 0.9, 0.9]) }).throwResult.resultName, '빽도');
+});
+
+test('state payload carries both characters stat lines', () => {
+  const g = game({});
+  g.characters = { A: 'miho', B: 'nolbu' };
+  const view = Yut.serializeYutState(g);
+  assert.deepEqual(view.characterStats.A, Yut.YUT_CHARACTER_STATS.miho);
+  assert.deepEqual(view.characterStats.B, Yut.YUT_CHARACTER_STATS.nolbu);
+  assert.notDeepEqual(view.characterStats.A, view.characterStats.B);
+});
+
+test('serializeYutState exposes the day/night theme and defaults old games to day', () => {
+  const g = game({});
+  assert.equal(Yut.serializeYutState(g).theme, 'day');
+  g.theme = 'night';
+  assert.equal(Yut.serializeYutState(g).theme, 'night');
+  g.theme = 'weird';
+  assert.equal(Yut.serializeYutState(g).theme, 'day');
 });

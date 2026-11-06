@@ -55,11 +55,15 @@ void main() {
     expect(lobbyOptionsFor('catch').single.defaultValue, 6);
     expect(lobbyOptionsFor('blackjack'), isEmpty);
     final telepathy = lobbyOptionsFor('telepathy');
-    expect(telepathy.map((d) => d.key), ['rounds', 'spicy']);
+    expect(telepathy.map((d) => d.key), ['rounds', 'heat']);
     expect(telepathy.first.defaultValue, 10);
     expect(telepathy.first.choices.map((c) => c.value), [10, 5, 15]);
-    expect(telepathy.last.defaultValue, 'off');
-    expect(telepathy.last.choices.map((c) => c.value), ['off', 'on']);
+    expect(telepathy.last.defaultValue, 'mild');
+    expect(telepathy.last.choices.map((c) => c.value), [
+      'mild',
+      'spicy',
+      'nuclear',
+    ]);
   });
 
   testWidgets('host sees the penalty cell choice and can switch to 6', (
@@ -85,6 +89,31 @@ void main() {
     await tester.tap(find.text('3칸'));
     await tester.pump();
     expect(socket.lobbyOptions['cells'], 6, reason: '상대는 바꿀 수 없다');
+  });
+
+  testWidgets('penalty lobby: host start button, guest waits, cells chip', (
+    tester,
+  ) async {
+    await pumpLobby(tester, gameType: 'penalty', host: true);
+    expect(find.text('게임 시작'), findsOneWidget);
+    expect(find.text('3칸'), findsWidgets, reason: 'title chip + option card');
+    expect(find.byType(LobbyOptionPicker), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+
+    await pumpLobby(
+      tester,
+      gameType: 'penalty',
+      host: false,
+      options: {'cells': 6},
+    );
+    expect(find.text('방장이 시작할 때까지 기다려요'), findsOneWidget);
+    expect(find.text('게임 시작'), findsNothing);
+    expect(find.text('정밀'), findsOneWidget);
+  });
+
+  testWidgets('other games keep the shared option picker', (tester) async {
+    await pumpLobby(tester, gameType: 'pirate', host: true);
+    expect(find.byType(LobbyOptionPicker), findsOneWidget);
   });
 
   testWidgets('games without options show no picker', (tester) async {

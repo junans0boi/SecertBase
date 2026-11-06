@@ -20,6 +20,8 @@ const Map<String, String> kTelepathyCategoryLabels = {
   'romance': '연애·로맨스',
   'whatif': '만약에',
   'spicy': '살짝 매운맛',
+  'sensual': '은근한 분위기',
+  'nuclear': '19+ 은밀한 질문',
 };
 
 class TelepathyQuestion {
@@ -31,6 +33,9 @@ class TelepathyQuestion {
   final String emojiB;
   final bool spicy;
 
+  /// mild | spicy | nuclear(19+)
+  final String heat;
+
   const TelepathyQuestion({
     required this.id,
     required this.cat,
@@ -39,6 +44,7 @@ class TelepathyQuestion {
     required this.emojiA,
     required this.emojiB,
     this.spicy = false,
+    this.heat = 'mild',
   });
 
   static TelepathyQuestion? fromMap(Object? v) {
@@ -54,6 +60,7 @@ class TelepathyQuestion {
       emojiA: '${v['emojiA'] ?? '✨'}',
       emojiB: '${v['emojiB'] ?? '✨'}',
       spicy: v['spicy'] == true,
+      heat: '${v['heat'] ?? 'mild'}',
     );
   }
 
@@ -190,7 +197,9 @@ class TelepathyState {
   final List<String> players;
   final int round;
   final int rounds;
-  final bool spicy;
+
+  /// 질문 수위: mild(순한맛) | spicy(살짝 매운맛) | nuclear(19+).
+  final String heat;
   final TelepathyQuestion? question;
   final Map<String, bool> picked;
   final Map<String, int> timeouts;
@@ -214,7 +223,7 @@ class TelepathyState {
     required this.players,
     required this.round,
     required this.rounds,
-    required this.spicy,
+    required this.heat,
     required this.question,
     required this.picked,
     required this.timeouts,
@@ -242,7 +251,7 @@ class TelepathyState {
       players: ((m['players'] as List?) ?? const []).map((e) => '$e').toList(),
       round: (m['round'] as num?)?.toInt() ?? 1,
       rounds: (m['rounds'] as num?)?.toInt() ?? 10,
-      spicy: m['spicy'] == true,
+      heat: '${m['heat'] ?? 'mild'}',
       question: TelepathyQuestion.fromMap(m['question']),
       picked: _boolMap(m['picked']),
       timeouts: _intMap(m['timeouts']),
@@ -267,6 +276,9 @@ class TelepathyState {
 
   bool get playing => status == 'playing';
   bool get finished => status == 'finished';
+
+  /// 19+ 판인가(화면에 작은 표시를 단다).
+  bool get adultOnly => heat == 'nuclear';
 
   String? opponentOf(String? me) {
     for (final p in players) {

@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' show PointMode;
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -16,154 +17,55 @@ Suit? suitFrom(String? raw) => switch (raw) {
 
 bool isRedSuit(Suit s) => s == Suit.heart || s == Suit.diamond;
 
-/// 무늬 경로(1×1 상자 기준). [size]로 늘려 쓴다.
+/// 무늬 경로. 24×24 도안을 [box]에 맞춰 늘린다.
 Path suitPath(Suit suit, Rect box) {
   final p = Path();
-  final x = box.left, y = box.top, w = box.width, h = box.height;
-  Offset o(double fx, double fy) => Offset(x + fx * w, y + fy * h);
   switch (suit) {
     case Suit.heart:
-      p.moveTo(o(0.5, 0.95).dx, o(0.5, 0.95).dy);
-      p.cubicTo(
-        o(0.1, 0.62).dx,
-        o(0.1, 0.62).dy,
-        o(-0.08, 0.28).dx,
-        o(-0.08, 0.28).dy,
-        o(0.24, 0.1).dx,
-        o(0.24, 0.1).dy,
-      );
-      p.cubicTo(
-        o(0.38, 0.03).dx,
-        o(0.38, 0.03).dy,
-        o(0.48, 0.12).dx,
-        o(0.48, 0.12).dy,
-        o(0.5, 0.24).dx,
-        o(0.5, 0.24).dy,
-      );
-      p.cubicTo(
-        o(0.52, 0.12).dx,
-        o(0.52, 0.12).dy,
-        o(0.62, 0.03).dx,
-        o(0.62, 0.03).dy,
-        o(0.76, 0.1).dx,
-        o(0.76, 0.1).dy,
-      );
-      p.cubicTo(
-        o(1.08, 0.28).dx,
-        o(1.08, 0.28).dy,
-        o(0.9, 0.62).dx,
-        o(0.9, 0.62).dy,
-        o(0.5, 0.95).dx,
-        o(0.5, 0.95).dy,
-      );
-      p.close();
-    case Suit.diamond:
-      p.moveTo(o(0.5, 0.02).dx, o(0.5, 0.02).dy);
-      p.quadraticBezierTo(
-        o(0.68, 0.32).dx,
-        o(0.68, 0.32).dy,
-        o(0.92, 0.5).dx,
-        o(0.92, 0.5).dy,
-      );
-      p.quadraticBezierTo(
-        o(0.68, 0.68).dx,
-        o(0.68, 0.68).dy,
-        o(0.5, 0.98).dx,
-        o(0.5, 0.98).dy,
-      );
-      p.quadraticBezierTo(
-        o(0.32, 0.68).dx,
-        o(0.32, 0.68).dy,
-        o(0.08, 0.5).dx,
-        o(0.08, 0.5).dy,
-      );
-      p.quadraticBezierTo(
-        o(0.32, 0.32).dx,
-        o(0.32, 0.32).dy,
-        o(0.5, 0.02).dx,
-        o(0.5, 0.02).dy,
-      );
-      p.close();
-    case Suit.spade:
-      p.moveTo(o(0.5, 0.03).dx, o(0.5, 0.03).dy);
-      p.cubicTo(
-        o(0.68, 0.24).dx,
-        o(0.68, 0.24).dy,
-        o(1.06, 0.42).dx,
-        o(1.06, 0.42).dy,
-        o(0.86, 0.66).dx,
-        o(0.86, 0.66).dy,
-      );
-      p.cubicTo(
-        o(0.74, 0.8).dx,
-        o(0.74, 0.8).dy,
-        o(0.58, 0.74).dx,
-        o(0.58, 0.74).dy,
-        o(0.53, 0.66).dx,
-        o(0.53, 0.66).dy,
-      );
-      p.quadraticBezierTo(
-        o(0.56, 0.86).dx,
-        o(0.56, 0.86).dy,
-        o(0.7, 0.97).dx,
-        o(0.7, 0.97).dy,
-      );
-      p.lineTo(o(0.3, 0.97).dx, o(0.3, 0.97).dy);
-      p.quadraticBezierTo(
-        o(0.44, 0.86).dx,
-        o(0.44, 0.86).dy,
-        o(0.47, 0.66).dx,
-        o(0.47, 0.66).dy,
-      );
-      p.cubicTo(
-        o(0.42, 0.74).dx,
-        o(0.42, 0.74).dy,
-        o(0.26, 0.8).dx,
-        o(0.26, 0.8).dy,
-        o(0.14, 0.66).dx,
-        o(0.14, 0.66).dy,
-      );
-      p.cubicTo(
-        o(-0.06, 0.42).dx,
-        o(-0.06, 0.42).dy,
-        o(0.32, 0.24).dx,
-        o(0.32, 0.24).dy,
-        o(0.5, 0.03).dx,
-        o(0.5, 0.03).dy,
-      );
-      p.close();
-    case Suit.club:
-      p.addOval(Rect.fromCircle(center: o(0.5, 0.27), radius: w * 0.21));
-      p.addOval(Rect.fromCircle(center: o(0.26, 0.56), radius: w * 0.21));
-      p.addOval(Rect.fromCircle(center: o(0.74, 0.56), radius: w * 0.21));
-      final stem = Path()
-        ..moveTo(o(0.46, 0.5).dx, o(0.46, 0.5).dy)
-        ..lineTo(o(0.54, 0.5).dx, o(0.54, 0.5).dy)
-        ..quadraticBezierTo(
-          o(0.56, 0.84).dx,
-          o(0.56, 0.84).dy,
-          o(0.72, 0.97).dx,
-          o(0.72, 0.97).dy,
-        )
-        ..lineTo(o(0.28, 0.97).dx, o(0.28, 0.97).dy)
-        ..quadraticBezierTo(
-          o(0.44, 0.84).dx,
-          o(0.44, 0.84).dy,
-          o(0.46, 0.5).dx,
-          o(0.46, 0.5).dy,
-        )
+      p
+        ..moveTo(12, 21.2)
+        ..cubicTo(5.2, 15.8, 2.6, 12.3, 2.6, 8.5)
+        ..cubicTo(2.6, 5.6, 4.7, 3.6, 7.2, 3.6)
+        ..relativeCubicTo(1.9, 0, 3.8, 1.1, 4.8, 3)
+        ..relativeCubicTo(1, -1.9, 2.9, -3, 4.8, -3)
+        ..relativeCubicTo(2.5, 0, 4.6, 2, 4.6, 4.9)
+        ..relativeCubicTo(0, 3.8, -2.6, 7.3, -9.4, 12.7)
         ..close();
-      p.addPath(stem, Offset.zero);
-      p.addRect(
-        Rect.fromLTRB(
-          o(0.42, 0.36).dx,
-          o(0.42, 0.36).dy,
-          o(0.58, 0.62).dx,
-          o(0.58, 0.62).dy,
-        ),
-      );
+    case Suit.diamond:
+      p
+        ..moveTo(12, 2.4)
+        ..relativeCubicTo(1.9, 3.6, 5.1, 6.8, 8.6, 9.6)
+        ..relativeCubicTo(-3.5, 2.8, -6.7, 6, -8.6, 9.6)
+        ..relativeCubicTo(-1.9, -3.6, -5.1, -6.8, -8.6, -9.6)
+        ..cubicTo(6.9, 9.2, 10.1, 6, 12, 2.4)
+        ..close();
+    case Suit.spade:
+      p
+        ..moveTo(12, 2.5)
+        ..cubicTo(8, 6.8, 3, 9.9, 3, 14.3)
+        ..relativeCubicTo(0, 2.6, 2, 4.4, 4.4, 4.4)
+        ..relativeCubicTo(1.7, 0, 3.1, -0.7, 3.9, -2)
+        ..relativeCubicTo(-0.1, 2.3, -0.9, 3.9, -2.8, 5.3)
+        ..relativeLineTo(7, 0)
+        ..relativeCubicTo(-1.9, -1.4, -2.7, -3, -2.8, -5.3)
+        ..relativeCubicTo(0.8, 1.3, 2.2, 2, 3.9, 2)
+        ..relativeCubicTo(2.4, 0, 4.4, -1.8, 4.4, -4.4)
+        ..cubicTo(21, 9.9, 16, 6.8, 12, 2.5)
+        ..close();
+    case Suit.club:
+      p
+        ..addOval(Rect.fromCircle(center: const Offset(12, 7.4), radius: 4.4))
+        ..addOval(Rect.fromCircle(center: const Offset(6.8, 14), radius: 4.4))
+        ..addOval(Rect.fromCircle(center: const Offset(17.2, 14), radius: 4.4))
+        ..moveTo(12, 11.5)
+        ..relativeLineTo(1.8, 10)
+        ..relativeLineTo(-3.6, 0)
+        ..close();
   }
-  return p;
+  final m = Matrix4.identity()
+    ..translateByDouble(box.left, box.top, 0, 1)
+    ..scaleByDouble(box.width / 24, box.height / 24, 1, 1);
+  return p.transform(m.storage);
 }
 
 /// 무늬 하나를 그리는 위젯.
@@ -200,9 +102,8 @@ class _SuitPainter extends CustomPainter {
       old.suit != suit || old.color != color;
 }
 
-const kCardRed = Color(0xFFC8243B);
-const kCardBlack = Color(0xFF1F1A24);
-const kCardIvory = Color(0xFFFFFCF4);
+const kCardRed = Color(0xFFB93A3A);
+const kCardBlack = Color(0xFF1D2B29);
 
 /// 카드 크기: 작은(손패 겹침용), 보통, 큰.
 enum CardSize { small, medium, large }
@@ -215,35 +116,89 @@ extension CardSizeDims on CardSize {
   };
 }
 
-/// 뒷면 스타일(게임 테마에 맞춤).
-@immutable
-class CardBackStyle {
-  final Color base;
-  final Color deep;
-  final Color trim;
-  final String emblem;
+/// 뒷면 무늬: 황동 사선 격자(라운지) 또는 점무늬(동화책).
+enum CardBackPattern { lattice, dots }
 
-  const CardBackStyle({
-    required this.base,
-    required this.deep,
-    required this.trim,
-    this.emblem = '♥',
+/// 카드 한 벌의 모양(앞면 종이색·글자색·뒷면). 테마마다 하나.
+@immutable
+class CardStyle {
+  final Color face;
+  final Color? faceBorder;
+  final Color red;
+  final Color black;
+  final Color shadow;
+  final double shadowBlur;
+  final double shadowDy;
+
+  final Color backBase;
+  final Color backBorder;
+  final Color backLine;
+  final Color backInner;
+  final CardBackPattern pattern;
+
+  /// 뒷면 가운데 표시: 비워 두면 열쇠 구멍.
+  final String? backMark;
+  final Color backMarkColor;
+
+  /// 표식(숨은 카드·NEW)·조커 강조색.
+  final Color accent;
+  final Color onAccent;
+
+  const CardStyle({
+    required this.face,
+    this.faceBorder,
+    required this.red,
+    required this.black,
+    required this.shadow,
+    required this.shadowBlur,
+    required this.shadowDy,
+    required this.backBase,
+    required this.backBorder,
+    required this.backLine,
+    required this.backInner,
+    required this.pattern,
+    this.backMark,
+    required this.backMarkColor,
+    required this.accent,
+    required this.onAccent,
   });
 
-  static const burgundy = CardBackStyle(
-    base: Color(0xFF8E2C48),
-    deep: Color(0xFF5C1630),
-    trim: Color(0xFFE2BC6A),
+  /// 블랙잭: 상아 카드 + 짙은 에메랄드 뒷면에 황동 격자와 "?".
+  static const lounge = CardStyle(
+    face: Color(0xFFFBF6EA),
+    red: Color(0xFFB93A3A),
+    black: Color(0xFF1D2B29),
+    shadow: Color(0x47000000),
+    shadowBlur: 12,
+    shadowDy: 5,
+    backBase: Color(0xFF0A3830),
+    backBorder: Color(0x8CE2BC6A),
+    backLine: Color(0x21E2BC6A),
+    backInner: Color(0x66E2BC6A),
+    pattern: CardBackPattern.lattice,
+    backMark: '?',
+    backMarkColor: Color(0xFFE2BC6A),
+    accent: Color(0xFFD9A441),
+    onAccent: Color(0xFF2A1E05),
   );
-  static const emerald = CardBackStyle(
-    base: Color(0xFF15604F),
-    deep: Color(0xFF0A3A30),
-    trim: Color(0xFFE2BC6A),
-  );
-  static const plum = CardBackStyle(
-    base: Color(0xFF5A2A7A),
-    deep: Color(0xFF32124A),
-    trim: Color(0xFFE8C27A),
+
+  /// 도둑잡기: 크림 카드 + 베리색 뒷면에 점무늬와 열쇠 구멍.
+  static const storybook = CardStyle(
+    face: Color(0xFFFFFDF7),
+    faceBorder: Color(0x333B2430),
+    red: Color(0xFFA23B55),
+    black: Color(0xFF3B2430),
+    shadow: Color(0x243B2430),
+    shadowBlur: 10,
+    shadowDy: 4,
+    backBase: Color(0xFFA23B55),
+    backBorder: Color(0xFF7E2A40),
+    backLine: Color(0x38FFF6E6),
+    backInner: Color(0x8CFFF6E6),
+    pattern: CardBackPattern.dots,
+    backMarkColor: Color(0xFFFFF6E6),
+    accent: Color(0xFFA23B55),
+    onAccent: Colors.white,
   );
 }
 
@@ -254,9 +209,11 @@ class PlayingCard extends StatelessWidget {
   final bool faceUp;
   final CardSize size;
   final double? width;
-  final CardBackStyle back;
+  final CardStyle style;
   final bool highlight;
   final bool dimmed;
+
+  /// 위쪽 가운데에 다는 작은 알약("숨은 카드", "NEW").
   final String? badge;
   final Color highlightColor;
 
@@ -267,11 +224,11 @@ class PlayingCard extends StatelessWidget {
     this.faceUp = true,
     this.size = CardSize.medium,
     this.width,
-    this.back = CardBackStyle.burgundy,
+    this.style = CardStyle.lounge,
     this.highlight = false,
     this.dimmed = false,
     this.badge,
-    this.highlightColor = const Color(0xFFFFD36E),
+    this.highlightColor = const Color(0xFFD9A441),
   });
 
   /// 서버 카드 맵에서 만든다(`{suit, rank}`; 뒷면은 null).
@@ -280,10 +237,11 @@ class PlayingCard extends StatelessWidget {
     Key? key,
     CardSize size = CardSize.medium,
     double? width,
-    CardBackStyle back = CardBackStyle.burgundy,
+    CardStyle style = CardStyle.lounge,
     bool highlight = false,
     bool dimmed = false,
     String? badge,
+    Color highlightColor = const Color(0xFFD9A441),
   }) {
     final rank = card?['rank']?.toString();
     final suit = card?['suit']?.toString();
@@ -298,10 +256,11 @@ class PlayingCard extends StatelessWidget {
       faceUp: !hidden,
       size: size,
       width: width,
-      back: back,
+      style: style,
       highlight: highlight,
       dimmed: dimmed,
       badge: badge,
+      highlightColor: highlightColor,
     );
   }
 
@@ -325,70 +284,75 @@ class PlayingCard extends StatelessWidget {
     final base = size.dims;
     final w = width ?? base.width;
     final h = w * base.height / base.width;
+    final s = style;
+    final radius = w * 0.14;
+    final Widget content = !faceUp
+        ? _CardBack(style: s, w: w, h: h)
+        : isJoker
+        ? _JokerFace(style: s, w: w, h: h)
+        : _CardFace(
+            style: s,
+            w: w,
+            h: h,
+            suit: suitFrom(suit),
+            rank: rank ?? '',
+          );
     return Semantics(
       label: _label,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
+      excludeSemantics: true,
+      child: SizedBox(
         width: w,
         height: h,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(w * 0.11),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.28),
-              blurRadius: w * 0.12,
-              offset: Offset(0, w * 0.05),
-            ),
-            if (highlight)
-              BoxShadow(
-                color: highlightColor.withValues(alpha: 0.85),
-                blurRadius: w * 0.28,
-                spreadRadius: w * 0.02,
-              ),
-          ],
-        ),
         child: Stack(
           clipBehavior: Clip.none,
           children: [
             Positioned.fill(
               child: Opacity(
                 opacity: dimmed ? 0.5 : 1,
-                child: CustomPaint(
-                  painter: faceUp
-                      ? _CardFacePainter(
-                          suit: suitFrom(suit),
-                          rank: rank ?? '',
-                          joker: isJoker,
-                        )
-                      : _CardBackPainter(back),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(radius),
+                    boxShadow: [
+                      BoxShadow(
+                        color: s.shadow,
+                        blurRadius: s.shadowBlur * w / 66,
+                        offset: Offset(0, s.shadowDy * w / 66),
+                      ),
+                      if (highlight)
+                        BoxShadow(color: highlightColor, spreadRadius: 1.5),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(radius),
+                    child: content,
+                  ),
                 ),
               ),
             ),
             if (badge != null)
               Positioned(
-                top: -h * 0.08,
-                right: -w * 0.1,
-                child: Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: w * 0.08,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: highlightColor,
-                    borderRadius: BorderRadius.circular(999),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.25),
-                        blurRadius: 4,
+                top: -10,
+                left: -20,
+                right: -20,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: s.accent,
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: Text(
+                      badge!,
+                      maxLines: 1,
+                      style: GoogleFonts.notoSansKr(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: s.onAccent,
+                        height: 1,
                       ),
-                    ],
-                  ),
-                  child: Text(
-                    badge!,
-                    style: GoogleFonts.notoSans(
-                      fontSize: math.max(9, w * 0.16),
-                      fontWeight: FontWeight.w900,
-                      color: const Color(0xFF3A2400),
                     ),
                   ),
                 ),
@@ -400,414 +364,335 @@ class PlayingCard extends StatelessWidget {
   }
 }
 
-class _CardFacePainter extends CustomPainter {
+class _CardFace extends StatelessWidget {
+  final CardStyle style;
+  final double w;
+  final double h;
   final Suit? suit;
   final String rank;
-  final bool joker;
 
-  _CardFacePainter({
+  const _CardFace({
+    required this.style,
+    required this.w,
+    required this.h,
     required this.suit,
     required this.rank,
-    required this.joker,
   });
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width, h = size.height;
-    final r = RRect.fromRectAndRadius(
-      Offset.zero & size,
-      Radius.circular(w * 0.11),
-    );
-    canvas.drawRRect(
-      r,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFFFFEF9), kCardIvory, Color(0xFFF5EEDC)],
-        ).createShader(Offset.zero & size),
-    );
-    canvas.drawRRect(
-      r.deflate(w * 0.045),
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = math.max(0.6, w * 0.012)
-        ..color = const Color(0x66C9A55A),
-    );
-    canvas.drawRRect(
-      r,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 0.8
-        ..color = const Color(0x22000000),
-    );
-    if (joker) {
-      _joker(canvas, size);
-      return;
-    }
-    final s = suit;
-    if (s == null) return;
-    final color = isRedSuit(s) ? kCardRed : kCardBlack;
-    final paint = Paint()..color = color;
-    // 모서리 표기(왼쪽 위 + 180° 회전한 오른쪽 아래).
-    void corner() {
-      final tp = TextPainter(
-        text: TextSpan(
-          text: rank,
-          style: GoogleFonts.gowunBatang(
-            fontSize: w * (rank.length > 1 ? 0.24 : 0.27),
-            fontWeight: FontWeight.w700,
-            color: color,
-            height: 1,
+  Widget build(BuildContext context) {
+    final s = style;
+    final color = suit != null && isRedSuit(suit!) ? s.red : s.black;
+    final small = w * 0.227;
+    final big = w * 0.455;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: s.face,
+        border: s.faceBorder == null
+            ? null
+            : Border.all(color: s.faceBorder!, width: 1),
+        borderRadius: BorderRadius.circular(w * 0.14),
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            left: w * 0.12,
+            top: h * 0.064,
+            child: Text(
+              rank,
+              maxLines: 1,
+              softWrap: false,
+              style: GoogleFonts.gowunBatang(
+                fontSize: w * 0.318,
+                fontWeight: FontWeight.w700,
+                color: color,
+                height: 1,
+              ),
+            ),
           ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      final cx = w * 0.16;
-      tp.paint(canvas, Offset(cx - tp.width / 2, h * 0.06));
-      final sw = w * 0.17;
-      canvas.drawPath(
-        suitPath(
-          s,
-          Rect.fromLTWH(cx - sw / 2, h * 0.06 + tp.height + h * 0.01, sw, sw),
-        ),
-        paint,
-      );
-    }
-
-    corner();
-    canvas.save();
-    canvas.translate(w, h);
-    canvas.rotate(math.pi);
-    corner();
-    canvas.restore();
-
-    final face = const {'J', 'Q', 'K'}.contains(rank);
-    if (face) {
-      _faceCard(canvas, size, s, color);
-    } else if (rank == 'A' || w < 56) {
-      final big = w * (rank == 'A' ? 0.5 : 0.42);
-      canvas.drawPath(
-        suitPath(
-          s,
-          Rect.fromCenter(
-            center: Offset(w / 2, h / 2),
-            width: big,
-            height: big,
-          ),
-        ),
-        paint,
-      );
-    } else {
-      _pips(canvas, size, s, paint);
-    }
-  }
-
-  void _pips(Canvas canvas, Size size, Suit s, Paint paint) {
-    final n = int.tryParse(rank) ?? 0;
-    final w = size.width, h = size.height;
-    final l = w * 0.34, c = w * 0.5, r = w * 0.66;
-    final t = h * 0.22, b = h * 0.78, m = h * 0.5;
-    final q1 = h * 0.36, q3 = h * 0.64;
-    final layouts = <int, List<Offset>>{
-      2: [Offset(c, t), Offset(c, b)],
-      3: [Offset(c, t), Offset(c, m), Offset(c, b)],
-      4: [Offset(l, t), Offset(r, t), Offset(l, b), Offset(r, b)],
-      5: [Offset(l, t), Offset(r, t), Offset(c, m), Offset(l, b), Offset(r, b)],
-      6: [
-        Offset(l, t),
-        Offset(r, t),
-        Offset(l, m),
-        Offset(r, m),
-        Offset(l, b),
-        Offset(r, b),
-      ],
-      7: [
-        Offset(l, t),
-        Offset(r, t),
-        Offset(c, q1),
-        Offset(l, m),
-        Offset(r, m),
-        Offset(l, b),
-        Offset(r, b),
-      ],
-      8: [
-        Offset(l, t),
-        Offset(r, t),
-        Offset(c, q1),
-        Offset(l, m),
-        Offset(r, m),
-        Offset(c, q3),
-        Offset(l, b),
-        Offset(r, b),
-      ],
-      9: [
-        Offset(l, t),
-        Offset(r, t),
-        Offset(l, q1 + h * 0.02),
-        Offset(r, q1 + h * 0.02),
-        Offset(c, m),
-        Offset(l, q3 - h * 0.02),
-        Offset(r, q3 - h * 0.02),
-        Offset(l, b),
-        Offset(r, b),
-      ],
-      10: [
-        Offset(l, t),
-        Offset(r, t),
-        Offset(c, h * 0.31),
-        Offset(l, q1 + h * 0.04),
-        Offset(r, q1 + h * 0.04),
-        Offset(l, q3 - h * 0.04),
-        Offset(r, q3 - h * 0.04),
-        Offset(c, h * 0.69),
-        Offset(l, b),
-        Offset(r, b),
-      ],
-    };
-    final pts = layouts[n] ?? [Offset(c, m)];
-    final ps = w * (n >= 9 ? 0.17 : 0.2);
-    for (final p in pts) {
-      final flip = p.dy > m + 1;
-      canvas.save();
-      canvas.translate(p.dx, p.dy);
-      if (flip) canvas.rotate(math.pi);
-      canvas.drawPath(
-        suitPath(
-          s,
-          Rect.fromCenter(center: Offset.zero, width: ps, height: ps),
-        ),
-        paint,
-      );
-      canvas.restore();
-    }
-  }
-
-  void _faceCard(Canvas canvas, Size size, Suit s, Color color) {
-    final w = size.width, h = size.height;
-    final frame = RRect.fromRectAndRadius(
-      Rect.fromLTRB(w * 0.27, h * 0.2, w * 0.73, h * 0.8),
-      Radius.circular(w * 0.06),
-    );
-    canvas.drawRRect(
-      frame,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            color.withValues(alpha: 0.10),
-            const Color(0x33E2BC6A),
-            color.withValues(alpha: 0.10),
+          if (suit != null) ...[
+            Positioned(
+              left: w * 0.12,
+              top: h * 0.32,
+              child: SuitIcon(suit: suit!, size: small, color: color),
+            ),
+            Positioned(
+              right: w * 0.106,
+              bottom: h * 0.074,
+              child: SuitIcon(suit: suit!, size: big, color: color),
+            ),
           ],
-        ).createShader(frame.outerRect),
-    );
-    canvas.drawRRect(
-      frame,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = math.max(0.8, w * 0.015)
-        ..color = const Color(0xAAC9A55A),
-    );
-    // 왕관 장식.
-    final cw = w * 0.3, top = h * 0.27;
-    final crown = Path()
-      ..moveTo(w / 2 - cw / 2, top + cw * 0.5)
-      ..lineTo(w / 2 - cw / 2, top + cw * 0.12)
-      ..lineTo(w / 2 - cw / 4, top + cw * 0.32)
-      ..lineTo(w / 2, top)
-      ..lineTo(w / 2 + cw / 4, top + cw * 0.32)
-      ..lineTo(w / 2 + cw / 2, top + cw * 0.12)
-      ..lineTo(w / 2 + cw / 2, top + cw * 0.5)
-      ..close();
-    canvas.drawPath(crown, Paint()..color = const Color(0xFFD9A441));
-    final tp = TextPainter(
-      text: TextSpan(
-        text: rank,
-        style: GoogleFonts.gowunBatang(
-          fontSize: w * 0.36,
-          fontWeight: FontWeight.w700,
-          color: color,
-          height: 1,
-        ),
+        ],
       ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    tp.paint(canvas, Offset(w / 2 - tp.width / 2, h * 0.47));
-    final ss = w * 0.14;
-    canvas.drawPath(
-      suitPath(
-        s,
-        Rect.fromCenter(center: Offset(w / 2, h * 0.72), width: ss, height: ss),
-      ),
-      Paint()..color = color,
     );
   }
-
-  void _joker(Canvas canvas, Size size) {
-    final w = size.width, h = size.height;
-    final c = Offset(w / 2, h * 0.5);
-    // 광대 모자(세 갈래) + 얼굴.
-    final hat = Path()
-      ..moveTo(c.dx - w * 0.26, c.dy - h * 0.02)
-      ..quadraticBezierTo(
-        c.dx - w * 0.34,
-        c.dy - h * 0.22,
-        c.dx - w * 0.3,
-        c.dy - h * 0.3,
-      )
-      ..quadraticBezierTo(
-        c.dx - w * 0.14,
-        c.dy - h * 0.18,
-        c.dx,
-        c.dy - h * 0.34,
-      )
-      ..quadraticBezierTo(
-        c.dx + w * 0.14,
-        c.dy - h * 0.18,
-        c.dx + w * 0.3,
-        c.dy - h * 0.3,
-      )
-      ..quadraticBezierTo(
-        c.dx + w * 0.34,
-        c.dy - h * 0.22,
-        c.dx + w * 0.26,
-        c.dy - h * 0.02,
-      )
-      ..close();
-    canvas.drawPath(
-      hat,
-      Paint()
-        ..shader = const LinearGradient(
-          colors: [Color(0xFF7E3FB0), kCardRed, Color(0xFF2E7D6B)],
-        ).createShader(Offset.zero & size),
-    );
-    for (final dx in [-0.3, 0.0, 0.3]) {
-      canvas.drawCircle(
-        Offset(c.dx + w * dx, c.dy - h * (dx == 0 ? 0.34 : 0.3)),
-        w * 0.045,
-        Paint()..color = const Color(0xFFD9A441),
-      );
-    }
-    canvas.drawCircle(
-      Offset(c.dx, c.dy + h * 0.08),
-      w * 0.2,
-      Paint()..color = const Color(0xFFFFE9D6),
-    );
-    final ink = Paint()
-      ..color = kCardBlack
-      ..strokeWidth = math.max(1, w * 0.025)
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-    canvas.drawCircle(
-      Offset(c.dx - w * 0.07, c.dy + h * 0.05),
-      w * 0.022,
-      Paint()..color = kCardBlack,
-    );
-    canvas.drawCircle(
-      Offset(c.dx + w * 0.07, c.dy + h * 0.05),
-      w * 0.022,
-      Paint()..color = kCardBlack,
-    );
-    canvas.drawArc(
-      Rect.fromCenter(
-        center: Offset(c.dx, c.dy + h * 0.1),
-        width: w * 0.2,
-        height: h * 0.1,
-      ),
-      0.2,
-      math.pi - 0.4,
-      false,
-      ink,
-    );
-    canvas.drawCircle(
-      Offset(c.dx, c.dy + h * 0.1),
-      w * 0.03,
-      Paint()..color = kCardRed,
-    );
-    final tp = TextPainter(
-      text: TextSpan(
-        text: 'JOKER',
-        style: GoogleFonts.gowunBatang(
-          fontSize: w * 0.15,
-          fontWeight: FontWeight.w700,
-          color: const Color(0xFF7E3FB0),
-          letterSpacing: w * 0.01,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    tp.paint(canvas, Offset(w / 2 - tp.width / 2, h * 0.8));
-  }
-
-  @override
-  bool shouldRepaint(covariant _CardFacePainter old) =>
-      old.suit != suit || old.rank != rank || old.joker != joker;
 }
 
-class _CardBackPainter extends CustomPainter {
-  final CardBackStyle style;
+class _CardBack extends StatelessWidget {
+  final CardStyle style;
+  final double w;
+  final double h;
 
-  _CardBackPainter(this.style);
+  const _CardBack({required this.style, required this.w, required this.h});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = style;
+    final inset = w * (s.pattern == CardBackPattern.lattice ? 0.076 : 0.074);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: s.backBase,
+        border: Border.all(color: s.backBorder),
+        borderRadius: BorderRadius.circular(w * 0.14),
+      ),
+      child: CustomPaint(
+        painter: s.pattern == CardBackPattern.lattice
+            ? _LatticePainter(s, w)
+            : null,
+        child: Padding(
+          padding: EdgeInsets.all(inset),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border.all(color: s.backInner),
+              borderRadius: BorderRadius.circular(w * 0.09),
+            ),
+            child: s.pattern == CardBackPattern.dots
+                ? CustomPaint(
+                    painter: _DotsPainter(s, w),
+                    child: Center(child: _mark(s, w)),
+                  )
+                : Center(child: _mark(s, w)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  static Widget _mark(CardStyle s, double w) {
+    if (s.backMark != null) {
+      return Text(
+        s.backMark!,
+        style: GoogleFonts.gowunBatang(
+          fontSize: w * 0.364,
+          fontWeight: FontWeight.w700,
+          color: s.backMarkColor,
+          height: 1,
+        ),
+      );
+    }
+    return CustomPaint(
+      size: Size.square(w * 0.48),
+      painter: _KeyholePainter(s.backMarkColor),
+    );
+  }
+}
+
+class _LatticePainter extends CustomPainter {
+  final CardStyle s;
+  final double w;
+
+  _LatticePainter(this.s, this.w);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final w = size.width, h = size.height;
-    final r = RRect.fromRectAndRadius(
-      Offset.zero & size,
-      Radius.circular(w * 0.11),
-    );
-    canvas.drawRRect(r, Paint()..color = kCardIvory);
-    final inner = r.deflate(w * 0.06);
-    canvas.save();
-    canvas.clipRRect(inner);
-    canvas.drawRRect(
-      inner,
-      Paint()
-        ..shader = RadialGradient(
-          colors: [style.base, style.deep],
-          radius: 0.9,
-        ).createShader(inner.outerRect),
-    );
-    // 금박 격자.
-    final lattice = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = math.max(0.5, w * 0.01)
-      ..color = style.trim.withValues(alpha: 0.38);
-    final step = w * 0.14;
-    for (double d = -h; d < w + h; d += step) {
-      canvas.drawLine(Offset(d, 0), Offset(d + h, h), lattice);
-      canvas.drawLine(Offset(d, h), Offset(d + h, 0), lattice);
+    final paint = Paint()
+      ..color = s.backLine
+      ..strokeWidth = 1;
+    // 사선 간격(수직 거리) 9px(카드 폭 66 기준).
+    final step = 9 * w / 66 * math.sqrt2;
+    final h = size.height;
+    for (double d = -h; d < size.width + h; d += step) {
+      canvas.drawLine(Offset(d, 0), Offset(d + h, h), paint);
+      canvas.drawLine(Offset(d, h), Offset(d + h, 0), paint);
     }
-    canvas.restore();
-    canvas.drawRRect(
-      inner,
+  }
+
+  @override
+  bool shouldRepaint(covariant _LatticePainter old) => old.s != s || old.w != w;
+}
+
+class _DotsPainter extends CustomPainter {
+  final CardStyle s;
+  final double w;
+
+  _DotsPainter(this.s, this.w);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final step = 7 * w / 54;
+    final dots = <Offset>[];
+    for (var y = step / 2; y < size.height; y += step) {
+      for (var x = step / 2; x < size.width; x += step) {
+        dots.add(Offset(x, y));
+      }
+    }
+    canvas.drawPoints(
+      PointMode.points,
+      dots,
       Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = math.max(0.8, w * 0.02)
-        ..color = style.trim,
-    );
-    // 가운데 엠블럼(하트).
-    final ew = w * 0.36;
-    final center = Offset(w / 2, h / 2);
-    canvas.drawCircle(center, ew * 0.72, Paint()..color = style.deep);
-    canvas.drawCircle(
-      center,
-      ew * 0.72,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = math.max(0.8, w * 0.018)
-        ..color = style.trim,
-    );
-    canvas.drawPath(
-      suitPath(
-        Suit.heart,
-        Rect.fromCenter(center: center, width: ew * 0.8, height: ew * 0.8),
-      ),
-      Paint()..color = style.trim,
+        ..color = s.backLine
+        ..strokeWidth = 1.6
+        ..strokeCap = StrokeCap.round,
     );
   }
 
   @override
-  bool shouldRepaint(covariant _CardBackPainter old) => old.style != style;
+  bool shouldRepaint(covariant _DotsPainter old) => old.s != s || old.w != w;
+}
+
+class _KeyholePainter extends CustomPainter {
+  final Color color;
+
+  _KeyholePainter(this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.scale(size.width / 24, size.height / 24);
+    final p = Paint()..color = color;
+    canvas.drawCircle(const Offset(12, 9.5), 4, p);
+    canvas.drawPath(
+      Path()
+        ..moveTo(10.2, 12.5)
+        ..lineTo(9, 19)
+        ..lineTo(15, 19)
+        ..lineTo(13.8, 12.5)
+        ..close(),
+      p,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _KeyholePainter old) => old.color != color;
+}
+
+/// 조커 앞면: 가면 쓴 도둑 일러스트 + "조커".
+class _JokerFace extends StatelessWidget {
+  final CardStyle style;
+  final double w;
+  final double h;
+
+  const _JokerFace({required this.style, required this.w, required this.h});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = style;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: s.face,
+        border: Border.all(color: s.accent, width: 1.5),
+        borderRadius: BorderRadius.circular(w * 0.14),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ThiefIcon(size: w * 0.7),
+            SizedBox(height: h * 0.012),
+            Text(
+              '조커',
+              maxLines: 1,
+              style: GoogleFonts.notoSansKr(
+                fontSize: math.max(9, w * 0.22),
+                fontWeight: FontWeight.w700,
+                color: s.accent,
+                height: 1.1,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 가면 쓴 도둑(조커·로비·결과 화면 공통 일러스트).
+class ThiefIcon extends StatelessWidget {
+  final double size;
+
+  const ThiefIcon({super.key, this.size = 64});
+
+  @override
+  Widget build(BuildContext context) => ExcludeSemantics(
+    child: CustomPaint(size: Size.square(size), painter: const _ThiefPainter()),
+  );
+}
+
+class _ThiefPainter extends CustomPainter {
+  const _ThiefPainter();
+
+  static const _berry = Color(0xFFA23B55);
+  static const _ink = Color(0xFF3B2430);
+  static const _skin = Color(0xFFFFF1DE);
+  static const _gold = Color(0xFFC79A4B);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.scale(size.width / 64, size.height / 64);
+    final fill = Paint()..style = PaintingStyle.fill;
+    final line = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    // 얼굴.
+    canvas.drawCircle(const Offset(32, 38), 16, fill..color = _skin);
+    canvas.drawCircle(
+      const Offset(32, 38),
+      16,
+      line
+        ..color = _ink
+        ..strokeWidth = 1.6,
+    );
+    // 모자.
+    canvas.drawPath(
+      Path()
+        ..moveTo(15, 33)
+        ..quadraticBezierTo(32, -2, 49, 33)
+        ..close(),
+      fill..color = _berry,
+    );
+    canvas.drawLine(
+      const Offset(13, 33),
+      const Offset(51, 33),
+      line
+        ..color = _ink
+        ..strokeWidth = 2.4,
+    );
+    canvas.drawCircle(const Offset(32, 9.5), 3.5, fill..color = _gold);
+    // 눈가리개.
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        const Rect.fromLTWH(17, 37, 30, 9),
+        const Radius.circular(4.5),
+      ),
+      fill..color = _ink,
+    );
+    fill.color = _skin;
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: const Offset(25.5, 41.5),
+        width: 6.4,
+        height: 4.8,
+      ),
+      fill,
+    );
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: const Offset(38.5, 41.5),
+        width: 6.4,
+        height: 4.8,
+      ),
+      fill,
+    );
+    // 입.
+    canvas.drawPath(
+      Path()
+        ..moveTo(27, 52)
+        ..relativeQuadraticBezierTo(5, 3.5, 10, 0),
+      line
+        ..color = _ink
+        ..strokeWidth = 1.6,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _ThiefPainter old) => false;
 }

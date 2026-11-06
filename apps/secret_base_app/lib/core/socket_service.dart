@@ -1436,6 +1436,13 @@ class SocketService extends ChangeNotifier {
       notifyListeners();
     });
 
+    // 새 판이 시작됐다(동의된 재대결·동시 요청 포함): 열려 있는 재대결 창과 대기 표시를 모두 닫는다.
+    socket.on('game:restart:started', (data) {
+      restartPending = false;
+      restartWaiting = false;
+      notifyListeners();
+    });
+
     socket.on('game:restart:declined', (data) {
       restartWaiting = false;
       restartPending = false;
@@ -1960,6 +1967,7 @@ class SocketService extends ChangeNotifier {
     'invalid_payload': '요청 형식이 올바르지 않아요.',
     'internal_error': '서버에서 오류가 발생했어요. 잠시 후 다시 시도해 주세요.',
     'partner_not_ready': '상대가 아직 준비 완료를 누르지 않았어요.',
+    'adult_only': '19세 이상 두 사람만 고를 수 있는 수위예요.',
     'not_host': '방장만 할 수 있어요.',
     'host_cannot_ready': '방장은 준비 완료를 누를 필요가 없어요.',
     'stake_not_supported': '이 게임은 판돈을 걸 수 없어요.',

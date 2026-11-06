@@ -291,7 +291,17 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.byKey(const Key('penalty_result')), findsOneWidget);
     expect(find.text('승리!'), findsOneWidget);
-    expect(find.text('한 판 더!'), findsOneWidget);
+    expect(find.text('FULL TIME'), findsOneWidget);
+    expect(find.text('한 판 더'), findsOneWidget);
+    expect(find.text('나가기'), findsOneWidget);
+    expect(find.text('이번 방 전적'), findsOneWidget);
+    expect(find.text('재대결은 칸 수(3칸)는 그대로, 첫 키커만 바뀌어요'), findsOneWidget);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const Key('penalty_result_my_score')))
+          .data,
+      '1',
+    );
 
     c.applyState(
       stateMap(

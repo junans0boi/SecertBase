@@ -62,6 +62,8 @@ export async function fixture(t, { players = 2 } = {}) {
     if (sql.includes('User1Code')) return { rows: [{ User1Code: 'ALPHA-code', User2Code: 'BETA-code' }] };
     if (sql.includes('SELECT CoupleId FROM Couples')) return { rows: [{ CoupleId: 1 }] };
     if (sql.includes('INSERT INTO game_results')) { results.push(params); return { rows: [] }; }
+    // 19+ 성인 확인(연 나이). 테스트는 boundary.ages로 사람별 나이를 바꾼다(기본 30).
+    if (sql.includes('AS Age')) return { rows: params.map(code => ({ UserCode: code, Age: boundary.ages && code in boundary.ages ? boundary.ages[code] : 30 })) };
     if (sql.includes('UserCode IN')) return { rows: [{ UserId: 11, UserCode: 'ALPHA-code' }, { UserId: 22, UserCode: 'BETA-code' }] };
     if (sql.includes('SELECT level, xp')) return { rows: [levels.get(params[0]) ?? { level: 1, xp: 0 }] };
     return { rows: [] };

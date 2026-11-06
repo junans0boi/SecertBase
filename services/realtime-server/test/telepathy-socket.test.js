@@ -2,8 +2,14 @@
 // 종료·재접속 sync·재대결(지난 판 답이 섞이지 않음)·방 시리즈를 확인한다.
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { fixture, flush } from './support/socket-harness.js';
-import { TELEPATHY_BAG_TTL_SEC, TELEPATHY_REVEAL_MS, TELEPATHY_TURN_MS } from '../src/games/telepathy.js';
+import { boundary, fixture, flush } from './support/socket-harness.js';
+import { TELEPATHY_BANK } from '../src/telepathy-engine.js';
+import {
+  TELEPATHY_BAG_TTL_SEC,
+  TELEPATHY_FIRST_EXTRA_MS,
+  TELEPATHY_REVEAL_MS,
+  TELEPATHY_TURN_MS,
+} from '../src/games/telepathy.js';
 
 const A = 'ALPHA-code';
 const B = 'BETA-code';
@@ -39,19 +45,19 @@ async function both(f, a, b) {
 test('telepathy: the lobby start builds the game from server options without a start button', async (t) => {
   const f = await fixture(t);
   const states = collect(f);
-  await start(t, f, { rounds: 5, spicy: 'on' });
+  await start(t, f, { rounds: 5, heat: 'spicy' });
   const s = states[1].at(-1);
   assert.equal(s.status, 'playing');
   assert.equal(s.gameType, 'telepathy');
   assert.equal(s.round, 1);
   assert.equal(s.rounds, 5);
-  assert.equal(s.spicy, true);
+  assert.equal(s.heat, 'spicy');
   assert.deepEqual(s.players, [A, B]);
   assert.ok(s.gameId);
   assert.ok(s.question.a && s.question.b && s.question.emojiA && s.question.id);
   assert.deepEqual(s.picked, { [A]: false, [B]: false });
   assert.equal(s.score, 0);
-  assert.equal(s.turnMs, TELEPATHY_TURN_MS);
+  assert.equal(s.turnMs, TELEPATHY_TURN_MS + TELEPATHY_FIRST_EXTRA_MS, 'first question window');
   assert.equal(typeof s.serverNow, 'number');
   assert.ok(s.turnDeadline >= NOW + 5300 + TELEPATHY_TURN_MS, 'the first deadline counts after the lobby countdown');
   assert.equal(s.series.games, 0);
@@ -61,7 +67,7 @@ test('telepathy: the lobby start builds the game from server options without a s
   const bag = f.redis.values.get(`telepathy:${f.roomCode}:bag`);
   assert.ok(bag, 'the room bag is stored');
   assert.ok(bag.expiresAt - Date.now() >= (TELEPATHY_BAG_TTL_SEC - 1) * 1000, 'the bag is kept for a year');
-  assert.equal(JSON.parse(bag.value).order.length, 315);
+  assert.equal(JSON.parse(bag.value).order.length, TELEPATHY_BANK.length - 5);
 });
 
 test('telepathy: defaults are 10 questions without spicy ones and bad picks are rejected', async (t) => {
@@ -69,7 +75,7 @@ test('telepathy: defaults are 10 questions without spicy ones and bad picks are 
   const states = collect(f);
   await start(t, f);
   assert.equal(states[0].at(-1).rounds, 10);
-  assert.equal(states[0].at(-1).spicy, false);
+  assert.equal(states[0].at(-1).heat, 'mild');
   assert.equal((await f.call(0, 'game:lobby:set_option', { gameType: 'telepathy', key: 'rounds', value: 7 })).reason, 'lobby_not_found');
   assert.equal((await f.call(0, 'game:telepathy:pick', { choice: 'C' })).reason, 'invalid_payload');
   assert.equal((await f.call(0, 'game:telepathy:pick', { choice: 'A', round: '1' })).reason, 'invalid_payload');
@@ -204,7 +210,7 @@ test('telepathy: a full game ends with the score, best streak, tier and the room
 test('telepathy: a rematch keeps the settings and series, draws new questions and ignores old picks', async (t) => {
   const f = await fixture(t);
   const states = collect(f);
-  await start(t, f, { rounds: 5, spicy: 'on' });
+  await start(t, f, { rounds: 5, heat: 'spicy' });
   const firstId = states[0].at(-1).gameId;
   for (let i = 0; i < 5; i++) await both(f, 'A', 'A');
   const firstQuestions = states[0].at(-1).history.map((h) => h.question.id);
@@ -217,7 +223,7 @@ test('telepathy: a rematch keeps the settings and series, draws new questions an
   assert.equal(fresh.status, 'playing');
   assert.notEqual(fresh.gameId, firstId);
   assert.equal(fresh.rounds, 5);
-  assert.equal(fresh.spicy, true);
+  assert.equal(fresh.heat, 'spicy');
   assert.equal(fresh.round, 1);
   assert.equal(fresh.score, 0);
   assert.equal(fresh.history.length, 0);
@@ -256,4 +262,163 @@ test('telepathy: the old select event is gone', async (t) => {
   await assert.rejects(
     f.clients[0].timeout(300).emitWithAck('game:telepathy:select', { choice: 'tea', options: ['tea', 'coffee'] }),
   );
+});
+
+test('telepathy: the first question gets extra time so a new player can read the rules, and the ring says so', async (t) => {
+  const f = await fixture(t);
+  const states = collect(f);
+  await start(t, f);
+  const first = states[0].at(-1);
+  const total = TELEPATHY_TURN_MS + TELEPATHY_FIRST_EXTRA_MS;
+  assert.equal(first.turnMs, total, 'turnMs matches the real window so the ring starts full');
+  assert.equal(first.turnDeadline, NOW + 5300 + total);
+  assert.equal(first.turnDeadline - first.serverNow, 5300 + total);
+  // 15초가 지나도 1번 문제는 그대로, 규칙을 읽고 나서 고를 수 있다.
+  f.tick(5300 + TELEPATHY_TURN_MS + 1000);
+  await flush();
+  assert.equal(states[0].at(-1).round, 1);
+  assert.equal((await f.call(0, 'game:telepathy:pick', { choice: 'A', round: 1 })).ok, true);
+  // 늦게라도 안 고르면 마감에 넘어간다.
+  f.tick(first.turnDeadline - Date.now());
+  await flush();
+  const s = states[1].at(-1);
+  assert.equal(s.round, 2);
+  assert.equal(s.lastRound.outcome, 'timeout');
+  assert.equal(s.turnMs, TELEPATHY_TURN_MS, 'later questions are back to 15 seconds');
+  assert.equal(s.turnDeadline - s.revealUntil, TELEPATHY_TURN_MS);
+});
+
+test('telepathy: a rematch does not get the extra first-question time', async (t) => {
+  const f = await fixture(t);
+  const states = collect(f);
+  await start(t, f, { rounds: 5 });
+  assert.equal((await f.call(1, 'game:restart:request', { gameType: 'telepathy' })).ok, true);
+  assert.equal((await f.call(0, 'game:restart:respond', { accept: true, gameType: 'telepathy' })).ok, true);
+  await flush();
+  const fresh = states[0].at(-1);
+  assert.equal(fresh.turnMs, TELEPATHY_TURN_MS);
+});
+
+test('telepathy: both pressing the rematch button at once starts one new game for both', async (t) => {
+  const f = await fixture(t);
+  const states = collect(f);
+  await start(t, f, { rounds: 5 });
+  const firstId = states[0].at(-1).gameId;
+  const started = [[], []];
+  const requested = [[], []];
+  f.clients.forEach((c, i) => {
+    c.on('game:restart:started', (e) => started[i].push(e));
+    c.on('game:restart:requested', (e) => requested[i].push(e));
+  });
+  const [a, b] = await Promise.all([
+    f.call(0, 'game:restart:request', { gameType: 'telepathy' }),
+    f.call(1, 'game:restart:request', { gameType: 'telepathy' }),
+  ]);
+  await flush();
+  assert.equal(a.ok && b.ok, true);
+  assert.equal([a, b].filter((r) => r.started).length, 1, 'the second request completes the agreement');
+  const fresh = states[0].at(-1);
+  assert.notEqual(fresh.gameId, firstId);
+  assert.equal(states[1].at(-1).gameId, fresh.gameId);
+  assert.deepEqual(started[0], [{ gameType: 'telepathy' }]);
+  assert.deepEqual(started[1], [{ gameType: 'telepathy' }]);
+  // 먼저 처리된 요청의 알림은 갔을 수 있지만, 판이 시작된 뒤에는 수락할 요청이 남지 않는다.
+  const stale = await f.call(0, 'game:restart:respond', { accept: true, gameType: 'telepathy' });
+  assert.equal(stale.reason, 'no_restart_request');
+  assert.equal(states[0].filter((x) => x.gameId === fresh.gameId && x.round === 1).length, 1, 'only one new game');
+});
+
+test('telepathy: a request and the partner request later still counts as agreement', async (t) => {
+  const f = await fixture(t);
+  const states = collect(f);
+  await start(t, f, { rounds: 5 });
+  const firstId = states[0].at(-1).gameId;
+  assert.deepEqual(await f.call(0, 'game:restart:request', { gameType: 'telepathy' }), { ok: true });
+  const second = await f.call(1, 'game:restart:request', { gameType: 'telepathy' });
+  assert.deepEqual(second, { ok: true, started: true });
+  await flush();
+  assert.notEqual(states[0].at(-1).gameId, firstId);
+  // 같은 사람이 두 번 눌러도 합의가 되지는 않는다.
+  assert.deepEqual(await f.call(0, 'game:restart:request', { gameType: 'telepathy' }), { ok: true });
+  assert.deepEqual(await f.call(0, 'game:restart:request', { gameType: 'telepathy' }), { ok: true });
+});
+
+async function lobby(t, f, ages) {
+  t.mock.timers.enable({ apis: ['Date'], now: NOW });
+  boundary.ages = ages;
+  t.after(() => { boundary.ages = undefined; });
+  assert.equal((await f.call(0, 'game:lobby:join', { gameType: 'telepathy' })).ok, true);
+  assert.equal((await f.call(1, 'game:lobby:join', { gameType: 'telepathy' })).ok, true);
+}
+
+const setHeat = (f, value) => f.call(0, 'game:lobby:set_option', { gameType: 'telepathy', key: 'heat', value });
+
+test('telepathy 19+: the guest must accept before the host can start, then the game uses only 19+ and spicy questions', async (t) => {
+  const f = await fixture(t);
+  const states = collect(f);
+  await lobby(t, f);
+  assert.equal((await setHeat(f, 'nuclear')).ok, true);
+  assert.equal((await f.call(0, 'game:lobby:start', { gameType: 'telepathy' })).reason, 'partner_not_ready');
+  assert.equal((await f.call(1, 'game:lobby:ready', { gameType: 'telepathy', ready: true })).ok, true);
+  // 방장이 수위를 다른 값으로 바꿨다가 되돌리면 동의가 풀린다.
+  assert.equal((await setHeat(f, 'spicy')).ok, true);
+  assert.equal((await setHeat(f, 'nuclear')).ok, true);
+  assert.equal((await f.call(0, 'game:lobby:start', { gameType: 'telepathy' })).reason, 'partner_not_ready');
+  assert.equal((await f.call(1, 'game:lobby:ready', { gameType: 'telepathy', ready: true })).ok, true);
+  const started = await f.call(0, 'game:lobby:start', { gameType: 'telepathy' });
+  assert.equal(started.ok, true, `start rejected: ${started.reason}`);
+  await flush();
+  const s = states[1].at(-1);
+  assert.equal(s.heat, 'nuclear');
+  assert.equal(s.question.heat, 'nuclear', 'a 19+ game is all hard questions');
+  assert.equal('tone' in s.question, false, 'the tone is data for grouping, never sent to the players');
+  assert.ok(f.redis.values.get(`telepathy:${f.roomCode}:bag:nuclear`), 'the 19+ pool has its own bag');
+  assert.equal(f.redis.values.get(`telepathy:${f.roomCode}:bag`), undefined, 'the mild bag is untouched');
+});
+
+test('telepathy 19+: mild and spicy never need the guest to accept', async (t) => {
+  const f = await fixture(t);
+  await lobby(t, f);
+  for (const heat of ['spicy', 'mild']) {
+    assert.equal((await setHeat(f, heat)).ok, true);
+  }
+  assert.equal((await f.call(0, 'game:lobby:start', { gameType: 'telepathy' })).ok, true);
+});
+
+for (const ages of [{ [B]: 17 }, { [A]: 18 }, { [B]: null }]) {
+  test(`telepathy 19+: someone under 19, or with no birth year, blocks the level on the server ${JSON.stringify(ages)}`, async (t) => {
+    const f = await fixture(t);
+    await lobby(t, f, ages);
+    const set = await setHeat(f, 'nuclear');
+    assert.deepEqual(set, { ok: false, reason: 'adult_only' }, JSON.stringify(ages));
+    // 19세(연 나이)는 통과.
+    boundary.ages = { [A]: 19, [B]: 19 };
+    assert.equal((await setHeat(f, 'nuclear')).ok, true);
+    assert.equal((await f.call(1, 'game:lobby:ready', { gameType: 'telepathy', ready: true })).ok, true);
+    boundary.ages = ages;
+    assert.deepEqual(await f.call(0, 'game:lobby:start', { gameType: 'telepathy' }), { ok: false, reason: 'adult_only' });
+    assert.equal(f.redis.values.get(`game:${f.roomCode}:telepathy`), undefined, 'no game was created');
+  });
+}
+
+test('telepathy 19+: a rematch keeps the level and checks the ages again', async (t) => {
+  const f = await fixture(t);
+  const states = collect(f);
+  await lobby(t, f);
+  await setHeat(f, 'nuclear');
+  await f.call(1, 'game:lobby:ready', { gameType: 'telepathy', ready: true });
+  await f.call(0, 'game:lobby:start', { gameType: 'telepathy' });
+  await flush();
+  const firstId = states[0].at(-1).gameId;
+  assert.equal((await f.call(1, 'game:restart:request', { gameType: 'telepathy' })).ok, true);
+  assert.equal((await f.call(0, 'game:restart:respond', { accept: true, gameType: 'telepathy' })).ok, true);
+  await flush();
+  const fresh = states[0].at(-1);
+  assert.notEqual(fresh.gameId, firstId);
+  assert.equal(fresh.heat, 'nuclear');
+  boundary.ages = { [B]: 16 };
+  assert.equal((await f.call(1, 'game:restart:request', { gameType: 'telepathy' })).ok, true);
+  const refused = await f.call(0, 'game:restart:respond', { accept: true, gameType: 'telepathy' });
+  assert.equal(refused.reason, 'adult_only');
+  assert.equal(states[0].at(-1).gameId, fresh.gameId, 'the old game stays');
 });

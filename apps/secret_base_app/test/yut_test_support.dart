@@ -54,6 +54,7 @@ Map<String, dynamic> yutState({
   int stake = 0,
   Map<String, dynamic>? lastAction,
   Map<String, dynamic>? equipped,
+  Map<String, dynamic>? effects,
 }) {
   List<Map<String, dynamic>> pieces(List<Map<String, dynamic>>? given) =>
       given ?? [for (var i = 0; i < pieceCount; i++) yutPiece(i, 0)];
@@ -80,6 +81,7 @@ Map<String, dynamic> yutState({
     'coinBonus': <String, dynamic>{},
     'coinBonusCap': stake * 3 ~/ 10,
     'equippedItems': equipped ?? <String, dynamic>{},
+    'effects': effects ?? <String, dynamic>{},
     'series': {
       'wins': {yutMe: 1, yutOpp: 0},
       'draws': 0,

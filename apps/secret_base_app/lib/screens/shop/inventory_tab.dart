@@ -21,25 +21,36 @@ Color gradeColor(String grade) => switch (grade) {
   _ => kMainMuted,
 };
 
+/// 아이템 효과 수치를 읽기 좋게(0.4 → "0.4", 8.0 → "8").
+String formatStatValue(num value) {
+  final v = value.toDouble();
+  if (v == v.roundToDouble()) return v.toInt().toString();
+  return v
+      .toStringAsFixed(2)
+      .replaceFirst(RegExp(r'0+$'), '')
+      .replaceFirst(RegExp(r'\.$'), '');
+}
+
 const statLabels = {
   // 기존
   'coin_bonus_pct': '🪙 승리 코인 +%',
   'shop_discount_pct': '🏷️ 상점 할인 %',
   'daily_bonus_add': '📅 데일리 추가 코인',
   'lose_refund_pct': '🔁 패배 환급 %',
-  'yut_control_pct': '🎯 윷/모 확률 +%',
+  'yut_control_pct': '🎯 윷·모 확률 +%p',
   'yut_catch_bonus': '⚡ 말 잡기 보너스 코인',
   'gacha_rate_up': '🎰 뽑기 S등급 확률 +%',
   'daily_bonus_cooldown': '⏱️ 데일리 쿨타임 감소',
   'win_streak_bonus': '🔥 연승 추가 코인',
   'onecard_draw_reduce': '🃏 +카드 1장 감소',
   // 윷 전용
-  'yut_mo_rate_pct': '🎲 모(5칸) 확률 +%',
+  'yut_mo_rate_pct': '🎲 모(5칸) 확률 +%p',
   'yut_backdo_bonus_pct': '🎲 유리한 백도 추가 던지기 %',
-  'yut_win_coin_pct': '💰 윷/모 시 추가 코인',
-  'yut_overturn_pct': '🔄 역전 시 윷/모 확률 +%',
+  'yut_win_coin_pct': '💰 윷·모 코인 보너스(판돈 %)',
+  'yut_overturn_pct': '🔥 지고 있을 때 윷·모 확률 +%p',
+  'yut_backdo_shield_pct': '🧘 빽도 방어(다시 던질 확률 %)',
   // 말 전용
-  'piece_catch_resist_pct': '🛡️ 잡힐 확률 감소 %',
+  'piece_catch_resist_pct': '🛡️ 잡힘 방어 %',
   'piece_catch_coin_bonus': '💥 상대 잡기 추가 코인',
   'piece_safe_zone_pct': '🏠 잡힐 확률 추가 감소 %',
   'piece_group_pct': '🤝 업은 말 분리 방지 %',
@@ -134,8 +145,11 @@ class _InventoryTabState extends State<InventoryTab> {
           .cast<String, dynamic>();
 
       setState(() {
+        // 폐지된 말 스킨·은퇴한 옛 윷은 보여 주지 않는다(서버도 거르지만 옛 응답에도 안전하게).
         _owned = (ownedData['owned'] as List? ?? [])
-            .cast<Map<String, dynamic>>();
+            .cast<Map<String, dynamic>>()
+            .where((i) => i['slot'] != 'yut_piece' && i['game'] != 'yut_legacy')
+            .toList();
         _equippedIds = slots.values
             .map((v) => ((v as Map)['item_id'] as num).toInt())
             .toSet();
@@ -207,15 +221,6 @@ class _InventoryTabState extends State<InventoryTab> {
     },
     {
       'item_id': 0,
-      'name': '기본 말',
-      'slot': 'yut_piece',
-      'game': 'yut',
-      'grade': 'B',
-      'icon': '⬛',
-      'stats': <String, dynamic>{},
-    },
-    {
-      'item_id': 0,
       'name': '기본 카드',
       'slot': 'onecard_cardback',
       'game': 'onecard',
@@ -230,15 +235,16 @@ class _InventoryTabState extends State<InventoryTab> {
     'shop_discount_pct': 20,
     'daily_bonus_add': 500,
     'lose_refund_pct': 20,
-    'yut_control_pct': 20,
+    'yut_control_pct': 1.5,
+    'yut_backdo_shield_pct': 12,
     'yut_catch_bonus': 300,
     'gacha_rate_up': 20,
     'win_streak_bonus': 400,
     'yut_mo_rate_pct': 8,
     'yut_backdo_bonus_pct': 25,
-    'yut_win_coin_pct': 15,
-    'yut_overturn_pct': 20,
-    'piece_catch_resist_pct': 15,
+    'yut_win_coin_pct': 10,
+    'yut_overturn_pct': 1.5,
+    'piece_catch_resist_pct': 9,
     'piece_catch_coin_bonus': 25,
     'piece_safe_zone_pct': 15,
     'piece_group_pct': 22,
@@ -503,7 +509,7 @@ class _InventoryTabState extends State<InventoryTab> {
               ),
             ),
             Text(
-              '+${value.toInt()}',
+              '+${formatStatValue(value)}',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
@@ -512,7 +518,7 @@ class _InventoryTabState extends State<InventoryTab> {
             ),
             if (compareValue != null) ...[
               Text(
-                ' vs +${compareValue.toInt()}',
+                ' vs +${formatStatValue(compareValue)}',
                 style: TextStyle(fontSize: 10, color: kMainMuted),
               ),
             ],

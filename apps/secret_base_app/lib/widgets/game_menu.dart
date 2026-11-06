@@ -216,6 +216,7 @@ class _GameMenuListenerState extends State<GameMenuListener> {
     if (_sock.restartPending && !_restartDialogShown) {
       _restartDialogShown = true;
       WidgetsBinding.instance.addPostFrameCallback((_) => _showRestartDialog());
+      WidgetsBinding.instance.ensureVisualUpdate();
     }
     if (!_sock.restartPending) _restartDialogShown = false;
   }
@@ -294,11 +295,45 @@ class _GameMenuListenerState extends State<GameMenuListener> {
 }
 
 /// 재대결 요청 카드. 게임 테마를 모르므로 앱의 브랜드 톤(장밋빛)으로 그린다.
-class _RematchDialog extends StatelessWidget {
+/// 요청이 취소·거절되거나 새 판이 이미 시작돼 [SocketService.restartPending]이 꺼지면 스스로 닫힌다
+/// (오래된 초대 창이 새 판 위에 남아 입력을 막지 않게).
+class _RematchDialog extends StatefulWidget {
   final String requester;
   final ValueChanged<bool> onAnswer;
 
   const _RematchDialog({required this.requester, required this.onAnswer});
+
+  @override
+  State<_RematchDialog> createState() => _RematchDialogState();
+}
+
+class _RematchDialogState extends State<_RematchDialog> {
+  final _sock = SocketService();
+  bool _answered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _sock.addListener(_onSocket);
+  }
+
+  @override
+  void dispose() {
+    _sock.removeListener(_onSocket);
+    super.dispose();
+  }
+
+  void _onSocket() {
+    if (_answered || _sock.restartPending || !mounted) return;
+    _answered = true;
+    Navigator.of(context).pop();
+  }
+
+  void _answer(bool accept) {
+    if (_answered) return;
+    _answered = true;
+    widget.onAnswer(accept);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -344,7 +379,7 @@ class _RematchDialog extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              '$requester님이 다시 겨루고 싶어해요.\n수락하면 바로 새 판이 시작돼요.',
+              '${widget.requester}님이 다시 겨루고 싶어해요.\n수락하면 바로 새 판이 시작돼요.',
               textAlign: TextAlign.center,
               style: GoogleFonts.notoSans(
                 color: kTextSub,
@@ -357,7 +392,7 @@ class _RematchDialog extends StatelessWidget {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () => onAnswer(false),
+                    onPressed: () => _answer(false),
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size.fromHeight(50),
                       side: const BorderSide(color: Color(0xFFF3DCE6)),
@@ -376,7 +411,7 @@ class _RematchDialog extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: FilledButton(
-                    onPressed: () => onAnswer(true),
+                    onPressed: () => _answer(true),
                     style: FilledButton.styleFrom(
                       minimumSize: const Size.fromHeight(50),
                       backgroundColor: rose,
