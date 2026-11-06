@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:secret_base_app/core/app_theme.dart';
+import 'package:secret_base_app/screens/home/home_screen.dart';
 import 'package:secret_base_app/screens/home_shell.dart';
+import 'package:secret_base_app/v2/v2.dart';
+
+int _selected(WidgetTester tester) =>
+    tester.widget<V2BottomTabBar>(find.byType(V2BottomTabBar)).currentIndex;
 
 void main() {
   testWidgets(
@@ -17,13 +21,13 @@ void main() {
         ),
       );
       await tester.pump();
-      expect(find.text('인터넷 연결이 끊겼어요'), findsOneWidget);
-      expect(find.byType(NavigationBar), findsOneWidget);
+      expect(find.textContaining('인터넷 연결이 끊겼어요'), findsOneWidget);
+      expect(find.byType(V2BottomTabBar), findsOneWidget);
 
       online = true;
       await tester.pump(const Duration(seconds: 5));
       await tester.pump();
-      expect(find.text('인터넷 연결이 끊겼어요'), findsNothing);
+      expect(find.textContaining('인터넷 연결이 끊겼어요'), findsNothing);
 
       await tester.pumpWidget(const SizedBox());
     },
@@ -33,91 +37,59 @@ void main() {
     tester,
   ) async {
     final semantics = tester.ensureSemantics();
-
-    await tester.pumpWidget(
-      MaterialApp(theme: buildAppTheme(), home: const HomeShell()),
-    );
+    await tester.pumpWidget(const MaterialApp(home: HomeShell()));
     await tester.pump();
 
-    final navigation = tester.widget<NavigationBar>(find.byType(NavigationBar));
-    expect(navigation.selectedIndex, 0);
+    expect(_selected(tester), 0);
     expect(
-      navigation.destinations.cast<NavigationDestination>().map(
-        (destination) => destination.label,
-      ),
-      ['홈', 'MomentLoop', '지도', '놀이', '더보기'],
+      tester
+          .widget<V2BottomTabBar>(find.byType(V2BottomTabBar))
+          .items
+          .map((i) => i.label),
+      ['홈', '기록', '지도', '놀이', '더보기'],
     );
-    for (final label in ['홈', 'MomentLoop', '지도', '놀이', '더보기']) {
-      expect(find.bySemanticsLabel(RegExp(label)), findsWidgets);
+    for (final label in ['홈', '기록', '지도', '놀이', '더보기']) {
+      expect(find.bySemanticsLabel(RegExp('^$label, 탭')), findsWidgets);
     }
+    expect(find.text('MomentLoop'), findsNothing);
     semantics.dispose();
   });
 
-  testWidgets('bottom navigation switches to each primary surface', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(theme: buildAppTheme(), home: const HomeShell()),
-    );
+  testWidgets('tabs switch and the home tab keeps its state', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: HomeShell()));
     await tester.pump();
-    expect(
-      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
-      0,
-    );
+    final home = tester.state(find.byType(HomeScreen));
 
-    await tester.tap(find.text('MomentLoop'));
-    await tester.pump();
-    expect(
-      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
-      1,
-    );
-    expect(find.text('MomentLoop'), findsAtLeastNWidgets(2));
-
-    await tester.tap(find.text('지도'));
-    await tester.pump();
-    expect(
-      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
-      2,
-    );
-    expect(find.text('우리 지도'), findsOneWidget);
-
-    await tester.tap(find.text('놀이'));
-    await tester.pump();
-    expect(
-      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
-      3,
-    );
-    expect(find.text('둘이서 놀기'), findsOneWidget);
-
-    await tester.tap(find.text('더보기'));
-    await tester.pump();
-    expect(
-      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
-      4,
-    );
-    expect(find.text('전체'), findsOneWidget);
-  });
-
-  testWidgets(
-    'bottom navigation keeps labels visible without a narrow-screen overflow',
-    (tester) async {
-      tester.view.physicalSize = const Size(390, 844);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
-
-      await tester.pumpWidget(
-        MaterialApp(theme: buildAppTheme(), home: const HomeShell()),
+    for (var i = 1; i <= 4; i++) {
+      await tester.tap(
+        find.descendant(
+          of: find.byType(V2BottomTabBar),
+          matching: find.text(const ['홈', '기록', '지도', '놀이', '더보기'][i]),
+        ),
       );
       await tester.pump();
+      expect(_selected(tester), i);
+    }
 
-      final navigation = tester.widget<NavigationBar>(
-        find.byType(NavigationBar),
-      );
-      expect(
-        navigation.labelBehavior,
-        NavigationDestinationLabelBehavior.alwaysShow,
-      );
-      expect(tester.takeException(), isNull);
-    },
-  );
+    await tester.tap(
+      find.descendant(
+        of: find.byType(V2BottomTabBar),
+        matching: find.text('홈'),
+      ),
+    );
+    await tester.pump();
+    expect(_selected(tester), 0);
+    // Same State object: the home tab was kept alive, not rebuilt.
+    expect(tester.state(find.byType(HomeScreen)), same(home));
+  });
+
+  testWidgets('tab bar fits a narrow screen without overflow', (tester) async {
+    tester.view.physicalSize = const Size(360, 740);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(const MaterialApp(home: HomeShell()));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
 }

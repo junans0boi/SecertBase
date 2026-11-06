@@ -993,22 +993,25 @@ class _HomeSkeleton extends StatelessWidget {
     return Semantics(
       label: '홈을 불러오는 중이에요',
       child: V2Shimmer(
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(
-            V2Space.page,
-            top + V2Space.x4,
-            V2Space.page,
-            0,
-          ),
-          child: const Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              V2SkeletonBox(height: 190, radius: V2Radius.sheet),
-              SizedBox(height: V2Space.x4),
-              V2SkeletonBox(height: 240, radius: V2Radius.card),
-              SizedBox(height: V2Space.x4),
-              V2SkeletonBox(height: 92, radius: V2Radius.card),
-            ],
+        child: SingleChildScrollView(
+          physics: const NeverScrollableScrollPhysics(),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              V2Space.page,
+              top + V2Space.x4,
+              V2Space.page,
+              0,
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                V2SkeletonBox(height: 190, radius: V2Radius.sheet),
+                SizedBox(height: V2Space.x4),
+                V2SkeletonBox(height: 240, radius: V2Radius.card),
+                SizedBox(height: V2Space.x4),
+                V2SkeletonBox(height: 92, radius: V2Radius.card),
+              ],
+            ),
           ),
         ),
       ),

@@ -7,6 +7,7 @@ import 'package:secret_base_app/screens/home_shell.dart';
 import 'package:secret_base_app/screens/relationship/relationship_understanding_screen.dart';
 import 'package:secret_base_app/screens/secret_base/secret_base_screen.dart';
 import 'package:secret_base_app/screens/settings/settings_screen.dart';
+import 'package:secret_base_app/v2/v2.dart';
 
 void main() {
   testWidgets('more details keep the shell navigation visible', (tester) async {
@@ -17,21 +18,21 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('전체'), findsOneWidget);
-    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.byType(V2BottomTabBar), findsOneWidget);
 
     await tester.tap(find.text('내 공간'));
     await tester.pumpAndSettle();
 
     expect(find.text('프로필 이모지'), findsOneWidget);
     expect(find.text('기념일 추가'), findsOneWidget);
-    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.byType(V2BottomTabBar), findsOneWidget);
     expect(find.byTooltip('뒤로가기'), findsOneWidget);
 
     await tester.tap(find.byTooltip('뒤로가기'));
     await tester.pumpAndSettle();
 
     expect(find.text('전체'), findsOneWidget);
-    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.byType(V2BottomTabBar), findsOneWidget);
   });
 
   testWidgets(
@@ -68,8 +69,9 @@ void main() {
       await tester.tap(find.text('우리의 비밀기지'));
       await tester.pump();
       expect(find.byType(SecretBaseScreen), findsOneWidget);
-      await tester.pageBack();
+      await tester.tap(find.byTooltip('뒤로 가기'));
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
 
       await tester.ensureVisible(find.text('관계 이해'));
       await tester.pump();
@@ -93,7 +95,7 @@ void main() {
       await tester.pump();
 
       expect(
-        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        tester.widget<V2BottomTabBar>(find.byType(V2BottomTabBar)).currentIndex,
         1,
       );
 

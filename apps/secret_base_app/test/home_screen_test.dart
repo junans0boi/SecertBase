@@ -4,237 +4,260 @@ import 'package:secret_base_app/core/today_api.dart';
 import 'package:secret_base_app/features/home/application/home_controller.dart';
 import 'package:secret_base_app/features/home/data/home_overview_repository.dart';
 import 'package:secret_base_app/features/home/domain/home_overview.dart';
+import 'package:secret_base_app/screens/archive/moment_loop_screen.dart';
 import 'package:secret_base_app/screens/auth/partner_screen.dart';
-import 'package:secret_base_app/screens/relationship/fortune_screen.dart';
+import 'package:secret_base_app/screens/home/home_format.dart';
 import 'package:secret_base_app/screens/home/home_screen.dart';
-import 'package:secret_base_app/screens/relationship/relationship_understanding_screen.dart';
-import 'package:secret_base_app/screens/relationship/saju_screen.dart';
-import 'package:secret_base_app/screens/relationship/tarot_screen.dart';
+import 'package:secret_base_app/screens/home/today_poke.dart';
 import 'package:secret_base_app/screens/secret_base/secret_base_screen.dart';
+import 'package:secret_base_app/v2/v2.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-void main() {
-  testWidgets('home makes every quick action discoverable on a narrow screen', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
+class _FakeRepo extends HomeOverviewRepository {
+  _FakeRepo(this.next) : super.fake();
+  Future<HomeOverview> Function() next;
+  int fetches = 0;
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(body: HomeScreen(onNavigate: (_) {})),
-      ),
-    );
-
-    for (final label in ['비밀 지도', '비밀기지', '운세', '타로', '사주']) {
-      expect(find.text(label, skipOffstage: false), findsOneWidget);
-    }
-    expect(find.text('함께 해볼까요?'), findsOneWidget);
-    expect(find.text('좌우로 밀어 더 보기'), findsOneWidget);
-    expect(find.bySemanticsLabel('비밀 지도: 장소 남기기'), findsOneWidget);
-    expect(
-      find.bySemanticsLabel('사주: 나의 흐름', skipOffstage: false),
-      findsOneWidget,
-    );
-
-    expect(find.text('오늘 기록'), findsNothing);
-    expect(find.text('함께 놀기'), findsNothing);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets(
-    'home keeps today entry, refresh, and relationship continuation explicit',
-    (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: HomeScreen(
-              onNavigate: (_) {},
-              relationshipStatus: RelationshipAssessmentStatus.inProgress,
-            ),
-          ),
-        ),
-      );
-
-      expect(find.byType(RefreshIndicator), findsOneWidget);
-      expect(
-        tester
-            .widget<RefreshIndicator>(find.byType(RefreshIndicator))
-            .onRefresh,
-        isNotNull,
-      );
-      expect(find.text('오늘의 루프를 준비하고 있어요'), findsOneWidget);
-      expect(find.text('관계 이해 이어보기'), findsOneWidget);
-      expect(find.text('검사 이어가기'), findsOneWidget);
-    },
-  );
-
-  testWidgets(
-    'quick action semantics tap keeps its existing navigation target',
-    (tester) async {
-      var navigationTarget = -1;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: HomeScreen(
-              onNavigate: (target) => navigationTarget = target,
-              todayStateLoader: () async => const TodayState(
-                date: '2026-09-14',
-                status: TodayStatus.empty,
-              ),
-            ),
-          ),
-        ),
-      );
-
-      tester.semantics.tap(find.semantics.byLabel('비밀 지도: 장소 남기기'));
-      await tester.pump();
-
-      expect(navigationTarget, 2);
-    },
-  );
-
-  testWidgets('home shows a retry entry when Today loading fails', (
-    tester,
-  ) async {
-    var attempts = 0;
-    Future<TodayState> loadToday() async {
-      attempts++;
-      if (attempts == 1) throw StateError('unavailable');
-      return const TodayState(date: '2026-09-14', status: TodayStatus.empty);
-    }
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: HomeScreen(onNavigate: (_) {}, todayStateLoader: loadToday),
-        ),
-      ),
-    );
-    await tester.pump();
-
-    expect(find.text('오늘의 루프를 불러오지 못했어요'), findsOneWidget);
-    expect(find.text('다시 시도'), findsOneWidget);
-
-    await tester.tap(find.text('다시 시도'));
-    await tester.pump();
-
-    expect(attempts, 2);
-    expect(find.text('오늘의 순간을 남겨볼까요?'), findsOneWidget);
-  });
-
-  testWidgets(
-    'home gives a short relationship entry when no assessment is active',
-    (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: HomeScreen(
-              onNavigate: (_) {},
-              relationshipStatus: RelationshipAssessmentStatus.notStarted,
-            ),
-          ),
-        ),
-      );
-
-      expect(find.text('관계 이해 알아보기'), findsOneWidget);
-      expect(find.text('관계 이해 살펴보기'), findsOneWidget);
-    },
-  );
-
-  testWidgets('relationship quick actions open their dedicated screens', (
-    tester,
-  ) async {
-    var navigationTarget = -1;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: HomeScreen(onNavigate: (target) => navigationTarget = target),
-        ),
-      ),
-    );
-
-    await tester.ensureVisible(find.text('비밀 지도'));
-    await tester.pump();
-
-    await tester.tap(find.text('비밀 지도'));
-    expect(navigationTarget, 2);
-
-    await tester.ensureVisible(find.text('비밀기지'));
-    await tester.pump();
-
-    await tester.tap(find.text('비밀기지'));
-    await tester.pumpAndSettle();
-    expect(find.byType(SecretBaseScreen), findsOneWidget);
-    await tester.pageBack();
-    await tester.pump();
-
-    await tester.ensureVisible(find.text('운세'));
-    await tester.pump();
-
-    await tester.tap(find.text('운세'));
-    await tester.pumpAndSettle();
-    expect(find.byType(RelationshipFortuneScreen), findsOneWidget);
-    await tester.pageBack();
-    await tester.pump();
-
-    await tester.ensureVisible(find.text('타로'));
-    await tester.pump();
-
-    await tester.tap(find.text('타로'));
-    await tester.pumpAndSettle();
-    expect(find.byType(TarotScreen), findsOneWidget);
-    await tester.pageBack();
-    await tester.pump();
-
-    await tester.ensureVisible(find.text('사주'));
-    await tester.pump();
-
-    await tester.tap(find.text('사주'));
-    await tester.pumpAndSettle();
-    expect(find.byType(SajuScreen), findsOneWidget);
-  });
-
-  for (final connected in [false, true]) {
-    testWidgets(
-      'home ${connected ? 'hides' : 'shows'} the partner connection guide',
-      (tester) async {
-        final controller = HomeController(
-          _FakeRepo(
-            HomeOverview(
-              couple: connected ? const HomeCoupleInfo(partnerName: 'p') : null,
-            ),
-          ),
-        );
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Scaffold(
-              body: HomeScreen(onNavigate: (_) {}, controller: controller),
-            ),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        expect(
-          find.text('아직 연결 전이에요', skipOffstage: false),
-          connected ? findsNothing : findsOneWidget,
-        );
-        if (!connected) {
-          await tester.tap(find.text('연결하러 가기'));
-          await tester.pump();
-          await tester.pump(const Duration(seconds: 1));
-          expect(find.byType(PartnerScreen), findsOneWidget);
-          await tester.pumpWidget(const SizedBox());
-        }
-      },
-    );
+  @override
+  Future<HomeOverview> fetch() {
+    fetches++;
+    return next();
   }
 }
 
-class _FakeRepo extends HomeOverviewRepository {
-  final HomeOverview overview;
-  _FakeRepo(this.overview) : super.fake();
+String _day(DateTime d) => isoDay(d);
 
-  @override
-  Future<HomeOverview> fetch() async => overview;
+HomeOverview _overview({
+  TodayStatus status = TodayStatus.empty,
+  DateTime? start,
+  bool noStart = false,
+  bool todayFailed = false,
+  HomeMemoryCard? memory,
+}) {
+  final s = noStart
+      ? null
+      : (start ?? today().subtract(const Duration(days: 411)));
+  return HomeOverview(
+    couple: HomeCoupleInfo(
+      partnerName: '서윤',
+      dDay: s == null ? null : dPlus(s),
+      startDate: s == null ? null : _day(s),
+    ),
+    memoryCard: memory,
+    memoryCardTotal: memory == null ? 0 : 1,
+    todayState: todayFailed
+        ? null
+        : TodayState(date: _day(today()), status: status),
+    failedSections: {if (todayFailed) HomeSection.today},
+  );
+}
+
+Widget _home(
+  _FakeRepo repo, {
+  ValueChanged<int>? onNavigate,
+  TodayPoke? poke,
+  Future<void> Function(DateTime)? saveStartDate,
+  Future<bool> Function()? blocked,
+}) => MaterialApp(
+  home: HomeScreen(
+    onNavigate: onNavigate ?? (_) {},
+    controller: HomeController(repo),
+    notificationsBlocked: blocked ?? () async => false,
+    claimableRewards: () async => 2,
+    poke: poke,
+    saveStartDate: saveStartDate,
+  ),
+);
+
+void _tall(WidgetTester tester) {
+  tester.view.physicalSize = const Size(390, 1600);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.reset);
+}
+
+void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  testWidgets('home shows the D+n hero, one today card and four shortcuts', (
+    tester,
+  ) async {
+    _tall(tester);
+    final repo = _FakeRepo(() async => _overview());
+    await tester.pumpWidget(_home(repo));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('412'), findsOneWidget);
+    expect(find.textContaining('500일까지'), findsOneWidget);
+    expect(find.text('오늘의 순간'), findsOneWidget);
+    // One primary CTA for the day; the old big duplicate cards are gone.
+    expect(find.text('오늘의 순간 남기기'), findsOneWidget);
+    expect(find.text('순간 남기기'), findsNothing);
+    expect(find.text('함께 놀기'), findsNothing);
+    for (final label in ['오늘의 운세', '우리 이해', '기념일', '비밀기지']) {
+      expect(find.text(V2Text.keepAll(label)), findsOneWidget);
+    }
+    expect(find.byTooltip('알림 설정'), findsOneWidget);
+    expect(find.text('n년 전 오늘'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('empty-day CTA opens the 기록 composer', (tester) async {
+    _tall(tester);
+    final repo = _FakeRepo(() async => _overview());
+    await tester.pumpWidget(_home(repo));
+    await tester.pump();
+    await tester.pump();
+
+    await tester.tap(find.text('오늘의 순간 남기기'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(MomentLoopScreen), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('missing start date asks for the first day and saves it', (
+    tester,
+  ) async {
+    _tall(tester);
+    DateTime? saved;
+    final repo = _FakeRepo(() async => _overview(noStart: true));
+    await tester.pumpWidget(_home(repo, saveStartDate: (d) async => saved = d));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.textContaining('우리의 첫날을'), findsWidgets);
+    await tester.tap(find.text('첫날 정하기').first);
+    await tester.pumpAndSettle();
+    expect(find.text('우리의 첫날은 언제인가요?'), findsOneWidget);
+    await tester.tap(find.text('저장하기'));
+    await tester.pumpAndSettle();
+
+    expect(saved, today());
+    expect(repo.fetches, greaterThanOrEqualTo(2));
+  });
+
+  testWidgets('today failure only breaks the today card and can retry', (
+    tester,
+  ) async {
+    _tall(tester);
+    var failing = true;
+    final repo = _FakeRepo(() async => _overview(todayFailed: failing));
+    await tester.pumpWidget(_home(repo));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('오늘의 순간을 불러오지 못했어요'), findsOneWidget);
+    expect(find.text('412'), findsOneWidget);
+    expect(find.text(V2Text.keepAll('비밀기지')), findsOneWidget);
+
+    failing = false;
+    await tester.tap(find.text('다시 불러오기'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('오늘의 순간을 불러오지 못했어요'), findsNothing);
+    expect(find.text('오늘의 순간 남기기'), findsOneWidget);
+  });
+
+  testWidgets('a failed first load shows a full retry state', (tester) async {
+    var calls = 0;
+    final repo = _FakeRepo(() async {
+      calls++;
+      if (calls == 1) throw StateError('down');
+      return _overview();
+    });
+    await tester.pumpWidget(_home(repo));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('홈을 불러오지 못했어요'), findsOneWidget);
+    await tester.tap(find.text('다시 불러오기'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('홈을 불러오지 못했어요'), findsNothing);
+  });
+
+  testWidgets('loading shows a skeleton instead of a spinner', (tester) async {
+    final repo = _FakeRepo(
+      () => Future.delayed(const Duration(seconds: 5), _overview),
+    );
+    await tester.pumpWidget(_home(repo));
+    await tester.pump();
+    expect(find.byType(V2Shimmer), findsWidgets);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('unpaired home offers connecting', (tester) async {
+    final repo = _FakeRepo(() async => HomeOverview());
+    await tester.pumpWidget(_home(repo));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('아직 연결되지 않았어요'), findsOneWidget);
+    await tester.tap(find.text('연결하러 가기'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(PartnerScreen), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('shortcuts open 비밀기지 with the reward badge', (tester) async {
+    _tall(tester);
+    final repo = _FakeRepo(() async => _overview());
+    await tester.pumpWidget(_home(repo));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.bySemanticsLabel('비밀기지, 받을 보상 2개'), findsOneWidget);
+    await tester.tap(find.text(V2Text.keepAll('비밀기지')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(SecretBaseScreen), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('notification-denied banner and first-use checklist show', (
+    tester,
+  ) async {
+    _tall(tester);
+    final repo = _FakeRepo(
+      () async => _overview(start: today(), status: TodayStatus.selfWaiting),
+    );
+    await tester.pumpWidget(_home(repo, blocked: () async => true));
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('알림이 꺼져 있어요'), findsOneWidget);
+    expect(find.text('시작해 볼까요?'), findsOneWidget);
+    expect(find.text('1'), findsWidgets); // D+1 hero number
+  });
+
+  testWidgets('poke is sent once a day and then rests', (tester) async {
+    _tall(tester);
+    var sent = 0;
+    final poke = TodayPoke(
+      send: () async {
+        sent++;
+        return true;
+      },
+    );
+    final repo = _FakeRepo(
+      () async => _overview(status: TodayStatus.selfWaiting),
+    );
+    await tester.pumpWidget(_home(repo, poke: poke));
+    await tester.pump();
+    await tester.pump();
+
+    await tester.tap(find.text('서윤에게 콕 찌르기'));
+    await tester.pump();
+    await tester.pump();
+    expect(sent, 1);
+    expect(find.text('오늘은 콕 찔렀어요'), findsOneWidget);
+    expect(await poke.send(), PokeOutcome.alreadyToday);
+    expect(sent, 1);
+    await tester.pumpWidget(const SizedBox());
+  });
 }

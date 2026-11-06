@@ -256,8 +256,8 @@ class _KoreanDateWheelState extends State<KoreanDateWheel> {
     return Semantics(
       label: label,
       value: text(selected),
-      increasedValue: selected < count - 1 ? text(selected + 1) : null,
-      decreasedValue: selected > 0 ? text(selected - 1) : null,
+      increasedValue: text(math.min(count - 1, selected + 1)),
+      decreasedValue: text(math.max(0, selected - 1)),
       onIncrease: () => step(1),
       onDecrease: () => step(-1),
       child: ExcludeSemantics(
