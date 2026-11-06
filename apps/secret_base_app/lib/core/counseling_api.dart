@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'mindcare_api.dart' show SafetyResources;
+
 class CounselingMessage {
   final int id;
   final int sequence;
@@ -76,7 +78,21 @@ class CounselingConversation {
   final CounselingSession session;
   final List<CounselingMessage> messages;
 
-  const CounselingConversation({required this.session, required this.messages});
+  /// Server `safety.status` (e.g. `pending`) when the last reply was a crisis
+  /// guidance reply, else null.
+  final String? safetyStatus;
+
+  /// Help-organisation catalog the server attaches to crisis replies.
+  final SafetyResources? safetyResources;
+
+  const CounselingConversation({
+    required this.session,
+    required this.messages,
+    this.safetyStatus,
+    this.safetyResources,
+  });
+
+  bool get isCrisis => safetyStatus != null || safetyResources != null;
 
   factory CounselingConversation.fromJson(Map<String, dynamic> json) {
     final session = json['session'];
@@ -84,7 +100,15 @@ class CounselingConversation {
       throw const FormatException('Missing counseling session');
     }
     final messages = json['messages'] as List? ?? const [];
+    final safety = json['safety'];
     return CounselingConversation(
+      safetyStatus: safety is Map && safety['status'] != null
+          ? '${safety['status']}'
+          : null,
+      safetyResources:
+          json['resourceVersion'] != null || json['resources'] is List
+          ? SafetyResources.fromJson(json)
+          : null,
       session: CounselingSession.fromJson(Map<String, dynamic>.from(session)),
       messages: messages
           .map(
@@ -179,11 +203,23 @@ class CounselingApi {
     required bool shared,
     required int id,
     required String content,
+    bool? locationPermissionGranted,
+    String? countryCode,
+    String? adminArea,
   }) async {
     final body = await _request(
       'POST',
       '${_sessionsEndpoint(shared)}/$id/messages',
-      body: {'content': content},
+      body: {
+        'content': content,
+        // Only sent when the user pre-chose location use in 돌봄 설정.
+        if (locationPermissionGranted != null)
+          'locationPermission': locationPermissionGranted
+              ? 'granted'
+              : 'denied',
+        'countryCode': ?countryCode,
+        'adminArea': ?adminArea,
+      },
     );
     return CounselingConversation.fromJson(body);
   }

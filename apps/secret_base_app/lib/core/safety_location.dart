@@ -26,8 +26,13 @@ abstract interface class SafetyLocationProvider {
 
 /// Requests one foreground location and immediately reduces it to the
 /// country and administrative area needed by the safety resource catalog.
+///
+/// [allowPrompt] false never shows an OS permission prompt: used at the moment
+/// of a crisis, when only a permission the user already granted may be used.
 class PlatformSafetyLocationProvider implements SafetyLocationProvider {
-  const PlatformSafetyLocationProvider();
+  const PlatformSafetyLocationProvider({this.allowPrompt = true});
+
+  final bool allowPrompt;
 
   @override
   Future<SafetyLocation> resolve() async {
@@ -37,7 +42,7 @@ class PlatformSafetyLocationProvider implements SafetyLocationProvider {
       }
 
       var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
+      if (permission == LocationPermission.denied && allowPrompt) {
         permission = await Geolocator.requestPermission();
       }
       if (permission == LocationPermission.denied ||
