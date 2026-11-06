@@ -234,7 +234,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('결과 준비됨'), findsOneWidget);
-    expect(find.text('검사 완료를 기다리는 중'), findsOneWidget);
+    expect(find.text('기다리는 중'), findsOneWidget);
     expect(
       find.byKey(const Key('compatibility_pending_affection-alignment')),
       findsOneWidget,
@@ -279,7 +279,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('compatibility_restricted')), findsOneWidget);
-    expect(find.text('활성 커플 연결 후 궁합을 볼 수 있어요.'), findsOneWidget);
+    expect(find.text('파트너와 연결하면 궁합을 볼 수 있어요'), findsOneWidget);
     expect(find.text('파트너 연결하기'), findsOneWidget);
   });
 
