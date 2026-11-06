@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -85,10 +84,11 @@ void main() {
     expect(linked.map((post) => post['id']), [1]);
   });
 
-  group('MapScreen bottom sheet', () {
+  group('MapScreen 2.0', () {
     final pins = [
       {
         'id': 1,
+        'user_id': 7,
         'place_name': '성수 카페',
         'category': '카페',
         'status': 'visited',
@@ -99,6 +99,7 @@ void main() {
       },
       {
         'id': 2,
+        'user_id': 8,
         'place_name': '한강 피크닉',
         'category': '활동',
         'status': 'wishlist',
@@ -107,62 +108,6 @@ void main() {
       },
     ];
 
-    Future<void> withMap(
-      WidgetTester tester,
-      Future<void> Function() body, {
-      MockClientHandler? handleRequest,
-    }) async {
-      await http.runWithClient(
-        () async {
-          await tester.pumpWidget(const MaterialApp(home: MapScreen()));
-          await tester.pump(const Duration(milliseconds: 200));
-          await body();
-        },
-        () => MockClient(
-          handleRequest ??
-              (_) async => http.Response.bytes(
-                utf8.encode(
-                  jsonEncode({'ok': true, 'pins': pins, 'reviews': []}),
-                ),
-                200,
-                headers: {'content-type': 'application/json; charset=utf-8'},
-              ),
-        ),
-      );
-    }
-
-    double sheetFraction(WidgetTester tester) =>
-        tester.getSize(find.byKey(const Key('map-sheet'))).height / 600;
-
-    Future<void> enterWishlistPin(WidgetTester tester) async {
-      await tester.tap(find.byKey(const Key('map-add-fab')));
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.descendant(
-          of: find.byKey(const Key('map-sheet')),
-          matching: find.text('가고 싶은 곳'),
-        ),
-      );
-      await tester.pumpAndSettle();
-      final name = find.byWidgetPredicate(
-        (widget) =>
-            widget is TextField && widget.decoration?.hintText == '장소 이름',
-      );
-      await tester.enterText(name, '새 카페');
-      await tester.ensureVisible(find.text('☕ 카페'));
-      await tester.tap(find.text('☕ 카페'));
-      final memo = find.byWidgetPredicate(
-        (widget) =>
-            widget is TextField && widget.decoration?.hintText == '가보고 싶은 이유',
-      );
-      await tester.ensureVisible(memo);
-      await tester.enterText(memo, '함께 커피 마시기');
-      await tester.pumpAndSettle();
-      await tester.ensureVisible(find.widgetWithText(FilledButton, '지도에 저장'));
-      await tester.pumpAndSettle();
-      expect(sheetFraction(tester), closeTo(0.45, 0.01));
-    }
-
     http.Response jsonResponse(Map<String, dynamic> body, int status) =>
         http.Response.bytes(
           utf8.encode(jsonEncode(body)),
@@ -170,114 +115,197 @@ void main() {
           headers: {'content-type': 'application/json; charset=utf-8'},
         );
 
-    testWidgets('starts collapsed and shows one filter row', (tester) async {
-      await withMap(tester, () async {
-        expect(sheetFraction(tester), closeTo(0.12, 0.01));
-        expect(find.text('전체'), findsOneWidget);
-        expect(find.text('다녀온 곳'), findsOneWidget);
-        expect(find.text('가고 싶은 곳'), findsOneWidget);
-        expect(find.byKey(const Key('map-filter-button')), findsOneWidget);
-        expect(find.text('🍽️ 식당'), findsNothing);
-      });
-    });
+    Future<void> withMap(
+      WidgetTester tester,
+      Future<void> Function() body, {
+      MockClientHandler? handleRequest,
+    }) async {
+      tester.view.physicalSize = const Size(800, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await http.runWithClient(
+        () async {
+          await tester.pumpWidget(const MaterialApp(home: MapScreen()));
+          await tester.pump(const Duration(milliseconds: 300));
+          await body();
+        },
+        () => MockClient(
+          handleRequest ??
+              (request) async {
+                if (request.url.path == '/api/map') {
+                  return jsonResponse({'ok': true, 'pins': pins}, 200);
+                }
+                return jsonResponse({'ok': true, 'reviews': []}, 200);
+              },
+        ),
+      );
+    }
 
-    testWidgets('marker tap moves sheet to half with inline detail', (
+    testWidgets('overlay has search + my location, one chip row', (
       tester,
     ) async {
       await withMap(tester, () async {
-        await tester.tap(find.byKey(const Key('map-pin-1')));
-        await tester.pumpAndSettle();
-        expect(find.text('성수 카페'), findsWidgets);
-        expect(find.text('장소 수정'), findsOneWidget);
-        expect(sheetFraction(tester), closeTo(0.45, 0.01));
-      });
-    });
-
-    testWidgets('dragging up to expanded shows the place list', (tester) async {
-      await withMap(tester, () async {
-        await tester.drag(
-          find.descendant(
-            of: find.byKey(const Key('map-sheet')),
-            matching: find.byType(ListView),
-          ),
-          const Offset(0, -600),
-        );
-        await tester.pumpAndSettle();
-        expect(sheetFraction(tester), closeTo(0.92, 0.01));
-        expect(find.text('성수 카페'), findsOneWidget);
-        expect(find.text('한강 피크닉'), findsOneWidget);
-      });
-    });
-
-    testWidgets('filter button picks a category and highlights', (
-      tester,
-    ) async {
-      await withMap(tester, () async {
-        await tester.tap(find.byKey(const Key('map-filter-button')));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('☕ 카페'));
-        await tester.pumpAndSettle();
+        expect(find.text('비밀지도'), findsOneWidget);
+        expect(find.byKey(const Key('map_search')), findsOneWidget);
+        expect(find.byKey(const Key('map_locate')), findsOneWidget);
+        expect(find.byTooltip('내 위치로 이동'), findsOneWidget);
+        expect(find.text('전체 2'), findsOneWidget);
+        expect(find.text('다녀온 곳 1'), findsOneWidget);
+        expect(find.text('가고 싶은 곳 1'), findsOneWidget);
+        expect(find.text('Date Afterglow'), findsNothing);
         expect(find.byKey(const Key('map-pin-1')), findsOneWidget);
-        expect(find.byKey(const Key('map-pin-2')), findsNothing);
-        expect(find.byKey(const Key('map-filter-active')), findsOneWidget);
+        expect(find.textContaining('OpenStreetMap'), findsWidgets);
       });
     });
 
-    testWidgets('add FAB opens the add form in the half sheet', (tester) async {
+    testWidgets('status chip filters the pins', (tester) async {
       await withMap(tester, () async {
-        await tester.tap(find.byKey(const Key('map-add-fab')));
-        await tester.pumpAndSettle();
-        expect(find.text('비밀 장소 추가'), findsOneWidget);
-        expect(sheetFraction(tester), closeTo(0.45, 0.01));
+        await tester.tap(find.byKey(const Key('map_chip_wishlist')));
+        await tester.pump();
+        expect(find.byKey(const Key('map-pin-1')), findsNothing);
+        expect(find.byKey(const Key('map-pin-2')), findsOneWidget);
       });
     });
 
-    testWidgets('double tap sends one POST until save completes', (
+    testWidgets('409 active_couple_required shows unpaired, not empty', (
       tester,
     ) async {
-      final save = Completer<http.Response>();
-      var saved = false;
-      var postCount = 0;
       await withMap(
         tester,
         () async {
-          await enterWishlistPin(tester);
-          await tester.tap(find.text('지도에 저장'));
-          // Both taps occur before a rebuild, exercising the synchronous guard.
-          await tester.tap(find.text('지도에 저장'));
-          await tester.pump();
-          expect(postCount, 1);
-          expect(
-            tester
-                .widget<FilledButton>(
-                  find.widgetWithText(FilledButton, '지도에 저장'),
-                )
-                .onPressed,
-            isNull,
-          );
-          expect(find.text('비밀 장소 추가'), findsOneWidget);
-          expect(sheetFraction(tester), closeTo(0.45, 0.01));
-          await tester.tap(find.text('지도에 저장'));
-          await tester.pump();
-          expect(postCount, 1);
+          expect(find.text('아직 연결되지 않았어요'), findsOneWidget);
+          expect(find.text('아직 저장한 장소가 없어요'), findsNothing);
+        },
+        handleRequest: (_) async => jsonResponse({
+          'ok': false,
+          'reason': 'active_couple_required',
+        }, 409),
+      );
+    });
 
-          save.complete(jsonResponse({'ok': true, 'id': 3}, 200));
-          await tester.pumpAndSettle();
+    testWidgets('ok:false without status is an error, retry reloads', (
+      tester,
+    ) async {
+      var calls = 0;
+      await withMap(
+        tester,
+        () async {
+          expect(find.text('지도를 불러오지 못했어요'), findsOneWidget);
+          await tester.tap(find.text('다시 시도'));
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(find.byKey(const Key('map-pin-1')), findsOneWidget);
+        },
+        handleRequest: (request) async {
+          if (request.url.path != '/api/map') {
+            return jsonResponse({'ok': true, 'reviews': []}, 200);
+          }
+          calls++;
+          return calls == 1
+              ? jsonResponse({'ok': false}, 200)
+              : jsonResponse({'ok': true, 'pins': pins}, 200);
+        },
+      );
+    });
+
+    testWidgets('empty map hints how to add the first place', (tester) async {
+      await withMap(
+        tester,
+        () async {
+          expect(find.byKey(const Key('map_empty_hint')), findsOneWidget);
+          expect(find.text('검색하거나 지도를 눌러 첫 장소를 남겨 보세요.'), findsOneWidget);
+        },
+        handleRequest: (_) async => jsonResponse({'ok': true, 'pins': []}, 200),
+      );
+    });
+
+    testWidgets('pin detail: 3 sections, 한마디, CTA, no fake heart', (
+      tester,
+    ) async {
+      await withMap(tester, () async {
+        await tester.tap(find.byKey(const Key('map-pin-2')));
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump(const Duration(seconds: 1));
+        expect(find.text('한강 피크닉'), findsWidgets);
+        expect(find.text('우리 이야기'), findsOneWidget);
+        expect(find.text('한마디 남기기'), findsOneWidget);
+        expect(find.text('리뷰'), findsNothing);
+        expect(find.byKey(const Key('map_cta_visited')), findsOneWidget);
+        expect(find.byKey(const Key('map_cta_directions')), findsOneWidget);
+        expect(find.byKey(const Key('map_leave_moment')), findsOneWidget);
+        expect(find.byKey(const Key('map_detail_delete')), findsNothing);
+        await tester.tap(find.byKey(const Key('map_detail_more')));
+        await tester.pump();
+        expect(find.byKey(const Key('map_detail_delete')), findsOneWidget);
+      });
+    });
+
+    testWidgets('notes show nicknames, never user codes', (tester) async {
+      await withMap(
+        tester,
+        () async {
+          await tester.tap(find.byKey(const Key('map-pin-1')));
+          await tester.pump(const Duration(seconds: 1));
+          await tester.pump(const Duration(seconds: 1));
+          await tester.pump(const Duration(seconds: 1));
+          await tester.pump(const Duration(seconds: 1));
+          expect(find.text('USER-CODE-9'), findsNothing);
+          expect(find.text('같이 가서 좋았어'), findsOneWidget);
+        },
+        handleRequest: (request) async {
+          if (request.url.path == '/api/map') {
+            return jsonResponse({'ok': true, 'pins': pins}, 200);
+          }
+          return jsonResponse({
+            'ok': true,
+            'reviews': [
+              {
+                'id': 5,
+                'user_id': 8,
+                'user_code': 'USER-CODE-9',
+                'content': '같이 가서 좋았어',
+              },
+            ],
+          }, 200);
+        },
+      );
+    });
+
+    testWidgets('mini sheet saves a wishlist place and selects the new pin', (
+      tester,
+    ) async {
+      var postCount = 0;
+      var saved = false;
+      await withMap(
+        tester,
+        () async {
+          await tester.tapAt(const Offset(100, 800));
+          await tester.pump(const Duration(seconds: 1));
+          await tester.pump(const Duration(seconds: 1));
+          expect(find.text('장소 추가'), findsOneWidget);
+          await tester.tap(find.byKey(const Key('map_add_wishlist')));
+          await tester.pump();
+          expect(find.text('장소 이름을 적어 주세요'), findsOneWidget);
+          await tester.enterText(find.byKey(const Key('map_add_name')), '새 카페');
+          await tester.tap(find.byKey(const Key('map_add_wishlist')));
+          await tester.tap(find.byKey(const Key('map_add_wishlist')));
+          await tester.pump(const Duration(seconds: 1));
+          await tester.pump(const Duration(seconds: 1));
+          await tester.pump(const Duration(seconds: 1));
+          await tester.pump(const Duration(seconds: 1));
           expect(postCount, 1);
-          expect(find.text('비밀 장소 추가'), findsNothing);
-          expect(sheetFraction(tester), closeTo(0.12, 0.01));
-          expect(find.byKey(const Key('map-pin-3')), findsOneWidget);
-          expect(find.byKey(const Key('map-filter-active')), findsOneWidget);
-          expect(tester.takeException(), isNull);
+          expect(find.text('장소 추가'), findsNothing);
+          expect(find.text('가고 싶은 곳으로 남겼어요'), findsOneWidget);
+          expect(find.text('가고 싶은 곳 2'), findsOneWidget);
         },
         handleRequest: (request) async {
           if (request.method == 'POST' && request.url.path == '/api/map') {
             postCount++;
-            final response = await save.future;
             saved = true;
-            return response;
+            return jsonResponse({'ok': true, 'id': 3}, 200);
           }
-          if (request.method == 'GET' && request.url.path == '/api/map') {
+          if (request.url.path == '/api/map') {
             return jsonResponse({
               'ok': true,
               'pins': [
@@ -285,149 +313,70 @@ void main() {
                 if (saved)
                   {
                     'id': 3,
+                    'user_id': 7,
                     'place_name': '새 카페',
-                    'category': '카페',
+                    'category': '기타',
                     'status': 'wishlist',
-                    'latitude': 37.54,
-                    'longitude': 127.05,
+                    'latitude': 37.5,
+                    'longitude': 127.0,
                   },
               ],
             }, 200);
           }
-          throw StateError('Unexpected fake API request');
+          return jsonResponse({'ok': true, 'reviews': []}, 200);
         },
       );
     });
 
-    testWidgets('completed save returns the sheet to collapsed', (
-      tester,
-    ) async {
+    testWidgets('save failure keeps the form and allows retry', (tester) async {
+      var failing = true;
       await withMap(
         tester,
         () async {
-          await enterWishlistPin(tester);
-          await tester.tap(find.text('지도에 저장'));
-          await tester.pumpAndSettle();
-          expect(sheetFraction(tester), closeTo(0.12, 0.01));
-          expect(find.text('비밀 장소 추가'), findsNothing);
+          await tester.tapAt(const Offset(100, 800));
+          await tester.pump(const Duration(seconds: 1));
+          await tester.pump(const Duration(seconds: 1));
+          await tester.enterText(
+            find.byKey(const Key('map_add_name')),
+            '실패 카페',
+          );
+          await tester.tap(find.byKey(const Key('map_add_visited')));
+          await tester.pump(const Duration(seconds: 1));
+          await tester.pump(const Duration(seconds: 1));
+          expect(find.text('장소를 저장하지 못했어요. 다시 시도해 주세요.'), findsOneWidget);
+          expect(find.text('실패 카페'), findsOneWidget);
+          failing = false;
+          await tester.tap(find.byKey(const Key('map_add_visited')));
+          await tester.pump(const Duration(seconds: 1));
+          await tester.pump(const Duration(seconds: 1));
+          await tester.pump(const Duration(seconds: 1));
+          await tester.pump(const Duration(seconds: 1));
+          expect(find.text('장소 추가'), findsNothing);
         },
         handleRequest: (request) async {
-          if (request.method == 'POST' && request.url.path == '/api/map') {
-            return jsonResponse({'ok': true, 'id': 3}, 200);
+          if (request.method == 'POST') {
+            return failing
+                ? jsonResponse({'ok': false}, 500)
+                : jsonResponse({'ok': true, 'id': 9}, 200);
           }
-          if (request.method == 'GET' && request.url.path == '/api/map') {
+          if (request.url.path == '/api/map') {
             return jsonResponse({'ok': true, 'pins': pins}, 200);
           }
-          throw StateError('Unexpected fake API request');
+          return jsonResponse({'ok': true, 'reviews': []}, 200);
         },
       );
     });
 
-    for (final status in [400, 500]) {
-      testWidgets('HTTP $status keeps the entered form and permits retry', (
-        tester,
-      ) async {
-        final save = Completer<http.Response>();
-        final requests = <Map<String, dynamic>>[];
-        await withMap(
-          tester,
-          () async {
-            await enterWishlistPin(tester);
-            await tester.tap(find.text('지도에 저장'));
-            await tester.pump();
-            expect(requests, hasLength(1));
-            expect(
-              tester
-                  .widget<FilledButton>(
-                    find.widgetWithText(FilledButton, '지도에 저장'),
-                  )
-                  .onPressed,
-              isNull,
-            );
-            // A success-shaped body must not override the HTTP failure.
-            save.complete(jsonResponse({'ok': true}, status));
-            await tester.pumpAndSettle();
-            expect(find.text('비밀 장소 추가'), findsOneWidget);
-            expect(find.text('새 카페'), findsOneWidget);
-            expect(find.text('함께 커피 마시기'), findsOneWidget);
-            expect(find.text('방문 날짜'), findsNothing);
-            expect(sheetFraction(tester), closeTo(0.45, 0.01));
-            expect(find.text('장소를 저장하지 못했어요'), findsOneWidget);
-            expect(find.byKey(const Key('map-filter-active')), findsNothing);
-            expect(find.byKey(const Key('map-pin-1')), findsOneWidget);
-            expect(find.byKey(const Key('map-pin-2')), findsOneWidget);
-            expect(
-              tester
-                  .widget<FilledButton>(
-                    find.widgetWithText(FilledButton, '지도에 저장'),
-                  )
-                  .onPressed,
-              isNotNull,
-            );
-            // Let the error snackbar leave the retry button's hit area.
-            await tester.pump(const Duration(seconds: 4));
-            await tester.pumpAndSettle();
-            await tester.tap(find.text('지도에 저장'));
-            await tester.pumpAndSettle();
-            expect(requests, hasLength(2));
-            expect(requests.last, containsPair('place_name', '새 카페'));
-            expect(requests.last, containsPair('memo', '함께 커피 마시기'));
-            expect(requests.last, containsPair('status', 'wishlist'));
-            expect(requests.last, containsPair('category', '카페'));
-            expect(sheetFraction(tester), closeTo(0.12, 0.01));
-            expect(find.text('비밀 장소 추가'), findsNothing);
-            expect(tester.takeException(), isNull);
-          },
-          handleRequest: (request) async {
-            if (request.method == 'POST' && request.url.path == '/api/map') {
-              requests.add(jsonDecode(request.body) as Map<String, dynamic>);
-              if (requests.length == 1) return save.future;
-              return jsonResponse({'ok': true, 'id': 3}, 200);
-            }
-            if (request.method == 'GET' && request.url.path == '/api/map') {
-              return jsonResponse({'ok': true, 'pins': pins}, 200);
-            }
-            throw StateError('Unexpected fake API request');
-          },
-        );
+    testWidgets('list handle opens the place list', (tester) async {
+      await withMap(tester, () async {
+        await tester.tap(find.byKey(const Key('map_list_handle')));
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump(const Duration(seconds: 1));
+        expect(find.text('우리 장소 2곳'), findsOneWidget);
+        expect(find.byKey(const Key('map_list_1')), findsOneWidget);
       });
-    }
-
-    for (final status in [200, 500]) {
-      testWidgets('pending HTTP $status save is safe after screen disposal', (
-        tester,
-      ) async {
-        final save = Completer<http.Response>();
-        var postCount = 0;
-        var loadCount = 0;
-        await withMap(
-          tester,
-          () async {
-            await enterWishlistPin(tester);
-            await tester.tap(find.text('지도에 저장'));
-            await tester.pump();
-            expect(postCount, 1);
-            await tester.pumpWidget(const MaterialApp(home: SizedBox()));
-            save.complete(jsonResponse({'ok': status == 200, 'id': 3}, status));
-            await tester.pumpAndSettle();
-            expect(loadCount, 1);
-            expect(find.byType(MapScreen), findsNothing);
-            expect(find.byType(SnackBar), findsNothing);
-            expect(tester.takeException(), isNull);
-          },
-          handleRequest: (request) async {
-            if (request.method == 'POST' && request.url.path == '/api/map') {
-              postCount++;
-              return save.future;
-            }
-            if (request.method == 'GET' && request.url.path == '/api/map') {
-              loadCount++;
-              return jsonResponse({'ok': true, 'pins': pins}, 200);
-            }
-            throw StateError('Unexpected fake API request');
-          },
-        );
-      });
-    }
+    });
   });
 }
