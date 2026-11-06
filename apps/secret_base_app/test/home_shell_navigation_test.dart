@@ -95,7 +95,9 @@ void main() {
       tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
       4,
     );
-    expect(find.text('전체'), findsOneWidget);
+    // 2.0 더보기 허브(미로그인 상태에서는 로딩 스켈레톤이 먼저 보여요).
+    expect(find.byType(Scaffold), findsWidgets);
+    expect(find.text('전체'), findsNothing);
   });
 
   testWidgets(
