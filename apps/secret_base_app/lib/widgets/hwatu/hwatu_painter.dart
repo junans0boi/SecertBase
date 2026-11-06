@@ -109,11 +109,12 @@ void _paintBack(Canvas canvas) {
   canvas.drawRRect(
     field,
     Paint()
-      ..shader = ui.Gradient.radial(c, h * 0.62, const [
-        Color(0xFFB01B2A),
-        HwatuInk.crimson,
-        Color(0xFF6A0E18),
-      ], const [0, 0.55, 1]),
+      ..shader = ui.Gradient.radial(
+        c,
+        h * 0.62,
+        const [Color(0xFFB01B2A), HwatuInk.crimson, Color(0xFF6A0E18)],
+        const [0, 0.55, 1],
+      ),
   );
   canvas.save();
   canvas.clipRRect(field);
@@ -153,7 +154,11 @@ void _paintBack(Canvas canvas) {
   // 가운데 메달리온.
   canvas.drawCircle(c, 27, fillOf(HwatuInk.crimsonDark));
   canvas.drawCircle(c, 27, strokeOf(HwatuInk.gold, 1.6));
-  canvas.drawCircle(c, 23.5, strokeOf(HwatuInk.goldLight.withValues(alpha: 0.7), 0.6));
+  canvas.drawCircle(
+    c,
+    23.5,
+    strokeOf(HwatuInk.goldLight.withValues(alpha: 0.7), 0.6),
+  );
   final rays = strokeOf(HwatuInk.gold.withValues(alpha: 0.5), 0.6);
   for (var i = 0; i < 24; i++) {
     final a = i * math.pi / 12;
@@ -330,7 +335,11 @@ void paintHwatuIndex(Canvas canvas, double width, HwatuCardSpec spec) {
     case HwatuType.bright:
       canvas.drawCircle(c + Offset(0, d * 0.05), d / 2, shadow);
       canvas.drawCircle(c, d / 2, fillOf(HwatuInk.vermilion));
-      canvas.drawCircle(c, d / 2 - ring / 2, strokeOf(HwatuInk.goldLight, ring));
+      canvas.drawCircle(
+        c,
+        d / 2 - ring / 2,
+        strokeOf(HwatuInk.goldLight, ring),
+      );
       glyph = '광';
       glyphColor = HwatuInk.white;
     case HwatuType.animal:
@@ -340,7 +349,10 @@ void paintHwatuIndex(Canvas canvas, double width, HwatuCardSpec spec) {
       );
       canvas.drawRRect(r.shift(Offset(0, d * 0.05)), shadow);
       canvas.drawRRect(r, fillOf(HwatuInk.ink));
-      canvas.drawRRect(r.deflate(ring / 2), strokeOf(HwatuInk.gold, ring * 0.8));
+      canvas.drawRRect(
+        r.deflate(ring / 2),
+        strokeOf(HwatuInk.gold, ring * 0.8),
+      );
       glyph = '열';
       glyphColor = HwatuInk.goldLight;
     case HwatuType.ribbon:
@@ -400,6 +412,10 @@ void paintHwatuIndex(Canvas canvas, double width, HwatuCardSpec spec) {
     ..color = HwatuInk.ivory;
   final top = c.dy + d / 2 + d * 0.12;
   final numberCenter = Offset(c.dx, top + numSize / 2);
-  _drawCentered(canvas, _glyph(label, numSize, HwatuInk.ivory, stroke: halo), numberCenter);
+  _drawCentered(
+    canvas,
+    _glyph(label, numSize, HwatuInk.ivory, stroke: halo),
+    numberCenter,
+  );
   _drawCentered(canvas, _glyph(label, numSize, HwatuInk.ink), numberCenter);
 }

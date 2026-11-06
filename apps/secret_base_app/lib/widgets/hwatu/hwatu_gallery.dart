@@ -42,12 +42,14 @@ class HwatuGallery extends StatelessWidget {
     ];
     return ColoredBox(
       color: background,
-      child: Padding(
-        padding: EdgeInsets.all(gap),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: rows,
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: EdgeInsets.all(gap),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: rows,
+          ),
         ),
       ),
     );

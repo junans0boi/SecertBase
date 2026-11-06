@@ -44,7 +44,11 @@ void _mumLeaf(Canvas canvas, Offset c, double r, double rotation) {
   );
   canvas.drawPath(leaf, fillOf(HwatuInk.jade));
   canvas.drawPath(leaf, strokeOf(HwatuInk.pine, 0.8));
-  canvas.drawLine(c, polar(c, r * 0.8, rotation - math.pi / 2), strokeOf(HwatuInk.pine, 0.7));
+  canvas.drawLine(
+    c,
+    polar(c, r * 0.8, rotation - math.pi / 2),
+    strokeOf(HwatuInk.pine, 0.7),
+  );
 }
 
 /// 붉은 옻칠 술잔(받침 포함). 글씨 대신 금빛 문양.
@@ -70,14 +74,22 @@ void _sakeCup(Canvas canvas, Offset c, double s) {
   canvas.drawPath(bowl, fillOf(HwatuInk.red));
   canvas.drawPath(bowl, strokeOf(HwatuInk.crimsonDark, 0.9));
   // 잔 안쪽(위에서 본 타원)
-  final rim = Rect.fromCenter(center: const Offset(0, -6), width: 52, height: 14);
+  final rim = Rect.fromCenter(
+    center: const Offset(0, -6),
+    width: 52,
+    height: 14,
+  );
   canvas.drawOval(rim, fillOf(HwatuInk.vermilion));
   canvas.drawOval(rim, strokeOf(HwatuInk.goldLight, 1.4));
   canvas.drawOval(rim.deflate(4), fillOf(HwatuInk.red));
   // 금빛 문양(壽 대신 둥근 꽃 문장)
   canvas.drawCircle(const Offset(0, 4), 5.5, fillOf(HwatuInk.gold));
   for (var i = 0; i < 8; i++) {
-    canvas.drawCircle(polar(const Offset(0, 4), 4.4, i * math.pi / 4), 1.6, fillOf(HwatuInk.gold));
+    canvas.drawCircle(
+      polar(const Offset(0, 4), 4.4, i * math.pi / 4),
+      1.6,
+      fillOf(HwatuInk.gold),
+    );
   }
   canvas.drawCircle(const Offset(0, 4), 2.4, fillOf(HwatuInk.red));
   canvas.drawCircle(const Offset(0, 4), 1, fillOf(HwatuInk.goldLight));
@@ -120,7 +132,10 @@ void paintMonth9(Canvas canvas, HwatuCardSpec spec) {
 
 // ── 10월 단풍 ──────────────────────────────────────────────────
 
-void _mapleBranches(Canvas canvas, List<(Offset, double, double, Color)> leaves) {
+void _mapleBranches(
+  Canvas canvas,
+  List<(Offset, double, double, Color)> leaves,
+) {
   final bark = HwatuInk.ink;
   drawBranch(
     canvas,
@@ -139,7 +154,10 @@ void _mapleBranches(Canvas canvas, List<(Offset, double, double, Color)> leaves)
   for (final (c, r, rot, color) in leaves) {
     final p = maplePath(c, r, rotation: rot);
     canvas.drawPath(p, fillOf(color));
-    canvas.drawPath(p, strokeOf(HwatuInk.crimsonDark.withValues(alpha: 0.7), 0.6));
+    canvas.drawPath(
+      p,
+      strokeOf(HwatuInk.crimsonDark.withValues(alpha: 0.7), 0.6),
+    );
     final vein = strokeOf(HwatuInk.crimsonDark.withValues(alpha: 0.45), 0.5);
     for (final a in [-72.0, -36.0, 0.0, 36.0, 72.0]) {
       canvas.drawLine(c, polar(c, r * 0.7, rot - math.pi / 2 + rad(a)), vein);
@@ -176,7 +194,10 @@ void _deer(Canvas canvas, Offset c, double s) {
   final legPaint = strokeOf(shade, 3);
   final hoof = strokeOf(HwatuInk.ink, 3);
   // 뒤쪽 다리
-  for (final l in const [(Offset(-12, 6), Offset(-16, 34)), (Offset(14, 6), Offset(20, 34))]) {
+  for (final l in const [
+    (Offset(-12, 6), Offset(-16, 34)),
+    (Offset(14, 6), Offset(20, 34)),
+  ]) {
     canvas.drawLine(l.$1, l.$2, legPaint);
     canvas.drawLine(l.$2, l.$2 + const Offset(0, 2), hoof);
   }
@@ -203,10 +224,16 @@ void _deer(Canvas canvas, Offset c, double s) {
     canvas.drawCircle(p, 1.4, spot);
   }
   // 꼬리
-  canvas.drawPath(leafPath(const Offset(22, -6), rad(-30), 6, 4), fillOf(HwatuInk.white));
+  canvas.drawPath(
+    leafPath(const Offset(22, -6), rad(-30), 6, 4),
+    fillOf(HwatuInk.white),
+  );
   // 앞쪽 다리
   final legNear = strokeOf(coat, 3.4);
-  for (final l in const [(Offset(-14, 6), Offset(-10, 35)), (Offset(16, 6), Offset(12, 35))]) {
+  for (final l in const [
+    (Offset(-14, 6), Offset(-10, 35)),
+    (Offset(16, 6), Offset(12, 35)),
+  ]) {
     canvas.drawLine(l.$1, l.$2, legNear);
     canvas.drawLine(l.$2, l.$2 + const Offset(0, 2), hoof);
   }
@@ -229,7 +256,10 @@ void _deer(Canvas canvas, Offset c, double s) {
   canvas.drawPath(head, outline);
   canvas.drawCircle(const Offset(-35.5, -26), 1.4, fillOf(HwatuInk.ink));
   canvas.drawCircle(const Offset(-25, -30.5), 1.3, fillOf(HwatuInk.ink));
-  canvas.drawPath(leafPath(const Offset(-19, -32), rad(-30), 8, 4), fillOf(shade));
+  canvas.drawPath(
+    leafPath(const Offset(-19, -32), rad(-30), 8, 4),
+    fillOf(shade),
+  );
   // 뿔
   final antler = strokeOf(HwatuInk.brown, 1.6);
   canvas.drawPath(
@@ -329,7 +359,13 @@ void _paulowniaLeaves(
   }
 }
 
-void _paulowniaFlowers(Canvas canvas, Offset base, double height, {Color bloom = HwatuInk.lilac, Color edge = HwatuInk.violet}) {
+void _paulowniaFlowers(
+  Canvas canvas,
+  Offset base,
+  double height, {
+  Color bloom = HwatuInk.lilac,
+  Color edge = HwatuInk.violet,
+}) {
   final top = base - Offset(0, height);
   canvas.drawLine(base, top, strokeOf(HwatuInk.ink, 2.4));
   const tiers = 6;
@@ -343,7 +379,11 @@ void _paulowniaFlowers(Canvas canvas, Offset base, double height, {Color bloom =
       final bell = leafPath(c, rad(90 + side * 25), 9, 8);
       canvas.drawPath(bell, fillOf(bloom));
       canvas.drawPath(bell, strokeOf(edge, 0.8));
-      canvas.drawCircle(c + const Offset(0, 1.5), 1.5, fillOf(HwatuInk.goldLight));
+      canvas.drawCircle(
+        c + const Offset(0, 1.5),
+        1.5,
+        fillOf(HwatuInk.goldLight),
+      );
     }
   }
   final crown = leafPath(top + const Offset(0, 6), rad(-90), 10, 8);
@@ -355,8 +395,14 @@ void _paulowniaFlowers(Canvas canvas, Offset base, double height, {Color bloom =
 void _phoenix(Canvas canvas) {
   // 꼬리깃(세 가닥)
   final plumes = <(List<Offset>, Color)>[
-    (const [Offset(52, 58), Offset(78, 74), Offset(70, 104), Offset(92, 122)], HwatuInk.vermilion),
-    (const [Offset(50, 62), Offset(64, 86), Offset(50, 112), Offset(64, 134)], HwatuInk.gold),
+    (
+      const [Offset(52, 58), Offset(78, 74), Offset(70, 104), Offset(92, 122)],
+      HwatuInk.vermilion,
+    ),
+    (
+      const [Offset(50, 62), Offset(64, 86), Offset(50, 112), Offset(64, 134)],
+      HwatuInk.gold,
+    ),
     (const [Offset(56, 54), Offset(90, 58), Offset(96, 84)], HwatuInk.jade),
   ];
   for (final (pts, color) in plumes) {
@@ -369,7 +415,12 @@ void _phoenix(Canvas canvas) {
   }
   // 날개: 깃털 부채
   final wingBase = const Offset(50, 54);
-  final colors = [HwatuInk.jade, HwatuInk.gold, HwatuInk.vermilion, HwatuInk.indigo];
+  final colors = [
+    HwatuInk.jade,
+    HwatuInk.gold,
+    HwatuInk.vermilion,
+    HwatuInk.indigo,
+  ];
   for (var i = 0; i < 7; i++) {
     final a = rad(-80 + i * 14.0);
     final p = leafPath(wingBase, a, 32 - i * 1.8, 9);
@@ -383,12 +434,23 @@ void _phoenix(Canvas canvas) {
     canvas.drawPath(p, strokeOf(HwatuInk.goldDark, 0.6));
   }
   // 목
-  final neck = [const Offset(50, 60), const Offset(40, 46), const Offset(42, 30), const Offset(34, 20)];
+  final neck = [
+    const Offset(50, 60),
+    const Offset(40, 46),
+    const Offset(42, 30),
+    const Offset(34, 20),
+  ];
   drawBranch(canvas, neck, 13, 7, HwatuInk.vermilion);
   final scale = strokeOf(HwatuInk.goldLight, 0.8);
   final pts = smoothPoints(neck);
   for (var k = 2; k < pts.length - 2; k += 2) {
-    canvas.drawArc(Rect.fromCircle(center: pts[k], radius: 3), rad(20), rad(140), false, scale);
+    canvas.drawArc(
+      Rect.fromCircle(center: pts[k], radius: 3),
+      rad(20),
+      rad(140),
+      false,
+      scale,
+    );
   }
   // 머리
   const head = Offset(32, 18);
@@ -402,7 +464,10 @@ void _phoenix(Canvas canvas) {
       ..close(),
     fillOf(HwatuInk.gold),
   );
-  canvas.drawPath(leafPath(const Offset(28, 22), rad(110), 9, 5), fillOf(HwatuInk.red));
+  canvas.drawPath(
+    leafPath(const Offset(28, 22), rad(110), 9, 5),
+    fillOf(HwatuInk.red),
+  );
   canvas.drawCircle(const Offset(31, 16), 2, fillOf(HwatuInk.white));
   canvas.drawCircle(const Offset(30.6, 16), 1.1, fillOf(HwatuInk.ink));
   // 볏
@@ -434,11 +499,12 @@ void paintMonth11(Canvas canvas, HwatuCardSpec spec) {
         canvas.drawRect(
           const Rect.fromLTWH(0, 0, _w, _h),
           Paint()
-            ..shader = Gradient.linear(const Offset(0, 0), const Offset(0, _h), [
-              HwatuInk.ivory,
-              const Color(0xFFF3C978),
-              HwatuInk.vermilion,
-            ], const [0, 0.5, 1]),
+            ..shader = Gradient.linear(
+              const Offset(0, 0),
+              const Offset(0, _h),
+              [HwatuInk.ivory, const Color(0xFFF3C978), HwatuInk.vermilion],
+              const [0, 0.5, 1],
+            ),
         );
         _paulowniaFlowers(
           canvas,
@@ -457,7 +523,12 @@ void paintMonth11(Canvas canvas, HwatuCardSpec spec) {
 
 // ── 12월 비 ────────────────────────────────────────────────────
 
-void _willow(Canvas canvas, {Color color = HwatuInk.pine, double reach = 1, double left = 30}) {
+void _willow(
+  Canvas canvas, {
+  Color color = HwatuInk.pine,
+  double reach = 1,
+  double left = 30,
+}) {
   final strands = <List<Offset>>[
     for (var i = 0; i < 6; i++)
       [
@@ -506,7 +577,10 @@ void _umbrellaFigure(Canvas canvas) {
       ..close(),
     fillOf(HwatuInk.white),
   );
-  canvas.drawRect(const Rect.fromLTWH(26, 130, 35, 3), fillOf(HwatuInk.vermilion));
+  canvas.drawRect(
+    const Rect.fromLTWH(26, 130, 35, 3),
+    fillOf(HwatuInk.vermilion),
+  );
   // 얼굴
   canvas.drawCircle(const Offset(47, 80), 6, fillOf(HwatuInk.ivoryDeep));
   // 우산
@@ -520,7 +594,13 @@ void _umbrellaFigure(Canvas canvas) {
     ..close();
   canvas.drawPath(canopy, fillOf(HwatuInk.vermilion));
   final rib = strokeOf(HwatuInk.crimson, 1);
-  for (final end in const [Offset(18, 68), Offset(34, 64), Offset(52, 66), Offset(70, 62), Offset(86, 64)]) {
+  for (final end in const [
+    Offset(18, 68),
+    Offset(34, 64),
+    Offset(52, 66),
+    Offset(70, 62),
+    Offset(86, 64),
+  ]) {
     canvas.drawLine(const Offset(50, 35), end, rib);
   }
   canvas.drawPath(canopy, strokeOf(HwatuInk.crimsonDark, 1.2));
@@ -538,9 +618,16 @@ void _umbrellaFigure(Canvas canvas) {
     canvas.drawPath(p, water);
   }
   const frog = Offset(80, 132);
-  canvas.drawOval(Rect.fromCenter(center: frog, width: 14, height: 9), fillOf(HwatuInk.jade));
+  canvas.drawOval(
+    Rect.fromCenter(center: frog, width: 14, height: 9),
+    fillOf(HwatuInk.jade),
+  );
   canvas.drawCircle(frog + const Offset(-5, -4), 2.4, fillOf(HwatuInk.jade));
-  canvas.drawCircle(frog + const Offset(-5, -4.5), 1, fillOf(HwatuInk.goldLight));
+  canvas.drawCircle(
+    frog + const Offset(-5, -4.5),
+    1,
+    fillOf(HwatuInk.goldLight),
+  );
 }
 
 /// 날아가는 제비(왼쪽으로).
@@ -586,7 +673,10 @@ void _swallow(Canvas canvas, Offset c, double s) {
     fillOf(HwatuInk.white),
   );
   canvas.drawPath(upper, fillOf(back));
-  canvas.drawPath(upper, strokeOf(HwatuInk.blueLight.withValues(alpha: 0.5), 0.6));
+  canvas.drawPath(
+    upper,
+    strokeOf(HwatuInk.blueLight.withValues(alpha: 0.5), 0.6),
+  );
   // 머리
   canvas.drawCircle(const Offset(-16, -1), 4.4, fillOf(back));
   canvas.drawCircle(const Offset(-18.5, 1.5), 2.2, fillOf(HwatuInk.vermilion));
@@ -625,7 +715,12 @@ void _stormDouble(Canvas canvas) {
   canvas.drawPath(bolt, fillOf(HwatuInk.goldLight));
   canvas.drawPath(bolt, strokeOf(HwatuInk.white, 1));
   // 먹구름
-  for (final (c, r) in const [(Offset(14, 132), 16.0), (Offset(40, 142), 18.0), (Offset(70, 136), 17.0), (Offset(94, 144), 15.0)]) {
+  for (final (c, r) in const [
+    (Offset(14, 132), 16.0),
+    (Offset(40, 142), 18.0),
+    (Offset(70, 136), 17.0),
+    (Offset(94, 144), 15.0),
+  ]) {
     canvas.drawPath(scallopPath(c, r, 8, depth: 0.12), fillOf(HwatuInk.ink));
   }
   _rain(canvas, HwatuInk.white.withValues(alpha: 0.35));

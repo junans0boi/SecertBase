@@ -49,12 +49,7 @@ void _irisClump(Canvas canvas, Offset base, double s, {bool flowers = true}) {
     (22, 54, 34),
   ];
   for (final (i, b) in blades.indexed) {
-    final p = bladePath(
-      base + Offset(b.$1 * s, 0),
-      b.$2 * s,
-      7 * s,
-      b.$3 * s,
-    );
+    final p = bladePath(base + Offset(b.$1 * s, 0), b.$2 * s, 7 * s, b.$3 * s);
     canvas.drawPath(p, fillOf(i.isEven ? HwatuInk.pine : HwatuInk.jade));
     canvas.drawPath(p, strokeOf(HwatuInk.ink, 0.5));
   }
@@ -104,8 +99,18 @@ void _plankBridge(Canvas canvas) {
   for (final x in [10.0, 46.0, 54.0, 90.0]) {
     canvas.drawRect(Rect.fromLTWH(x - 2, 118, 4, 22), post);
   }
-  plank(const [Offset(-4, 104), Offset(52, 130), Offset(56, 120), Offset(0, 94)]);
-  plank(const [Offset(46, 130), Offset(104, 104), Offset(104, 94), Offset(42, 120)]);
+  plank(const [
+    Offset(-4, 104),
+    Offset(52, 130),
+    Offset(56, 120),
+    Offset(0, 94),
+  ]);
+  plank(const [
+    Offset(46, 130),
+    Offset(104, 104),
+    Offset(104, 94),
+    Offset(42, 120),
+  ]);
 }
 
 void paintMonth5(Canvas canvas, HwatuCardSpec spec) {
@@ -152,8 +157,14 @@ void _peonyPlant(Canvas canvas, {required Offset flower, double r = 22}) {
   final bud = flower + Offset(r * 1.15, -r * 0.9);
   canvas.drawLine(flower + Offset(r * 0.6, -r * 0.2), bud, stem);
   canvas.drawCircle(bud, 5.5, fillOf(HwatuInk.red));
-  canvas.drawPath(leafPath(bud + const Offset(0, 4), rad(-60), 8, 5), fillOf(HwatuInk.pine));
-  canvas.drawPath(leafPath(bud + const Offset(0, 4), rad(-120), 8, 5), fillOf(HwatuInk.pine));
+  canvas.drawPath(
+    leafPath(bud + const Offset(0, 4), rad(-60), 8, 5),
+    fillOf(HwatuInk.pine),
+  );
+  canvas.drawPath(
+    leafPath(bud + const Offset(0, 4), rad(-120), 8, 5),
+    fillOf(HwatuInk.pine),
+  );
 }
 
 void _butterfly(Canvas canvas, Offset c, double s, double tilt) {
@@ -218,10 +229,30 @@ void paintMonth6(Canvas canvas, HwatuCardSpec spec) {
 
 void _bushClover(Canvas canvas, {double height = 1, bool dense = true}) {
   final stems = <List<Offset>>[
-    [const Offset(76, 152), Offset(70, 150 - 60 * height), Offset(30, 150 - 108 * height), Offset(8, 150 - 116 * height)],
-    [const Offset(80, 152), Offset(86, 150 - 50 * height), Offset(78, 150 - 98 * height), Offset(58, 150 - 128 * height)],
-    [const Offset(70, 152), Offset(52, 150 - 40 * height), Offset(18, 150 - 60 * height), Offset(4, 150 - 56 * height)],
-    if (dense) [const Offset(84, 152), Offset(96, 150 - 70 * height), Offset(98, 150 - 96 * height)],
+    [
+      const Offset(76, 152),
+      Offset(70, 150 - 60 * height),
+      Offset(30, 150 - 108 * height),
+      Offset(8, 150 - 116 * height),
+    ],
+    [
+      const Offset(80, 152),
+      Offset(86, 150 - 50 * height),
+      Offset(78, 150 - 98 * height),
+      Offset(58, 150 - 128 * height),
+    ],
+    [
+      const Offset(70, 152),
+      Offset(52, 150 - 40 * height),
+      Offset(18, 150 - 60 * height),
+      Offset(4, 150 - 56 * height),
+    ],
+    if (dense)
+      [
+        const Offset(84, 152),
+        Offset(96, 150 - 70 * height),
+        Offset(98, 150 - 96 * height),
+      ],
   ];
   for (final (i, stem) in stems.indexed) {
     drawBranch(canvas, stem, 2.4, 1, HwatuInk.crimson);
@@ -251,7 +282,13 @@ void _bushClover(Canvas canvas, {double height = 1, bool dense = true}) {
     // 끝의 꽃 봉우리
     final tip = pts.last;
     canvas.drawCircle(tip, 2.3, fillOf(HwatuInk.red));
-    if (i == 0) canvas.drawCircle(tip + const Offset(-3, 2), 1.6, fillOf(HwatuInk.vermilion));
+    if (i == 0) {
+      canvas.drawCircle(
+        tip + const Offset(-3, 2),
+        1.6,
+        fillOf(HwatuInk.vermilion),
+      );
+    }
   }
 }
 
@@ -484,10 +521,22 @@ void paintMonth8(Canvas canvas, HwatuCardSpec spec) {
           ]),
       );
       const moon = Offset(52, 58);
-      canvas.drawCircle(moon, 31, fillOf(HwatuInk.goldLight.withValues(alpha: 0.35)));
+      canvas.drawCircle(
+        moon,
+        31,
+        fillOf(HwatuInk.goldLight.withValues(alpha: 0.35)),
+      );
       canvas.drawCircle(moon, 27, fillOf(HwatuInk.ivory));
-      canvas.drawCircle(moon + const Offset(7, 6), 6, fillOf(HwatuInk.ivoryDeep));
-      canvas.drawCircle(moon + const Offset(-9, -8), 3.5, fillOf(HwatuInk.ivoryDeep));
+      canvas.drawCircle(
+        moon + const Offset(7, 6),
+        6,
+        fillOf(HwatuInk.ivoryDeep),
+      );
+      canvas.drawCircle(
+        moon + const Offset(-9, -8),
+        3.5,
+        fillOf(HwatuInk.ivoryDeep),
+      );
       _hill(canvas, top: 92);
     case HwatuType.animal:
       canvas.drawRect(

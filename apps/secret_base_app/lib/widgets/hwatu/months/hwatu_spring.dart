@@ -61,7 +61,11 @@ void _pineTuft(
   final line = strokeOf(needle, math.max(0.45, r * 0.02));
   for (var k = 0; k < rim.length; k += 2) {
     final p = rim[k];
-    canvas.drawLine(Offset.lerp(base, p, 0.28)!, Offset.lerp(base, p, 0.93)!, line);
+    canvas.drawLine(
+      Offset.lerp(base, p, 0.28)!,
+      Offset.lerp(base, p, 0.93)!,
+      line,
+    );
   }
   canvas.drawPath(path, strokeOf(HwatuInk.ink, 0.6));
 }
@@ -73,7 +77,11 @@ void _pineGround(Canvas canvas) {
 }
 
 void _redCraneSun(Canvas canvas, Offset c, double r) {
-  canvas.drawCircle(c, r + 2.2, fillOf(HwatuInk.goldLight.withValues(alpha: 0.5)));
+  canvas.drawCircle(
+    c,
+    r + 2.2,
+    fillOf(HwatuInk.goldLight.withValues(alpha: 0.5)),
+  );
   canvas.drawCircle(c, r, fillOf(HwatuInk.vermilion));
   canvas.drawCircle(c, r * 0.82, fillOf(HwatuInk.red.withValues(alpha: 0.35)));
 }
@@ -115,7 +123,11 @@ void _crane(Canvas canvas, Offset c, double s) {
   final feather = strokeOf(HwatuInk.inkSoft, 0.7);
   for (var i = 0; i < 4; i++) {
     final x = 4.0 - i * 5.5;
-    canvas.drawLine(Offset(x, -6.5 + i * 0.4), Offset(x - 5, -1 + i * 0.6), feather);
+    canvas.drawLine(
+      Offset(x, -6.5 + i * 0.4),
+      Offset(x - 5, -1 + i * 0.6),
+      feather,
+    );
   }
   // 목: 흰 아래 목 + 검은 윗목
   final neck = [
@@ -488,7 +500,10 @@ void _wisteria(Canvas canvas, {double reach = 1}) {
       final side = (k ~/ 2).isEven ? 1 : -1;
       final dir = (pts[k + 1] - pts[k - 1]);
       final a = math.atan2(dir.dy, dir.dx) + side * rad(50);
-      canvas.drawPath(leafPath(p, a, 12, 7, bend: side * 0.2), fillOf(HwatuInk.ink));
+      canvas.drawPath(
+        leafPath(p, a, 12, 7, bend: side * 0.2),
+        fillOf(HwatuInk.ink),
+      );
     }
     // 끝의 꽃송이: 아래로 작아지는 점들
     final tip = pts.last;

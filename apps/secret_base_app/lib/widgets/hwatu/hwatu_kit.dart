@@ -171,7 +171,12 @@ Path bladePath(Offset base, double height, double width, double lean) {
   return Path()
     ..moveTo(base.dx - width / 2, base.dy)
     ..quadraticBezierTo(ctrl.dx - width * 0.5, ctrl.dy, tip.dx, tip.dy)
-    ..quadraticBezierTo(ctrl.dx + width * 0.5, ctrl.dy, base.dx + width / 2, base.dy)
+    ..quadraticBezierTo(
+      ctrl.dx + width * 0.5,
+      ctrl.dy,
+      base.dx + width / 2,
+      base.dy,
+    )
     ..close();
 }
 
@@ -325,7 +330,13 @@ void drawPeony(
     strokeOf(HwatuInk.crimson, r * 0.05),
   );
   canvas.drawPath(
-    scallopPath(c + Offset(0, -r * 0.05), r * 0.7, 7, depth: 0.2, rotation: 0.3),
+    scallopPath(
+      c + Offset(0, -r * 0.05),
+      r * 0.7,
+      7,
+      depth: 0.2,
+      rotation: 0.3,
+    ),
     fillOf(mid),
   );
   canvas.drawPath(
@@ -405,7 +416,10 @@ void drawRibbon(
     ..lineTo(0, hl - width * 0.35 - 1.8)
     ..lineTo(-hw + 1.6, hl - 2.2)
     ..close();
-  canvas.drawPath(inset, strokeOf(HwatuInk.goldLight.withValues(alpha: 0.85), 0.7));
+  canvas.drawPath(
+    inset,
+    strokeOf(HwatuInk.goldLight.withValues(alpha: 0.85), 0.7),
+  );
   canvas.drawRect(
     Rect.fromLTRB(-hw, -hl, hw, -hl + 3.2),
     fillOf(HwatuInk.goldLight),
@@ -423,10 +437,22 @@ void drawRibbon(
           canvas.drawLine(Offset(0, y - 2.2), Offset(0, y + 3.5), ink);
         case 1:
           canvas.drawCircle(Offset(-hw * 0.18, y), 1.1, dot);
-          canvas.drawLine(Offset(hw * 0.05, y - 2), Offset(hw * 0.32, y + 2.4), ink);
+          canvas.drawLine(
+            Offset(hw * 0.05, y - 2),
+            Offset(hw * 0.32, y + 2.4),
+            ink,
+          );
         case 2:
-          canvas.drawLine(Offset(-hw * 0.35, y - 1.6), Offset(hw * 0.35, y - 1.6), ink);
-          canvas.drawLine(Offset(-hw * 0.25, y + 1.8), Offset(hw * 0.25, y + 1.8), ink);
+          canvas.drawLine(
+            Offset(-hw * 0.35, y - 1.6),
+            Offset(hw * 0.35, y - 1.6),
+            ink,
+          );
+          canvas.drawLine(
+            Offset(-hw * 0.25, y + 1.8),
+            Offset(hw * 0.25, y + 1.8),
+            ink,
+          );
         default:
           canvas.drawLine(Offset(-hw * 0.3, y + 2.4), Offset(0, y - 2.4), ink);
           canvas.drawLine(Offset(0, y - 2.4), Offset(hw * 0.32, y + 2.4), ink);
@@ -444,8 +470,23 @@ Path flyingBirdPath(Offset c, double span, {double lift = 0.35}) {
   return Path()
     ..moveTo(c.dx - h, c.dy - span * lift * 0.2)
     ..quadraticBezierTo(c.dx - h * 0.45, c.dy - span * lift, c.dx, c.dy)
-    ..quadraticBezierTo(c.dx + h * 0.45, c.dy - span * lift, c.dx + h, c.dy - span * lift * 0.2)
-    ..quadraticBezierTo(c.dx + h * 0.45, c.dy - span * lift * 0.55, c.dx, c.dy + span * 0.12)
-    ..quadraticBezierTo(c.dx - h * 0.45, c.dy - span * lift * 0.55, c.dx - h, c.dy - span * lift * 0.2)
+    ..quadraticBezierTo(
+      c.dx + h * 0.45,
+      c.dy - span * lift,
+      c.dx + h,
+      c.dy - span * lift * 0.2,
+    )
+    ..quadraticBezierTo(
+      c.dx + h * 0.45,
+      c.dy - span * lift * 0.55,
+      c.dx,
+      c.dy + span * 0.12,
+    )
+    ..quadraticBezierTo(
+      c.dx - h * 0.45,
+      c.dy - span * lift * 0.55,
+      c.dx - h,
+      c.dy - span * lift * 0.2,
+    )
     ..close();
 }
