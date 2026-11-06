@@ -1,10 +1,8 @@
 // 비밀기지 2.0 ThemeData, so plain Material widgets already look 2.0.
 //
-// IMPORTANT: this is NOT the global app theme. Game screens (arcade, play
-// kit, hwatu...) still rely on the legacy `buildAppTheme()` for their
-// AlertDialogs, SnackBars and buttons, so `MaterialApp.theme` stays legacy.
-// 2.0 screens opt in by wrapping their root in [V2Theme]. The `showV2*`
-// helpers apply the 2.0 theme themselves, so they look right from anywhere.
+// This is the global app theme (`MaterialApp.theme`), games included; game
+// screens layer their own explicit styling on top. [V2Theme] is still useful
+// for the dark variant (마음관리, photo viewing) and is harmless elsewhere.
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 

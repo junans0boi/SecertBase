@@ -8,7 +8,6 @@ import 'core/push/local_notification_service.dart';
 import 'features/moment_loop/application/upload_outbox.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/semantics.dart';
-import 'core/app_theme.dart';
 import 'core/main_design.dart';
 import 'core/socket_service.dart';
 import 'core/auth_service.dart';
@@ -17,6 +16,7 @@ import 'screens/auth/login_screen.dart';
 import 'screens/auth/partner_screen.dart';
 import 'screens/home_shell.dart';
 import 'v2/gallery/v2_gallery_screen.dart';
+import 'v2/theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -172,9 +172,9 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
       navigatorKey: _navigatorKey,
       title: '비밀기지',
       debugShowCheckedModeBanner: false,
-      // Global theme stays legacy: game screens rely on it. 2.0 screens opt
-      // in with `V2Theme` (see lib/v2/README.md).
-      theme: buildAppTheme(),
+      // 2.0 is the whole app's theme (games included). Game screens keep
+      // their own explicit per-game styling on top of it.
+      theme: buildV2Theme(),
       // Dev-only 2.0 component gallery (/#/v2-gallery); absent in release.
       routes: kDebugMode
           ? {V2GalleryScreen.routeName: (_) => const V2GalleryScreen()}

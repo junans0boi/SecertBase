@@ -10,12 +10,11 @@ Mockup source of truth: `docs/design/v2/mockup/` (`ds.css`, `PLAN.md`, `system.h
 Live gallery (debug builds only): run the web app and open `/#/v2-gallery`
 (`lib/v2/gallery/v2_gallery_screen.dart`).
 
-## 0. Theme: opt in per screen
+## 0. Theme: global
 
-The global `MaterialApp.theme` is still the legacy `buildAppTheme()`, because
-game screens (arcade, play kit, hwatu) rely on it for their dialogs, snackbars
-and buttons. **Wrap every 2.0 screen root in `V2Theme`** so plain Material
-widgets (TextField, FilledButton, Switch, ListTile...) also look 2.0:
+`MaterialApp.theme` is `buildV2Theme()` — the whole app (games included) is
+2.0. Wrapping a screen in `V2Theme` is harmless and still needed for the dark
+variant:
 
 ```dart
 @override
@@ -26,7 +25,6 @@ Widget build(BuildContext context) => V2Theme(
 V2Theme(dark: true, child: ...)
 ```
 
-Pages you push are new routes: wrap their root in `V2Theme` too.
 `showV2Sheet`, `showV2Dialog`, `showV2Confirm`, `showV2PermissionSheet`,
 `showV2ConfirmDestructiveSheet` and `showV2Snack` apply the 2.0 look
 themselves and work from anywhere.
