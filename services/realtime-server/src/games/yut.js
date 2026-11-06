@@ -151,20 +151,45 @@ export async function finishYutGame(kit, roomCode, state, reason, winner = state
   // 코인 보너스는 판돈의 30%까지만(엔진이 쌓을 때 이미 자른다). 정산 때 승자에게만 지급.
   const coinBonus = stake > 0 ? Math.min(Number(state.coinBonus?.[winner]) || 0, coinBonusCap(stake)) : 0;
   let series = state.series ?? null;
+  // 영수증: 실제로 옮겨진 코인. 판돈이 모자라거나(올인 캡) 정산이 실패하면 화면이 판돈 그대로를 말하지 않게 한다.
+  let transferred = 0;
+  let winnerGain = 0;
+  let settlement = stake > 0 ? "pending" : "none";
   try {
-    const [{ rows: winnerRows }, { rows: loserRows }] = await Promise.all([
-      query("SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1", [winner]),
-      query("SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1", [loser]),
-    ]);
+    // 아이템 보너스용 숫자 id 조회가 실패해도 판돈 이체는 코드로 하므로 멈추지 않는다.
+    let winnerNumericId;
+    let loserNumericId;
+    try {
+      const [{ rows: winnerRows }, { rows: loserRows }] = await Promise.all([
+        query("SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1", [winner]),
+        query("SELECT UserId FROM Users WHERE UserCode = ? LIMIT 1", [loser]),
+      ]);
+      winnerNumericId = winnerRows[0]?.UserId;
+      loserNumericId = loserRows[0]?.UserId;
+    } catch (err) {
+      console.error(`[yut] user lookup failed for ${roomCode}: ${err?.message ?? err}`);
+    }
     const preStreak = await kit.winStreak(roomCode, winner);
     // 정산 ref는 판 id로 고정되어 멱등하다.
-    const wallet = await kit.settleWallet(roomCode, winner, loser, stake, `yut:${gameId}`, winnerRows[0]?.UserId, coinBonus, loserRows[0]?.UserId, preStreak);
-    if (!wallet.ok) kit.io.to(roomCode).emit("wallet:settle_failed", { gameType: GAME_TYPE, reason: wallet.reason });
+    const wallet = await kit.settleWallet(roomCode, winner, loser, stake, `yut:${gameId}`, winnerNumericId, coinBonus, loserNumericId, preStreak);
+    if (stake > 0) {
+      if (wallet?.ok && wallet.result) {
+        transferred = Math.max(0, Number(wallet.result.actual) || 0);
+        winnerGain = Math.max(0, Number(wallet.result.winnerGain) || 0);
+        settlement = wallet.result.alreadySettled ? "already" : transferred < stake ? "capped" : "settled";
+      } else {
+        settlement = "failed";
+        kit.io.to(roomCode).emit("wallet:settle_failed", { gameType: GAME_TYPE, reason: wallet?.reason ?? "settle_error" });
+      }
+    }
     await kit.recordGameOutcome(roomCode, { winner, players: state.playersOrder, gameType: GAME_TYPE, missionKey: "yut", stake, gameId });
     series = await kit.series.record(roomCode, GAME_TYPE, state.playersOrder, winner);
   } catch (err) {
     console.error(`[yut] settlement failed for ${roomCode}: ${err?.message ?? err}`);
-    if (stake > 0) kit.io.to(roomCode).emit("wallet:settle_failed", { gameType: GAME_TYPE, reason: "settle_error" });
+    if (settlement === "pending") {
+      settlement = "failed";
+      kit.io.to(roomCode).emit("wallet:settle_failed", { gameType: GAME_TYPE, reason: "settle_error" });
+    }
   } finally {
     await kit.redis.del(yutGameKey(roomCode));
     await kit.redis.set(
@@ -192,6 +217,9 @@ export async function finishYutGame(kit, roomCode, state, reason, winner = state
     reason,
     stake,
     coinBonus,
+    transferred,
+    winnerGain,
+    settlement,
     finished,
     pieceCount: state.pieceCount ?? DEFAULT_PIECE_COUNT,
     pieces: Object.fromEntries(state.playersOrder.map((p) => [p, state.players[p]?.pieces ?? []])),

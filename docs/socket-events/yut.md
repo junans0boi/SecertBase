@@ -55,9 +55,12 @@
 ### `game:yut:ended`
 
 ```js
-{ gameId, winner, loser, reason: 'goal'|'forfeit', stake, coinBonus, finished: { [user]: n },
-  pieceCount, pieces, characters, series }
+{ gameId, winner, loser, reason: 'goal'|'forfeit', stake, coinBonus,
+  transferred, winnerGain, settlement: 'none'|'settled'|'capped'|'already'|'failed',
+  finished: { [user]: n }, pieceCount, pieces, characters, series }
 ```
+
+영수증: `transferred` = 진 사람에게서 실제로 옮겨진 판돈(잔액이 모자라면 `stake`보다 작다 → `capped`), `winnerGain` = 이긴 사람이 실제로 받은 코인(보너스 포함), 정산이 실패하면 `failed`와 0. 화면은 `stake`가 아니라 이 값을 보여 준다.
 
 판돈은 기존 `wallet:updated`로 반영되고, 실패하면 `wallet:settle_failed`. 정산 ref는 `yut:<gameId>`(멱등), 결과 저장은 `recordGameOutcome(gameId)`.
 

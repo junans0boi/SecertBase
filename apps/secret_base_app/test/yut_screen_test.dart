@@ -291,6 +291,43 @@ void main() {
     await settle(tester);
   });
 
+  testWidgets(
+    'result overlay shows the real receipt: capped stake and failed settlement',
+    (tester) async {
+      Map<String, dynamic> ended(Map<String, dynamic> extra) => {
+        'gameId': 'g1',
+        'winner': yutMe,
+        'loser': yutOpp,
+        'reason': 'goal',
+        'stake': 1000,
+        'coinBonus': 100,
+        'finished': {yutMe: 4, yutOpp: 2},
+        'pieceCount': 4,
+        ...extra,
+      };
+      await pumpScreen(tester);
+      c.debugApplyState(yutState(stake: 1000));
+      await tester.pump(const Duration(milliseconds: 400));
+      // 진 사람이 300코인밖에 없었다: 화면은 약속한 1000이 아니라 실제 300을 말한다.
+      c.debugApplyEnded(
+        ended({'settlement': 'capped', 'transferred': 300, 'winnerGain': 350}),
+      );
+      await tester.pump(const Duration(milliseconds: 1500));
+      expect(find.text('판돈 300코인을 얻었어요'), findsOneWidget);
+      expect(find.text('판돈 1000코인을 얻었어요'), findsNothing);
+      expect(find.text('아이템 보너스 +50코인'), findsOneWidget);
+      // 정산이 실패했다: 얻었다고 말하지 않는다.
+      c.debugApplyEnded(
+        ended({'settlement': 'failed', 'transferred': 0, 'winnerGain': 0}),
+      );
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.textContaining('코인 정산이 지연되고 있어요'), findsOneWidget);
+      expect(find.textContaining('코인을 얻었어요'), findsNothing);
+      expect(find.textContaining('아이템 보너스'), findsNothing);
+      await settle(tester);
+    },
+  );
+
   for (final size in const [
     Size(360, 640),
     Size(360, 740),

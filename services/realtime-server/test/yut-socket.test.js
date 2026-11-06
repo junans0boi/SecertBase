@@ -278,3 +278,95 @@ test('a stale timer from a replaced game does nothing', async t => {
   assert.equal(g.autoStreak, undefined);
   assert.equal(g.seq, 1);
 });
+
+// ── 정산 영수증: 화면은 실제로 옮겨진 코인만 말한다 ────────────────────────────────
+/** 메모리 지갑: transferGameReward가 쓰는 SQL만 흉내 낸다. */
+function installWallet(t, { balances = { 11: 10000, 22: 10000 }, failTransfer = false, failLookup = false } = {}) {
+  const baseQuery = boundary.query;
+  const baseTx = boundary.transaction;
+  const wallet = { balances: { ...balances }, transfers: [], refs: new Set() };
+  boundary.query = async (sql, params) => {
+    if (sql.includes('SELECT UserId FROM Users WHERE UserCode')) {
+      if (failLookup && sql.includes('LIMIT 1')) throw new Error('lookup down');
+      return { rows: [{ UserId: params[0] === A ? 11 : 22 }] };
+    }
+    return baseQuery(sql, params);
+  };
+  boundary.transaction = async run => baseTx(conn => run({
+    execute: async (sql, params) => {
+      if (failTransfer && sql.includes('wallets')) throw new Error('wallet down');
+      if (sql.includes('INSERT IGNORE INTO wallets')) return [[]];
+      if (sql.includes('FROM wallet_transactions')) return [wallet.refs.has(params[0]) ? [{ id: 1 }] : []];
+      if (sql.includes('SELECT balance FROM wallets')) return [[{ balance: wallet.balances[params[0]] }]];
+      if (sql.includes('UPDATE wallets SET balance')) { wallet.balances[params[1]] = params[0]; return [[]]; }
+      if (sql.includes('INSERT INTO wallet_transactions')) {
+        wallet.transfers.push({ user: params[0], delta: params[1], ref: params[4] });
+        wallet.refs.add(params[4]);
+        return [[]];
+      }
+      return conn.execute(sql, params);
+    },
+  }));
+  t.after(() => { boundary.query = baseQuery; boundary.transaction = baseTx; });
+  return wallet;
+}
+
+/** 이기는 마지막 한 수만 남긴 판돈 판을 만들고 그 수를 둔다. */
+async function winOnLastMove(t, { stake, balances, coinBonus = 0, ...walletOpts }) {
+  const f = await fixture(t);
+  const wallet = installWallet(t, { balances, ...walletOpts });
+  const ended = collect(f, 'game:yut:ended');
+  const failed = collect(f, 'wallet:settle_failed');
+  const g0 = await startFromLobby(f, { stake, pieces: 2 });
+  const me = g0.currentTurn;
+  await arrange(f, g => {
+    g.phase = 'moving';
+    g.pendingMoves = [1];
+    g.coinBonus = coinBonus ? { [me]: coinBonus } : {};
+    g.players[me].pieces[0] = { id: 0, position: 20, lastPos: 20, finished: true };
+    g.players[me].pieces[1] = { id: 1, position: 20, lastPos: 19, finished: false };
+  });
+  assert.equal((await f.call(indexOf(me), 'game:yut:move', { pieceId: 1 })).ok, true);
+  await flush();
+  return { f, wallet, me, other: me === A ? B : A, ended: ended[0][0] ?? ended[1][0], failed: [...failed[0], ...failed[1]] };
+}
+
+test('the ended receipt carries the coins that really moved when the loser can pay in full', async t => {
+  const r = await winOnLastMove(t, { stake: 1000, coinBonus: 120 });
+  assert.equal(r.ended.settlement, 'settled');
+  assert.equal(r.ended.transferred, 1000);
+  assert.equal(r.ended.winnerGain, 1120);
+  assert.equal(r.wallet.transfers.length, 2, 'exactly one settlement');
+  const winnerTx = r.wallet.transfers.find(x => x.user === (r.me === A ? 11 : 22));
+  assert.equal(winnerTx.delta, r.ended.winnerGain);
+  assert.equal(winnerTx.ref, `yut:${r.ended.gameId}`);
+});
+
+test('an all-in loser pays only what they have: the receipt says capped and shows the real amount', async t => {
+  // 지는 쪽은 첫 순서(무작위)에 달렸으니 둘 다 300으로 맞춘다.
+  const r = await winOnLastMove(t, { stake: 1000, balances: { 11: 300, 22: 300 }, coinBonus: 50 });
+  assert.equal(r.ended.settlement, 'capped');
+  assert.equal(r.ended.transferred, 300);
+  assert.equal(r.ended.winnerGain, 350);
+  assert.equal(r.ended.stake, 1000, 'the agreed stake stays visible; the receipt is separate');
+});
+
+test('a wallet failure is reported as failed with nothing transferred, and the game still ends once', async t => {
+  const r = await winOnLastMove(t, { stake: 500, failTransfer: true });
+  assert.equal(r.ended.settlement, 'failed');
+  assert.equal(r.ended.transferred, 0);
+  assert.equal(r.ended.winnerGain, 0);
+  assert.equal(r.failed.length > 0, true, 'wallet:settle_failed is announced');
+  assert.equal(r.wallet.transfers.length, 0);
+  assert.equal(await r.f.redis.get(gameKey(r.f)), null);
+});
+
+test('free games have no settlement and a failing user lookup does not stop a staked settlement', async t => {
+  const free = await winOnLastMove(t, { stake: 0 });
+  assert.equal(free.ended.settlement, 'none');
+  assert.equal(free.ended.transferred, 0);
+  const staked = await winOnLastMove(t, { stake: 500, failLookup: true });
+  assert.equal(staked.ended.settlement, 'settled', 'the coin transfer resolves users by code itself');
+  assert.equal(staked.ended.transferred, 500);
+  assert.equal(staked.f.results.length, 1, 'the result is still recorded');
+});

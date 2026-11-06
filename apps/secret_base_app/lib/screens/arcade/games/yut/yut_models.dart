@@ -403,6 +403,15 @@ class YutResult {
   final String reason;
   final int stake;
   final int coinBonus;
+
+  /// 실제로 옮겨진 판돈(영수증). 구버전 서버는 보내지 않아 null.
+  final int? transferred;
+
+  /// 이긴 사람이 실제로 받은 코인(보너스 포함). 구버전 서버는 null.
+  final int? winnerGain;
+
+  /// none | settled | capped | already | failed (구버전 서버는 null)
+  final String? settlement;
   final Map<String, int> finished;
   final int pieceCount;
   final Map<String, dynamic>? series;
@@ -414,6 +423,9 @@ class YutResult {
     required this.reason,
     required this.stake,
     required this.coinBonus,
+    this.transferred,
+    this.winnerGain,
+    this.settlement,
     required this.finished,
     required this.pieceCount,
     required this.series,
@@ -428,6 +440,9 @@ class YutResult {
       reason: '${m['reason'] ?? 'goal'}',
       stake: _int(m['stake']),
       coinBonus: _int(m['coinBonus']),
+      transferred: m['transferred'] is num ? _int(m['transferred']) : null,
+      winnerGain: m['winnerGain'] is num ? _int(m['winnerGain']) : null,
+      settlement: m['settlement'] as String?,
       finished: {
         for (final e in _map(m['finished']).entries) e.key: _int(e.value),
       },
@@ -437,6 +452,21 @@ class YutResult {
   }
 
   bool get forfeit => reason == 'forfeit';
+
+  /// 코인 정산이 실패했다(코인이 옮겨지지 않았다).
+  bool get settlementFailed => settlement == 'failed';
+
+  /// 화면에 말할 판돈: 실제로 옮겨진 코인. 영수증이 없으면 약속한 판돈.
+  int get shownStake => settlementFailed ? 0 : (transferred ?? stake);
+
+  /// 이긴 사람의 아이템 보너스(실제 받은 코인 − 판돈). 영수증이 없으면 서버가 센 보너스.
+  int get shownBonus {
+    if (settlementFailed) return 0;
+    final gain = winnerGain;
+    if (gain == null) return coinBonus;
+    final extra = gain - (transferred ?? stake);
+    return extra > 0 ? extra : 0;
+  }
 }
 
 /// 상점 윷 스킨 아이콘 → 윷가락 색 이름.

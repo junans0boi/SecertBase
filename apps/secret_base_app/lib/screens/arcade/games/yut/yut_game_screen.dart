@@ -1132,23 +1132,30 @@ class _YutGameScreenState extends State<YutGameScreen>
       details: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (r.stake > 0)
+          if (r.stake > 0 && r.settlementFailed)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: GameChip(theme: t, leading: '⏳', label: '코인 정산이 지연되고 있어요'),
+            )
+          else if (r.stake > 0)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: GameChip(
                 theme: t,
                 leading: '🪙',
-                label: won ? '판돈 ${r.stake}코인을 얻었어요' : '판돈 ${r.stake}코인을 잃었어요',
+                label: won
+                    ? '판돈 ${r.shownStake}코인을 얻었어요'
+                    : '판돈 ${r.shownStake}코인을 잃었어요',
                 emphasized: won,
               ),
             ),
-          if (won && r.coinBonus > 0)
+          if (won && r.shownBonus > 0)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: GameChip(
                 theme: t,
                 leading: '🎁',
-                label: '아이템 보너스 +${r.coinBonus}코인',
+                label: '아이템 보너스 +${r.shownBonus}코인',
                 emphasized: true,
               ),
             ),
