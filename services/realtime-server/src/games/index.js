@@ -19,5 +19,6 @@ import onecard from "./onecard.js";
 import penalty from "./penalty.js";
 import pirate from "./pirate.js";
 import zero from "./zero.js";
+import yut from "./yut.js";
 
-export const GAME_MODULES = [blackjack, oldmaid, onecard, penalty, pirate, zero].filter((m) => m && m.gameType);
+export const GAME_MODULES = [blackjack, oldmaid, onecard, penalty, pirate, zero, yut].filter((m) => m && m.gameType);

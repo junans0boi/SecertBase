@@ -3,7 +3,7 @@
 // Accepts io and redis explicitly so tests can inject fakes.
 
 import { serializeOneCardFor } from './uno-engine.js';
-import { serializeYutGame } from './yut-engine.js';
+import { serializeYutState } from './yut-engine.js';
 import { serializeFor as serializeGostopGameFor } from './gostop-engine.js';
 import { serializeMarbleGame } from './marble-engine.js';
 
@@ -70,7 +70,7 @@ export const resolveLobbyJoinForResume = async (socket, io, redis, { roomCode, g
 
   let state = null;
   if (gameType === 'yut') {
-    state = serializeYutGame(game);
+    state = serializeYutState(game);
   } else if (gameType === 'uno') {
     state = serializeUnoGameFor(game, userId);
   } else if (gameType === 'gostop') {

@@ -13,6 +13,9 @@ export const LOBBY_OPTIONS = Object.freeze({
   uno: Object.freeze({
     mode: Object.freeze({ values: Object.freeze(["go_wild", "classic"]), default: "go_wild" }),
   }),
+  yut: Object.freeze({
+    pieces: Object.freeze({ values: Object.freeze([4, 3, 2]), default: 4 }),
+  }),
 });
 
 const specFor = (gameType) => LOBBY_OPTIONS[String(gameType).startsWith("uno") ? "uno" : gameType];

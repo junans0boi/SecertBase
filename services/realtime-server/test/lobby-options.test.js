@@ -32,3 +32,11 @@ test('normalizing keeps valid values, drops unknown keys and fills defaults', ()
   assert.deepEqual(normalizeLobbyOptions('pirate', null), { holes: 8 });
   assert.deepEqual(normalizeLobbyOptions('blackjack', { cells: 3 }), {});
 });
+
+test('yut piece count option: 4 (default), 3 or 2', () => {
+  assert.deepEqual(defaultLobbyOptions('yut'), { pieces: 4 });
+  for (const n of [4, 3, 2]) assert.equal(isValidLobbyOption('yut', 'pieces', n), true);
+  assert.equal(isValidLobbyOption('yut', 'pieces', 5), false);
+  assert.equal(isValidLobbyOption('yut', 'pieces', '3'), false);
+  assert.deepEqual(normalizeLobbyOptions('yut', { pieces: 1 }), { pieces: 4 });
+});
