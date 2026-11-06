@@ -6,9 +6,9 @@ import 'package:flutter/material.dart';
 import '../../../../core/game_sfx/game_sfx.dart';
 import '../../../../widgets/play_kit/play_kit.dart';
 
-/// 한 사람의 손패. 카드는 신발(덱 상자)에서 날아와 자리를 잡고, 가려진 카드가 공개되면
+/// 한 사람의 손패. 카드는 테이블 가장자리에서 날아와 자리를 잡고, 가려진 카드가 공개되면
 /// 세로축으로 뒤집힌다. [gold]이면 금빛 테두리가 손패 둘레를 한 바퀴 돌고,
-/// [bust]가 켜지는 순간 손패가 흔들린다.
+/// [bust]가 켜지는 순간 손패가 흔들린다. [winner]이면 카드마다 황동 테두리가 둘린다.
 class BlackjackHand extends StatefulWidget {
   final GameTheme theme;
   final List<Map<String, dynamic>> cards;
@@ -16,16 +16,19 @@ class BlackjackHand extends StatefulWidget {
   /// 같은 라운드의 카드인지 가르는 열쇠(예: `gameId-round`). 바뀌면 새로 딜한다.
   final String roundKey;
 
-  /// 손패 가운데에서 신발까지의 거리(픽셀). 카드가 여기서 출발한다.
+  /// 손패 가운데에서 카드가 나오는 자리까지의 거리(픽셀). 카드가 여기서 출발한다.
   final Offset dealFrom;
 
   /// 처음 두 장을 번갈아 나눠 주는 순서(0 = 선공, 1 = 후공).
   final int seat;
 
-  /// 내 손이면 홀카드에 "비공개" 표시를 한다(상대에게는 안 보인다는 뜻).
+  /// 내 손이면 홀카드에 "숨은 카드" 표시를 한다(상대에게는 안 보인다는 뜻).
   final bool markHole;
   final bool gold;
   final bool bust;
+
+  /// 이번 라운드를 이긴 손(카드마다 황동 테두리).
+  final bool winner;
 
   /// 홀카드가 공개될 때 뒤집기 전 기다리는 시간(순서대로 공개).
   final Duration flipDelay;
@@ -43,8 +46,9 @@ class BlackjackHand extends StatefulWidget {
     this.markHole = false,
     this.gold = false,
     this.bust = false,
+    this.winner = false,
     this.flipDelay = Duration.zero,
-    this.maxCardWidth = 78,
+    this.maxCardWidth = 96,
   });
 
   @override
@@ -95,15 +99,13 @@ class _BlackjackHandState extends State<BlackjackHand>
           final n = math.max(1, widget.cards.length);
           final maxW = box.maxWidth.isFinite ? box.maxWidth : 360.0;
           final maxH = box.maxHeight.isFinite ? box.maxHeight : 160.0;
-          // 카드 폭: 높이에 맞추고(비율 64:92), 장수가 많으면 겹쳐서 폭에 맞춘다.
-          final byHeight = (maxH - 10) * 64 / 92;
-          final cardW = math
-              .min(widget.maxCardWidth, math.min(byHeight, maxW * 0.3))
-              .clamp(30.0, 120.0);
-          final cardH = cardW * 92 / 64;
+          // 카드는 줄 높이를 꽉 채운다(비율 66:94). 장수가 많으면 겹쳐서 폭에 맞춘다.
+          final cardH = math.min(maxH, widget.maxCardWidth * 94 / 66);
+          final cardW = math.min(cardH * 66 / 94, maxW * 0.4);
+          // 기본 겹침은 카드 폭의 39%(66px 카드에서 26px).
           final step = n <= 1
               ? 0.0
-              : math.min(cardW * 0.78, (maxW - cardW - 12) / (n - 1));
+              : math.min(cardW * 0.606, (maxW - cardW) / (n - 1));
           final handW = cardW + step * (n - 1);
           return Center(
             child: AnimatedBuilder(
@@ -129,8 +131,8 @@ class _BlackjackHandState extends State<BlackjackHand>
                 );
               },
               child: SizedBox(
-                width: handW + 8,
-                height: cardH + 8,
+                width: handW,
+                height: cardH,
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
@@ -138,8 +140,8 @@ class _BlackjackHandState extends State<BlackjackHand>
                       AnimatedPositioned(
                         duration: const Duration(milliseconds: 260),
                         curve: Curves.easeOutCubic,
-                        left: 4 + step * i,
-                        top: 4,
+                        left: step * i,
+                        top: 0,
                         child: _DealtCard(
                           key: ValueKey('${widget.roundKey}-$i'),
                           card: widget.cards[i],
@@ -153,12 +155,11 @@ class _BlackjackHandState extends State<BlackjackHand>
                                 )
                               : Duration.zero,
                           flipDelay: widget.flipDelay,
-                          badge:
+                          hole:
                               widget.markHole &&
-                                  i == 1 &&
-                                  widget.cards[i]['hidden'] != true
-                              ? '비공개'
-                              : null,
+                              i == 1 &&
+                              widget.cards[i]['hidden'] != true,
+                          ring: widget.winner,
                         ),
                       ),
                   ],
@@ -172,14 +173,19 @@ class _BlackjackHandState extends State<BlackjackHand>
   }
 }
 
-/// 신발에서 날아와 앉고, 앞면이 처음 보이게 되면 뒤집히는 카드 한 장.
+/// 테이블 가장자리에서 날아와 앉고, 앞면이 처음 보이게 되면 뒤집히는 카드 한 장.
 class _DealtCard extends StatefulWidget {
   final Map<String, dynamic> card;
   final double width;
   final Offset from;
   final Duration delay;
   final Duration flipDelay;
-  final String? badge;
+
+  /// 내 숨은 카드(라벨 + 황동 테두리).
+  final bool hole;
+
+  /// 이긴 손의 카드(황동 테두리).
+  final bool ring;
 
   const _DealtCard({
     super.key,
@@ -188,7 +194,8 @@ class _DealtCard extends StatefulWidget {
     required this.from,
     required this.delay,
     required this.flipDelay,
-    this.badge,
+    this.hole = false,
+    this.ring = false,
   });
 
   @override
@@ -267,7 +274,7 @@ class _DealtCardState extends State<_DealtCard> with TickerProviderStateMixin {
     return AnimatedBuilder(
       animation: Listenable.merge([_deal, _flip]),
       builder: (context, _) {
-        // 날아오기: 시작 전에는 신발 위치에 뒷면으로 작게 있다가 호를 그리며 자리로.
+        // 날아오기: 시작 전에는 나오는 자리에 뒷면으로 작게 있다가 호를 그리며 자리로.
         final raw = _deal.value <= _dealStart
             ? 0.0
             : (_deal.value - _dealStart) / (1 - _dealStart);
@@ -294,8 +301,9 @@ class _DealtCardState extends State<_DealtCard> with TickerProviderStateMixin {
         final card = PlayingCard.fromMap(
           showFace ? widget.card : const {'hidden': true},
           width: widget.width,
-          back: CardBackStyle.emerald,
-          badge: widget.badge,
+          style: CardStyle.lounge,
+          highlight: showFace && (widget.hole || widget.ring),
+          badge: showFace && widget.hole ? '숨은 카드' : null,
         );
         return Opacity(
           opacity: arrived ? 1 : 0,

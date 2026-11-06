@@ -11,6 +11,7 @@ import 'games/penalty/penalty_models.dart';
 import 'games/onecard/onecard_lobby.dart';
 import 'games/yut/yut_character_picker.dart';
 import 'games/yut/yut_figures.dart';
+import 'game_lobby_themed.dart';
 import 'lobby_options.dart';
 
 const _kStakeOptions = [0, 500, 1000, 3000];
@@ -185,6 +186,30 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
         : (hasTwoPlayers && needsReady && !partnersReady)
         ? '상대의 판돈 동의를 기다리는 중'
         : '상대방을 기다리는 중';
+
+    // 시안이 있는 게임(블랙잭·도둑잡기)은 모던 로비로 그린다.
+    final themed = themedLobbySpecFor(widget.gameType);
+    if (themed != null) {
+      return Stack(
+        children: [
+          ThemedLobbyView(
+            spec: themed,
+            gameType: widget.gameType,
+            players: List<String>.from(_socket.lobbyPlayers),
+            host: _socket.lobbyHost,
+            myId: _socket.userId,
+            nicknames: Map<String, String>.from(_socket.presenceNicknames),
+            isHost: isHost,
+            canStart: canStart,
+            startLabel: startLabel,
+            onStart: () => _socket.startGameLobby(widget.gameType),
+            onBack: () => Navigator.of(context).pop(),
+          ),
+          if (_countdown > 0)
+            ThemedCountdown(theme: themed.theme, seconds: _countdown),
+        ],
+      );
+    }
 
     return Stack(
       children: [

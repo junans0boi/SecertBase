@@ -7,7 +7,8 @@ import 'package:secret_base_app/core/socket_service.dart';
 import 'package:secret_base_app/screens/arcade/games/blackjack/blackjack_controller.dart';
 import 'package:secret_base_app/screens/arcade/games/blackjack/blackjack_game_screen.dart';
 import 'package:secret_base_app/screens/arcade/games/blackjack/blackjack_rules.dart';
-import 'package:secret_base_app/widgets/play_kit/play_kit.dart';
+import 'package:secret_base_app/widgets/play_kit/modern_kit.dart';
+import 'package:secret_base_app/widgets/play_kit/modern_result.dart';
 
 const me = 'ME-CODE-1';
 const opp = 'OPP-CODE-2';
@@ -119,13 +120,8 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
   }
 
-  GamePrimaryButton primary(WidgetTester tester, String label) => tester
-      .widget<GamePrimaryButton>(find.widgetWithText(GamePrimaryButton, label));
-
-  GameSecondaryButton secondary(WidgetTester tester, String label) =>
-      tester.widget<GameSecondaryButton>(
-        find.widgetWithText(GameSecondaryButton, label),
-      );
+  ModButton button(WidgetTester tester, String label) =>
+      tester.widget<ModButton>(find.widgetWithText(ModButton, label));
 
   for (final size in const [
     Size(360, 640),
@@ -158,15 +154,15 @@ void main() {
   testWidgets('hit and stand are enabled only on my turn', (tester) async {
     controller.apply(state(currentTurn: me));
     await pumpScreen(tester);
-    expect(primary(tester, '히트').onPressed, isNotNull);
-    expect(secondary(tester, '스탠드').onPressed, isNotNull);
+    expect(button(tester, '히트').onPressed, isNotNull);
+    expect(button(tester, '스탠드').onPressed, isNotNull);
     expect(find.text('내 차례 — 히트 또는 스탠드'), findsOneWidget);
-    expect(find.byType(TurnTimerRing), findsOneWidget);
+    expect(find.byType(ModTimerRing), findsOneWidget);
 
     controller.apply(state(currentTurn: opp));
     await tester.pump(const Duration(milliseconds: 300));
-    expect(primary(tester, '히트').onPressed, isNull);
-    expect(secondary(tester, '스탠드').onPressed, isNull);
+    expect(button(tester, '히트').onPressed, isNull);
+    expect(button(tester, '스탠드').onPressed, isNull);
     expect(find.text('단비님이 고르는 중…'), findsOneWidget);
     await finish(tester);
   });
@@ -174,8 +170,8 @@ void main() {
   testWidgets('on 21 only stand is allowed', (tester) async {
     controller.apply(state(myHand: [c('10'), c('5'), c('6')]));
     await pumpScreen(tester);
-    expect(primary(tester, '히트').onPressed, isNull);
-    expect(secondary(tester, '스탠드').onPressed, isNotNull);
+    expect(button(tester, '히트').onPressed, isNull);
+    expect(button(tester, '스탠드').onPressed, isNotNull);
     expect(find.text('21! 스탠드로 지켜요'), findsOneWidget);
     await finish(tester);
   });
@@ -216,11 +212,11 @@ void main() {
       ),
     );
     await tester.pump(const Duration(milliseconds: 200));
-    expect(find.text('이번 라운드 승리!'), findsNothing, reason: '공개 연출 먼저');
+    expect(find.text('이번 라운드는 이겼어요'), findsNothing, reason: '공개 연출 먼저');
     await tester.pump(const Duration(milliseconds: 1200));
-    expect(find.text('이번 라운드 승리!'), findsOneWidget);
-    expect(find.text('다음 라운드'), findsOneWidget);
-    expect(primary(tester, '다음 라운드').onPressed, isNotNull);
+    expect(find.text('이번 라운드는 이겼어요'), findsOneWidget);
+    expect(find.text('다음 라운드 준비'), findsOneWidget);
+    expect(button(tester, '다음 라운드 준비').onPressed, isNotNull);
     expect(find.text('18'), findsOneWidget, reason: '상대 합 공개');
     expect(find.text('히트'), findsNothing);
     expect(tester.takeException(), isNull);
@@ -238,7 +234,7 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('상대를 기다리는 중…'), findsOneWidget);
-    expect(primary(tester, '상대를 기다리는 중…').onPressed, isNull);
+    expect(button(tester, '상대를 기다리는 중…').onPressed, isNull);
     await finish(tester);
   });
 
@@ -260,13 +256,15 @@ void main() {
       ),
     );
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.byType(GameResultOverlay), findsNothing);
+    expect(find.byType(ModResultView), findsNothing);
     await tester.pump(const Duration(milliseconds: 2000));
-    expect(find.byType(GameResultOverlay), findsOneWidget);
-    expect(find.text('승리!'), findsOneWidget);
-    expect(find.text('한 판 더!'), findsOneWidget);
+    expect(find.byType(ModResultView), findsOneWidget);
+    expect(find.text('승리'), findsWidgets);
+    expect(find.text('먼저 2승을 거뒀어요'), findsOneWidget);
+    expect(find.text('재대결'), findsOneWidget);
     expect(find.text('이번 방 전적'), findsOneWidget);
-    expect(find.text('라운드 2 : 1'), findsOneWidget);
+    expect(find.text('3 : 1'), findsOneWidget, reason: '이번 방 전적');
+    expect(find.text('라운드 기록'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await finish(tester);
   });
@@ -281,7 +279,7 @@ void main() {
       ),
     );
     await pumpScreen(tester);
-    expect(find.byType(GameResultOverlay), findsOneWidget);
+    expect(find.byType(ModResultView), findsOneWidget);
     expect(find.text('시간을 세 번 넘겨 기권했어요'), findsOneWidget);
     await finish(tester);
   });
