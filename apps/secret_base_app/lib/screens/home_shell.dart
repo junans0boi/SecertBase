@@ -47,6 +47,7 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
   bool _offline = false;
+  final ValueNotifier<bool> _offlineNotifier = ValueNotifier(false);
   Timer? _probeTimer;
 
   @override
@@ -61,13 +62,17 @@ class _HomeShellState extends State<HomeShell> {
   @override
   void dispose() {
     _probeTimer?.cancel();
+    _offlineNotifier.dispose();
     pendingPushTarget.removeListener(_schedulePush);
     super.dispose();
   }
 
   Future<void> _probe() async {
     final online = await widget.connectivityProbe();
-    if (mounted && _offline == online) setState(() => _offline = !online);
+    if (mounted && _offline == online) {
+      setState(() => _offline = !online);
+      _offlineNotifier.value = _offline;
+    }
   }
 
   // Tabs are built the first time they are opened and then kept alive
@@ -75,7 +80,10 @@ class _HomeShellState extends State<HomeShell> {
   final Set<int> _visited = {0};
 
   Widget _buildPage(int i) => switch (i) {
-    0 => HomeScreen(onNavigate: _handleHomeNavigation),
+    0 => HomeScreen(
+      onNavigate: _handleHomeNavigation,
+      offline: _offlineNotifier,
+    ),
     1 => const MomentLoopScreen(),
     2 => const MapScreen(),
     3 => const ArcadeScreen(),

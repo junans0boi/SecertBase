@@ -294,7 +294,11 @@ class _StatePanel extends StatelessWidget {
             style: V2Text.head,
           ),
           const SizedBox(height: V2Space.x1),
-          Text(V2Text.keepAll(body), textAlign: TextAlign.center, style: V2Text.cap),
+          Text(
+            V2Text.keepAll(body),
+            textAlign: TextAlign.center,
+            style: V2Text.cap,
+          ),
         ],
       ),
     );
@@ -403,8 +407,10 @@ class _TodayMedia extends StatelessWidget {
           url,
           fit: BoxFit.cover,
           semanticLabel: '오늘의 순간 사진',
-          errorBuilder: (_, _, _) =>
-              V2PhotoPlaceholder(seed: moment.id, icon: Icons.broken_image_rounded),
+          errorBuilder: (_, _, _) => V2PhotoPlaceholder(
+            seed: moment.id,
+            icon: Icons.broken_image_rounded,
+          ),
         ),
       ),
     );

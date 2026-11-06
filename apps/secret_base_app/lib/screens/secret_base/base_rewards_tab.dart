@@ -207,15 +207,11 @@ class _BaseRewardsTabState extends State<BaseRewardsTab> {
       await _showReward(m, name, icon);
     } on BaseApiException catch (e) {
       if (!mounted) return;
-      showV2Snack(
-        context,
-        switch (e.reason) {
-          'already_claimed' => '이미 받은 보상이에요.',
-          'not_achieved' => '아직 받을 수 없는 보상이에요.',
-          _ => '보상을 받지 못했어요. 다시 시도해 주세요.',
-        },
-        tone: V2Tone.err,
-      );
+      showV2Snack(context, switch (e.reason) {
+        'already_claimed' => '이미 받은 보상이에요.',
+        'not_achieved' => '아직 받을 수 없는 보상이에요.',
+        _ => '보상을 받지 못했어요. 다시 시도해 주세요.',
+      }, tone: V2Tone.err);
       if (e.reason == 'already_claimed') _fetch(silent: true);
     } finally {
       if (mounted) setState(() => _claiming.remove(m.type));
@@ -251,9 +247,9 @@ class _BaseRewardsTabState extends State<BaseRewardsTab> {
     );
     if (!mounted) return;
     if (go == 'play') {
-      Navigator.of(context).push<void>(
-        MaterialPageRoute(builder: (_) => const ArcadeScreen()),
-      );
+      Navigator.of(
+        context,
+      ).push<void>(MaterialPageRoute(builder: (_) => const ArcadeScreen()));
     } else if (go == 'shop') {
       Navigator.of(
         context,
@@ -337,8 +333,7 @@ class _BaseRewardsTabState extends State<BaseRewardsTab> {
               child: V2EmptyState(
                 illustration: const V2SceneIllustration(V2Scene.hearts),
                 title: '첫 보상은 동물 말이에요',
-                body:
-                    '${josa(partner, '와', '과')} 첫 번째 순간을 남기면 바로 받을 수 있어요.',
+                body: '${josa(partner, '와', '과')} 첫 번째 순간을 남기면 바로 받을 수 있어요.',
                 actionLabel: '오늘의 순간 남기기',
                 onAction: () => openMomentComposer(context),
               ),
@@ -355,8 +350,7 @@ class _BaseRewardsTabState extends State<BaseRewardsTab> {
                       milestone: m,
                       claiming: _claiming.contains(m.type),
                       onClaim: () => _claim(m),
-                      subtitleOverride:
-                          '${m.label} · ${m.group.label} 보상',
+                      subtitleOverride: '${m.label} · ${m.group.label} 보상',
                     ),
                 ],
               ),
@@ -442,11 +436,12 @@ class _BaseRewardsTabState extends State<BaseRewardsTab> {
       final t = m.target;
       if (v != null && t != null) return '${m.label} ($v/$t)';
     }
-    final upcoming = _items
-        .where((m) => !m.achieved && m.group == MilestoneGroup.days)
-        .where((m) => m.achievedAt != null)
-        .toList()
-      ..sort((a, b) => a.achievedAt!.compareTo(b.achievedAt!));
+    final upcoming =
+        _items
+            .where((m) => !m.achieved && m.group == MilestoneGroup.days)
+            .where((m) => m.achievedAt != null)
+            .toList()
+          ..sort((a, b) => a.achievedAt!.compareTo(b.achievedAt!));
     if (upcoming.isNotEmpty) {
       final m = upcoming.first;
       return '${m.label} · ${m.achievedAt!.difference(today()).inDays}일 남았어요';
@@ -613,10 +608,7 @@ class _GradeLegend extends StatelessWidget {
               ],
             ),
           ),
-        Text(
-          '받은 보상은 놀이의 윷·말·카드에서 쓰고, 상점 꾸러미에서 모아 볼 수 있어요.',
-          style: V2Text.cap,
-        ),
+        Text('받은 보상은 놀이의 윷·말·카드에서 쓰고, 상점 꾸러미에서 모아 볼 수 있어요.', style: V2Text.cap),
       ],
     );
   }

@@ -47,7 +47,9 @@ class _BaseMemoriesTabState extends State<BaseMemoriesTab> {
   }
 
   void _open(Map<String, dynamic> post) {
-    final id = post['id'] is int ? post['id'] as int : int.tryParse('${post['id']}');
+    final id = post['id'] is int
+        ? post['id'] as int
+        : int.tryParse('${post['id']}');
     if (id == null) return;
     Navigator.of(context).push<void>(
       MaterialPageRoute(builder: (_) => MomentLoopScreen(initialPostId: id)),
@@ -145,10 +147,7 @@ class _MemoryRow extends StatelessWidget {
     final media = post['media_url'] as String?;
     final at = DateTime.tryParse('${post['captured_at'] ?? ''}');
     final clock = clockLabel(post['captured_at'] as String?);
-    final subtitle = [
-      ?clock,
-      ?place,
-    ].join(' · ');
+    final subtitle = [?clock, ?place].join(' · ');
     final title = caption.isNotEmpty ? caption : (place ?? '사진 기록');
     final thumb = media == null || media.isEmpty
         ? null

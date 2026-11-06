@@ -134,7 +134,10 @@ class _BaseAnniversariesTabState extends State<BaseAnniversariesTab> {
       if (!mounted) return;
       setState(() {
         _raw = list is List
-            ? [for (final a in list.whereType<Map>()) Map<String, dynamic>.from(a)]
+            ? [
+                for (final a in list.whereType<Map>())
+                  Map<String, dynamic>.from(a),
+              ]
             : [];
         _load = BaseLoad.ready;
       });
@@ -313,9 +316,7 @@ class _BaseAnniversariesTabState extends State<BaseAnniversariesTab> {
           if (entries.past.isNotEmpty) ...[
             const SizedBox(height: V2Space.x2),
             V2Button(
-              label: _showPast
-                  ? '지난 기념일 접기'
-                  : '지난 기념일 ${entries.past.length}개',
+              label: _showPast ? '지난 기념일 접기' : '지난 기념일 ${entries.past.length}개',
               variant: V2ButtonVariant.text,
               onPressed: () => setState(() => _showPast = !_showPast),
             ),
@@ -359,9 +360,7 @@ class _StartDateCard extends StatelessWidget {
                 Text('우리의 첫날', style: V2Text.cap),
                 const SizedBox(height: V2Space.x1),
                 Text(
-                  start == null
-                      ? '아직 정하지 않았어요'
-                      : dotDateWithWeekday(start!),
+                  start == null ? '아직 정하지 않았어요' : dotDateWithWeekday(start!),
                   style: V2Text.head,
                 ),
               ],
@@ -375,7 +374,11 @@ class _StartDateCard extends StatelessWidget {
                 style: V2Text.serif(size: 24, color: p.primary),
               ),
             ),
-          V2IconButton(icon: V2Icons.edit, tooltip: '첫날 바꾸기', onPressed: onEdit),
+          V2IconButton(
+            icon: V2Icons.edit,
+            tooltip: '첫날 바꾸기',
+            onPressed: onEdit,
+          ),
         ],
       ),
     );
@@ -416,7 +419,10 @@ class _AnniversaryRow extends StatelessWidget {
                 width: 44,
                 child: Column(
                   children: [
-                    Text('${e.shown.month}월', style: V2Text.label.copyWith(color: p.sub)),
+                    Text(
+                      '${e.shown.month}월',
+                      style: V2Text.label.copyWith(color: p.sub),
+                    ),
                     Text('${e.shown.day}', style: V2Text.serif(size: 22)),
                   ],
                 ),

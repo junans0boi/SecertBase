@@ -21,12 +21,9 @@ class BaseApiException implements Exception {
 /// Tiny JSON client for the 비밀기지 hub (milestones, anniversaries,
 /// postcards, memories, couple info). Every response must be `{ok: true}`.
 class BaseApi {
-  BaseApi({
-    required this.baseUrl,
-    required this.headers,
-    http.Client? client,
-  }) : _client = client ?? http.Client(),
-       _ownsClient = client == null;
+  BaseApi({required this.baseUrl, required this.headers, http.Client? client})
+    : _client = client ?? http.Client(),
+      _ownsClient = client == null;
 
   final String baseUrl;
   final Map<String, String> headers;

@@ -445,7 +445,10 @@ class _Stat extends StatelessWidget {
     return Expanded(
       child: Column(
         children: [
-          Text('$value', style: V2Text.serif(size: 28, color: V2Colors.rose700)),
+          Text(
+            '$value',
+            style: V2Text.serif(size: 28, color: V2Colors.rose700),
+          ),
           Text(label, style: V2Text.cap),
         ],
       ),
