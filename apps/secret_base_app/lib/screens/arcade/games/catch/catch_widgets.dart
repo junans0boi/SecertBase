@@ -287,59 +287,63 @@ class CatchGuessBubbles extends StatefulWidget {
 
 class _CatchGuessBubblesState extends State<CatchGuessBubbles> {
   static const Duration life = Duration(milliseconds: 3800);
-  final Map<String, DateTime> _shownAt = {};
-  final Map<String, String> _shownId = {};
-  Timer? _expire;
+
+  /// 지금 떠 있는 말풍선(사람별)과 그것을 지우는 타이머.
+  final Map<String, CatchGuess> _visible = {};
+  final Map<String, Timer> _timers = {};
+  final Map<String, String> _seenId = {};
 
   @override
   void initState() {
     super.initState();
+    // 화면이 열리기 전의 추측은 말풍선으로 다시 띄우지 않는다.
+    for (final e in widget.controller.latestGuess.entries) {
+      _seenId[e.key] = e.value.id;
+    }
     widget.controller.addListener(_onController);
   }
 
   @override
   void dispose() {
-    _expire?.cancel();
+    for (final t in _timers.values) {
+      t.cancel();
+    }
     widget.controller.removeListener(_onController);
     super.dispose();
   }
 
   void _onController() {
+    final latest = widget.controller.latestGuess;
     var changed = false;
-    for (final e in widget.controller.latestGuess.entries) {
-      if (_shownId[e.key] != e.value.id) {
-        _shownId[e.key] = e.value.id;
-        _shownAt[e.key] = DateTime.now();
-        changed = true;
-      }
-    }
-    // 새 라운드에서 지워졌으면 말풍선도 지운다.
-    if (widget.controller.latestGuess.isEmpty && _shownId.isNotEmpty) {
-      _shownId.clear();
-      _shownAt.clear();
+    for (final e in latest.entries) {
+      if (_seenId[e.key] == e.value.id) continue;
+      _seenId[e.key] = e.value.id;
+      _visible[e.key] = e.value;
+      _timers[e.key]?.cancel();
+      _timers[e.key] = Timer(life, () {
+        _timers.remove(e.key);
+        if (!mounted) return;
+        setState(() => _visible.remove(e.key));
+      });
       changed = true;
     }
-    if (changed && mounted) {
-      setState(() {});
-      _expire?.cancel();
-      _expire = Timer(life + const Duration(milliseconds: 60), () {
-        if (mounted) setState(() {});
-      });
+    // 새 라운드에서 지워졌으면 말풍선도 지운다.
+    if (latest.isEmpty && (_visible.isNotEmpty || _seenId.isNotEmpty)) {
+      for (final t in _timers.values) {
+        t.cancel();
+      }
+      _timers.clear();
+      _visible.clear();
+      _seenId.clear();
+      changed = true;
     }
-  }
-
-  CatchGuess? _visible(String? id) {
-    if (id == null) return null;
-    final at = _shownAt[id];
-    final g = widget.controller.latestGuess[id];
-    if (at == null || g == null) return null;
-    return DateTime.now().difference(at) < life ? g : null;
+    if (changed && mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    final left = _visible(widget.leftId);
-    final right = _visible(widget.rightId);
+    final left = widget.leftId == null ? null : _visible[widget.leftId];
+    final right = widget.rightId == null ? null : _visible[widget.rightId];
     return IgnorePointer(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
