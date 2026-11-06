@@ -156,6 +156,11 @@ class _AppInfoScreenState extends State<AppInfoScreen> {
                   MoreInfoRow(label: '팀', value: widget.teamName),
                   if (operator.isNotEmpty)
                     MoreInfoRow(label: '운영자', value: operator),
+                  if (site.isNotEmpty)
+                    MoreInfoRow(
+                      label: '홈페이지',
+                      value: Uri.tryParse(site)?.host ?? site,
+                    ),
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: _versionTap,
