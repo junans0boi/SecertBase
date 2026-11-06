@@ -417,3 +417,192 @@ class _ScenePainter extends CustomPainter {
   bool shouldRepaint(_ScenePainter old) =>
       old.scene != scene || old.dark != dark;
 }
+
+/// Night-sky tent hero artwork for the home screen (mockup `.hm-ill`, a
+/// 390×204 viewBox pinned to the bottom-right and sliced to cover). Draws
+/// only the artwork; put it in a [Stack] over the pastel hero gradient.
+///
+/// ```dart
+/// Stack(children: [const Positioned.fill(child: V2HeroIllustration()), ...])
+/// ```
+class V2HeroIllustration extends StatelessWidget {
+  const V2HeroIllustration({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const ExcludeSemantics(
+      child: CustomPaint(painter: _HeroPainter(), size: Size.infinite),
+    );
+  }
+}
+
+class _HeroPainter extends CustomPainter {
+  const _HeroPainter();
+
+  static const _w = 390.0;
+  static const _h = 204.0;
+  static const _pole = Color(0xFFB07A8F);
+  static const _gold = Color(0xFFFFD76A);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // preserveAspectRatio="xMaxYMax slice"
+    final s = math.max(size.width / _w, size.height / _h);
+    canvas.save();
+    canvas.translate(size.width - _w * s, size.height - _h * s);
+    canvas.scale(s);
+
+    Paint fill(Color c, [double o = 1]) =>
+        Paint()..color = c.withValues(alpha: o);
+    Paint stroke(Color c, double w) => Paint()
+      ..color = c
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = w
+      ..strokeCap = StrokeCap.round;
+
+    // crescent moon
+    final moon = Path.combine(
+      PathOperation.difference,
+      Path()
+        ..addOval(Rect.fromCircle(center: const Offset(296, 69), radius: 17)),
+      Path()
+        ..addOval(Rect.fromCircle(center: const Offset(301.5, 67), radius: 16)),
+    );
+    canvas.drawPath(moon, fill(_gold, .9));
+
+    void star(double cx, double cy, double r, double o) {
+      final k = r * .3;
+      final p = Path()
+        ..moveTo(cx, cy - r)
+        ..lineTo(cx + k, cy - k)
+        ..lineTo(cx + r, cy)
+        ..lineTo(cx + k, cy + k)
+        ..lineTo(cx, cy + r)
+        ..lineTo(cx - k, cy + k)
+        ..lineTo(cx - r, cy)
+        ..lineTo(cx - k, cy - k)
+        ..close();
+      canvas.drawPath(p, fill(Colors.white, o));
+    }
+
+    star(246, 70, 4.5, .9);
+    star(330, 118, 3, .8);
+    star(214, 112, 3, .7);
+    star(370, 60, 3, .8);
+
+    // rolling hills
+    canvas.drawPath(
+      Path()
+        ..moveTo(0, 168)
+        ..quadraticBezierTo(90, 138, 190, 160)
+        ..quadraticBezierTo(290, 182, 390, 146)
+        ..lineTo(390, _h)
+        ..lineTo(0, _h)
+        ..close(),
+      fill(const Color(0xFFFFCADD)),
+    );
+    canvas.drawPath(
+      Path()
+        ..moveTo(0, 190)
+        ..quadraticBezierTo(120, 164, 230, 184)
+        ..quadraticBezierTo(340, 204, 390, 174)
+        ..lineTo(390, _h)
+        ..lineTo(0, _h)
+        ..close(),
+      fill(const Color(0xFFFFB2CB)),
+    );
+
+    // string lights
+    canvas.drawLine(
+      const Offset(196, 152),
+      const Offset(196, 180),
+      stroke(_pole, 3),
+    );
+    canvas.drawPath(
+      Path()
+        ..moveTo(196, 152)
+        ..quadraticBezierTo(238, 172, 280, 124),
+      stroke(_pole, 1.6),
+    );
+    canvas.drawCircle(const Offset(217, 157), 3.4, fill(_gold));
+    canvas.drawCircle(const Offset(238, 154), 3.4, fill(Colors.white));
+    canvas.drawCircle(const Offset(259, 143), 3.4, fill(_gold));
+
+    // tent
+    canvas.drawPath(
+      Path()
+        ..moveTo(238, 180)
+        ..lineTo(280, 120)
+        ..lineTo(322, 180)
+        ..close(),
+      fill(Colors.white),
+    );
+    canvas.drawPath(
+      Path()
+        ..moveTo(280, 120)
+        ..lineTo(266, 180)
+        ..lineTo(294, 180)
+        ..close(),
+      fill(const Color(0xFFFF8FB3)),
+    );
+    canvas.drawLine(
+      const Offset(280, 120),
+      const Offset(280, 106),
+      stroke(_pole, 2),
+    );
+    canvas.drawPath(
+      Path()
+        ..moveTo(280, 106)
+        ..lineTo(291, 110)
+        ..lineTo(280, 114)
+        ..close(),
+      fill(V2Colors.rose600),
+    );
+
+    // couple
+    canvas.drawOval(
+      Rect.fromCenter(center: const Offset(344, 188), width: 64, height: 10),
+      fill(Colors.white, .85),
+    );
+    void person(double x, Color c) {
+      canvas.drawCircle(Offset(x, 162.5), 6.5, fill(c));
+      canvas.drawPath(
+        Path()
+          ..moveTo(x - 10, 188)
+          ..cubicTo(x - 10, 172, x - 6, 164, x, 164)
+          ..cubicTo(x + 6, 164, x + 10, 172, x + 10, 188)
+          ..close(),
+        fill(c),
+      );
+    }
+
+    person(334, const Color(0xFF5B4A8A));
+    person(350, V2Colors.rose600);
+
+    void heart(double x, double y, double k, Color c, double o) {
+      canvas.save();
+      canvas.translate(x, y);
+      canvas.scale(k);
+      canvas.drawPath(
+        Path()
+          ..moveTo(0, 5)
+          ..cubicTo(-8, -1, -7, -8, -2, -8)
+          ..cubicTo(0, -8, 0, -6, 0, -6)
+          ..cubicTo(0, -6, 0, -8, 2, -8)
+          ..cubicTo(7, -8, 8, -1, 0, 5)
+          ..close(),
+        fill(c, o),
+      );
+      canvas.restore();
+    }
+
+    heart(342, 140, 1.15, V2Colors.rose600, .9);
+    heart(366, 128, .7, const Color(0xFFFF8FB3), .8);
+    heart(318, 124, .55, Colors.white, .9);
+
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter old) => false;
+}

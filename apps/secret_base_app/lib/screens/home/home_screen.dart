@@ -446,109 +446,135 @@ class _HomeScreenState extends State<HomeScreen> {
         ? '오늘은 ${next.label}이에요'
         : '${next.label}까지 ${next.days}일';
     return Container(
-      padding: EdgeInsets.fromLTRB(
-        V2Space.page,
-        top + V2Space.x3,
-        V2Space.page,
-        V2Space.x6,
-      ),
-      decoration: const BoxDecoration(
-        gradient: V2Gradients.hero,
-        borderRadius: BorderRadius.vertical(
-          bottom: Radius.circular(V2Radius.sheet),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      constraints: BoxConstraints(minHeight: top + 152),
+      decoration: const BoxDecoration(gradient: V2Gradients.heroPaper),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
         children: [
-          Row(
-            children: [
-              ExcludeSemantics(
-                child: V2AvatarPair(me: _myName, partner: _partnerName),
+          const Positioned.fill(child: V2HeroIllustration()),
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              V2Space.page,
+              top + V2Space.x2,
+              V2Space.page,
+              V2Space.x6,
+            ),
+            child: _heroContent(dDay, pill),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _heroContent(int? dDay, String? pill) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            ExcludeSemantics(
+              child: V2AvatarPair(
+                me: _myName,
+                partner: _partnerName,
+                size: V2AvatarSize.sm,
               ),
-              const SizedBox(width: V2Space.x3),
-              Expanded(
-                child: Text(
-                  '$_myName · $_partnerName',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: V2Text.bodyStrong.copyWith(color: Colors.white),
+            ),
+            const SizedBox(width: V2Space.x2),
+            Expanded(
+              child: Text(
+                '$_myName · $_partnerName',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: V2Text.cap.copyWith(
+                  color: V2Colors.sub,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-              IconButton(
+            ),
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: .78),
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
                 tooltip: '알림 설정',
                 constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                 icon: Badge(
                   isLabelVisible: _notificationsBlocked,
                   smallSize: 8,
-                  child: const Icon(V2Icons.bell, color: Colors.white),
+                  child: const Icon(V2Icons.bell, color: V2Colors.ink),
                 ),
                 onPressed: _openNotifications,
               ),
-            ],
-          ),
-          const SizedBox(height: V2Space.x4),
-          if (dDay == null)
-            _startPrompt()
-          else ...[
-            Semantics(
-              label: '함께한 지 $dDay일째',
-              child: ExcludeSemantics(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    Text(
-                      'D+',
-                      style: V2Text.serif(size: 28, color: Colors.white),
-                    ),
-                    const SizedBox(width: V2Space.x1),
-                    Flexible(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          '$dDay',
-                          style: V2Text.serif(size: 64, color: Colors.white),
-                        ),
+            ),
+          ],
+        ),
+        const SizedBox(height: V2Space.x3),
+        if (dDay == null)
+          _startPrompt()
+        else ...[
+          Semantics(
+            label: '함께한 지 $dDay일째',
+            child: ExcludeSemantics(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text(
+                    'D+',
+                    style: V2Text.serif(size: 32, color: V2Colors.rose700),
+                  ),
+                  const SizedBox(width: 2),
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        '$dDay',
+                        style: V2Text.serif(size: 52, color: V2Colors.ink)
+                            .copyWith(
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-            if (pill != null) ...[
-              const SizedBox(height: V2Space.x2),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: V2Space.x3,
-                  vertical: V2Space.x1 + 2,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: .24),
-                  borderRadius: V2Radius.pillAll,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(V2Icons.event, size: 16, color: Colors.white),
-                    const SizedBox(width: V2Space.x1),
-                    Flexible(
-                      child: Text(
-                        pill,
-                        style: V2Text.label.copyWith(
-                          color: Colors.white,
-                          fontSize: 13,
-                        ),
+          ),
+          if (pill != null) ...[
+            const SizedBox(height: V2Space.x1),
+            Container(
+              height: 30,
+              padding: const EdgeInsets.symmetric(horizontal: V2Space.x3),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: .85),
+                borderRadius: V2Radius.pillAll,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(V2Icons.event, size: 16, color: V2Colors.rose700),
+                  const SizedBox(width: V2Space.x1),
+                  Flexible(
+                    child: Text(
+                      pill,
+                      style: V2Text.label.copyWith(
+                        color: V2Colors.rose700,
+                        fontSize: 13,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ],
         ],
-      ),
+      ],
     );
   }
 
@@ -558,14 +584,14 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         Text(
           '우리의 첫날을\n알려 주세요',
-          style: V2Text.serif(size: 30, color: Colors.white),
+          style: V2Text.serif(size: 30, color: V2Colors.ink),
         ),
         const SizedBox(height: V2Space.x1),
         Text(
           _coupleFailed
               ? '정보를 불러오지 못했어요. 아래로 당겨 새로고침해 보세요.'
               : '연결한 날이 기본이에요. 바꿔도 돼요',
-          style: V2Text.cap.copyWith(color: Colors.white),
+          style: V2Text.cap.copyWith(color: V2Colors.ink),
         ),
         if (!_coupleFailed) ...[
           const SizedBox(height: V2Space.x3),
@@ -730,21 +756,21 @@ class _HomeScreenState extends State<HomeScreen> {
       (
         icon: V2Icons.sparkle,
         label: '오늘의 운세',
-        tone: V2Tone.lilac,
+        tone: V2Tone.honey,
         badge: 0,
         onTap: _openFortune,
       ),
       (
         icon: V2Icons.heart,
         label: '우리 이해',
-        tone: V2Tone.rose,
+        tone: V2Tone.lilac,
         badge: 0,
         onTap: _openUnderstanding,
       ),
       (
         icon: V2Icons.event,
         label: '기념일',
-        tone: V2Tone.honey,
+        tone: V2Tone.rose,
         badge: 0,
         onTap: () => _push(const AnniversariesScreen()),
       ),
@@ -756,22 +782,29 @@ class _HomeScreenState extends State<HomeScreen> {
         onTap: () => _openBase(),
       ),
     ];
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (var i = 0; i < items.length; i++) ...[
-          if (i > 0) const SizedBox(width: V2Space.x2),
-          Expanded(
-            child: _Shortcut(
-              icon: items[i].icon,
-              label: items[i].label,
-              tone: items[i].tone,
-              badge: items[i].badge,
-              onTap: items[i].onTap,
-            ),
-          ),
-        ],
-      ],
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.symmetric(horizontal: BorderSide(color: V2Colors.line2)),
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < items.length; i++) ...[
+              if (i > 0) const VerticalDivider(width: 1, color: V2Colors.line),
+              Expanded(
+                child: _Shortcut(
+                  icon: items[i].icon,
+                  label: items[i].label,
+                  tone: items[i].tone,
+                  badge: items[i].badge,
+                  onTap: items[i].onTap,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -870,53 +903,38 @@ class _Shortcut extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = V2ToneColors.of(tone);
     return Semantics(
       container: true,
       button: true,
       label: badge > 0 ? '$label, 받을 보상 $badge개' : label,
       onTap: onTap,
       child: ExcludeSemantics(
-        child: Material(
-          color: V2Colors.surface,
-          borderRadius: V2Radius.cardAll,
-          child: InkWell(
-            borderRadius: V2Radius.cardAll,
-            onTap: onTap,
-            child: Container(
-              constraints: const BoxConstraints(minHeight: 92),
-              padding: const EdgeInsets.symmetric(
-                horizontal: V2Space.x1,
-                vertical: V2Space.x3,
-              ),
-              decoration: BoxDecoration(
-                borderRadius: V2Radius.cardAll,
-                border: Border.all(color: V2Colors.line),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Badge(
-                    isLabelVisible: badge > 0,
-                    label: Text('$badge'),
-                    child: Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: c.soft,
-                        borderRadius: V2Radius.ctlAll,
-                      ),
-                      child: Icon(icon, color: c.text),
-                    ),
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: V2Space.x1,
+              vertical: V2Space.x3 + 2,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Badge(
+                  isLabelVisible: badge > 0,
+                  label: Text('$badge'),
+                  child: SizedBox(
+                    width: 44,
+                    height: 36,
+                    child: Icon(icon, color: V2Colors.ink, size: 26),
                   ),
-                  const SizedBox(height: V2Space.x2),
-                  Text(
-                    V2Text.keepAll(label),
-                    textAlign: TextAlign.center,
-                    style: V2Text.label,
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(height: V2Space.x2),
+                Text(
+                  V2Text.keepAll(label),
+                  textAlign: TextAlign.center,
+                  style: V2Text.label,
+                ),
+              ],
             ),
           ),
         ),

@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
 
-/// The 2.0 icon vocabulary. Always rounded Material Symbols
-/// (`Icons.*_rounded`), 24px, `currentColor` via [IconTheme].
+/// The 2.0 icon vocabulary. Light outlined Material icons (stroke style like the mockup), 24px, `currentColor` via [IconTheme].
 ///
 /// Never use emoji as UI icons. Emoji are content only (감정, 반응).
 /// If you need an icon that is not listed here, use the `_rounded` variant
 /// of the Material icon and consider adding it here.
 abstract final class V2Icons {
   // Tabs
-  static const home = Icons.home_rounded;
-  static const record = Icons.auto_stories_rounded;
-  static const map = Icons.map_rounded;
-  static const play = Icons.sports_esports_rounded;
+  static const home = Icons.home_outlined;
+  static const record = Icons.auto_stories_outlined;
+  static const map = Icons.map_outlined;
+  static const play = Icons.sports_esports_outlined;
   static const more = Icons.more_horiz_rounded;
 
   // Navigation
@@ -30,46 +29,46 @@ abstract final class V2Icons {
   static const send = Icons.send_rounded;
   static const search = Icons.search_rounded;
   static const refresh = Icons.refresh_rounded;
-  static const settings = Icons.settings_rounded;
+  static const settings = Icons.settings_outlined;
   static const filter = Icons.tune_rounded;
   static const download = Icons.download_rounded;
   static const logout = Icons.logout_rounded;
 
   // Media / content
-  static const camera = Icons.photo_camera_rounded;
-  static const gallery = Icons.photo_library_rounded;
-  static const image = Icons.image_rounded;
-  static const video = Icons.videocam_rounded;
+  static const camera = Icons.photo_camera_outlined;
+  static const gallery = Icons.photo_library_outlined;
+  static const image = Icons.image_outlined;
+  static const video = Icons.videocam_outlined;
   static const text = Icons.notes_rounded;
-  static const heart = Icons.favorite_rounded;
+  static const heart = Icons.favorite_border_rounded;
   static const heartOutline = Icons.favorite_border_rounded;
-  static const calendar = Icons.calendar_month_rounded;
-  static const event = Icons.cake_rounded;
-  static const location = Icons.place_rounded;
-  static const myLocation = Icons.my_location_rounded;
-  static const bell = Icons.notifications_rounded;
-  static const bellOff = Icons.notifications_off_rounded;
-  static const chat = Icons.chat_bubble_rounded;
-  static const star = Icons.star_rounded;
-  static const sparkle = Icons.auto_awesome_rounded;
-  static const person = Icons.person_rounded;
-  static const couple = Icons.people_alt_rounded;
+  static const calendar = Icons.calendar_month_outlined;
+  static const event = Icons.cake_outlined;
+  static const location = Icons.place_outlined;
+  static const myLocation = Icons.my_location_outlined;
+  static const bell = Icons.notifications_none_rounded;
+  static const bellOff = Icons.notifications_off_outlined;
+  static const chat = Icons.chat_bubble_outline_rounded;
+  static const star = Icons.star_border_rounded;
+  static const sparkle = Icons.wb_sunny_outlined;
+  static const person = Icons.person_outline_rounded;
+  static const couple = Icons.people_alt_outlined;
   static const link = Icons.link_rounded;
-  static const lock = Icons.lock_rounded;
-  static const visibility = Icons.visibility_rounded;
-  static const visibilityOff = Icons.visibility_off_rounded;
-  static const phone = Icons.call_rounded;
-  static const help = Icons.help_rounded;
-  static const shop = Icons.storefront_rounded;
-  static const care = Icons.spa_rounded;
-  static const base = Icons.cottage_rounded;
+  static const lock = Icons.lock_outline_rounded;
+  static const visibility = Icons.visibility_outlined;
+  static const visibilityOff = Icons.visibility_off_outlined;
+  static const phone = Icons.call_outlined;
+  static const help = Icons.help_outline_rounded;
+  static const shop = Icons.storefront_outlined;
+  static const care = Icons.spa_outlined;
+  static const base = Icons.cottage_outlined;
 
   // Status
-  static const info = Icons.info_rounded;
-  static const ok = Icons.check_circle_rounded;
-  static const warn = Icons.warning_rounded;
-  static const error = Icons.error_rounded;
+  static const info = Icons.info_outline_rounded;
+  static const ok = Icons.check_circle_outline_rounded;
+  static const warn = Icons.warning_amber_rounded;
+  static const error = Icons.error_outline_rounded;
   static const check = Icons.check_rounded;
-  static const offline = Icons.cloud_off_rounded;
-  static const shield = Icons.shield_rounded;
+  static const offline = Icons.cloud_off_outlined;
+  static const shield = Icons.shield_outlined;
 }

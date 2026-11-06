@@ -17,25 +17,25 @@ import 'package:flutter/material.dart';
 abstract final class V2Colors {
   // ─── Neutral ──────────────────────────────────────────────────────
   /// Page background, a warm blush white.
-  static const bg = Color(0xFFFFFAFA);
+  static const bg = Color(0xFFFFFBFC);
 
   /// Cards, sheets, dialogs, list containers.
   static const surface = Color(0xFFFFFFFF);
 
   /// Soft fills: icon bubbles, soft cards, chips, skeleton highlight.
-  static const soft = Color(0xFFFFF2F5);
+  static const soft = Color(0xFFFFF3F6);
 
   /// Slightly deeper fill: segmented track, progress track, skeleton base.
-  static const soft2 = Color(0xFFFAEAEF);
+  static const soft2 = Color(0xFFFCE8EE);
 
   /// Hairline borders and list dividers (decorative, no contrast needed).
-  static const line = Color(0xFFF0DCE3);
+  static const line = Color(0xFFF3DFE6);
 
   /// Stronger divider, sheet handle, ghost button border.
-  static const line2 = Color(0xFFE4CBD4);
+  static const line2 = Color(0xFFE6CBD6);
 
   /// Text field border at rest (field always has a visible label above).
-  static const fieldBorder = Color(0xFFD9BFCA);
+  static const fieldBorder = Color(0xFFD9BCC9);
 
   /// Boundary of toggles/checkboxes at rest: 3.27:1 on white, 3.16:1 on bg
   /// (WCAG 1.4.11 non-text contrast >= 3:1).
@@ -63,14 +63,14 @@ abstract final class V2Colors {
   // ─── Brand rose ───────────────────────────────────────────────────
   /// Decorative rose: illustrations, gradients, icon tints on soft fills.
   /// 2.38:1 on white, so NEVER use for text or as a text background.
-  static const rose = Color(0xFFFF7FA3);
+  static const rose = Color(0xFFFF6B8E);
 
   /// Primary actions and rose text. White on rose600 5.03:1, rose600 on
   /// white 5.03:1, on bg 4.86:1, on soft 4.62:1.
-  static const rose600 = Color(0xFFC93468);
+  static const rose600 = Color(0xFFCF2F5F);
 
   /// Rose text on [roseSoft] (soft buttons, rose chips): 5.80:1.
-  static const rose700 = Color(0xFFA3285A);
+  static const rose700 = Color(0xFFB02454);
 
   /// Soft rose fill (soft button, rose chip, focus ring).
   static const roseSoft = Color(0xFFFFE3EB);
@@ -100,7 +100,7 @@ abstract final class V2Colors {
   /// 6.17:1 on [lilacSoft], 7.37:1 on white.
   static const lilacText = Color(0xFF5A43AE);
 
-  static const peach = Color(0xFFFFA084);
+  static const peach = Color(0xFFFF8A6B);
   static const peachSoft = Color(0xFFFFE8DF);
 
   /// 5.43:1 on [peachSoft].
@@ -172,13 +172,13 @@ abstract final class V2DarkColors {
 /// Corner radii (ds.css --r-*).
 abstract final class V2Radius {
   /// Controls: inputs, small buttons, icon bubbles.
-  static const double ctl = 12;
+  static const double ctl = 14;
 
   /// Primary buttons, banners, snackbars.
-  static const double button = 14;
+  static const double button = 16;
 
   /// Cards and lists.
-  static const double card = 20;
+  static const double card = 24;
 
   /// Bottom sheets (top corners), large dialogs.
   static const double sheet = 28;
@@ -217,8 +217,7 @@ abstract final class V2Space {
 abstract final class V2Shadow {
   /// Cards and raised surfaces.
   static const level1 = [
-    BoxShadow(color: Color(0x0D3C1428), blurRadius: 2, offset: Offset(0, 1)),
-    BoxShadow(color: Color(0x0F3C1428), blurRadius: 18, offset: Offset(0, 6)),
+    BoxShadow(color: Color(0x0F3C1428), blurRadius: 16, offset: Offset(0, 4)),
   ];
 
   /// Sheets, dialogs, snackbars, floating elements.
@@ -232,23 +231,31 @@ abstract final class V2Gradients {
   /// Home hero. White text >= 4.5:1 on every stop (4.72 / 5.40 / 4.78), so
   /// body-size white text is fine on it.
   static const hero = LinearGradient(
-    begin: Alignment(-0.6, -1),
-    end: Alignment(0.6, 1),
-    colors: [Color(0xFFCC3D6C), Color(0xFFBC3868), Color(0xFFC4475A)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFFD03363), Color(0xFFC12E5E)],
+  );
+
+  /// Home hero paper: a barely-there blush to cream wash (the mockup
+  /// `.hm-hero`). Use [V2Colors.ink] / rose700 text on it.
+  static const heroPaper = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFFFFDDE8), Color(0xFFFFF1E8)],
   );
 
   /// Rose to plum, for 우리 이해 / result cards. White text >= 4.72:1.
   static const berry = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFFCC3D6C), Color(0xFF9C3F86)],
+    colors: [Color(0xFFCF2F5F), Color(0xFF9C3F86)],
   );
 
   /// Pastel blush → peach → lilac. Use [V2Colors.ink] text on it.
   static const heroSoft = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFFFFE3EB), Color(0xFFFFEBE2), Color(0xFFEFE8FF)],
+    colors: [Color(0xFFFFE3EB), Color(0xFFFFEBE2), Color(0xFFF0E9FF)],
   );
 
   /// Decorative only (no text): illustration blobs, avatar rings.
@@ -427,9 +434,9 @@ abstract final class V2Contrast {
     ('white/snack', Colors.white, V2Colors.snack, 4.5),
     ('roseSoft/snack', V2Colors.roseSoft, V2Colors.snack, 4.5),
     ('white/ink', Colors.white, V2Colors.ink, 4.5),
-    ('white/hero0', Colors.white, Color(0xFFCC3D6C), 4.5),
-    ('white/hero1', Colors.white, Color(0xFFBC3868), 4.5),
-    ('white/hero2', Colors.white, Color(0xFFC4475A), 4.5),
+    ('white/hero0', Colors.white, Color(0xFFD03363), 4.5),
+    ('white/hero1', Colors.white, Color(0xFFC12E5E), 4.5),
+    ('white/berry0', Colors.white, Color(0xFFCF2F5F), 4.5),
     ('white/berry1', Colors.white, Color(0xFF9C3F86), 4.5),
     ('control/surface', V2Colors.control, V2Colors.surface, 3.0),
     ('control/bg', V2Colors.control, V2Colors.bg, 3.0),

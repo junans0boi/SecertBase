@@ -42,7 +42,7 @@ class V2Avatar extends StatelessWidget {
   });
 
   static const meColor = V2Colors.rose600;
-  static const partnerColor = V2Colors.skyText;
+  static const partnerColor = Color(0xFF2877BD);
 
   final String name;
   final Color color;
