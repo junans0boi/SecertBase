@@ -592,7 +592,7 @@ class _GradeLegend extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SizedBox(
-                  width: 52,
+                  width: 64,
                   child: V2Chip(label: r.$1, tone: _gradeTone[r.$1]!),
                 ),
                 const SizedBox(width: V2Space.x3),
