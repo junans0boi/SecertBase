@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 /// 게임 화면의 바탕 질감.
-enum GameTexture { felt, paper, stage, deck, stadium, velvet }
+enum GameTexture { felt, paper, stage, deck, stadium, velvet, starlight }
 
 /// 게임 2.0 테마 토큰. 게임마다 그 게임에 맞는 고급 테마를 쓰고(01-grilling Q6),
 /// 공용 부품은 하드코딩 색 없이 이 토큰만 쓴다.
@@ -225,6 +225,24 @@ class GameTheme {
     displayFont: _batang,
   );
 
+  /// 텔레파시: 별빛 편지(밤하늘 남보라 + 별가루).
+  static const starlight = GameTheme(
+    id: 'starlight',
+    texture: GameTexture.starlight,
+    dark: true,
+    backdrop: [Color(0xFF0C0B2E), Color(0xFF1B1950), Color(0xFF0A0A24)],
+    surface: Color(0xFF1F1D57),
+    surfaceBorder: Color(0x55CDBEFF),
+    accent: Color(0xFFFFB6D5),
+    accentSoft: Color(0x33FFB6D5),
+    gold: Color(0xFFF6D98E),
+    ink: Color(0xFFF6F3FF),
+    subInk: Color(0xCCCFCAF2),
+    me: Color(0xFF8FD6FF),
+    opponent: Color(0xFFFFA9CB),
+    displayFont: _batang,
+  );
+
   static const all = [
     lounge,
     storybook,
@@ -232,6 +250,7 @@ class GameTheme {
     pirateNight,
     sunsetStadium,
     salon,
+    starlight,
   ];
 }
 
@@ -295,6 +314,8 @@ class _BackdropPainter extends CustomPainter {
         _stadium(canvas, size);
       case GameTexture.velvet:
         _velvet(canvas, size);
+      case GameTexture.starlight:
+        _starlight(canvas, size);
     }
     // 비네트: 가장자리를 살짝 눌러 시선을 가운데로.
     canvas.drawRect(
@@ -692,6 +713,74 @@ class _BackdropPainter extends CustomPainter {
       13,
     );
     _goldFrame(canvas, size, 10, 0.45);
+  }
+
+  void _starlight(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    // 성운: 보라·파랑·장밋빛 안개.
+    _spotlight(
+      canvas,
+      size,
+      Offset(w * 0.18, h * 0.16),
+      w * 0.75,
+      const Color(0x4D5B3FC4),
+    );
+    _spotlight(
+      canvas,
+      size,
+      Offset(w * 0.9, h * 0.52),
+      w * 0.7,
+      const Color(0x3A2F67D8),
+    );
+    _spotlight(
+      canvas,
+      size,
+      Offset(w * 0.45, h * 1.02),
+      w * 0.8,
+      const Color(0x33C0508F),
+    );
+    // 은하수: 대각선 띠를 따라 촘촘한 별가루.
+    final rnd = math.Random(41);
+    final dust = Paint();
+    final band = (w * h / 260).round();
+    for (int i = 0; i < band; i++) {
+      final t = rnd.nextDouble();
+      final spread = (rnd.nextDouble() + rnd.nextDouble() - 1) * h * 0.11;
+      final x = -w * 0.1 + t * w * 1.2;
+      final y = h * 0.7 - t * h * 0.55 + spread;
+      dust.color = Color.fromRGBO(
+        225,
+        215,
+        255,
+        0.08 + rnd.nextDouble() * 0.22,
+      );
+      canvas.drawCircle(Offset(x, y), 0.3 + rnd.nextDouble() * 0.7, dust);
+    }
+    // 흩어진 별.
+    final stars = (w * h / 1500).round();
+    for (int i = 0; i < stars; i++) {
+      final c = Offset(rnd.nextDouble() * w, rnd.nextDouble() * h);
+      final r = 0.35 + math.pow(rnd.nextDouble(), 3).toDouble() * 1.5;
+      final warm = rnd.nextDouble() > 0.82;
+      dust.color = (warm ? const Color(0xFFFFE9B8) : const Color(0xFFF2EEFF))
+          .withValues(alpha: 0.35 + rnd.nextDouble() * 0.6);
+      canvas.drawCircle(c, r, dust);
+    }
+    // 반짝이는 큰 별 몇 개: 십자 빛 + 번짐.
+    for (int i = 0; i < 9; i++) {
+      final c = Offset(rnd.nextDouble() * w, rnd.nextDouble() * h * 0.92);
+      final len = 4.0 + rnd.nextDouble() * 6;
+      _spotlight(canvas, size, c, len * 2.4, const Color(0x55F6D98E));
+      final ray = Paint()
+        ..strokeWidth = 1
+        ..strokeCap = StrokeCap.round
+        ..color = const Color(0xCCFFF4D6);
+      canvas.drawLine(c.translate(-len, 0), c.translate(len, 0), ray);
+      canvas.drawLine(c.translate(0, -len), c.translate(0, len), ray);
+      canvas.drawCircle(c, 1.3, Paint()..color = Colors.white);
+    }
+    _goldFrame(canvas, size, 10, 0.32);
   }
 
   @override

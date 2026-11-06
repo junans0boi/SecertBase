@@ -32,3 +32,13 @@ test('normalizing keeps valid values, drops unknown keys and fills defaults', ()
   assert.deepEqual(normalizeLobbyOptions('pirate', null), { holes: 8 });
   assert.deepEqual(normalizeLobbyOptions('blackjack', { cells: 3 }), {});
 });
+
+test('telepathy offers 10|5|15 questions and a spicy switch that is off by default', () => {
+  assert.deepEqual(defaultLobbyOptions('telepathy'), { rounds: 10, spicy: 'off' });
+  assert.equal(isValidLobbyOption('telepathy', 'rounds', 15), true);
+  assert.equal(isValidLobbyOption('telepathy', 'rounds', 20), false);
+  assert.equal(isValidLobbyOption('telepathy', 'spicy', 'on'), true);
+  assert.equal(isValidLobbyOption('telepathy', 'spicy', true), false);
+  assert.deepEqual(normalizeLobbyOptions('telepathy', { rounds: 5, spicy: 'on' }), { rounds: 5, spicy: 'on' });
+  assert.deepEqual(normalizeLobbyOptions('telepathy', { rounds: '5' }), { rounds: 10, spicy: 'off' });
+});
