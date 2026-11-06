@@ -48,15 +48,15 @@ class YutStickLook {
     Color(0xFFC9A66B),
   );
 
-  // 이름 → 모습. 0018 카탈로그 18종 + 예전 5종.
+  // 이름 → 모습. 상점 윷 스킨 9종(마이그레이션 0049)마다 하나씩, 등급이 높을수록 화려하다.
   static const Map<String, YutStickLook> byName = {
-    // B
-    '벚꽃 윷': YutStickLook(
-      'cherry',
-      Color(0xFFFFE3EA),
-      Color(0xFFD9577F),
-      Color(0xFFF08AA8),
-      stripe: Color(0xFFFFFFFF),
+    // B: 소재 그대로의 소박한 모습
+    '대나무 윷': YutStickLook(
+      'bamboo',
+      Color(0xFFDDEFA8),
+      Color(0xFF3E7A2B),
+      Color(0xFF6FA84A),
+      stripe: Color(0xFF2F5E20),
     ),
     '단풍 윷': YutStickLook(
       'maple',
@@ -65,27 +65,7 @@ class YutStickLook {
       Color(0xFFD9772B),
       stripe: Color(0xFFE8892B),
     ),
-    '새싹 윷': YutStickLook(
-      'sprout',
-      Color(0xFFE2F4B6),
-      Color(0xFF4F8F2B),
-      Color(0xFF86C14A),
-      stripe: Color(0xFFB6E36B),
-    ),
-    '조약돌 윷': YutStickLook(
-      'pebble',
-      Color(0xFFDAD7CF),
-      Color(0xFF55534E),
-      Color(0xFF8A877F),
-    ),
-    '대나무 윷': YutStickLook(
-      'bamboo',
-      Color(0xFFDDEFA8),
-      Color(0xFF3E7A2B),
-      Color(0xFF6FA84A),
-      stripe: Color(0xFF2F5E20),
-    ),
-    // A
+    // A: 은은한 빛과 무늬
     '달빛 윷': YutStickLook(
       'moon',
       Color(0xFFF7F2CC),
@@ -93,52 +73,16 @@ class YutStickLook {
       Color(0xFF5967A0),
       glow: Color(0xFFFFF4B0),
     ),
-    '바람 윷': YutStickLook(
-      'wind',
-      Color(0xFFE8F8F4),
-      Color(0xFF4E9E96),
-      Color(0xFF86CBC2),
-      stripe: Color(0xFFFFFFFF),
-      glow: Color(0xFFBDEFE6),
+    '옥 윷': YutStickLook(
+      'jade',
+      Color(0xFFD6F3E3),
+      Color(0xFF2F8F63),
+      Color(0xFF6CC79B),
+      stripe: Color(0xFFEFFFF6),
+      glow: Color(0xFF9CE6C0),
+      glassy: true,
     ),
-    '눈꽃 윷': YutStickLook(
-      'snow',
-      Color(0xFFF6FBFF),
-      Color(0xFF8FC1E6),
-      Color(0xFFC9E4F6),
-      sparkle: true,
-    ),
-    '파도 윷': YutStickLook(
-      'wave',
-      Color(0xFFD2ECFC),
-      Color(0xFF1E6AA6),
-      Color(0xFF4F9AD0),
-      stripe: Color(0xFF8FD0F5),
-    ),
-    '황금 윷': YutStickLook(
-      'gold',
-      Color(0xFFFFE680),
-      Color(0xFFB8860B),
-      Color(0xFFDAA520),
-      glow: Color(0xFFFFD34D),
-    ),
-    // S
-    '번개 윷': YutStickLook(
-      'lightning',
-      Color(0xFFFFF7AA),
-      Color(0xFF55369E),
-      Color(0xFF8A62D8),
-      stripe: Color(0xFFFFE23D),
-      glow: Color(0xFFFFE23D),
-    ),
-    '태양 윷': YutStickLook(
-      'sun',
-      Color(0xFFFFE470),
-      Color(0xFFE0701C),
-      Color(0xFFFFA23C),
-      glow: Color(0xFFFFA21F),
-      sparkle: true,
-    ),
+    // S: 기운이 뚜렷한 빛
     '얼음 윷': YutStickLook(
       'ice',
       Color(0xFFE6F9FF),
@@ -147,50 +91,15 @@ class YutStickLook {
       glow: Color(0xFF9EE6FF),
       glassy: true,
     ),
-    '폭풍 윷': YutStickLook(
-      'storm',
-      Color(0xFFCBD1E2),
-      Color(0xFF353C66),
-      Color(0xFF5F69A0),
-      stripe: Color(0xFF7FE0FF),
-      glow: Color(0xFF6C7BD6),
-    ),
-    '크리스탈 윷': YutStickLook(
-      'crystal',
-      Color(0xFFD7F0F7),
-      Color(0xFF3B6FA1),
-      Color(0xFF7AA9D2),
-      glow: Color(0xFF8ED1FF),
-      glassy: true,
-    ),
-    // SS
-    '용의 윷': YutStickLook(
-      'dragon',
-      Color(0xFFB9F2C9),
-      Color(0xFF1A6B45),
-      Color(0xFF3FA874),
-      stripe: Color(0xFFFFD34D),
-      glow: Color(0xFF44E08A),
-      sparkle: true,
-    ),
-    '봉황 윷': YutStickLook(
-      'phoenix',
-      Color(0xFFFFD4A8),
-      Color(0xFFC2341F),
-      Color(0xFFF2762B),
-      stripe: Color(0xFFFFD34D),
-      glow: Color(0xFFFF8A3D),
-      sparkle: true,
-    ),
-    '천둥 윷': YutStickLook(
-      'thunder',
-      Color(0xFFDDD3FF),
-      Color(0xFF4A2D9C),
-      Color(0xFF8566DE),
+    '번개 윷': YutStickLook(
+      'lightning',
+      Color(0xFFFFF7AA),
+      Color(0xFF55369E),
+      Color(0xFF8A62D8),
       stripe: Color(0xFFFFE23D),
-      glow: Color(0xFFA27BFF),
-      sparkle: true,
+      glow: Color(0xFFFFE23D),
     ),
+    // SS: 불꽃·용의 반짝임
     '불꽃 윷': YutStickLook(
       'flame',
       Color(0xFFFFC27A),
@@ -200,168 +109,23 @@ class YutStickLook {
       glow: Color(0xFFFF6A2B),
       sparkle: true,
     ),
-    // SSS
+    '용의 윷': YutStickLook(
+      'dragon',
+      Color(0xFFB9F2C9),
+      Color(0xFF1A6B45),
+      Color(0xFF3FA874),
+      stripe: Color(0xFFFFD34D),
+      glow: Color(0xFF44E08A),
+      sparkle: true,
+    ),
+    // SSS: 신화 속 무지갯빛
     '신들의 윷': YutStickLook(
       'gods',
       Color(0xFFFFF3C4),
       Color(0xFFB8860B),
       Color(0xFFFFD34D),
+      stripe: Color(0xFFFFFFFF),
       glow: Color(0xFFFFE680),
-      sparkle: true,
-      rainbow: true,
-    ),
-    '우주의 윷': YutStickLook(
-      'cosmos',
-      Color(0xFF6A58B8),
-      Color(0xFF130E30),
-      Color(0xFF3C2F80),
-      stripe: Color(0xFFB9A8FF),
-      glow: Color(0xFF8E7BFF),
-      sparkle: true,
-      rainbow: true,
-    ),
-    '운명의 윷': YutStickLook(
-      'destiny',
-      Color(0xFFFFD8EA),
-      Color(0xFF8E1B58),
-      Color(0xFFE05AA0),
-      stripe: Color(0xFFFFD34D),
-      glow: Color(0xFFFF7BC0),
-      sparkle: true,
-      rainbow: true,
-    ),
-    '전설의 윷': YutStickLook(
-      'legend',
-      Color(0xFFE8C8F5),
-      Color(0xFF5A1D8F),
-      Color(0xFFA066D6),
-      glow: Color(0xFFD08BFF),
-      sparkle: true,
-      rainbow: true,
-    ),
-  };
-
-  // 이름을 몰라도 아이콘으로 고르는 예비 모습.
-  static const Map<String, YutStickLook> _byIcon = {
-    '🌸': YutStickLook(
-      'icon-cherry',
-      Color(0xFFFFE3EA),
-      Color(0xFFD9577F),
-      Color(0xFFF08AA8),
-    ),
-    '🍁': YutStickLook(
-      'icon-maple',
-      Color(0xFFF8D79A),
-      Color(0xFFA63F1B),
-      Color(0xFFD9772B),
-    ),
-    '🌱': YutStickLook(
-      'icon-sprout',
-      Color(0xFFE2F4B6),
-      Color(0xFF4F8F2B),
-      Color(0xFF86C14A),
-    ),
-    '🪨': YutStickLook(
-      'icon-stone',
-      Color(0xFFDAD7CF),
-      Color(0xFF55534E),
-      Color(0xFF8A877F),
-    ),
-    '🌙': YutStickLook(
-      'icon-moon',
-      Color(0xFFF7F2CC),
-      Color(0xFF34406E),
-      Color(0xFF5967A0),
-      glow: Color(0xFFFFF4B0),
-    ),
-    '💨': YutStickLook(
-      'icon-wind',
-      Color(0xFFE8F8F4),
-      Color(0xFF4E9E96),
-      Color(0xFF86CBC2),
-    ),
-    '❄️': YutStickLook(
-      'icon-snow',
-      Color(0xFFF6FBFF),
-      Color(0xFF8FC1E6),
-      Color(0xFFC9E4F6),
-      sparkle: true,
-    ),
-    '🌊': YutStickLook(
-      'icon-wave',
-      Color(0xFFD2ECFC),
-      Color(0xFF1E6AA6),
-      Color(0xFF4F9AD0),
-    ),
-    '⚡': YutStickLook(
-      'icon-bolt',
-      Color(0xFFFFF7AA),
-      Color(0xFF55369E),
-      Color(0xFF8A62D8),
-      glow: Color(0xFFFFE23D),
-    ),
-    '☀️': YutStickLook(
-      'icon-sun',
-      Color(0xFFFFE470),
-      Color(0xFFE0701C),
-      Color(0xFFFFA23C),
-      glow: Color(0xFFFFA21F),
-    ),
-    '🧊': YutStickLook(
-      'icon-ice',
-      Color(0xFFE6F9FF),
-      Color(0xFF5DB6E4),
-      Color(0xFFA9E1F8),
-      glassy: true,
-    ),
-    '🌪️': YutStickLook(
-      'icon-storm',
-      Color(0xFFCBD1E2),
-      Color(0xFF353C66),
-      Color(0xFF5F69A0),
-    ),
-    '🐉': YutStickLook(
-      'icon-dragon',
-      Color(0xFFB9F2C9),
-      Color(0xFF1A6B45),
-      Color(0xFF3FA874),
-      glow: Color(0xFF44E08A),
-    ),
-    '🦅': YutStickLook(
-      'icon-phoenix',
-      Color(0xFFFFD4A8),
-      Color(0xFFC2341F),
-      Color(0xFFF2762B),
-      glow: Color(0xFFFF8A3D),
-    ),
-    '⛈️': YutStickLook(
-      'icon-thunder',
-      Color(0xFFDDD3FF),
-      Color(0xFF4A2D9C),
-      Color(0xFF8566DE),
-      glow: Color(0xFFA27BFF),
-    ),
-    '✨': YutStickLook(
-      'icon-gods',
-      Color(0xFFFFF3C4),
-      Color(0xFFB8860B),
-      Color(0xFFFFD34D),
-      sparkle: true,
-      rainbow: true,
-    ),
-    '🌌': YutStickLook(
-      'icon-cosmos',
-      Color(0xFF6A58B8),
-      Color(0xFF130E30),
-      Color(0xFF3C2F80),
-      sparkle: true,
-      rainbow: true,
-    ),
-    '🎯': YutStickLook(
-      'icon-destiny',
-      Color(0xFFFFD8EA),
-      Color(0xFF8E1B58),
-      Color(0xFFE05AA0),
       sparkle: true,
       rainbow: true,
     ),
@@ -402,12 +166,11 @@ class YutStickLook {
   };
 
   /// 장착한 `yut_yut` 아이템(서버 `equippedItems`의 한 칸)에서 모습을 정한다.
+  /// 모르는 이름(옛 아이템 등)은 등급으로, 그래도 모르면 기본 윷으로 — 절대 실패하지 않는다.
   static YutStickLook fromItem(Map<String, dynamic>? item) {
     if (item == null) return base;
-    final byNameHit = byName['${item['name'] ?? ''}'.trim()];
-    if (byNameHit != null) return byNameHit;
-    final byIconHit = _byIcon['${item['icon'] ?? ''}'];
-    if (byIconHit != null) return byIconHit;
+    final hit = byName['${item['name'] ?? ''}'.trim()];
+    if (hit != null) return hit;
     return _byGrade['${item['grade'] ?? ''}'] ?? base;
   }
 }

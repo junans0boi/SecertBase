@@ -1,4 +1,6 @@
 // 윷놀이 상점 아이템 반영(티켓 B): 동물 말 스킨 등급, 윷가락 스킨 23종, 효과 칩, 로비 캐릭터 고르기.
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -61,222 +63,146 @@ void main() {
     }
   }
 
-  group('stick skins', () {
-    test('every catalog yut skin has its own look', () {
-      const catalog = [
-        '벚꽃 윷', '단풍 윷', '새싹 윷', '조약돌 윷', // B
-        '달빛 윷', '바람 윷', '눈꽃 윷', '파도 윷', // A
-        '번개 윷', '태양 윷', '얼음 윷', '폭풍 윷', // S
-        '용의 윷', '봉황 윷', '천둥 윷', // SS
-        '신들의 윷', '우주의 윷', '운명의 윷', // SSS
-        '대나무 윷', '황금 윷', '크리스탈 윷', '불꽃 윷', '전설의 윷', // 예전 5종
-      ];
-      final seen = <String, String>{};
-      for (final name in catalog) {
+  const skinNames = [
+    '대나무 윷',
+    '단풍 윷', // B
+    '달빛 윷',
+    '옥 윷', // A
+    '얼음 윷',
+    '번개 윷', // S
+    '불꽃 윷',
+    '용의 윷', // SS
+    '신들의 윷', // SSS
+  ];
+
+  group('yut skins', () {
+    test('every shop skin has its own look, distinct from the plain stick', () {
+      final seen = <String, String>{YutStickLook.base.signature: '기본 윷'};
+      for (final name in skinNames) {
         final look = YutStickLook.fromItem(item(name, '?', 'B'));
         expect(look.id, isNot('base'), reason: name);
+        expect(
+          look.id,
+          isNot(startsWith('grade-')),
+          reason: '$name has its own look',
+        );
         final clash = seen[look.signature];
         expect(clash, isNull, reason: '$name looks like $clash');
         seen[look.signature] = name;
       }
-      expect(seen.length, catalog.length);
+      expect(seen.length, skinNames.length + 1);
     });
 
     test(
-      'unknown names fall back to the icon, then the grade, then the plain stick',
+      'higher grades are flashier: SS and SSS shimmer, SSS is the rainbow one',
       () {
-        expect(YutStickLook.fromItem(null).id, 'base');
-        expect(YutStickLook.fromItem(item('새 윷', '🌸', 'B')).id, 'icon-cherry');
-        expect(YutStickLook.fromItem(item('새 윷', '❓', 'SSS')).id, 'grade-sss');
-        expect(YutStickLook.fromItem(item('새 윷', '❓', 'A')).id, 'grade-a');
-        expect(YutStickLook.fromItem(item('새 윷', '❓', 'B')).id, 'base');
-        expect(
-          YutStickLook.fromItem({'name': 7, 'icon': null, 'grade': null}).id,
-          'base',
-        );
+        YutStickLook look(String n) => YutStickLook.fromItem(item(n, '?', 'B'));
+        expect(look('대나무 윷').sparkle, isFalse);
+        expect(look('단풍 윷').glow, isNull);
+        expect(look('불꽃 윷').sparkle, isTrue);
+        expect(look('용의 윷').sparkle, isTrue);
+        expect(look('신들의 윷').rainbow, isTrue);
+        expect(look('용의 윷').rainbow, isFalse);
+      },
+    );
+
+    test('unknown or old items fall back by grade and never crash', () {
+      expect(YutStickLook.fromItem(null).id, 'base');
+      expect(YutStickLook.fromItem(item('벚꽃 윷', '🌸', 'B')).id, 'base');
+      expect(YutStickLook.fromItem(item('새 윷', '❓', 'A')).id, 'grade-a');
+      expect(YutStickLook.fromItem(item('새 윷', '❓', 'SSS')).id, 'grade-sss');
+      expect(
+        YutStickLook.fromItem({'name': 7, 'icon': null, 'grade': null}).id,
+        'base',
+      );
+    });
+
+    test(
+      'the client catalog and stat table match the server (migration + engine)',
+      () {
+        final root = Directory.current.parent.parent;
+        final sql = File(
+          '${root.path}/services/realtime-server/migrations/0049_yut_system.sql',
+        ).readAsStringSync();
+        final names = RegExp(
+          r"\(11\d, 'skin', 'yut', 'yut_yut', '\w+',\s+'([^']+)'",
+        ).allMatches(sql).map((m) => m.group(1)!).toList();
+        expect(names, skinNames);
+        for (final n in names) {
+          expect(
+            YutStickLook.byName.containsKey(n),
+            isTrue,
+            reason: '$n has a look',
+          );
+        }
+        expect(YutStickLook.byName.length, names.length);
+        final engine = File(
+          '${root.path}/services/realtime-server/src/yut-engine.js',
+        ).readAsStringSync();
+        for (final e in kYutCharacterStats.entries) {
+          final m = RegExp(
+            '${e.key}: Object.freeze\\(\\{([^}]*)\\}\\)',
+          ).firstMatch(engine);
+          expect(m, isNotNull, reason: e.key);
+          final server = {
+            for (final p in RegExp(r'(\w+): (\d)').allMatches(m!.group(1)!))
+              p.group(1)!: int.parse(p.group(2)!),
+          };
+          expect(server, e.value, reason: '${e.key} stats match the server');
+          expect(e.value.values.reduce((a, b) => a + b), 15);
+        }
       },
     );
   });
 
-  group('piece skins', () {
+  group('characters', () {
+    test('five stats each, shown in the same order as the server', () {
+      expect(kYutStatDefs.map((d) => d.key), [
+        'power',
+        'calm',
+        'guard',
+        'luck',
+        'momentum',
+      ]);
+      expect(kYutStatDefs.map((d) => d.label), [
+        '던지기 힘',
+        '침착',
+        '방어',
+        '행운',
+        '기세',
+      ]);
+      expect(kYutCharacterStats.keys.toSet(), {
+        'honggilldong',
+        'miho',
+        'nolbu',
+      });
+      expect(
+        yutCharacterStatsFor('unknown').values.every((v) => v == 3),
+        isTrue,
+      );
+    });
+
     test(
-      'a piece item replaces the character figure; no item keeps the character',
+      'server state is read for both players, with the table as a fallback',
       () {
-        final plain = YutFigureSpec.of('miho', null);
-        expect(plain.isSkin, isFalse);
-        final tiger = YutFigureSpec.of('miho', item('호랑이 말', '🐯', 'A'));
-        expect(tiger.isSkin, isTrue);
-        expect(tiger.skinEmoji, '🐯');
-        expect(tiger.skinGrade, 'A');
-        expect(yutGradeColor('A'), isNot(yutGradeColor('S')));
-        expect(yutGradeColor('SS'), isNot(yutGradeColor('SSS')));
-      },
-    );
-
-    testWidgets('tiers B to SSS render as standing figures on a base disc', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(900, 300);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Wrap(
-              children: [
-                for (final g in ['B', 'A', 'S', 'SS', 'SSS'])
-                  YutFigure(
-                    key: ValueKey('fig_$g'),
-                    height: 90,
-                    team: Colors.blue,
-                    spec: YutFigureSpec(
-                      character: 'miho',
-                      skinEmoji: '🐯',
-                      skinGrade: g,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      );
-      await tester.pump(const Duration(milliseconds: 200));
-      expect(tester.takeException(), isNull);
-      for (final g in ['B', 'A', 'S', 'SS', 'SSS']) {
-        expect(find.byKey(ValueKey('fig_$g')), findsOneWidget);
-      }
-      expect(find.text('🐯'), findsNWidgets(5));
-    });
-  });
-
-  group('screen', () {
-    testWidgets(
-      'both cards show the equipped skins and effective effect chips',
-      (tester) async {
-        await pumpScreen(tester);
-        c.debugApplyState(
-          yutState(
-            stake: 100,
-            equipped: {
-              yutMe: {
-                'yut_piece': item('호랑이 말', '🐯', 'A'),
-                'yut_yut': item('번개 윷', '⚡', 'S'),
-              },
-              yutOpp: {
-                'yut_piece': item('은하수 말', '🌌', 'SSS'),
-                'yut_yut': item('우주의 윷', '🌌', 'SSS'),
-              },
+        final v = YutView.fromJson({
+          ...yutState(),
+          'characterStats': {
+            yutMe: {
+              'power': 3,
+              'calm': 4,
+              'guard': 4,
+              'luck': 2,
+              'momentum': 2,
             },
-            effects: {
-              yutMe: {
-                ...zeroEffects,
-                'controlPct': 2.1,
-                'defensePct': 10,
-                'winCoinPct': 10,
-              },
-              yutOpp: {...zeroEffects, 'moRatePct': 3},
-            },
-          ),
-        );
-        await tester.pump(const Duration(milliseconds: 600));
-        // 내 카드: 동물 말 이름 + 윷 이름 + 서버가 상한을 적용한 효과.
-        expect(find.textContaining('호랑이 말 · 대기 4'), findsOneWidget);
-        expect(find.textContaining('번개 윷'), findsOneWidget);
-        expect(find.text('윷 컨트롤 +2.1%'), findsOneWidget);
-        expect(find.text('잡힘 방어 10%'), findsOneWidget);
-        // 카드에는 앞의 둘만, 나머지는 "+N"(전체는 장비 창).
-        expect(find.text('윷·모 코인 10%'), findsNothing);
-        expect(find.text('+1'), findsOneWidget);
-        // 상대 카드도 같은 정보를 보여 준다.
-        expect(find.textContaining('은하수 말 · 대기 4'), findsOneWidget);
-        expect(find.textContaining('우주의 윷'), findsOneWidget);
-        expect(find.text('모 확률 +3%'), findsOneWidget);
-        expect(find.text('효과'), findsNWidgets(2));
-        // 말 스킨은 카드의 서 있는 말과 대기 말로 나타난다.
-        expect(find.text('🐯'), findsWidgets);
-        expect(find.text('🌌'), findsWidgets);
-        expect(tester.takeException(), isNull);
-        await settle(tester);
-      },
-    );
-
-    testWidgets(
-      'free games hide coin effects and no equipment shows no effect chips',
-      (tester) async {
-        await pumpScreen(tester);
-        c.debugApplyState(
-          yutState(
-            equipped: {
-              yutMe: {'yut_yut': item('황금 윷', '🏅', 'A')},
-            },
-            effects: {
-              yutMe: {...zeroEffects, 'controlPct': 1, 'winCoinPct': 15},
-            },
-          ),
-        );
-        await tester.pump(const Duration(milliseconds: 600));
-        expect(find.text('윷 컨트롤 +1%'), findsOneWidget);
-        expect(find.textContaining('코인'), findsNothing);
+          },
+        });
+        expect(v.statsOf(yutMe)['calm'], 4);
         expect(
-          find.text('효과'),
-          findsOneWidget,
-          reason: 'only the side with effects',
+          v.statsOf(yutOpp),
+          kYutCharacterStats['miho'],
+          reason: 'falls back to the character table',
         );
-        await settle(tester);
-      },
-    );
-
-    testWidgets('tapping a card lists the equipment and the applied effects', (
-      tester,
-    ) async {
-      await pumpScreen(tester);
-      c.debugApplyState(
-        yutState(
-          equipped: {
-            yutOpp: {'yut_piece': item('용 말', '🐲', 'S')},
-          },
-          effects: {
-            yutOpp: {...zeroEffects, 'defensePct': 7},
-          },
-        ),
-      );
-      await tester.pump(const Duration(milliseconds: 600));
-      await tester.tap(find.textContaining('용 말 · 대기'));
-      await tester.pump(const Duration(milliseconds: 500));
-      expect(find.text('하늘 장비'), findsOneWidget);
-      expect(find.textContaining('말: 용 말 (S등급)'), findsOneWidget);
-      expect(find.textContaining('윷: 기본'), findsOneWidget);
-      expect(find.text('이 판에 적용되는 효과'), findsOneWidget);
-      expect(find.text('잡힘 방어 7%'), findsWidgets);
-      await tester.tapAt(const Offset(10, 10));
-      await settle(tester);
-    });
-
-    testWidgets(
-      'collapsed effect chips are all listed in the equipment sheet',
-      (tester) async {
-        await pumpScreen(tester);
-        c.debugApplyState(
-          yutState(
-            stake: 100,
-            effects: {
-              yutMe: {
-                ...zeroEffects,
-                'controlPct': 2.1,
-                'defensePct': 10,
-                'winCoinPct': 10,
-              },
-            },
-          ),
-        );
-        await tester.pump(const Duration(milliseconds: 600));
-        expect(find.text('윷·모 코인 10%'), findsNothing);
-        await tester.tap(find.textContaining('대기 4 · 도착 0/4').last);
-        await tester.pump(const Duration(milliseconds: 500));
-        expect(find.text('윷·모 코인 10%'), findsOneWidget);
-        expect(find.text('잡힘 방어 10%'), findsWidgets);
-        await tester.tapAt(const Offset(10, 10));
-        await settle(tester);
       },
     );
 
@@ -289,26 +215,154 @@ void main() {
         final figures = tester
             .widgetList<YutFigure>(find.byType(YutFigure))
             .toList();
-        final mine = figures.where(
-          (f) => f.spec.character == 'honggilldong' && !f.spec.isSkin,
-        );
         expect(
-          mine.length,
+          figures.where((f) => f.spec.character == 'honggilldong').length,
           greaterThanOrEqualTo(2),
           reason: 'card + waiting group',
         );
-        final theirs = figures.where(
-          (f) => f.spec.character == 'miho' && !f.spec.isSkin,
+        expect(
+          figures.where((f) => f.spec.character == 'miho').length,
+          greaterThanOrEqualTo(2),
         );
-        expect(theirs.length, greaterThanOrEqualTo(2));
         await settle(tester);
       },
     );
   });
 
+  group('screen', () {
+    testWidgets(
+      'cards show the character, the yut skin and the effective effects of both players',
+      (tester) async {
+        await pumpScreen(tester);
+        c.debugApplyState(
+          yutState(
+            stake: 100,
+            equipped: {
+              yutMe: {'yut_yut': item('번개 윷', '⚡', 'S')},
+              yutOpp: {'yut_yut': item('신들의 윷', '✨', 'SSS')},
+            },
+            effects: {
+              yutMe: {
+                ...zeroEffects,
+                'controlPct': 2.1,
+                'calmPct': 12,
+                'defensePct': 4.5,
+              },
+              yutOpp: {...zeroEffects, 'controlPct': 1.2},
+            },
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 600));
+        expect(
+          find.textContaining('홍길동 · 대기 4'),
+          findsOneWidget,
+          reason: 'the card names the character, not an animal skin',
+        );
+        expect(find.textContaining('번개 윷'), findsOneWidget);
+        expect(find.text('윷 컨트롤 +2.1%'), findsOneWidget);
+        expect(find.text('빽도 방어 12%'), findsOneWidget);
+        expect(find.textContaining('신들의 윷'), findsOneWidget);
+        expect(find.text('윷 컨트롤 +1.2%'), findsOneWidget);
+        expect(find.text('효과'), findsNWidgets(2));
+        expect(tester.takeException(), isNull);
+        await settle(tester);
+      },
+    );
+
+    testWidgets(
+      'tapping a card lists the five stats, the yut skin and every effect',
+      (tester) async {
+        await pumpScreen(tester);
+        c.debugApplyState(
+          yutState(
+            stake: 100,
+            equipped: {
+              yutOpp: {'yut_yut': item('용의 윷', '🐉', 'SS')},
+            },
+            effects: {
+              yutOpp: {
+                ...zeroEffects,
+                'defensePct': 7,
+                'winCoinPct': 8,
+                'controlPct': 0.8,
+                'calmPct': 5,
+              },
+            },
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 600));
+        await tester.tap(find.textContaining('용의 윷').first);
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(find.text('하늘 장비'), findsOneWidget);
+        expect(find.textContaining('미호 · 기술·행운형'), findsOneWidget);
+        for (final def in kYutStatDefs) {
+          expect(find.text(def.label), findsOneWidget, reason: def.label);
+        }
+        // 미호: 행운 5칸 모두 채워짐, 침착 2칸.
+        Color? pip(String key, int i) {
+          final box = tester.widget<Container>(
+            find.byKey(ValueKey('yut_stat_${key}_$i')),
+          );
+          return (box.decoration as BoxDecoration).color;
+        }
+
+        expect(pip('luck', 5), pip('luck', 1));
+        expect(pip('calm', 2), pip('calm', 1));
+        expect(pip('calm', 3), isNot(pip('calm', 2)));
+        expect(find.textContaining('윷 스킨: 용의 윷 (SS등급)'), findsOneWidget);
+        expect(
+          find.textContaining('말:'),
+          findsNothing,
+          reason: 'there is no piece slot any more',
+        );
+        expect(find.text('윷·모 코인 8%'), findsOneWidget);
+        expect(find.text('잡힘 방어 7%'), findsOneWidget);
+        await tester.tapAt(const Offset(10, 10));
+        await settle(tester);
+      },
+    );
+
+    testWidgets(
+      'a stale piece skin in the state is ignored and an old yut name does not crash',
+      (tester) async {
+        await pumpScreen(tester);
+        c.debugApplyState(
+          yutState(
+            equipped: {
+              yutMe: {
+                'yut_piece': item('호랑이 말', '🐯', 'A'),
+                'yut_yut': item('벚꽃 윷', '🌸', 'B'),
+              },
+            },
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 600));
+        expect(find.text('🐯'), findsNothing);
+        expect(find.textContaining('벚꽃 윷'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await settle(tester);
+      },
+    );
+
+    testWidgets('free games hide coin effects', (tester) async {
+      await pumpScreen(tester);
+      c.debugApplyState(
+        yutState(
+          effects: {
+            yutMe: {...zeroEffects, 'controlPct': 1, 'winCoinPct': 15},
+          },
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.text('윷 컨트롤 +1%'), findsOneWidget);
+      expect(find.textContaining('코인'), findsNothing);
+      await settle(tester);
+    });
+  });
+
   group('lobby character picker', () {
     Future<void> pumpPicker(WidgetTester tester) async {
-      tester.view.physicalSize = const Size(390, 700);
+      tester.view.physicalSize = const Size(390, 900);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       await tester.pumpWidget(
@@ -316,9 +370,11 @@ void main() {
           home: Scaffold(
             body: ListenableBuilder(
               listenable: socket,
-              builder: (_, _) => Padding(
-                padding: const EdgeInsets.all(16),
-                child: YutCharacterPicker(color: Colors.orange),
+              builder: (_, _) => SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: YutCharacterPicker(color: Colors.orange),
+                ),
               ),
             ),
           ),
@@ -328,16 +384,18 @@ void main() {
     }
 
     testWidgets(
-      'three characters; the partner pick is disabled, mine is marked',
+      'each card shows its five stats; the partner pick is disabled, mine is marked',
       (tester) async {
         socket.lobbyCharacterSelections = {yutOpp: 'miho'};
         await pumpPicker(tester);
-        expect(
-          find.byKey(const ValueKey('yut_pick_honggilldong')),
-          findsOneWidget,
-        );
-        expect(find.byKey(const ValueKey('yut_pick_nolbu')), findsOneWidget);
-        expect(find.byKey(const ValueKey('yut_pick_miho')), findsOneWidget);
+        for (final id in ['honggilldong', 'nolbu', 'miho']) {
+          expect(find.byKey(ValueKey('yut_pick_$id')), findsOneWidget);
+        }
+        // 능력치 이름이 카드마다(3장) 보인다.
+        for (final def in kYutStatDefs) {
+          expect(find.text(def.label), findsNWidgets(3), reason: def.label);
+        }
+        expect(find.text('균형·수비형'), findsOneWidget);
         expect(find.text('상대 선택'), findsOneWidget);
         expect(find.text('고르기'), findsNWidgets(2));
         expect(find.textContaining('자동으로 정해져요'), findsOneWidget);
@@ -346,52 +404,61 @@ void main() {
         socket.notifyListeners();
         await tester.pump(const Duration(milliseconds: 300));
         expect(find.text('내 선택'), findsOneWidget);
-        expect(find.text('상대 선택'), findsOneWidget);
-        expect(find.textContaining('겹치지 않아요'), findsOneWidget);
-        // 상대가 고른 카드는 눌러도 내 선택이 바뀌지 않는다.
         await tester.tap(find.byKey(const ValueKey('yut_pick_miho')));
         await tester.pump(const Duration(milliseconds: 200));
         expect(socket.lobbyCharacterSelections[yutMe], 'nolbu');
+        // 놀부는 힘 5칸, 침착 1칸.
+        Color? pip(String key, int i, String id) {
+          final boxes = find.descendant(
+            of: find.byKey(ValueKey('yut_pick_$id')),
+            matching: find.byKey(ValueKey('yut_stat_${key}_$i')),
+          );
+          final box = tester.widget<Container>(boxes);
+          return (box.decoration as BoxDecoration).color;
+        }
+
+        expect(pip('power', 5, 'nolbu'), pip('power', 1, 'nolbu'));
+        expect(pip('calm', 2, 'nolbu'), isNot(pip('calm', 1, 'nolbu')));
         socket.lobbyCharacterSelections = {};
       },
     );
-  });
 
-  testWidgets('lobby avatar circles show the picked character faces', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    socket.userId = 'ME';
-    socket.lobbyGameType = 'yut';
-    socket.lobbyHost = 'ME';
-    socket.lobbyPlayers = ['ME', 'YOU'];
-    socket.lobbyCharacterSelections = {'ME': 'honggilldong', 'YOU': 'miho'};
-    await tester.pumpWidget(
-      MaterialApp(
-        home: GameLobbyScreen(
-          gameType: 'yut',
-          title: '윷놀이',
-          description: '테스트',
-          emoji: '🎲',
-          color: Colors.orange,
-          backgroundColor: Colors.orange.shade50,
-          gameScreen: const SizedBox(),
-          onJoinLobby: (_) {},
+    testWidgets('lobby avatar circles show the picked character faces', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(390, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      socket.userId = 'ME';
+      socket.lobbyGameType = 'yut';
+      socket.lobbyHost = 'ME';
+      socket.lobbyPlayers = ['ME', 'YOU'];
+      socket.lobbyCharacterSelections = {'ME': 'honggilldong', 'YOU': 'miho'};
+      await tester.pumpWidget(
+        MaterialApp(
+          home: GameLobbyScreen(
+            gameType: 'yut',
+            title: '윷놀이',
+            description: '테스트',
+            emoji: '🎲',
+            color: Colors.orange,
+            backgroundColor: Colors.orange.shade50,
+            gameScreen: const SizedBox(),
+            onJoinLobby: (_) {},
+          ),
         ),
-      ),
-    );
-    await tester.pump(const Duration(milliseconds: 300));
-    final faces = tester
-        .widgetList<YutCharacterAvatar>(find.byType(YutCharacterAvatar))
-        .map((f) => f.character)
-        .toList();
-    expect(faces, ['honggilldong', 'miho']);
-    socket.lobbyCharacterSelections = {};
-    socket.lobbyGameType = null;
-    socket.lobbyPlayers = [];
-    await tester.pumpWidget(const SizedBox());
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      final faces = tester
+          .widgetList<YutCharacterAvatar>(find.byType(YutCharacterAvatar))
+          .map((f) => f.character)
+          .toList();
+      expect(faces, ['honggilldong', 'miho']);
+      socket.lobbyCharacterSelections = {};
+      socket.lobbyGameType = null;
+      socket.lobbyPlayers = [];
+      await tester.pumpWidget(const SizedBox());
+    });
   });
 
   test(
@@ -401,7 +468,8 @@ void main() {
         controlPct: 2.1,
         moRatePct: 0.9,
         backdoBonusPct: 3,
-        defensePct: 10,
+        calmPct: 12,
+        defensePct: 8.5,
         winCoinPct: 15,
         catchCoinPer: 25,
         catchFlat: 120,
@@ -410,7 +478,8 @@ void main() {
         '윷 컨트롤 +2.1%',
         '모 확률 +0.9%',
         '빽도 보너스 3%',
-        '잡힘 방어 10%',
+        '빽도 방어 12%',
+        '잡힘 방어 8.5%',
         '윷·모 코인 15%',
         '잡기 말당 +25코인',
         '잡기 +120코인',

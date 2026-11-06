@@ -14,6 +14,7 @@ import 'yut_controller.dart';
 import 'yut_models.dart';
 import 'yut_figures.dart';
 import 'yut_sticks.dart';
+import 'yut_stat_bars.dart';
 
 /// 윷놀이 2.0 — 햇살 풀밭(GameTheme.meadow).
 /// 서버가 로비 시작과 함께 판을 만든다. 이 화면에는 시작 버튼이 없다.
@@ -522,10 +523,8 @@ class _YutGameScreenState extends State<YutGameScreen>
   // ── 화면 ────────────────────────────────────────────────────────────────
   Color _colorOf(String player) => player == c.me ? _theme.me : _theme.opponent;
 
-  YutFigureSpec _specOf(String player) => YutFigureSpec.of(
-    c.characterOf(player),
-    c.view?.itemOf(player, 'yut_piece'),
-  );
+  YutFigureSpec _specOf(String player) =>
+      YutFigureSpec(character: c.characterOf(player));
 
   @override
   Widget build(BuildContext context) {
@@ -677,7 +676,6 @@ class _YutGameScreenState extends State<YutGameScreen>
       total: v.pieceCount,
       deadline: active ? deadline : null,
       stick: v.itemOf(player, 'yut_yut'),
-      piece: v.itemOf(player, 'yut_piece'),
       effects: v.effectsOf(player).chips(staked: v.stake > 0),
       onTapCard: () => _showEquipSheet(v, player),
       selectableWaiting: mine && sel.moves.any((m) => m.from == 0),
@@ -882,6 +880,7 @@ class _YutGameScreenState extends State<YutGameScreen>
 
     showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => Padding(
         padding: const EdgeInsets.all(14),
@@ -890,40 +889,56 @@ class _YutGameScreenState extends State<YutGameScreen>
           opaque: true,
           radius: 22,
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '${mine ? '내' : c.displayName(player)} 장비',
-                style: t.display(size: 20),
-              ),
-              const SizedBox(height: 10),
-              itemBlock('말', v.itemOf(player, 'yut_piece')),
-              itemBlock('윷', v.itemOf(player, 'yut_yut')),
-              const SizedBox(height: 4),
-              Text(
-                '이 판에 적용되는 효과',
-                style: t.body(size: 13, weight: FontWeight.w800),
-              ),
-              const SizedBox(height: 6),
-              if (chips.isEmpty)
-                Text('적용되는 효과가 없어요.', style: t.body(size: 13, color: t.subInk))
-              else
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    for (final label in chips)
-                      GameChip(theme: t, label: label, emphasized: true),
-                  ],
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${mine ? '내' : c.displayName(player)} 장비',
+                  style: t.display(size: 20),
                 ),
-              const SizedBox(height: 10),
-              Text(
-                '아이템 효과는 합쳐서 일정 한도까지만 적용되고, 코인 보너스는 판돈의 30%까지만 쌓여요.',
-                style: t.body(size: 12, color: t.subInk, height: 1.4),
-              ),
-            ],
+                const SizedBox(height: 10),
+                Text(
+                  '${yutCharacterNames[c.characterOf(player)] ?? ''} · ${kYutCharacterBlurb[c.characterOf(player)] ?? ''}',
+                  style: t.body(size: 13.5, weight: FontWeight.w800),
+                ),
+                const SizedBox(height: 4),
+                YutStatBars(
+                  stats: v.statsOf(player),
+                  color: t.accent,
+                  textColor: t.ink,
+                  mutedColor: t.subInk,
+                ),
+                const SizedBox(height: 10),
+                itemBlock('윷 스킨', v.itemOf(player, 'yut_yut')),
+                const SizedBox(height: 4),
+                Text(
+                  '이 판에 적용되는 효과',
+                  style: t.body(size: 13, weight: FontWeight.w800),
+                ),
+                const SizedBox(height: 6),
+                if (chips.isEmpty)
+                  Text(
+                    '적용되는 효과가 없어요.',
+                    style: t.body(size: 13, color: t.subInk),
+                  )
+                else
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final label in chips)
+                        GameChip(theme: t, label: label, emphasized: true),
+                    ],
+                  ),
+                const SizedBox(height: 10),
+                Text(
+                  '아이템 효과는 합쳐서 일정 한도까지만 적용되고, 코인 보너스는 판돈의 30%까지만 쌓여요.',
+                  style: t.body(size: 12, color: t.subInk, height: 1.4),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1260,7 +1275,6 @@ class _PlayerCard extends StatelessWidget {
   final int total;
   final GameDeadline? deadline;
   final Map<String, dynamic>? stick;
-  final Map<String, dynamic>? piece;
   final List<String> effects;
   final VoidCallback onTapCard;
   final bool selectableWaiting;
@@ -1280,7 +1294,6 @@ class _PlayerCard extends StatelessWidget {
     required this.total,
     required this.deadline,
     required this.stick,
-    required this.piece,
     required this.effects,
     required this.onTapCard,
     required this.bubble,
@@ -1308,7 +1321,7 @@ class _PlayerCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = theme;
     final charName = yutCharacterNames[spec.character] ?? '';
-    final who = spec.isSkin ? (spec.skinName ?? '동물 말') : charName;
+    final who = charName;
     // 효과 칩은 가장 앞의 둘만 보이고 나머지는 "+N"(전체는 카드를 눌러 장비 창에서).
     final compact = MediaQuery.sizeOf(context).height < 720;
     final shownEffects = effects.take(compact ? 1 : 2).toList();
@@ -1574,6 +1587,7 @@ class _ItemEffectBadge extends StatelessWidget {
       'yut_catch_bonus' => '⚡ $who잡기 보너스 +${effect.amount}코인이 쌓였어요',
       'yut_capture_protection' => '🛡️ 아이템 방어 발동! 말 ${effect.amount}개가 무사해요',
       'yut_backdo_bonus_pct' => '🎲 $who아이템 효과 — 빽도 뒤 한 번 더 던져요',
+      'yut_backdo_shield_pct' => '🧘 $who침착! 빽도를 다시 던졌어요',
       _ => '✨ $who아이템 효과 발동!',
     };
   }

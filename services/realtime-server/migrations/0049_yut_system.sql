@@ -28,10 +28,10 @@ INSERT INTO item_stats (item_id, stat_key, stat_value) VALUES
   (112, 'yut_backdo_shield_pct',  8),    -- 달빛 A: 빽도 방어(빽도가 나오면 다시 던질 확률 %)
   (113, 'yut_win_coin_pct',       4),    -- 옥 A: 윷·모 코인(판돈 %)
   (114, 'piece_catch_resist_pct', 4),    -- 얼음 S: 잡힘 방어
-  (115, 'yut_control_pct',        0.8),  -- 번개 S: 윷·모 확률
+  (115, 'yut_control_pct',        0.7),  -- 번개 S: 윷·모 확률
   (116, 'yut_overturn_pct',       1),    -- 불꽃 SS: 역전(지고 있을 때 윷·모 확률)
   (117, 'yut_win_coin_pct',       8),    -- 용 SS: 윷·모 코인(판돈 %)
-  (118, 'yut_control_pct',        1.2);  -- 신들 SSS: 윷·모 확률(가장 높게)
+  (118, 'yut_control_pct',        1.0);  -- 신들 SSS: 윷·모 확률(가장 높게)
 
 -- 3. 예전 윷 → 새 윷 대응표(같은 등급). 성격이 비슷한 것끼리 묶었다.
 CREATE TABLE IF NOT EXISTS yut_skin_migration_map (

@@ -5,37 +5,12 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'yut_models.dart';
 
-/// 말 그림 명세: 캐릭터 전신, 또는 상점 동물 말(이모지 + 등급).
+/// 말 그림 명세: 캐릭터 전신(홍길동·미호·놀부). 말 스킨은 폐지되어 캐릭터 그림만 쓴다.
 @immutable
 class YutFigureSpec {
   final String character;
 
-  /// 상점 말 스킨(`yut_piece` 아이템). 있으면 캐릭터 대신 서 있는 동물 말을 그린다.
-  final String? skinEmoji;
-  final String skinGrade;
-  final String? skinName;
-
-  const YutFigureSpec({
-    required this.character,
-    this.skinEmoji,
-    this.skinGrade = 'B',
-    this.skinName,
-  });
-
-  bool get isSkin => skinEmoji != null && skinEmoji!.isNotEmpty;
-
-  factory YutFigureSpec.of(String character, Map<String, dynamic>? pieceItem) {
-    final icon = pieceItem == null ? null : '${pieceItem['icon'] ?? ''}';
-    if (icon == null || icon.isEmpty) {
-      return YutFigureSpec(character: character);
-    }
-    return YutFigureSpec(
-      character: character,
-      skinEmoji: icon,
-      skinGrade: '${pieceItem?['grade'] ?? 'B'}',
-      skinName: pieceItem?['name'] as String?,
-    );
-  }
+  const YutFigureSpec({required this.character});
 }
 
 /// 등급별 테두리 색.
@@ -105,8 +80,6 @@ class YutFigure extends StatelessWidget {
     final figH = h * 0.86;
     final bob = math.sin(t * math.pi * 2) * h * 0.012;
     final stacked = math.min(count, 3);
-    final tier = spec.isSkin ? spec.skinGrade : 'B';
-    final rim = spec.isSkin ? yutGradeColor(tier) : Colors.white;
 
     Widget figure(int i) {
       final dx = stacked == 1 ? 0.0 : (i - (stacked - 1) / 2) * h * 0.2;
@@ -116,9 +89,7 @@ class YutFigure extends StatelessWidget {
         bottom: baseH * 0.38 + dy - bob * (i.isEven ? 1 : -1),
         width: h * 0.8,
         height: figH,
-        child: spec.isSkin
-            ? _AnimalFace(emoji: spec.skinEmoji!, size: figH, tier: tier)
-            : _CharacterImage(character: spec.character),
+        child: _CharacterImage(character: spec.character),
       );
     }
 
@@ -141,8 +112,8 @@ class YutFigure extends StatelessWidget {
                 colors: [Color.lerp(team, Colors.white, 0.35)!, team],
               ),
               border: Border.all(
-                color: selected ? const Color(0xFFFFE066) : rim,
-                width: selected ? 2.6 : (tier == 'B' ? 1.6 : 2.4),
+                color: selected ? const Color(0xFFFFE066) : Colors.white,
+                width: selected ? 2.6 : 1.6,
               ),
               boxShadow: [
                 BoxShadow(
@@ -156,25 +127,11 @@ class YutFigure extends StatelessWidget {
                     blurRadius: 14,
                     spreadRadius: 2,
                   ),
-                if (tier == 'S' || tier == 'SS' || tier == 'SSS')
-                  BoxShadow(
-                    color: yutGradeColor(tier).withValues(alpha: 0.55),
-                    blurRadius: 12,
-                    spreadRadius: 1,
-                  ),
               ],
             ),
           ),
         ),
         for (var i = 0; i < stacked; i++) figure(i),
-        if (tier == 'SS' || tier == 'SSS')
-          Positioned.fill(
-            child: IgnorePointer(
-              child: CustomPaint(
-                painter: _SparklePainter(tier: tier, t: t),
-              ),
-            ),
-          ),
         if (badge && count > 1)
           Positioned(
             right: -h * 0.02,
@@ -226,92 +183,6 @@ class _CharacterImage extends StatelessWidget {
       ),
     );
   }
-}
-
-/// 서 있는 동물 말: 큰 이모지 몸통 + 아래로 떨어지는 부드러운 그림자.
-class _AnimalFace extends StatelessWidget {
-  final String emoji;
-  final double size;
-  final String tier;
-
-  const _AnimalFace({
-    required this.emoji,
-    required this.size,
-    required this.tier,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final fontSize = size * 0.72;
-    return Align(
-      alignment: Alignment.bottomCenter,
-      child: Text(
-        emoji,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontSize: fontSize,
-          height: 1.0,
-          shadows: [
-            Shadow(
-              color: Colors.black.withValues(alpha: 0.28),
-              blurRadius: 5,
-              offset: const Offset(0, 3),
-            ),
-            if (tier != 'B' && tier != 'A')
-              Shadow(
-                color: yutGradeColor(tier).withValues(alpha: 0.9),
-                blurRadius: 14,
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// SS·SSS 말의 반짝이: 네 갈래 별이 돌며 깜빡인다(SSS는 무지개색).
-class _SparklePainter extends CustomPainter {
-  final String tier;
-  final double t;
-
-  _SparklePainter({required this.tier, required this.t});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const count = 5;
-    for (int i = 0; i < count; i++) {
-      final phase = (t + i / count) % 1.0;
-      final a = i / count * math.pi * 2 + t * math.pi * 2 * 0.5;
-      final c = Offset(
-        size.width / 2 + math.cos(a) * size.width * 0.42,
-        size.height * 0.5 + math.sin(a * 1.3) * size.height * 0.34,
-      );
-      final k = math.sin(phase * math.pi);
-      final color = tier == 'SSS'
-          ? HSVColor.fromAHSV(
-              1,
-              ((phase + i * 0.2) % 1) * 360,
-              0.5,
-              1,
-            ).toColor()
-          : Colors.white;
-      final r = size.width * 0.07 * (0.4 + k);
-      final paint = Paint()
-        ..color = color.withValues(alpha: 0.35 + 0.65 * k)
-        ..style = PaintingStyle.fill;
-      final p = Path()
-        ..moveTo(c.dx, c.dy - r)
-        ..quadraticBezierTo(c.dx, c.dy, c.dx + r, c.dy)
-        ..quadraticBezierTo(c.dx, c.dy, c.dx, c.dy + r)
-        ..quadraticBezierTo(c.dx, c.dy, c.dx - r, c.dy)
-        ..quadraticBezierTo(c.dx, c.dy, c.dx, c.dy - r);
-      canvas.drawPath(p, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _SparklePainter old) =>
-      old.t != t || old.tier != tier;
 }
 
 /// 로비 아바타 원 안에 고른 캐릭터의 얼굴(머리 부분)을 보여 준다.

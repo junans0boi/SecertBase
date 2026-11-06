@@ -625,7 +625,9 @@ class _ShopScreenState extends State<ShopScreen>
   }
 
   Widget _buildShopTab() {
-    final yutItems = _items.where((i) => i['game'] == 'yut').toList();
+    final yutItems = _items
+        .where((i) => i['game'] == 'yut' && i['slot'] != 'yut_piece')
+        .toList();
     final onecardItems = _items.where((i) => i['game'] == 'onecard').toList();
     return RefreshIndicator(
       onRefresh: _load,
@@ -1238,7 +1240,7 @@ class _ItemPreviewSheet extends StatelessWidget {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
-                        '+${s['value']}',
+                        '+${formatStatValue(num.tryParse('${s['value']}') ?? 0)}',
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
@@ -1498,14 +1500,9 @@ class _GameSection extends StatelessWidget {
     required this.tierColor,
   });
 
-  static const _slotOrder = {
-    'yut_yut': 0,
-    'yut_piece': 1,
-    'onecard_cardback': 2,
-  };
+  static const _slotOrder = {'yut_yut': 0, 'onecard_cardback': 2};
   static const _slotLabels = {
-    'yut_yut': '🎲 윷',
-    'yut_piece': '♟️ 말',
+    'yut_yut': '🎲 윷 스킨',
     'onecard_cardback': '🃏 카드백',
   };
 

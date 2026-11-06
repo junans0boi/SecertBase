@@ -4,6 +4,7 @@ import '../../../../core/main_design.dart';
 import '../../../../core/socket_service.dart';
 import 'yut_figures.dart';
 import 'yut_models.dart';
+import 'yut_stat_bars.dart';
 
 /// 윷놀이 로비의 캐릭터 고르기. 홍길동·놀부·미호 중 하나를 고르고,
 /// 상대가 고른 캐릭터는 누를 수 없다(서버도 `character_taken`으로 막는다).
@@ -136,6 +137,21 @@ class _CharacterCard extends StatelessWidget {
                   height: 1.1,
                 ),
               ),
+              Text(
+                kYutCharacterBlurb[id] ?? '',
+                style: mainBody(size: 12, color: kMainSub, height: 1.2),
+              ),
+              const SizedBox(height: 6),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: YutStatBars(
+                  stats: yutCharacterStatsFor(id),
+                  color: taken ? kMainMuted : color,
+                  textColor: taken ? kMainMuted : kMainInk,
+                  compact: true,
+                ),
+              ),
+              const SizedBox(height: 6),
               Text(
                 status,
                 style: mainBody(
