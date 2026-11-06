@@ -1,23 +1,23 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'onecard_cards.dart';
 import 'onecard_models.dart';
+import 'onecard_ui.dart';
 
-/// 카드 폭: 장수가 많을수록 조금 작게(폭 360~430에서 7~20장).
+/// 카드 폭: 장수가 많을수록 조금 작게(폭 360~430에서 7~20장). 목업은 70.
 double oneCardHandWidth(int count, double maxWidth) {
   final base = count <= 8
-      ? 66.0
+      ? 70.0
       : count <= 12
-      ? 60.0
+      ? 62.0
       : 54.0;
   return math.min(base, maxWidth / 4.2);
 }
 
-/// 손패 부채. 겹침 간격을 폭에 맞춰 자동으로 줄이고, 낼 수 있는 카드는 살짝 들리며,
-/// 방금 뽑은 카드는 NEW 빛이 돈다.
+/// 손패 부채(목업 그대로): 카드는 한 장씩 3.2도, 가운데에서 멀수록 조금 내려가고,
+/// 낼 수 있는 카드는 흰 헤어라인과 함께 들리고, 못 내는 카드는 어둡게 가린다.
 class OneCardHandFan extends StatelessWidget {
   final List<OneCard> cards;
   final Set<String> playable;
@@ -36,7 +36,10 @@ class OneCardHandFan extends StatelessWidget {
     this.onTap,
   });
 
-  static const double lift = 16;
+  static const double lift = 20;
+
+  /// 부채 전체 높이(카드 + 들림 여유). 가장자리 카드는 아래로 조금 더 내려간다.
+  static double heightFor(double cw) => cw * kOneCardAspect + lift + 6;
 
   @override
   Widget build(BuildContext context) {
@@ -46,29 +49,31 @@ class OneCardHandFan extends StatelessWidget {
         final maxW = constraints.maxWidth;
         final cw = oneCardHandWidth(n, maxW);
         final ch = cw * kOneCardAspect;
-        final maxAngle = math.min(0.2, 0.026 * n);
-        // 기울어진 양 끝 카드가 화면 밖으로 나가지 않게 여유를 둔다.
-        final pad = ch * math.sin(maxAngle) + 4;
-        final usable = maxW - pad * 2;
+        final half = (n - 1) / 2;
+        // 가장자리 카드가 너무 눕지 않게: 장수가 많으면 각도·낙차를 줄인다.
+        final spread = n <= 1 ? 0.0 : math.min(3.2, 12 / half);
+        final arc = n <= 1 ? 0.0 : math.min(2.2, 16 / (half * half));
+        final maxAngle = half * spread * math.pi / 180;
+        // 기울어진 가장자리 카드의 위쪽 모서리까지 화면 안에 들어오게 간격을 정한다.
+        final reach =
+            cw / 2 * math.cos(maxAngle) + 1.6 * ch * math.sin(maxAngle);
         final step = n <= 1
             ? 0.0
-            : math.min(cw * 0.64, (usable - cw) / (n - 1));
-        final total = cw + step * math.max(0, n - 1);
-        final left0 = (maxW - total) / 2;
-        final arc = math.min(12.0, 1.2 * n);
+            : math.min(52 * cw / 70, (maxW / 2 - 2 - reach) / half);
         return SizedBox(
           width: maxW,
-          height: ch + lift + arc + 6,
+          height: heightFor(cw),
           child: Stack(
             clipBehavior: Clip.none,
             children: [
               for (var i = 0; i < n; i++)
                 _positioned(
                   i: i,
-                  n: n,
-                  left: left0 + i * step,
+                  k: i - half,
+                  cx: maxW / 2,
+                  step: step,
                   cw: cw,
-                  maxAngle: maxAngle,
+                  spread: spread,
                   arc: arc,
                 ),
             ],
@@ -80,29 +85,30 @@ class OneCardHandFan extends StatelessWidget {
 
   Widget _positioned({
     required int i,
-    required int n,
-    required double left,
+    required double k,
+    required double cx,
+    required double step,
     required double cw,
-    required double maxAngle,
+    required double spread,
     required double arc,
   }) {
     final card = cards[i];
-    final t = n <= 1 ? 0.0 : (i / (n - 1)) * 2 - 1;
     final canPlay = active && playable.contains(card.id);
     final isFresh = fresh.contains(card.id);
     final shown = i < revealCount;
+    final dy = k * k * arc - (canPlay ? lift : 0);
     return AnimatedPositioned(
       key: ValueKey(card.id),
       duration: const Duration(milliseconds: 260),
       curve: Curves.easeOutCubic,
-      left: left,
-      top: lift + t * t * arc - (canPlay ? lift : 0),
+      left: cx - cw / 2 + k * step,
+      bottom: -dy,
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 160),
         opacity: shown ? 1 : 0,
         child: Transform.rotate(
-          angle: t * maxAngle,
-          alignment: Alignment.bottomCenter,
+          angle: k * spread * math.pi / 180,
+          alignment: const Alignment(0, 2.2),
           child: Semantics(
             button: canPlay,
             enabled: canPlay,
@@ -113,55 +119,35 @@ class OneCardHandFan extends StatelessWidget {
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  if (canPlay || isFresh)
-                    Positioned.fill(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(cw * 0.13),
-                          boxShadow: [
-                            BoxShadow(
-                              color:
-                                  (isFresh
-                                          ? const Color(0xFFFFE08A)
-                                          : const Color(0xFFE8C27A))
-                                      .withValues(alpha: isFresh ? 0.9 : 0.55),
-                              blurRadius: isFresh ? 18 : 12,
-                              spreadRadius: isFresh ? 2 : 0,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
                   OneCardFace(
                     card: card,
                     width: cw,
                     dimmed: active && !canPlay,
+                    shadows: canPlay
+                        ? OneCardShadows.lift
+                        : OneCardShadows.rest,
                   ),
                   if (isFresh)
                     Positioned(
-                      top: -7,
+                      top: -8,
                       right: -4,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 5,
-                          vertical: 1.5,
+                          horizontal: 7,
+                          vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFFFFE9A8), Color(0xFFE8B84A)],
-                          ),
+                          color: OneCardUi.vio,
                           borderRadius: BorderRadius.circular(99),
-                          boxShadow: const [
-                            BoxShadow(color: Colors.black38, blurRadius: 4),
-                          ],
+                          border: Border.all(color: OneCardUi.bg, width: 2),
                         ),
                         child: Text(
                           '새 카드',
-                          style: GoogleFonts.notoSans(
-                            fontSize: 8.5,
-                            fontWeight: FontWeight.w900,
-                            color: const Color(0xFF3A1A08),
-                            height: 1.1,
+                          style: OneCardUi.sans(
+                            size: 10,
+                            color: Colors.white,
+                            weight: FontWeight.w800,
+                            height: 1.2,
                           ),
                         ),
                       ),
@@ -176,7 +162,7 @@ class OneCardHandFan extends StatelessWidget {
   }
 }
 
-/// 상대 손패: 겹친 뒷면 부채.
+/// 상대 손패: 겹친 뒷면 작은 부채(120x52 영역, 카드 폭 26).
 class OneCardOpponentFan extends StatelessWidget {
   final int count;
   final String skin;
@@ -187,51 +173,43 @@ class OneCardOpponentFan extends StatelessWidget {
     super.key,
     required this.count,
     this.skin = 'base',
-    this.cardWidth = 34,
+    this.cardWidth = 26,
     this.revealCount = 1 << 20,
   });
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final shown = math.min(count, math.min(revealCount, 16));
-        final cw = cardWidth;
-        final ch = cw * kOneCardAspect;
-        final maxW = math.min(constraints.maxWidth, 260.0);
-        final step = shown <= 1
-            ? 0.0
-            : math.min(cw * 0.5, (maxW - cw) / (shown - 1));
-        final total = cw + step * math.max(0, shown - 1);
-        return Semantics(
-          label: '상대 손패 $count장',
-          child: SizedBox(
-            width: math.max(total, cw),
-            height: ch + 8,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                for (var i = 0; i < shown; i++)
-                  Positioned(
-                    left: i * step,
-                    top:
-                        4 +
-                        (shown <= 1
-                            ? 0
-                            : math.pow((i / (shown - 1)) * 2 - 1, 2) * 4),
-                    child: Transform.rotate(
-                      angle: shown <= 1
-                          ? 0
-                          : -((i / (shown - 1)) * 2 - 1) * 0.12,
-                      alignment: Alignment.topCenter,
-                      child: OneCardBack(width: cw, skin: skin),
-                    ),
+    final shown = math.min(count, math.min(revealCount, 16));
+    final cw = cardWidth;
+    const boxW = 120.0;
+    final half = (shown - 1) / 2;
+    final step = shown <= 1
+        ? 0.0
+        : math.min(10.0, (boxW - cw - 8) / (shown - 1));
+    return Semantics(
+      label: '상대 손패 $count장',
+      child: SizedBox(
+        width: boxW,
+        height: 52,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            for (var i = 0; i < shown; i++)
+              Positioned(
+                left: boxW / 2 - cw / 2 + (i - half) * step,
+                top: (i - half) * (i - half) * 0.9,
+                child: Transform.rotate(
+                  angle: (i - half) * 4 * math.pi / 180,
+                  child: OneCardBack(
+                    width: cw,
+                    skin: skin,
+                    shadows: OneCardShadows.fan,
                   ),
-              ],
-            ),
-          ),
-        );
-      },
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

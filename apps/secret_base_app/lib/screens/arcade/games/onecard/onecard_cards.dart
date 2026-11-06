@@ -1,22 +1,65 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'onecard_models.dart';
+import 'onecard_ui.dart';
 
-/// 카드 크기 비율(가로:세로 = 1:1.45).
-const double kOneCardAspect = 1.45;
+/// 카드 크기 비율(가로:세로 = 1:1.46).
+const double kOneCardAspect = 1.46;
 
-/// 원카드 앞면. 보석 톤 4색과 기호(⊘ ⇄ +2 +4 ◐ "모두")만 쓰고 영어 글자는 없다.
-/// 기호는 글꼴이 늦게 와도 네모로 보이지 않게 직접 그린다(00-analysis C1).
+/// 카드 그림자 모음(목업 box-shadow와 같은 값).
+class OneCardShadows {
+  OneCardShadows._();
+
+  static const rest = [
+    BoxShadow(
+      color: Color(0x73000000),
+      offset: Offset(0, 6),
+      blurRadius: 12,
+      spreadRadius: -4,
+    ),
+  ];
+  static const lift = [
+    BoxShadow(
+      color: Color(0x99000000),
+      offset: Offset(0, 14),
+      blurRadius: 22,
+      spreadRadius: -6,
+    ),
+    BoxShadow(color: Color(0xE6FFFFFF), spreadRadius: 2),
+  ];
+  static const row = [
+    BoxShadow(
+      color: Color(0x80000000),
+      offset: Offset(0, 3),
+      blurRadius: 6,
+      spreadRadius: -2,
+    ),
+  ];
+  static const mini = [
+    BoxShadow(
+      color: Color(0x80000000),
+      offset: Offset(0, 4),
+      blurRadius: 8,
+      spreadRadius: -3,
+    ),
+  ];
+  static const fan = [
+    BoxShadow(color: Color(0x59000000), offset: Offset(0, 2), blurRadius: 6),
+  ];
+}
+
+/// 원카드 앞면(목업 카드): 솔리드 한 색 + 헤어라인 안쪽선 + 큰 숫자 + 모서리 표시.
+/// 색마다 작은 기호(하트·다이아·스페이드·클럽)를 붙여 색만으로 구분하지 않게 한다. 기호는 직접 그린다.
 class OneCardFace extends StatelessWidget {
   final OneCard card;
   final double width;
 
-  /// 버린 더미 위 와일드: 고른 색으로 물든다(Q53).
+  /// 버린 더미 위 와일드: 고른 색으로 테두리가 물든다(Q53).
   final String? tintColor;
   final bool dimmed;
+  final List<BoxShadow> shadows;
 
   const OneCardFace({
     super.key,
@@ -24,16 +67,139 @@ class OneCardFace extends StatelessWidget {
     this.width = 60,
     this.tintColor,
     this.dimmed = false,
+    this.shadows = OneCardShadows.rest,
   });
+
+  static const _even = TextHeightBehavior(
+    leadingDistribution: TextLeadingDistribution.even,
+  );
 
   @override
   Widget build(BuildContext context) {
     final w = width;
     final h = w * kOneCardAspect;
-    final colored = card.color != null;
-    final paint = colored ? card.color : tintColor;
-    final base = OneCardColors.of(paint);
-    final radius = BorderRadius.circular(w * 0.13);
+    final wild = card.color == null;
+    final honey = card.color == 'yellow';
+    final bg = wild ? const Color(0xFF1A1030) : OneCardSuit.color(card.color);
+    final fg = honey ? const Color(0xFF2E1C00) : Colors.white;
+    final tint = wild && tintColor != null
+        ? OneCardSuit.color(tintColor)
+        : null;
+    final hairline =
+        tint ??
+        (honey
+            ? const Color(0x472E1C00)
+            : (wild ? const Color(0x47FFFFFF) : const Color(0x52FFFFFF)));
+    final big = card.value == 'draw2' ? w * 0.42 : w * 0.58;
+    final isIcon = const {
+      'skip',
+      'reverse',
+      'discard_all',
+    }.contains(card.value);
+    final isNumber = card.isNumber;
+    final text = card.value == 'draw2' ? '+2' : card.value;
+
+    Widget center;
+    if (wild) {
+      center = SizedBox.square(
+        dimension: big * 0.62,
+        child: const CustomPaint(painter: _QuadPainter()),
+      );
+    } else {
+      final Widget glyph = isIcon
+          ? SizedBox.square(
+              dimension: big * 0.46,
+              child: CustomPaint(painter: _IconPainter(card.value, fg)),
+            )
+          : Text(
+              text,
+              maxLines: 1,
+              style: OneCardUi.sans(
+                size: big,
+                color: fg,
+                weight: FontWeight.w800,
+                height: 1,
+                spacing: -0.04,
+              ),
+              textHeightBehavior: _even,
+            );
+      final ellipse = Transform.rotate(
+        angle: 24 * math.pi / 180,
+        child: Container(
+          width: 0.78 * big,
+          height: 1.25 * big,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.all(
+              Radius.elliptical(0.39 * big, 0.625 * big),
+            ),
+            color: Colors.white.withValues(alpha: honey ? 0.28 : 0.14),
+          ),
+        ),
+      );
+      // 목업처럼 숫자 글자는 타원 "아래"(타원이 살짝 덮음), 아이콘은 타원 "위"에 그린다.
+      center = Stack(
+        alignment: Alignment.center,
+        clipBehavior: Clip.none,
+        children: isIcon ? [ellipse, glyph] : [glyph, ellipse],
+      );
+    }
+
+    final f = w * 0.22;
+    Widget index() {
+      Widget content;
+      if (wild) {
+        content = card.value == 'wild_draw4'
+            ? Text(
+                '+4',
+                style: OneCardUi.sans(
+                  size: f,
+                  color: fg,
+                  weight: FontWeight.w800,
+                  height: 1,
+                  spacing: -0.04,
+                ),
+                textHeightBehavior: _even,
+              )
+            : const SizedBox.shrink();
+      } else if (isIcon) {
+        content = SizedBox.square(
+          dimension: f,
+          child: CustomPaint(painter: _IconPainter(card.value, fg)),
+        );
+      } else {
+        content = Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              text,
+              maxLines: 1,
+              style: OneCardUi.sans(
+                size: f,
+                color: fg,
+                weight: FontWeight.w800,
+                height: 1,
+                spacing: -0.04,
+              ),
+              textHeightBehavior: _even,
+            ),
+            if (isNumber) ...[
+              SizedBox(height: f * 0.14),
+              SizedBox.square(
+                dimension: f * 0.78,
+                child: CustomPaint(
+                  painter: SuitPainter(OneCardSuit.index(card.color), fg),
+                ),
+              ),
+            ],
+          ],
+        );
+      }
+      return SizedBox(
+        width: f * 1.1,
+        child: Center(child: content),
+      );
+    }
+
     return Semantics(
       label: card.label,
       child: SizedBox(
@@ -41,114 +207,44 @@ class OneCardFace extends StatelessWidget {
         height: h,
         child: DecoratedBox(
           decoration: BoxDecoration(
-            borderRadius: radius,
-            color: const Color(0xFFFFF8EC),
-            border: Border.all(
-              color: const Color(0xFFE8C27A),
-              width: math.max(1, w * 0.018),
-            ),
+            color: bg,
+            borderRadius: BorderRadius.circular(w * 0.13),
             boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.32),
-                blurRadius: w * 0.1,
-                offset: Offset(0, w * 0.04),
-              ),
-              if (tintColor != null && !colored)
+              ...shadows,
+              if (tint != null)
                 BoxShadow(
-                  color: base.withValues(alpha: 0.75),
-                  blurRadius: w * 0.3,
-                  spreadRadius: w * 0.02,
+                  color: tint.withValues(alpha: 0.5),
+                  blurRadius: w * 0.22,
                 ),
             ],
           ),
-          child: Padding(
-            padding: EdgeInsets.all(w * 0.055),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(w * 0.09),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  DecoratedBox(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(w * 0.13),
+            child: Stack(
+              fit: StackFit.expand,
+              clipBehavior: Clip.none,
+              children: [
+                Padding(
+                  padding: EdgeInsets.all(w * 0.05),
+                  child: DecoratedBox(
                     decoration: BoxDecoration(
-                      gradient: paint == null
-                          ? const LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [Color(0xFF3B1C55), Color(0xFF190A27)],
-                            )
-                          : LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                OneCardColors.light(paint),
-                                base,
-                                OneCardColors.deep(paint),
-                              ],
-                              stops: const [0, 0.55, 1],
-                            ),
-                    ),
-                  ),
-                  // 가운데 비스듬한 타원(보석의 반사광).
-                  Center(
-                    child: Transform.rotate(
-                      angle: -0.42,
-                      child: Container(
-                        width: w * 0.78,
-                        height: h * 0.62,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.all(
-                            Radius.elliptical(w * 0.39, h * 0.31),
-                          ),
-                          color: Colors.white.withValues(
-                            alpha: colored ? 0.94 : 0.12,
-                          ),
-                          border: Border.all(
-                            color: const Color(
-                              0xFFE8C27A,
-                            ).withValues(alpha: colored ? 0.55 : 0.8),
-                            width: math.max(0.8, w * 0.012),
-                          ),
-                        ),
+                      borderRadius: BorderRadius.circular(w * 0.09),
+                      border: Border.all(
+                        color: hairline,
+                        width: tint != null ? 1.6 : 1,
                       ),
                     ),
                   ),
-                  Center(
-                    child: _CardSymbol(
-                      card: card,
-                      size: w * 0.5,
-                      color: colored ? base : Colors.white,
-                      tint: paint,
-                    ),
-                  ),
-                  Positioned(
-                    left: w * 0.04,
-                    top: w * 0.02,
-                    child: _CardSymbol(
-                      card: card,
-                      size: w * 0.2,
-                      color: Colors.white,
-                      tint: paint,
-                      corner: true,
-                    ),
-                  ),
-                  Positioned(
-                    right: w * 0.04,
-                    bottom: w * 0.02,
-                    child: Transform.rotate(
-                      angle: math.pi,
-                      child: _CardSymbol(
-                        card: card,
-                        size: w * 0.2,
-                        color: Colors.white,
-                        tint: paint,
-                        corner: true,
-                      ),
-                    ),
-                  ),
-                  if (dimmed)
-                    ColoredBox(color: Colors.black.withValues(alpha: 0.38)),
-                ],
-              ),
+                ),
+                Center(child: center),
+                Positioned(left: f * 0.12, top: f * 0.15, child: index()),
+                Positioned(
+                  right: f * 0.12,
+                  bottom: f * 0.15,
+                  child: Transform.rotate(angle: math.pi, child: index()),
+                ),
+                if (dimmed) const ColoredBox(color: Color(0x94150C2A)),
+              ],
             ),
           ),
         ),
@@ -157,215 +253,103 @@ class OneCardFace extends StatelessWidget {
   }
 }
 
-class _CardSymbol extends StatelessWidget {
-  final OneCard card;
-  final double size;
+/// 건너뛰기 · 방향 바꾸기 · 모두 내기 아이콘(24 격자 선화).
+class _IconPainter extends CustomPainter {
+  final String kind;
   final Color color;
-  final String? tint;
-  final bool corner;
 
-  const _CardSymbol({
-    required this.card,
-    required this.size,
-    required this.color,
-    required this.tint,
-    this.corner = false,
-  });
-
-  TextStyle _text(double fontSize) => GoogleFonts.gowunBatang(
-    fontSize: fontSize,
-    fontWeight: FontWeight.w700,
-    color: color,
-    height: 1,
-    shadows: [
-      Shadow(
-        color: Colors.black.withValues(alpha: corner ? 0.35 : 0.15),
-        blurRadius: 2,
-      ),
-    ],
-  );
-
-  @override
-  Widget build(BuildContext context) {
-    switch (card.value) {
-      case 'skip':
-        return CustomPaint(
-          size: Size.square(size * 0.9),
-          painter: _SkipPainter(color),
-        );
-      case 'reverse':
-        return CustomPaint(
-          size: Size.square(size * 0.95),
-          painter: _ReversePainter(color),
-        );
-      case 'wild':
-        return CustomPaint(
-          size: Size.square(size * (corner ? 0.85 : 1.05)),
-          painter: _WildWheelPainter(tint: tint),
-        );
-      case 'wild_draw4':
-        if (corner) return Text('+4', style: _text(size * 0.7));
-        return SizedBox.square(
-          dimension: size * 1.1,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              CustomPaint(
-                size: Size.square(size * 1.05),
-                painter: _WildWheelPainter(tint: tint),
-              ),
-              Text(
-                '+4',
-                style: _text(size * 0.52).copyWith(
-                  color: Colors.white,
-                  shadows: const [Shadow(color: Colors.black54, blurRadius: 4)],
-                ),
-              ),
-            ],
-          ),
-        );
-      case 'draw2':
-        return Text('+2', style: _text(size * (corner ? 0.7 : 0.72)));
-      case 'discard_all':
-        return Text(
-          '모두',
-          style: GoogleFonts.notoSans(
-            fontSize: size * (corner ? 0.42 : 0.42),
-            fontWeight: FontWeight.w900,
-            color: color,
-            height: 1,
-          ),
-        );
-      default:
-        return Text(card.value, style: _text(size * (corner ? 0.78 : 0.95)));
-    }
-  }
-}
-
-/// ⊘ 건너뛰기: 원 + 사선.
-class _SkipPainter extends CustomPainter {
-  final Color color;
-  _SkipPainter(this.color);
+  _IconPainter(this.kind, this.color);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final r = size.shortestSide / 2;
-    final c = size.center(Offset.zero);
+    canvas.scale(size.width / 24);
     final p = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = r * 0.22
-      ..strokeCap = StrokeCap.round
-      ..color = color;
-    canvas.drawCircle(c, r * 0.8, p);
-    final d = r * 0.8 * math.cos(math.pi / 4);
-    canvas.drawLine(c + Offset(-d, d), c + Offset(d, -d), p);
-  }
-
-  @override
-  bool shouldRepaint(covariant _SkipPainter old) => old.color != color;
-}
-
-/// ⇄ 방향 바꾸기: 위아래로 엇갈린 두 화살표.
-class _ReversePainter extends CustomPainter {
-  final Color color;
-  _ReversePainter(this.color);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-    final p = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = w * 0.11
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..color = color;
-    // 위: 왼→오
-    canvas.drawLine(Offset(w * 0.12, h * 0.34), Offset(w * 0.86, h * 0.34), p);
-    canvas.drawPath(
-      Path()
-        ..moveTo(w * 0.66, h * 0.16)
-        ..lineTo(w * 0.88, h * 0.34)
-        ..lineTo(w * 0.66, h * 0.52),
-      p,
-    );
-    // 아래: 오→왼
-    canvas.drawLine(Offset(w * 0.88, h * 0.68), Offset(w * 0.14, h * 0.68), p);
-    canvas.drawPath(
-      Path()
-        ..moveTo(w * 0.34, h * 0.5)
-        ..lineTo(w * 0.12, h * 0.68)
-        ..lineTo(w * 0.34, h * 0.86),
-      p,
-    );
+    switch (kind) {
+      case 'skip':
+        p.strokeWidth = 2.6;
+        canvas.drawCircle(const Offset(12, 12), 8.2, p);
+        canvas.drawLine(const Offset(6.4, 17.6), const Offset(17.6, 6.4), p);
+      case 'reverse':
+        p.strokeWidth = 2.6;
+        canvas.drawPath(
+          Path()
+            ..moveTo(4, 8)
+            ..lineTo(18, 8)
+            ..moveTo(14, 4)
+            ..lineTo(18, 8)
+            ..lineTo(14, 12)
+            ..moveTo(20, 16)
+            ..lineTo(6, 16)
+            ..moveTo(10, 12)
+            ..lineTo(6, 16)
+            ..lineTo(10, 20),
+          p,
+        );
+      default:
+        p.strokeWidth = 2.2;
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            const Rect.fromLTWH(3.5, 6, 11, 14),
+            const Radius.circular(2.4),
+          ),
+          p,
+        );
+        canvas.drawPath(
+          Path()
+            ..moveTo(8, 3.2)
+            ..lineTo(18.2, 3.2)
+            ..arcToPoint(
+              const Offset(20.5, 5.5),
+              radius: const Radius.circular(2.3),
+            )
+            ..lineTo(20.5, 16),
+          p,
+        );
+    }
   }
 
   @override
-  bool shouldRepaint(covariant _ReversePainter old) => old.color != color;
+  bool shouldRepaint(covariant _IconPainter old) =>
+      old.kind != kind || old.color != color;
 }
 
-/// ◐ 색 바꾸기: 4색 보석 바퀴. [tint]가 있으면 그 색이 반을 차지한다.
-class _WildWheelPainter extends CustomPainter {
-  final String? tint;
-  _WildWheelPainter({this.tint});
+/// 색 바꾸기 카드의 4색 바퀴(부채꼴 넷).
+class _QuadPainter extends CustomPainter {
+  const _QuadPainter();
 
   @override
   void paint(Canvas canvas, Size size) {
-    final r = size.shortestSide / 2;
     final c = size.center(Offset.zero);
-    final rect = Rect.fromCircle(center: c, radius: r * 0.92);
-    if (tint != null) {
-      canvas.drawArc(
-        rect,
-        math.pi / 2,
-        math.pi,
-        true,
-        Paint()..color = OneCardColors.of(tint),
-      );
-      canvas.drawArc(
-        rect,
-        -math.pi / 2,
-        math.pi,
-        true,
-        Paint()..color = OneCardColors.light(tint),
-      );
-    } else {
-      const colors = ['red', 'yellow', 'green', 'blue'];
-      for (var i = 0; i < 4; i++) {
-        canvas.drawArc(
-          rect,
-          -math.pi / 2 + i * math.pi / 2,
-          math.pi / 2,
-          true,
-          Paint()..color = OneCardColors.of(colors[i]),
-        );
-      }
-    }
-    canvas.drawCircle(
-      c,
-      r * 0.92,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = r * 0.1
-        ..color = const Color(0xFFFFF3D6),
-    );
-    canvas.drawCircle(
-      c,
-      r * 0.2,
-      Paint()..color = const Color(0xFFFFF3D6).withValues(alpha: 0.9),
-    );
+    final r = size.width * 0.4;
+    final rect = Rect.fromCircle(center: c, radius: r);
+    void slice(double start, Color color) =>
+        canvas.drawArc(rect, start, math.pi / 2, true, Paint()..color = color);
+    slice(-math.pi / 2, OneCardUi.honey);
+    slice(0, OneCardUi.sky);
+    slice(math.pi / 2, OneCardUi.sage);
+    slice(math.pi, OneCardUi.rose);
   }
 
   @override
-  bool shouldRepaint(covariant _WildWheelPainter old) => old.tint != tint;
+  bool shouldRepaint(covariant _QuadPainter old) => false;
 }
 
-/// 카드 뒷면. 상점 아이템(원카드 카드 뒷면) 스킨 표를 그대로 쓴다.
+/// 카드 뒷면. 기본은 보라 격자 + 가운데 마름모, 상점 아이템(원카드 카드 뒷면)은 색·그림으로 바뀐다.
 class OneCardBack extends StatelessWidget {
   final double width;
   final String skin;
+  final List<BoxShadow> shadows;
 
-  const OneCardBack({super.key, this.width = 60, this.skin = 'base'});
+  const OneCardBack({
+    super.key,
+    this.width = 60,
+    this.skin = 'base',
+    this.shadows = OneCardShadows.rest,
+  });
 
   /// 스킨 id → (그라데이션, 아이콘). 상점 아이템 아이콘에서 고른다([skinFromItem]).
   static const skins = <String, (List<Color>, String)>{
@@ -424,58 +408,72 @@ class OneCardBack extends StatelessWidget {
     final w = width;
     final h = w * kOneCardAspect;
     final entry = skins[skin];
+    const base = Color(0xFF3A2470);
     return Semantics(
       label: '뒷면 카드',
-      child: Container(
+      child: SizedBox(
         width: w,
         height: h,
-        padding: EdgeInsets.all(w * 0.05),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFFF3D6),
-          borderRadius: BorderRadius.circular(w * 0.13),
-          border: Border.all(
-            color: const Color(0xFFE8C27A),
-            width: math.max(1, w * 0.018),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: base,
+            borderRadius: BorderRadius.circular(w * 0.13),
+            boxShadow: shadows,
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35),
-              blurRadius: w * 0.08,
-              offset: Offset(0, w * 0.035),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(w * 0.09),
-          child: CustomPaint(
-            painter: _BackPainter(
-              colors: entry?.$1 ?? const [Color(0xFF5B2A7E), Color(0xFF2A1240)],
-            ),
-            child: Center(
-              child: entry != null
-                  ? Text(entry.$2, style: TextStyle(fontSize: w * 0.36))
-                  : Container(
-                      width: w * 0.46,
-                      height: w * 0.46,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: const Color(0xFFE8C27A),
-                          width: math.max(1, w * 0.025),
-                        ),
-                        color: const Color(0xFF2A1240),
-                      ),
-                      child: Text(
-                        '원',
-                        style: GoogleFonts.gowunBatang(
-                          fontSize: w * 0.22,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFFE8C27A),
-                          height: 1,
-                        ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(w * 0.13),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (entry != null)
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: entry.$1,
                       ),
                     ),
+                  ),
+                Padding(
+                  padding: EdgeInsets.all(w * 0.05),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(w * 0.09),
+                      border: Border.all(color: const Color(0x66B9A2FF)),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: EdgeInsets.all(w * 0.1),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(w * 0.06),
+                    child: CustomPaint(
+                      painter: _HatchPainter(period: w * 0.12),
+                      child: Center(
+                        child: entry != null
+                            ? Text(
+                                entry.$2,
+                                style: TextStyle(fontSize: w * 0.3),
+                              )
+                            : Transform.rotate(
+                                angle: math.pi / 4,
+                                child: Container(
+                                  width: w * 0.34,
+                                  height: w * 0.34,
+                                  decoration: BoxDecoration(
+                                    color: base,
+                                    border: Border.all(
+                                      color: const Color(0xB3B9A2FF),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -484,49 +482,41 @@ class OneCardBack extends StatelessWidget {
   }
 }
 
-class _BackPainter extends CustomPainter {
-  final List<Color> colors;
-  _BackPainter({required this.colors});
+/// 뒷면 격자: 45도와 -45도의 가는 선을 [period] 간격으로.
+class _HatchPainter extends CustomPainter {
+  final double period;
+
+  _HatchPainter({required this.period});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-    canvas.drawRect(
-      rect,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: colors,
-        ).createShader(rect),
-    );
-    // 금박 마름모 격자.
     final p = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = math.max(0.5, size.width * 0.012)
-      ..color = const Color(0x55E8C27A);
-    final s = size.width / 4;
-    for (double x = -size.height; x < size.width + size.height; x += s) {
-      canvas.drawLine(Offset(x, 0), Offset(x + size.height, size.height), p);
-      canvas.drawLine(Offset(x, size.height), Offset(x + size.height, 0), p);
+      ..color = const Color(0x29B9A2FF)
+      ..strokeWidth = 1;
+    final len = size.width + size.height;
+    final step = math.max(2.0, period);
+    const k = 0.7071;
+    for (var t = 0.0; t < len; t += step) {
+      final b = Offset(k * t, size.height - k * t);
+      canvas.drawLine(
+        b + const Offset(-k, -k) * len,
+        b + const Offset(k, k) * len,
+        p,
+      );
+      final b2 = Offset(size.width - k * t, size.height - k * t);
+      canvas.drawLine(
+        b2 + const Offset(k, -k) * len,
+        b2 + const Offset(-k, k) * len,
+        p,
+      );
     }
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        rect.deflate(size.width * 0.07),
-        Radius.circular(size.width * 0.07),
-      ),
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = math.max(0.8, size.width * 0.02)
-        ..color = const Color(0xAAE8C27A),
-    );
   }
 
   @override
-  bool shouldRepaint(covariant _BackPainter old) => old.colors != colors;
+  bool shouldRepaint(covariant _HatchPainter old) => old.period != period;
 }
 
-/// 항상 보이는 "지금 색" 보석 칩(Q53).
+/// 항상 보이는 "지금 색" 칩(Q53): 색 점 + 이름.
 class CurrentColorChip extends StatelessWidget {
   final String? color;
   final bool declared;
@@ -539,65 +529,45 @@ class CurrentColorChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = OneCardColors.of(color);
+    final c = OneCardSuit.color(color);
     final name = OneCardColors.name(color);
     return Semantics(
       label: '지금 색 $name${declared ? ', 색 바꾸기로 정해짐' : ''}',
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 320),
-        padding: const EdgeInsets.fromLTRB(6, 5, 12, 5),
+      child: Container(
+        height: 34,
+        padding: const EdgeInsets.fromLTRB(10, 0, 14, 0),
         decoration: BoxDecoration(
-          color: const Color(0xFF1C0C2B).withValues(alpha: 0.85),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: c.withValues(alpha: 0.9), width: 1.6),
-          boxShadow: [
-            BoxShadow(color: c.withValues(alpha: 0.55), blurRadius: 14),
-          ],
+          color: const Color(0x12FFFFFF),
+          borderRadius: BorderRadius.circular(17),
+          border: Border.all(color: OneCardUi.line),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 22,
-              height: 22,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  center: const Alignment(-0.35, -0.4),
-                  colors: [
-                    OneCardColors.light(color),
-                    c,
-                    OneCardColors.deep(color),
-                  ],
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 320),
+              width: 14,
+              height: 14,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: c),
+            ),
+            const SizedBox(width: 8),
+            Text('지금 색', style: OneCardUi.sans(size: 12, color: OneCardUi.sub)),
+            const SizedBox(width: 8),
+            Text(
+              name.isEmpty ? '-' : name,
+              style: OneCardUi.sans(size: 13, weight: FontWeight.w700),
+            ),
+            if (declared) ...[
+              const SizedBox(width: 2),
+              Text(
+                '바뀜',
+                style: OneCardUi.sans(
+                  size: 12,
+                  color: OneCardUi.vio2,
+                  weight: FontWeight.w700,
                 ),
-                border: Border.all(color: const Color(0xFFE8C27A), width: 1.2),
               ),
-            ),
-            const SizedBox(width: 7),
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '지금 색',
-                  style: GoogleFonts.notoSans(
-                    fontSize: 9.5,
-                    color: const Color(0xCCE6D6F0),
-                    fontWeight: FontWeight.w700,
-                    height: 1.1,
-                  ),
-                ),
-                Text(
-                  name.isEmpty ? '-' : name,
-                  style: GoogleFonts.notoSans(
-                    fontSize: 13.5,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    height: 1.15,
-                  ),
-                ),
-              ],
-            ),
+            ],
           ],
         ),
       ),

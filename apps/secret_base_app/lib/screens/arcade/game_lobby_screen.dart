@@ -8,6 +8,7 @@ import '../../core/yut_audio.dart';
 import '../../widgets/play_kit/play_kit.dart';
 import 'games/penalty/penalty_lobby.dart';
 import 'games/penalty/penalty_models.dart';
+import 'games/onecard/onecard_lobby.dart';
 import 'games/yut/yut_character_picker.dart';
 import 'games/yut/yut_figures.dart';
 import 'lobby_options.dart';
@@ -114,9 +115,8 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
     if (!resumed && widget.gameType == 'yut') {
       YutAudio.instance.playGameStart(bgm: _startedYutBgm);
     }
-    Navigator.of(
-      context,
-    ).pushReplacement(MaterialPageRoute(builder: (_) => widget.gameScreen));
+    Navigator.of(context)
+        .pushReplacement(MaterialPageRoute(builder: (_) => widget.gameScreen));
     // On resume the game is already running on the server — do not create a new game.
     // 게임 2.0 모듈은 서버가 이미 판을 만들었다(serverStart).
     if (!resumed && isHost && !_socket.lobbyStartedServerStart) {
@@ -261,6 +261,28 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
           lines: kPenaltyHowToLines,
           emoji: '⚽',
         ),
+      );
+    }
+
+    // 원카드는 쇼타임 디자인의 전용 대기실을 쓴다(상태·동작은 이 화면 그대로).
+    if (widget.gameType == 'uno') {
+      return OneCardLobby(
+        players: lobbyPlayers,
+        host: _socket.lobbyHost,
+        me: _socket.userId,
+        nicknames: nicknames,
+        ready: _socket.lobbyReady,
+        stake: _socket.lobbyStake,
+        mode: '${_socket.lobbyOptions['mode'] ?? 'go_wild'}',
+        isHost: isHost,
+        canStart: canStart,
+        startLabel: startLabel,
+        stakeOptions: _kStakeOptions,
+        onBack: () => Navigator.of(context).pop(),
+        onStart: () => _socket.startGameLobby(widget.gameType),
+        onStake: (stake) => _socket.setLobbyStake(widget.gameType, stake),
+        onMode: (mode) => _socket.setLobbyOption(widget.gameType, 'mode', mode),
+        onReady: (ready) => _socket.setLobbyReady(widget.gameType, ready),
       );
     }
 
