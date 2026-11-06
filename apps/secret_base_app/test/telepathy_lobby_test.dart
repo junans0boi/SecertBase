@@ -80,7 +80,7 @@ void main() {
       size: const Size(390, 1000),
     );
     await tester.tap(find.bySemanticsLabel('15, 천천히'));
-    await tester.tap(find.bySemanticsLabel('살짝 매운맛, 조금 짓궂게'));
+    await tester.tap(find.bySemanticsLabel('살짝 매운맛, 분위기 있게'));
     await tester.tap(find.bySemanticsLabel('핵폭탄 매운맛, 🔞 19+'));
     expect(rounds, [15]);
     expect(heats, ['spicy', 'nuclear']);
@@ -102,6 +102,8 @@ void main() {
   ) async {
     await pump(tester, view(heat: 'spicy'), size: const Size(390, 1000));
     expect(find.textContaining('19+ 성인 전용'), findsNothing);
+    expect(find.text('분위기 있는 스킨십·장소·속옷 취향'), findsOneWidget);
+    expect(find.textContaining('BDSM'), findsNothing);
     await pump(
       tester,
       view(heat: 'nuclear', canStart: false, label: '상대의 동의를 기다리는 중'),
@@ -109,6 +111,8 @@ void main() {
     );
     expect(find.text('🔞 19+ 성인 전용'), findsOneWidget);
     expect(find.textContaining('만 19세 이상'), findsOneWidget);
+    expect(find.textContaining('BDSM'), findsWidgets);
+    expect(find.textContaining('하드한 성인 질문'), findsWidgets);
     expect(find.text('상대의 동의를 기다리는 중이에요'), findsOneWidget);
     expect(
       find.text('상대의 동의를 기다리는 중'),

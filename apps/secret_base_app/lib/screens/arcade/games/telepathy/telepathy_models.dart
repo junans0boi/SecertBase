@@ -20,6 +20,7 @@ const Map<String, String> kTelepathyCategoryLabels = {
   'romance': '연애·로맨스',
   'whatif': '만약에',
   'spicy': '살짝 매운맛',
+  'sensual': '은근한 분위기',
   'nuclear': '19+ 은밀한 질문',
 };
 

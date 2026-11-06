@@ -204,15 +204,15 @@ class TelepathyLobbyView extends StatelessWidget {
             onChanged: onHeat,
             items: const [
               _SegItem('mild', '순한맛', '편하게'),
-              _SegItem('spicy', '살짝 매운맛', '조금 짓궂게'),
+              _SegItem('spicy', '살짝 매운맛', '분위기 있게'),
               _SegItem('nuclear', '핵폭탄 매운맛', '🔞 19+'),
             ],
           ),
           const SizedBox(height: 10),
           Text(
             switch (heat) {
-              'spicy' => '조금 짓궂은 연애 질문이 섞여요',
-              'nuclear' => '성인 커플 전용 질문이 나와요',
+              'spicy' => '분위기 있는 스킨십·장소·속옷 취향',
+              'nuclear' => '하드한 성인 질문 · BDSM 취향 포함',
               _ => '편하게 즐기는 질문만 나와요',
             },
             textAlign: TextAlign.center,
@@ -255,8 +255,8 @@ class TelepathyLobbyView extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            '성인 커플끼리 즐기는 수위 높은 질문이 나와요. 두 사람 모두 만 19세 이상이어야 하고, '
-            '상대가 직접 동의해야 시작할 수 있어요.',
+            '노골적이고 하드한 성인 질문이 나오고, 묶기·복종 같은 BDSM 취향 주제도 포함돼요. '
+            '두 사람 모두 만 19세 이상이어야 하고, 상대가 직접 동의해야 시작할 수 있어요.',
             style: tpSans(size: 12.5, color: kTpSub, height: 1.5),
           ),
           if (!isHost) ...[

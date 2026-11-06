@@ -106,8 +106,8 @@ const kLobbyOptions = <String, List<LobbyOptionDef>>{
       icon: '🌶️',
       choices: [
         LobbyChoice('mild', '순한맛', '편하게 즐기는 질문만'),
-        LobbyChoice('spicy', '살짝 매운맛', '조금 짓궂은 연애 질문도'),
-        LobbyChoice('nuclear', '핵폭탄 매운맛 🔞 19+', '성인 커플 전용 · 상대가 동의해야 시작'),
+        LobbyChoice('spicy', '살짝 매운맛', '분위기 있는 스킨십·장소·속옷 취향'),
+        LobbyChoice('nuclear', '핵폭탄 매운맛 🔞 19+', '하드한 성인 질문 · BDSM 취향 포함'),
       ],
     ),
   ],
