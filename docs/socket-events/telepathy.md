@@ -17,19 +17,40 @@
 
 ## 문제 은행과 셔플 가방
 
-- `src/data/telepathy-questions.json`: 320문제 = 8분야 × 40. `{ id: "food-001", cat, a, b, emojiA, emojiB, spicy }`.
-  분야: `light` 가벼운 취향 · `food` 음식·야식 · `date` 데이트 · `travel` 여행 · `daily` 일상·생활습관 · `romance` 연애·로맨스 · `whatif` 만약에 · `spicy` 살짝 매운맛(`spicy: true`).
-- 서버 시작 때 검증(`validateTelepathyBank`): 고유 id(`<분야>-NNN`), 알려진 분야, 보기 한국어만·14자 이내·서로 다름, 이모지, `spicy` = 매운맛 분야, 보기 쌍 중복 없음. 어기면 서버가 뜨지 않는다.
-- 방별 가방 `telepathy:<room>:bag` (1년 보관) `{ order: [id...], recent: [최근 50개], refills }`.
-  판 시작 때 가방 순서대로 꺼내되 **같은 분야는 판당 2문제까지**(남은 문제가 많은 분야부터 꺼내 분야별로 고르게 줄어든다). 15문제 + 매운맛 끄기처럼 분야가 모자라면 상한을 `ceil(문제 수 / 분야 수)`로 늘린다.
-  매운맛 끄기면 매운맛 문제는 건너뛴다(가방에 남는다). 가방에서 다 못 채우면 **전체를 다시 섞되 최근 50개는 맨 뒤로** 보내고 이어서 꺼낸다.
-  → 10문제 기준 매운맛 켜기 **32판**, 끄기 28판 동안 한 문제도 반복되지 않는다(테스트로 고정).
+- `src/data/telepathy-questions.json`: 순한 7분야 + 살짝 매운맛 = 320문제(8분야 × 40) + **19+ 분야 `nuclear` 109문제**.
+  `{ id: "food-001", cat, heat, a, b, emojiA, emojiB, spicy }`. 19+ 문제 id는 `nuc-001…`.
+  분야: `light` 가벼운 취향 · `food` 음식·야식 · `date` 데이트 · `travel` 여행 · `daily` 일상·생활습관 · `romance` 연애·로맨스 · `whatif` 만약에 · `spicy` 살짝 매운맛 · `nuclear` 19+ 은밀한 질문.
+  `heat`: 순한 분야 `mild`, `spicy` 분야 `spicy`, `nuclear` 분야 `nuclear`. `spicy` 불리언은 `heat !== 'mild'`.
+- 서버 시작 때 검증(`validateTelepathyBank`): 고유 id(`<분야>-NNN`, 19+는 `nuc-NNN`), 알려진 분야, `heat`가 분야와 일치, 보기 한국어만·14자 이내·서로 다름, 이모지, 보기 쌍 중복 없음. 어기면 서버가 뜨지 않는다.
+- 19+ 문제 가이드라인(테스트가 금칙어를 검사): 서로 합의한 성인 커플 사이의 장난·야한 농담·분위기·장소·스킨십 수위·코스튬 정도의 수위. 노골적인 신체 묘사, 미성년·가족, 동의 없음·폭력, 동물, 비하 표현은 없다.
+
+### 수위(`heat`)별로 섞이는 문제
+
+| `heat` | 로비 이름 | 섞이는 분야 |
+|---|---|---|
+| `mild` (기본) | 순한맛 | 순한 7분야(280문제) |
+| `spicy` | 살짝 매운맛 | 순한 7분야 + `spicy`(320문제) |
+| `nuclear` | 핵폭탄 매운맛 🔞 19+ | `nuclear` + `spicy`만. **순한 분야는 섞지 않는다**(분위기가 깨지지 않게). 한 판의 70%는 19+, 30%(10문제면 3개)까지는 살짝 매운맛 |
+
+### 셔플 가방
+
+- 순한맛·살짝 매운맛은 한 가방 `telepathy:<room>:bag`을 나눠 쓰고(매운맛이 순한맛을 포함하므로 반복이 없다), 19+는 풀이 달라 **가방을 따로** `telepathy:<room>:bag:nuclear`로 둔다. 둘 다 1년 보관, `{ order: [id...], recent: [최근 50개], refills }`.
+- 판 시작 때 가방 순서대로 꺼내되 **같은 분야는 판당 2문제까지**(남은 문제가 많은 분야부터 꺼내 분야별로 고르게 줄어든다). 15문제 + 순한맛처럼 분야가 모자라면 상한을 `ceil(문제 수 / 분야 수)`로 늘린다.
+- 안 맞는 수위의 문제는 건너뛴다(가방에 남는다). 가방에서 다 못 채우면 **전체를 다시 섞되 최근 50개는 맨 뒤로** 보내고 이어서 꺼낸다.
+  → 10문제 기준 살짝 매운맛 **32판**, 순한맛 28판, 19+ 13판 동안 한 문제도 반복되지 않는다(테스트로 고정).
+
+## 19+ 성인 확인
+
+- 로비 옵션 `heat: 'nuclear'`를 고르면 로비에 "🔞 19+ 성인 전용" 경고가 뜨고, **상대(비방장)가 직접 "19세 이상이며 동의해요"를 눌러야** 시작할 수 있다(`game:lobby:ready`, 판돈 게임의 준비 완료와 같은 경로). 방장이 수위를 바꾸면 동의가 풀린다. 상대가 아직 동의 전이면 시작 요청이 `partner_not_ready`로 거절된다.
+- **서버 강제**: 두 사람의 연 나이(올해 − 가입 때 입력한 `Users.BirthDate`의 해)가 **19 이상**이어야 한다. 선택 시(`game:lobby:set_option`)·시작 시(`game:lobby:start`)·재대결 시 모두 검사하고, 아니거나 생년을 알 수 없으면 ack `{ ok: false, reason: 'adult_only' }`(클라이언트는 한국어 안내로 바꿔 보여 준다).
+  생년은 가입 때 본인이 입력한 값이라 본인 확인은 아니다(실명 인증 없음).
+- 'nuclear' 글자는 로비·게임 화면의 수위 선택과 문제 상태에만 있고, 푸시·알림 미리보기에는 쓰지 않는다. 게임 화면의 질문 위에는 작은 🔞 19+ 표시가 붙는다.
 
 ## 시작·재대결·복원
 
 | 흐름 | 동작 |
 |---|---|
-| 로비 | `game:lobby:join` / `game:lobby:set_option`(`rounds`: 10\|5\|15, `spicy`: `'off'`\|`'on'`) / `game:lobby:start`, `gameType: 'telepathy'`. 서버가 판을 만들고(`metadata.serverStart = true`) `game:telepathy:state`를 보낸다. 첫 마감 = 로비 카운트다운 종료(`startsAt`) + 15초. 게임 화면에 시작 버튼 없음. |
+| 로비 | `game:lobby:join` / `game:lobby:set_option`(`rounds`: 10\|5\|15, `heat`: `'mild'`\|`'spicy'`\|`'nuclear'`) / `game:lobby:start`, `gameType: 'telepathy'`. 서버가 판을 만들고(`metadata.serverStart = true`) `game:telepathy:state`를 보낸다. 첫 마감 = 로비 카운트다운 종료(`startsAt`) + 15초. 게임 화면에 시작 버튼 없음. |
 | 재대결 | `game:restart:request` / `game:restart:respond` (`gameType: 'telepathy'`). 같은 두 사람·같은 문제 수·매운맛 설정으로 새 판(`gameId` 새로, 가방에서 새 문제). 시리즈는 이어진다. 첫 마감 = 지금 + 1.5초 + 15초. |
 | 복원 | `session:restore` → 진행 중이면 그 소켓에 `game:telepathy:state`(내 이번 선택 `myPick` 포함), ack의 `restored`에 `'telepathy'`. 끝난 판도 상태는 보내지만 `restored`에는 넣지 않는다. 서버가 재시작돼 타이머가 없으면 다시 건다. |
 
@@ -61,7 +82,7 @@
   "players": ["User1Code", "User2Code"],
   "round": 3,                       // 지금 문제 번호(1부터)
   "rounds": 10,
-  "spicy": false,
+  "heat": "mild",                   // mild | spicy | nuclear(19+)
   "question": Question | null,      // 지금 문제(끝나면 null). 앞으로 나올 문제는 보내지 않는다
   "picked": { "<id>": true, "<id>": false },   // 값은 숨기고 고른 여부만("골랐어요")
   "timeouts": { "<id>": 0, "<id>": 1 },         // 연속 시간 초과 수
@@ -83,7 +104,7 @@
 }
 ```
 
-`Question` = `{ id, cat, a, b, emojiA, emojiB, spicy }`.
+`Question` = `{ id, cat, a, b, emojiA, emojiB, spicy, heat }`.
 
 `RoundRecord` = `{ round, question: Question, picks: { "<id>": "A"|"B"|null }, matched, outcome: "match"|"miss"|"timeout", streak, score }`.
 새 `lastRound.round`가 오면 클라이언트는 두 카드를 함께 뒤집어 공개하고(`revealMs` 동안), 끝나면 `question`(다음 문제)을 보여 준다.

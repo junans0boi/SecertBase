@@ -55,11 +55,15 @@ void main() {
     expect(lobbyOptionsFor('catch').single.defaultValue, 6);
     expect(lobbyOptionsFor('blackjack'), isEmpty);
     final telepathy = lobbyOptionsFor('telepathy');
-    expect(telepathy.map((d) => d.key), ['rounds', 'spicy']);
+    expect(telepathy.map((d) => d.key), ['rounds', 'heat']);
     expect(telepathy.first.defaultValue, 10);
     expect(telepathy.first.choices.map((c) => c.value), [10, 5, 15]);
-    expect(telepathy.last.defaultValue, 'off');
-    expect(telepathy.last.choices.map((c) => c.value), ['off', 'on']);
+    expect(telepathy.last.defaultValue, 'mild');
+    expect(telepathy.last.choices.map((c) => c.value), [
+      'mild',
+      'spicy',
+      'nuclear',
+    ]);
   });
 
   testWidgets('host sees the penalty cell choice and can switch to 6', (

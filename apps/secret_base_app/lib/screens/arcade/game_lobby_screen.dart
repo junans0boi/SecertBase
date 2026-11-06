@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/main_design.dart';
 import '../../core/socket_service.dart';
 import '../../core/yut_audio.dart';
+import 'games/telepathy/telepathy_lobby.dart';
 import 'games/yut/yut_character_picker.dart';
 import 'games/yut/yut_figures.dart';
 import 'lobby_options.dart';
@@ -170,18 +171,54 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
         _socket.userId != null && _socket.userId == _socket.lobbyHost;
     final hasTwoPlayers = _socket.lobbyPlayers.length >= 2;
     final usesStake = kStakeGameTypes.contains(widget.gameType);
+    // 텔레파시 19+ 수위: 상대(비방장)가 직접 동의해야 시작할 수 있다.
+    final adultHeat =
+        widget.gameType == 'telepathy' &&
+        _socket.lobbyOptions['heat'] == 'nuclear';
     // 판돈이 걸린 판은 상대(비방장)가 금액에 동의해야 시작할 수 있다.
-    final needsReady = usesStake && _socket.lobbyStake > 0;
+    final needsReady = (usesStake && _socket.lobbyStake > 0) || adultHeat;
     final partnersReady = _socket.lobbyPlayers
         .where((p) => p != _socket.lobbyHost)
         .every((p) => _socket.lobbyReady[p] == true);
     final canStart = isHost && hasTwoPlayers && (!needsReady || partnersReady);
 
     final startLabel = canStart
-        ? '게임 시작'
+        ? (widget.gameType == 'telepathy' ? '시작하기' : '게임 시작')
         : (hasTwoPlayers && needsReady && !partnersReady)
-        ? '상대의 판돈 동의를 기다리는 중'
+        ? (adultHeat ? '상대의 동의를 기다리는 중' : '상대의 판돈 동의를 기다리는 중')
         : '상대방을 기다리는 중';
+
+    if (widget.gameType == 'telepathy') {
+      final others = _socket.lobbyPlayers.where((p) => p != _socket.userId);
+      final partner = others.isEmpty ? null : others.first;
+      String nameOf(String? id) {
+        final n = id == null ? '' : _socket.nameOf(id);
+        return n.isEmpty || n == id ? (id == _socket.userId ? '나' : '상대') : n;
+      }
+
+      return Stack(
+        children: [
+          TelepathyLobbyView(
+            isHost: isHost,
+            hasTwoPlayers: hasTwoPlayers,
+            myName: nameOf(_socket.userId),
+            partnerName: nameOf(partner),
+            rounds: (_socket.lobbyOptions['rounds'] as num?)?.toInt() ?? 10,
+            heat: '${_socket.lobbyOptions['heat'] ?? 'mild'}',
+            partnerAccepted: partnersReady && hasTwoPlayers,
+            iAccepted: _socket.lobbyReady[_socket.userId ?? ''] == true,
+            canStart: canStart,
+            startLabel: startLabel,
+            onBack: () => Navigator.of(context).pop(),
+            onRounds: (v) => _socket.setLobbyOption('telepathy', 'rounds', v),
+            onHeat: (v) => _socket.setLobbyOption('telepathy', 'heat', v),
+            onStart: () => _socket.startGameLobby('telepathy'),
+            onAccept: (v) => _socket.setLobbyReady('telepathy', v),
+          ),
+          if (_countdown > 0) _buildCountdownOverlay(),
+        ],
+      );
+    }
 
     return Stack(
       children: [
