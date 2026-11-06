@@ -164,11 +164,13 @@ List<String> nearMissHints(List<CoachCard> captures, {int max = 3}) {
     if (rem <= 2) hints.add((rem, '광 $rem장이면 3광'));
   }
   final ribbons = captures.where((c) => c.type == 'ribbon').length;
-  if (ribbons >= 3 && ribbons < 5)
+  if (ribbons >= 3 && ribbons < 5) {
     hints.add((5 - ribbons, '띠 ${5 - ribbons}장이면 1점'));
+  }
   final animals = captures.where((c) => c.type == 'animal').length;
-  if (animals >= 3 && animals < 5)
+  if (animals >= 3 && animals < 5) {
     hints.add((5 - animals, '열끗 ${5 - animals}장이면 1점'));
+  }
   final pi = captures.fold<int>(
     0,
     (s, c) => s + (c.type == 'junk' ? (c.subtype == 'double' ? 2 : 1) : 0),
@@ -243,8 +245,9 @@ GostopAdvice buildGostopAdvice(GostopCoachInput s) {
       card: cardId,
     );
   }
-  if (eventDetail != null)
+  if (eventDetail != null) {
     return advice(eventDetail.$1, eventDetail.$2, card: cardId);
+  }
   if (cardId == null) return advice('패를 선택하세요', '패를 길게 누르면 설명을 볼 수 있어요.');
   final card = s.hand.firstWhere(
     (c) => c.id == cardId,

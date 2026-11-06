@@ -364,6 +364,7 @@ class GostopView {
   final Map<String, int> dotan;
   final Map<int, String> ppeok;
   final HPending? pending;
+  final List<String> redeals;
   final String? chongtongPlayer;
   final int? chongtongMonth;
   final List<int> shakeable;
@@ -403,6 +404,7 @@ class GostopView {
     required this.dotan,
     required this.ppeok,
     required this.pending,
+    required this.redeals,
     required this.chongtongPlayer,
     required this.chongtongMonth,
     required this.shakeable,
@@ -459,6 +461,7 @@ class GostopView {
       dotan: _intMap(j['dotan']),
       ppeok: {for (final e in ppeok.entries) _int(e.key): '${e.value}'},
       pending: HPending.fromJson(j['pending']),
+      redeals: [for (final r in (j['redeals'] as List? ?? const [])) '$r'],
       chongtongPlayer: ct?['player'] as String?,
       chongtongMonth: ct?['month'] == null ? null : _int(ct?['month']),
       shakeable: [
