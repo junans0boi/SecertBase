@@ -14,27 +14,24 @@ abstract final class AppInfoConstants {
   static const appNameKo = '비밀기지';
   static const appNameEn = 'Secret Base';
 
-  /// 개발자(대표) 이름. 기존 내 공간 화면의 개발자 정보에서 가져온 값.
-  static const developerName = 'Lee JunHwan';
+  /// 개발자(대표) 이름. 오너가 확정한 값(2026-11-06).
+  static const developerName = '이준환 (LeeJunHwan)';
 
-  /// 팀 이름. 기존 내 공간 화면의 개발자 정보에서 가져온 값.
-  static const teamName = 'STEADY TO VIVID STUDIO';
+  /// 팀(스튜디오) 이름. 오너가 확정한 값(2026-11-06).
+  static const teamName = 'SteadyToVivid';
 
-  /// 팀 홈페이지. 기존 내 공간 화면의 개발자 정보에서 가져온 값.
+  /// 팀 홈페이지. 오너가 확정한 값(2026-11-06).
   static const websiteUrl = 'https://steady2vivid.kro.kr/';
 
   /// 운영자 법적 명칭. 개인정보 처리방침·이용약관이 "미확인"으로 표시한 항목이라
   /// 오너가 확정하기 전까지 비워 둔다.
   static const legalOperatorName = '';
 
-  /// 문의 이메일. 개인정보 처리방침·이용약관·계정 삭제 안내에는 검증된 문의
-  /// 이메일이 "미확인"으로 표시돼 있고 공개 문서 어디에도 주소가 없다.
-  /// (고객센터 시트가 쓰는 [kSupportEmail]은 확인 대기 중인 값이다.)
-  /// 오너가 확정한 주소를 여기에 넣으면 개발자 정보에 문의 줄이 나타난다.
-  static const supportEmail = '';
+  /// 문의 이메일. 오너가 확정한 값(2026-11-06). 고객센터 시트의 [kSupportEmail]과 같다.
+  static const supportEmail = 'junans0boi@naver.com';
 
   static const copyrightYear = 2026;
-  static const copyrightHolder = 'STEADY TO VIVID STUDIO';
+  static const copyrightHolder = 'SteadyToVivid';
 
   /// `--dart-define=BUILD_ID=...` 로 주입되는 빌드 식별자(배포 스크립트는 빌드
   /// 시각, CI 라면 커밋 해시 등). 없으면 빈 문자열이라 화면에 나타나지 않는다.
