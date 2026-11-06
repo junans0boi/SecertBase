@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/app_info.dart';
 import '../../core/app_theme.dart';
 import '../../core/main_design.dart';
 import '../../core/main_hero.dart';
@@ -13,6 +13,7 @@ import '../../core/support_contact.dart';
 import '../../core/auth_service.dart';
 import '../../core/legal_urls.dart';
 import '../auth/auth_layout.dart';
+import 'app_info_screens.dart';
 import 'notification_settings_screen.dart';
 import '../relationship/relationship_understanding_screen.dart';
 import '../secret_base/secret_base_screen.dart';
@@ -214,7 +215,7 @@ class _MoreOverview extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 24),
-                  const Center(child: _AppVersion()),
+                  const _AppInfoSection(),
                 ],
               ),
             ),
@@ -225,21 +226,86 @@ class _MoreOverview extends StatelessWidget {
   }
 }
 
-class _AppVersion extends StatelessWidget {
-  const _AppVersion();
+/// 더보기 맨 아래의 "앱 정보" 묶음: 앱 버전, 업데이트 내역, 개발자 정보.
+class _AppInfoSection extends StatefulWidget {
+  const _AppInfoSection();
+
+  @override
+  State<_AppInfoSection> createState() => _AppInfoSectionState();
+}
+
+class _AppInfoSectionState extends State<_AppInfoSection> {
+  AppInfo? _info;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final info = await AppInfo.load();
+      if (mounted) setState(() => _info = info);
+    } catch (_) {
+      // 버전을 못 읽어도 화면은 유지하고 "확인할 수 없어요"로 보여 준다.
+      if (mounted) setState(() => _failed = true);
+    }
+  }
+
+  String get _versionSubtitle {
+    final info = _info;
+    if (info != null && info.hasVersion) return info.detailVersion;
+    final stillLoading = !_failed && info == null;
+    return stillLoading ? '확인하는 중...' : '버전을 확인할 수 없어요';
+  }
+
+  Future<void> _copyVersion() async {
+    final info = _info;
+    if (info == null || !info.hasVersion) return;
+    final messenger = ScaffoldMessenger.of(context);
+    await Clipboard.setData(ClipboardData(text: info.clipboardText));
+    messenger.showSnackBar(const SnackBar(content: Text('버전 정보를 복사했어요.')));
+  }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<PackageInfo>(
-      future: PackageInfo.fromPlatform(),
-      builder: (context, snap) {
-        final info = snap.data;
-        if (info == null) return const SizedBox.shrink(); // 실패해도 화면 유지
-        return Text(
-          '버전 ${info.version} (빌드 ${info.buildNumber})',
-          style: mainBody(size: 11, color: kMainMuted),
-        );
-      },
+    return _MoreSection(
+      title: '앱 정보',
+      children: [
+        _MoreRow(
+          icon: Icons.info_outline_rounded,
+          iconColor: kMainSky,
+          iconBackground: kMainSkySoft,
+          title: '앱 버전',
+          subtitle: _versionSubtitle,
+          onTap: _copyVersion,
+        ),
+        _MoreRow(
+          icon: Icons.new_releases_outlined,
+          iconColor: kMainHoney,
+          iconBackground: kMainHoneySoft,
+          title: '업데이트 내역',
+          subtitle: '새로 바뀐 점을 확인해요',
+          onTap: () => Navigator.of(context).push<void>(
+            MaterialPageRoute(
+              builder: (_) =>
+                  ChangelogScreen(currentVersion: _info?.version ?? ''),
+            ),
+          ),
+        ),
+        _MoreRow(
+          icon: Icons.code_rounded,
+          iconColor: kMainSage,
+          iconBackground: kMainSageSoft,
+          title: '개발자 정보',
+          subtitle: '만든 사람, 문의, 약관과 라이선스',
+          onTap: () => Navigator.of(context).push<void>(
+            MaterialPageRoute(builder: (_) => DeveloperInfoScreen(info: _info)),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -657,7 +723,7 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '© 2026 STEADY TO VIVID STUDIO. All Rights Reserved.',
+                    AppInfoConstants.copyrightLine,
                     style: mainBody(size: 10, color: kMainMuted),
                     textAlign: TextAlign.center,
                   ),
@@ -679,7 +745,7 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
           Icons.person_outline_rounded,
           kMainSky,
           '개발자',
-          'Lee JunHwan',
+          AppInfoConstants.developerName,
           null,
         ),
         const SizedBox(height: 10),
@@ -687,7 +753,7 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
           Icons.business_outlined,
           kMainSage,
           '팀',
-          'STEADY TO VIVID STUDIO',
+          AppInfoConstants.teamName,
           null,
         ),
         const SizedBox(height: 12),
@@ -695,7 +761,7 @@ class _MySpaceScreenState extends State<MySpaceScreen> {
           width: double.infinity,
           child: OutlinedButton.icon(
             onPressed: () => launchUrl(
-              Uri.parse('https://steady2vivid.kro.kr/'),
+              Uri.parse(AppInfoConstants.websiteUrl),
               mode: LaunchMode.externalApplication,
             ),
             icon: const Icon(Icons.open_in_new_rounded, size: 15),

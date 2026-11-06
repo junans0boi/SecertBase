@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'core/app_info.dart';
 import 'core/push/push_service.dart';
 import 'core/push/local_notification_service.dart';
 import 'features/moment_loop/application/upload_outbox.dart';
@@ -22,6 +23,11 @@ Future<void> main() async {
   // Initialize AuthService
   final auth = AuthService();
   await auth.init();
+  try {
+    await AppInfo.load();
+  } catch (_) {
+    // 버전 표시만 비고 앱은 그대로 시작한다.
+  }
   await YutAudio.instance.loadSettings();
   await LocalNotificationService.instance.start();
   UploadOutbox.instance.failureNotifier =
@@ -211,7 +217,10 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
               Text('비밀기지로 입장하는 중...', style: mainTitle(size: 24)),
               const SizedBox(height: 12),
               Text(
-                'v1.0.4 - ${_socket.status}',
+                [
+                  AppInfo.current?.displayVersion ?? '',
+                  _socket.status,
+                ].where((part) => part.isNotEmpty).join(' · '),
                 style: mainBody(size: 14, color: kMainSub),
               ),
               if (_socket.status == '연결 실패' || _socket.status == '연결 끊김') ...[

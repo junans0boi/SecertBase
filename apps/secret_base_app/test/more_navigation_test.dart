@@ -150,6 +150,7 @@ void main() {
       const MaterialApp(home: Scaffold(body: SettingsScreen())),
     );
     await tester.pumpAndSettle();
-    expect(find.text('버전 1.2.3 (빌드 45)'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('앱 버전'), 200);
+    expect(find.text('v1.2.3 (빌드 45)'), findsOneWidget);
   });
 }
