@@ -1,4 +1,3 @@
-
 import 'package:flutter/services.dart';
 
 /// Non-web fallback: no gallery/share plugin is bundled, so copy the caption

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:secret_base_app/core/birth_profile_api.dart';
 import 'package:secret_base_app/core/saju_api.dart';
 import 'package:secret_base_app/screens/relationship/saju_screen.dart';
 
@@ -106,7 +107,7 @@ void main() {
     expect(find.text('일주 포인트'), findsOneWidget);
     expect(find.text('오늘 가져갈 질문'), findsOneWidget);
     expect(find.textContaining('庚辰'), findsWidgets);
-    await tester.tap(find.byKey(const Key('saju_technical_toggle')));
+    await tester.tap(find.text('전문 용어'));
     await tester.pumpAndSettle();
     expect(find.text('네 기둥 원문'), findsOneWidget);
     expect(find.textContaining('년주 을해 乙亥'), findsOneWidget);
@@ -156,7 +157,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('차분하게 중심을 잡는 날'), findsOneWidget);
       expect(find.text('丙午'), findsNothing);
-      await tester.tap(find.byKey(const Key('saju_technical_toggle')));
+      await tester.tap(find.text('전문 용어'));
       await tester.pumpAndSettle();
       expect(find.text('丙午'), findsOneWidget);
     },
@@ -195,8 +196,9 @@ void main() {
       );
 
       await tester.pumpAndSettle();
-      expect(find.text('출생 시각과 출생지가 없어 기본 명식으로 볼까요?'), findsOneWidget);
-      expect(find.text('출생정보 수정하기'), findsOneWidget);
+      expect(find.text('태어난 시각을 모르면 시각 없이 볼 수 있어요'), findsOneWidget);
+      expect(find.text('정보 추가하기'), findsOneWidget);
+      expect(find.text('시각 없이 보기'), findsOneWidget);
       await tester.tap(find.byKey(const Key('saju_limited_confirm')));
       await tester.pumpAndSettle();
       expect(posted, isTrue);
@@ -226,7 +228,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('출생정보 수정하기'));
+      await tester.tap(find.text('출생 정보 입력하기'));
       expect(edited, isTrue);
     },
   );
@@ -278,5 +280,54 @@ void main() {
     expect(find.text('우리의 관계 사주'), findsOneWidget);
     expect(find.text('서로의 속도를 알아가는 사이'), findsOneWidget);
     expect(find.textContaining('점수:'), findsNothing);
+  });
+
+  testWidgets('standalone 정보 추가하기 opens the birth sheet and reloads', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(900, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    var saved = false;
+    final profileApi = BirthProfileApi(
+      baseUrl: 'https://secretbase.example',
+      token: 'jwt-token',
+      client: MockClient((request) async {
+        if (request.method == 'PATCH') saved = true;
+        return http.Response(
+          '{"ok":true,"birthProfile":{"calendarType":"solar","birthDate":"1995-03-02","lunarLeapMonth":false,"birthTime":null,"timezone":"Asia/Seoul","birthPlace":null}}',
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      }),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SajuScreen(
+          birthProfileApi: profileApi,
+          api: SajuApi(
+            baseUrl: 'https://secretbase.example',
+            token: 'jwt-token',
+            client: MockClient(
+              (_) async => http.Response(
+                '{"ok":false,"reason":"saju_limited_confirmation_required"}',
+                409,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('정보 추가하기'));
+    await tester.pumpAndSettle();
+    expect(find.text('출생 정보'), findsOneWidget);
+    expect(find.text('시각을 몰라요'), findsWidgets);
+    // The saved profile is prefilled; saving works and reloads the reading.
+    expect(find.textContaining('1995-03-02'), findsOneWidget);
+    await tester.tap(find.text('저장하고 보기'));
+    await tester.pumpAndSettle();
+    expect(saved, isTrue);
+    expect(find.text('출생 정보'), findsNothing);
   });
 }

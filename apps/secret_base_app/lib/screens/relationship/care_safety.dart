@@ -120,10 +120,18 @@ class _ConsentBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const items = [
-      (V2Icons.sparkle, 'AI 가이드예요', '사람 상담사가 아니라 AI가 도와요. 전문 상담이나 의료를 대신하지 않아요.'),
+      (
+        V2Icons.sparkle,
+        'AI 가이드예요',
+        '사람 상담사가 아니라 AI가 도와요. 전문 상담이나 의료를 대신하지 않아요.',
+      ),
       (V2Icons.lock, '파트너에게 공유되지 않아요', '내가 직접 고른 한 문장만 보낼 수 있고, 대화 원문은 나만 봐요.'),
       (V2Icons.send, 'AI 서비스로 전송돼요', '답변을 만들기 위해 입력한 내용이 AI 서비스로 전달돼요.'),
-      (V2Icons.phone, '위급할 땐 바로 연락해 주세요', '지금 위험하면 112·119, 마음이 너무 힘들면 109에 전화해 주세요.'),
+      (
+        V2Icons.phone,
+        '위급할 땐 바로 연락해 주세요',
+        '지금 위험하면 112·119, 마음이 너무 힘들면 109에 전화해 주세요.',
+      ),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

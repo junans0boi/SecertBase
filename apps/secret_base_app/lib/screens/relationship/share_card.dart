@@ -5,8 +5,7 @@ import 'package:flutter/rendering.dart';
 
 import 'package:secret_base_app/v2/v2.dart';
 
-import 'share_image_stub.dart'
-    if (dart.library.html) 'share_image_web.dart';
+import 'share_image_stub.dart' if (dart.library.html) 'share_image_web.dart';
 
 /// A 1:1 card for sharing. Never put names, birthdays or the four pillar
 /// characters on it: only the kind of reading and a short, gentle line.
@@ -44,7 +43,10 @@ class ShareCard extends StatelessWidget {
               style: V2Text.label.copyWith(color: Colors.white, fontSize: 13),
             ),
             const SizedBox(height: 8),
-            if (art != null) Expanded(child: Center(child: art)) else const Spacer(),
+            if (art != null)
+              Expanded(child: Center(child: art))
+            else
+              const Spacer(),
             Text(
               title,
               maxLines: 2,
@@ -81,7 +83,8 @@ Future<void> showShareCardSheet(
     context,
     title: '카드로 공유',
     subtitle: '이름이나 생일은 카드에 들어가지 않아요.',
-    builder: (ctx) => _ShareSheetBody(card: card, caption: caption, fileName: fileName),
+    builder: (ctx) =>
+        _ShareSheetBody(card: card, caption: caption, fileName: fileName),
   );
 }
 
@@ -119,15 +122,11 @@ class _ShareSheetBodyState extends State<_ShareSheetBody> {
         widget.caption,
       );
       if (!mounted) return;
-      showV2Snack(
-        context,
-        switch (result) {
-          ShareImageResult.downloaded => '이미지를 저장했어요',
-          ShareImageResult.copiedText => '이 기기에서는 이미지 저장이 어려워 문구를 복사했어요',
-          ShareImageResult.failed => '저장하지 못했어요. 다시 시도해 주세요.',
-        },
-        tone: result == ShareImageResult.failed ? V2Tone.err : V2Tone.neutral,
-      );
+      showV2Snack(context, switch (result) {
+        ShareImageResult.downloaded => '이미지를 저장했어요',
+        ShareImageResult.copiedText => '이 기기에서는 이미지 저장이 어려워 문구를 복사했어요',
+        ShareImageResult.failed => '저장하지 못했어요. 다시 시도해 주세요.',
+      }, tone: result == ShareImageResult.failed ? V2Tone.err : V2Tone.neutral);
     } catch (_) {
       if (mounted) {
         showV2Snack(context, '저장하지 못했어요. 다시 시도해 주세요.', tone: V2Tone.err);

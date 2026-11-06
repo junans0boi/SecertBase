@@ -80,7 +80,6 @@ const kBirthCountryOptions = [
   BirthCountryOption('나이지리아', 'Africa/Lagos'),
 ];
 
-
 String? birthCountryForTimezone(String timezone) {
   for (final o in kBirthCountryOptions) {
     if (o.timezone == timezone) return o.label;
@@ -219,7 +218,10 @@ class _BirthInfoFormState extends State<BirthInfoForm> {
       context: context,
       initialTime: m == null
           ? const TimeOfDay(hour: 12, minute: 0)
-          : TimeOfDay(hour: int.parse(m.group(1)!), minute: int.parse(m.group(2)!)),
+          : TimeOfDay(
+              hour: int.parse(m.group(1)!),
+              minute: int.parse(m.group(2)!),
+            ),
       helpText: '태어난 시각',
       cancelText: '취소',
       confirmText: '확인',
@@ -342,7 +344,11 @@ class _BirthInfoFormState extends State<BirthInfoForm> {
           V2Banner(tone: V2BannerTone.err, message: _error!),
         ],
         const SizedBox(height: 16),
-        V2Button(label: '저장하고 보기', loading: _saving, onPressed: _saving ? null : _save),
+        V2Button(
+          label: '저장하고 보기',
+          loading: _saving,
+          onPressed: _saving ? null : _save,
+        ),
       ],
     );
   }

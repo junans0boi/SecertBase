@@ -98,10 +98,8 @@ class _MindcareScreenState extends State<MindcareScreen> {
       return;
     }
     await _run(
-      () => _api.sendMessage(
-        id: conversation.session.id,
-        choiceKey: choice.key,
-      ),
+      () =>
+          _api.sendMessage(id: conversation.session.id, choiceKey: choice.key),
     );
   }
 

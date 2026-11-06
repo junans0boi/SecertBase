@@ -100,8 +100,8 @@ class _TarotScreenState extends State<TarotScreen> {
       if (!mounted) return;
       setState(() {
         _drawingScope = null;
-        _drawError = error is TarotApiException &&
-                error.reason == 'network_error'
+        _drawError =
+            error is TarotApiException && error.reason == 'network_error'
             ? '네트워크 연결을 확인하고 다시 시도해 주세요. 고른 카드는 그대로예요.'
             : '카드를 뒤집지 못했어요. 다시 시도해 주세요.';
       });
@@ -149,10 +149,7 @@ class _TarotScreenState extends State<TarotScreen> {
                 style: V2Text.title,
               ),
               const SizedBox(height: 4),
-              Text(
-                '카드가 답을 정해 주기보다, 지금의 마음을 바라볼 질문을 건네요.',
-                style: V2Text.cap,
-              ),
+              Text('카드가 답을 정해 주기보다, 지금의 마음을 바라볼 질문을 건네요.', style: V2Text.cap),
               const SizedBox(height: 14),
               if (hasCouple)
                 V2Segmented<String>(
@@ -192,7 +189,10 @@ class _TarotScreenState extends State<TarotScreen> {
                           children: [
                             Text('우리의 타로도 뽑아 볼까요?', style: V2Text.bodyStrong),
                             const SizedBox(height: 2),
-                            Text('파트너와 연결하면 둘을 위한 한 장이 열려요.', style: V2Text.cap),
+                            Text(
+                              '파트너와 연결하면 둘을 위한 한 장이 열려요.',
+                              style: V2Text.cap,
+                            ),
                           ],
                         ),
                       ),
@@ -242,7 +242,10 @@ class _TarotScreenState extends State<TarotScreen> {
           V2Card(
             key: Key('tarot_${reading.scope}_empty_deck'),
             variant: V2CardVariant.soft,
-            child: Text('오늘 고를 수 있는 카드가 아직 없어요. 잠시 뒤 다시 와 주세요.', style: V2Text.body),
+            child: Text(
+              '오늘 고를 수 있는 카드가 아직 없어요. 잠시 뒤 다시 와 주세요.',
+              style: V2Text.body,
+            ),
           )
         else
           SizedBox(
@@ -321,10 +324,7 @@ class _TarotScreenState extends State<TarotScreen> {
         Expanded(
           child: _error?.reason == 'network_error'
               ? V2ErrorState.offline(onRetry: _load)
-              : V2ErrorState(
-                  title: '오늘의 타로를 불러오지 못했어요',
-                  onRetry: _load,
-                ),
+              : V2ErrorState(title: '오늘의 타로를 불러오지 못했어요', onRetry: _load),
         ),
         if (needsPartner)
           Padding(
@@ -482,7 +482,11 @@ class _TarotResultState extends State<_TarotResult>
         ),
         if (!widget.flip) ...[
           const SizedBox(height: 14),
-          const V2Chip(label: '오늘 이미 뽑은 카드예요', tone: V2Tone.neutral, icon: V2Icons.check),
+          const V2Chip(
+            label: '오늘 이미 뽑은 카드예요',
+            tone: V2Tone.neutral,
+            icon: V2Icons.check,
+          ),
         ],
         const SizedBox(height: 16),
         V2Button(

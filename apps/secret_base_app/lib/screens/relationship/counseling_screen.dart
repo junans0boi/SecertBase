@@ -241,9 +241,7 @@ class _RelationshipCounselingScreenState
     if (!mine && message.generationStatus == 'fallback') {
       return Padding(
         padding: const EdgeInsets.only(bottom: 10),
-        child: CareFallbackNotice(
-          message: last ? message.content : null,
-        ),
+        child: CareFallbackNotice(message: last ? message.content : null),
       );
     }
     return Align(
