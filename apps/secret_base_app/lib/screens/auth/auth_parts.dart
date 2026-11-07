@@ -168,7 +168,11 @@ class AuthHeartKey extends StatelessWidget {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            Icon(Icons.favorite_rounded, size: size, color: Colors.white),
+            Icon(
+              Icons.favorite_rounded,
+              size: size,
+              color: V2Colors.onHeroStrong,
+            ),
             Positioned(
               top: size * 0.3,
               child: Container(
@@ -248,7 +252,7 @@ class AuthHeroBlock extends StatelessWidget {
       ),
     );
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: V2Gradients.hero,
         borderRadius: BorderRadius.vertical(bottom: Radius.circular(36)),
       ),

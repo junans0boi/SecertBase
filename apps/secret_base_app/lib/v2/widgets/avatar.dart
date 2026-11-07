@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
-import '../tokens.dart';
 import '../typography.dart';
 
 enum V2AvatarSize {
@@ -35,17 +34,20 @@ class V2Avatar extends StatelessWidget {
   const V2Avatar({
     super.key,
     required this.name,
-    this.color = V2Colors.rose600,
+    this.color,
     this.size = V2AvatarSize.md,
     this.image,
     this.ring,
   });
 
-  static const meColor = V2Colors.rose600;
-  static const partnerColor = Color(0xFF2877BD);
+  /// Theme avatar colors (white initial stays >= 4.5:1).
+  static Color get meColor => V2Palette.current.me;
+  static Color get partnerColor => V2Palette.current.partner;
 
   final String name;
-  final Color color;
+
+  /// Fill; defaults to [meColor].
+  final Color? color;
   final V2AvatarSize size;
   final ImageProvider? image;
 
@@ -69,7 +71,7 @@ class V2Avatar extends StatelessWidget {
         width: d,
         height: d,
         decoration: BoxDecoration(
-          color: color,
+          color: color ?? meColor,
           shape: BoxShape.circle,
           border: ring == null ? null : Border.all(color: ring!, width: 2.5),
           image: image == null

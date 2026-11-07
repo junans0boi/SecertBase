@@ -852,7 +852,7 @@ class _TarotBackPainter extends CustomPainter {
     if (size.isEmpty) return;
     canvas.save();
     _enterViewBox(canvas, size);
-    const white = V2Colors.surface;
+    final white = V2Colors.surface;
 
     final outer = RRect.fromRectAndRadius(
       const Rect.fromLTWH(1.5, 1.5, 117, 197),
@@ -862,7 +862,7 @@ class _TarotBackPainter extends CustomPainter {
       ..drawRRect(
         outer,
         Paint()
-          ..shader = const LinearGradient(
+          ..shader = LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [V2Colors.lilac, V2Colors.lilacText],

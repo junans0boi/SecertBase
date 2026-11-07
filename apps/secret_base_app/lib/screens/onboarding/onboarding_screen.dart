@@ -201,7 +201,7 @@ class _OnboardingArt extends StatelessWidget {
   Widget _chip(BuildContext context, {required Widget child}) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
     decoration: BoxDecoration(
-      color: Colors.white,
+      color: V2Colors.surface,
       borderRadius: BorderRadius.circular(99),
       boxShadow: V2Shadow.level1,
     ),
@@ -248,7 +248,7 @@ class _OnboardingArt extends StatelessWidget {
                 height: 204,
                 padding: const EdgeInsets.all(V2Space.x3),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: V2Colors.surface,
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: V2Shadow.level2,
                 ),
@@ -268,7 +268,7 @@ class _OnboardingArt extends StatelessWidget {
                               child: Container(
                                 width: 26,
                                 height: 26,
-                                decoration: const BoxDecoration(
+                                decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   color: V2Colors.peach,
                                 ),
@@ -341,7 +341,7 @@ class _OnboardingArt extends StatelessWidget {
         1 => Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(V2Icons.heart, size: 40, color: Colors.white),
+            Icon(V2Icons.heart, size: 40, color: V2Colors.onHeroStrong),
             const SizedBox(height: V2Space.x2),
             SizedBox(
               width: 212,
@@ -354,11 +354,11 @@ class _OnboardingArt extends StatelessWidget {
                       width: 136,
                       height: 136,
                       alignment: Alignment.center,
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Colors.white,
+                        color: V2Colors.surface,
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.person_rounded,
                         size: 92,
                         color: V2Colors.rose,
@@ -371,11 +371,11 @@ class _OnboardingArt extends StatelessWidget {
                       width: 136,
                       height: 136,
                       alignment: Alignment.center,
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: V2Colors.honeySoft,
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.person_rounded,
                         size: 92,
                         color: V2Colors.peach,
@@ -391,7 +391,7 @@ class _OnboardingArt extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(V2Icons.ok, size: 24, color: V2Colors.ok),
+                  Icon(V2Icons.ok, size: 24, color: V2Colors.ok),
                   const SizedBox(width: V2Space.x2),
                   Text(
                     '오늘의 기록 2/2',
@@ -426,15 +426,23 @@ class _OnboardingArt extends StatelessWidget {
                 ),
               ),
               const AuthHeartKey(size: 156),
-              const Positioned(
+              Positioned(
                 left: 18,
                 top: 24,
-                child: Icon(V2Icons.sparkle, size: 28, color: Colors.white),
+                child: Icon(
+                  V2Icons.sparkle,
+                  size: 28,
+                  color: V2Colors.onHeroStrong,
+                ),
               ),
-              const Positioned(
+              Positioned(
                 right: 26,
                 top: 8,
-                child: Icon(V2Icons.sparkle, size: 20, color: Colors.white),
+                child: Icon(
+                  V2Icons.sparkle,
+                  size: 20,
+                  color: V2Colors.onHeroStrong,
+                ),
               ),
             ],
           ),

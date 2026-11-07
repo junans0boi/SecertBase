@@ -605,19 +605,26 @@ class _ShopScreenState extends State<ShopScreen> {
                       children: [
                         Text(
                           '뽑기',
-                          style: V2Text.head.copyWith(color: Colors.white),
+                          style: V2Text.head.copyWith(
+                            color: V2Colors.onHeroStrong,
+                          ),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           '무엇이 나올까요? ${coinText(kGachaTiers.first.cost)} 코인부터',
-                          style: V2Text.cap.copyWith(color: Colors.white),
+                          style: V2Text.cap.copyWith(
+                            color: V2Colors.onHeroStrong,
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  const Icon(Icons.auto_awesome_rounded, color: Colors.white),
+                  Icon(
+                    Icons.auto_awesome_rounded,
+                    color: V2Colors.onHeroStrong,
+                  ),
                   const SizedBox(width: 4),
-                  const Icon(V2Icons.chevron, color: Colors.white),
+                  Icon(V2Icons.chevron, color: V2Colors.onHeroStrong),
                 ],
               ),
             ),

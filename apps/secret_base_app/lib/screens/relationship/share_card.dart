@@ -16,14 +16,16 @@ class ShareCard extends StatelessWidget {
     required this.title,
     required this.line,
     this.art,
-    this.gradient = V2Gradients.hero,
+    this.gradient,
   });
 
   final String kind;
   final String title;
   final String line;
   final Widget? art;
-  final Gradient gradient;
+
+  /// Defaults to the theme's strong hero gradient.
+  final Gradient? gradient;
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +33,7 @@ class ShareCard extends StatelessWidget {
       aspectRatio: 1,
       child: Container(
         decoration: BoxDecoration(
-          gradient: gradient,
+          gradient: gradient ?? V2Palette.of(context).heroStrong,
           borderRadius: BorderRadius.circular(V2Radius.card),
         ),
         padding: const EdgeInsets.all(24),
@@ -40,7 +42,10 @@ class ShareCard extends StatelessWidget {
           children: [
             Text(
               kind,
-              style: V2Text.label.copyWith(color: Colors.white, fontSize: 13),
+              style: V2Text.label.copyWith(
+                color: V2Colors.onHeroStrong,
+                fontSize: 13,
+              ),
             ),
             const SizedBox(height: 8),
             if (art != null)
@@ -51,19 +56,22 @@ class ShareCard extends StatelessWidget {
               title,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: V2Text.serif(size: 26, color: Colors.white),
+              style: V2Text.serif(size: 26, color: V2Colors.onHeroStrong),
             ),
             const SizedBox(height: 8),
             Text(
               line,
               maxLines: 4,
               overflow: TextOverflow.ellipsis,
-              style: V2Text.body.copyWith(color: Colors.white),
+              style: V2Text.body.copyWith(color: V2Colors.onHeroStrong),
             ),
             const SizedBox(height: 14),
             Text(
               '비밀기지',
-              style: V2Text.label.copyWith(color: Colors.white, fontSize: 13),
+              style: V2Text.label.copyWith(
+                color: V2Colors.onHeroStrong,
+                fontSize: 13,
+              ),
             ),
           ],
         ),

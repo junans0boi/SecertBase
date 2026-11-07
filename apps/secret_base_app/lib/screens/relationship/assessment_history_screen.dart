@@ -146,7 +146,7 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
           children: [
             Row(
               children: [
-                const Icon(Icons.auto_graph_rounded, color: V2Colors.lilac),
+                Icon(Icons.auto_graph_rounded, color: V2Colors.lilac),
                 const SizedBox(width: 8),
                 Text('최근 변화', style: V2Text.bodyStrong),
               ],
@@ -205,7 +205,7 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
                     ),
                     Text(item.version, style: V2Text.cap),
                     const SizedBox(width: 4),
-                    const Icon(
+                    Icon(
                       Icons.chevron_right_rounded,
                       size: 20,
                       color: V2Colors.muted,

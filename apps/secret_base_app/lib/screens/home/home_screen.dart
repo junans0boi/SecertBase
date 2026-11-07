@@ -447,7 +447,7 @@ class _HomeScreenState extends State<HomeScreen> {
         : '${next.label}까지 ${next.days}일';
     return Container(
       constraints: BoxConstraints(minHeight: top + 152),
-      decoration: const BoxDecoration(gradient: V2Gradients.heroPaper),
+      decoration: BoxDecoration(gradient: V2Gradients.heroPaper),
       clipBehavior: Clip.antiAlias,
       child: Stack(
         children: [
@@ -495,7 +495,7 @@ class _HomeScreenState extends State<HomeScreen> {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: .78),
+                color: V2Colors.surface.withValues(alpha: .78),
                 shape: BoxShape.circle,
               ),
               child: IconButton(
@@ -504,7 +504,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 icon: Badge(
                   isLabelVisible: _notificationsBlocked,
                   smallSize: 8,
-                  child: const Icon(V2Icons.bell, color: V2Colors.ink),
+                  child: Icon(V2Icons.bell, color: V2Colors.ink),
                 ),
                 onPressed: _openNotifications,
               ),
@@ -552,13 +552,13 @@ class _HomeScreenState extends State<HomeScreen> {
               height: 30,
               padding: const EdgeInsets.symmetric(horizontal: V2Space.x3),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: .85),
+                color: V2Colors.surface.withValues(alpha: .85),
                 borderRadius: V2Radius.pillAll,
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(V2Icons.event, size: 16, color: V2Colors.rose700),
+                  Icon(V2Icons.event, size: 16, color: V2Colors.rose700),
                   const SizedBox(width: V2Space.x1),
                   Flexible(
                     child: Text(
@@ -791,7 +791,7 @@ class _HomeScreenState extends State<HomeScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             for (var i = 0; i < items.length; i++) ...[
-              if (i > 0) const VerticalDivider(width: 1, color: V2Colors.line),
+              if (i > 0) VerticalDivider(width: 1, color: V2Colors.line),
               Expanded(
                 child: _Shortcut(
                   icon: items[i].icon,
@@ -879,7 +879,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: V2Colors.muted),
+          Icon(Icons.chevron_right_rounded, color: V2Colors.muted),
         ],
       ),
     );

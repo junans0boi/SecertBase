@@ -650,7 +650,7 @@ class _RewardReveal extends StatelessWidget {
               width: 112,
               height: 112,
               alignment: Alignment.center,
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 gradient: V2Gradients.heroSoft,
                 shape: BoxShape.circle,
               ),

@@ -166,9 +166,9 @@ class _PairingCelebrateScreenState extends State<PairingCelebrateScreen> {
       width: 76,
       height: 76,
       alignment: Alignment.center,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: Colors.white,
+        color: V2Colors.surface,
       ),
       child: Text(
         name.isEmpty ? '?' : String.fromCharCode(name.runes.first),
@@ -191,15 +191,23 @@ class _PairingCelebrateScreenState extends State<PairingCelebrateScreen> {
       child: Stack(
         alignment: Alignment.topCenter,
         children: [
-          const Positioned(
+          Positioned(
             right: 24,
             top: 0,
-            child: Icon(V2Icons.sparkle, size: 22, color: Colors.white),
+            child: Icon(
+              V2Icons.sparkle,
+              size: 22,
+              color: V2Colors.onHeroStrong,
+            ),
           ),
-          const Positioned(
+          Positioned(
             left: 30,
             bottom: 0,
-            child: Icon(V2Icons.sparkle, size: 24, color: Colors.white),
+            child: Icon(
+              V2Icons.sparkle,
+              size: 24,
+              color: V2Colors.onHeroStrong,
+            ),
           ),
           Column(
             children: [
@@ -222,7 +230,7 @@ class _PairingCelebrateScreenState extends State<PairingCelebrateScreen> {
                         height: 44,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: Colors.white,
+                          color: V2Colors.surface,
                           boxShadow: V2Shadow.level2,
                         ),
                         child: Icon(V2Icons.heart, size: 24, color: p.primary),
@@ -237,7 +245,7 @@ class _PairingCelebrateScreenState extends State<PairingCelebrateScreen> {
                 child: Text(
                   '연결됐어요!',
                   textAlign: TextAlign.center,
-                  style: V2Text.display.copyWith(color: Colors.white),
+                  style: V2Text.display.copyWith(color: V2Colors.onHeroStrong),
                 ),
               ),
               const SizedBox(height: V2Space.x1),
@@ -245,7 +253,7 @@ class _PairingCelebrateScreenState extends State<PairingCelebrateScreen> {
                 '둘만의 비밀기지가 열렸어요',
                 textAlign: TextAlign.center,
                 style: V2Text.head.copyWith(
-                  color: Colors.white,
+                  color: V2Colors.onHeroStrong,
                   fontWeight: FontWeight.w600,
                 ),
               ),

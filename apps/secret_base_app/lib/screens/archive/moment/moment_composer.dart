@@ -1093,7 +1093,7 @@ class _PlacePickerState extends State<_PlacePicker> {
                   subtitle: pin.category,
                   showChevron: false,
                   trailing: pin.id == widget.selectedId
-                      ? const Icon(V2Icons.ok, color: V2Colors.rose600)
+                      ? Icon(V2Icons.ok, color: V2Colors.rose600)
                       : null,
                   onTap: () => Navigator.pop(
                     context,

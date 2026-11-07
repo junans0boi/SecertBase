@@ -96,7 +96,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             child: Text(
                               '비밀기지',
                               style: V2Text.display.copyWith(
-                                color: Colors.white,
+                                color: V2Colors.onHeroStrong,
                                 fontSize: 36,
                                 height: 1.2,
                               ),
@@ -233,12 +233,12 @@ class _GoogleButton extends StatelessWidget {
             height: 52,
             child: Center(
               child: loading
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 22,
                       height: 22,
                       child: CircularProgressIndicator(
                         strokeWidth: 2.5,
-                        color: Colors.white,
+                        color: p.bg,
                       ),
                     )
                   : Row(
@@ -266,7 +266,7 @@ class _GoogleButton extends StatelessWidget {
                         const SizedBox(width: V2Space.x3),
                         Text(
                           'Google로 계속하기',
-                          style: V2Text.button.copyWith(color: Colors.white),
+                          style: V2Text.button.copyWith(color: p.bg),
                         ),
                       ],
                     ),

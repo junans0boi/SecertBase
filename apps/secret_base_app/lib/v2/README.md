@@ -29,6 +29,26 @@ V2Theme(dark: true, child: ...)
 `showV2ConfirmDestructiveSheet` and `showV2Snack` apply the 2.0 look
 themselves and work from anywhere.
 
+### Color themes (`palettes.dart`)
+
+Users pick a color theme in 설정 > 화면 테마 (분홍, 종이 다이어리, 깔끔한 회색,
+밤의 비밀기지, 몽글 라벤더, 초록 정원, 버터 팝). Only colors change; shapes,
+spacing and type stay. `V2ThemeController.instance` saves the choice on the
+device and `MaterialApp` rebuilds with `buildV2Theme(palette: ...)`.
+
+- `V2Palette.of(context)` is the palette for a subtree (dark care palette
+  inside `V2Theme(dark: true)`). `V2Colors.*`, `V2Gradients.hero/heroSoft`,
+  `V2ToneColors.of` and `V2Text.cap` follow the active theme too, so they are
+  getters, not `const`. Use `V2BlossomColors` only where a constant is
+  required.
+- `rose600` / `p.primary` may be dark ink (종이) or light peach (밤): put
+  `p.onPrimary` on it, never `Colors.white`. On `V2Gradients.hero` use
+  `V2Colors.onHeroStrong`. For white-looking cards use `p.surface`.
+- `night` is a dark theme (`p.dark == true`): never hardcode white fills or
+  dark text.
+- test/v2/v2_themes_test.dart checks AA contrast for every theme; add a new
+  theme to `V2ThemeId` + `V2Palettes` and it is covered.
+
 ## 1. Tokens (`tokens.dart`)
 
 Never write `Color(0x...)` in a 2.0 screen. Use tokens.

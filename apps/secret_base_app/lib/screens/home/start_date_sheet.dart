@@ -70,7 +70,7 @@ class _StartPreview extends StatelessWidget {
         horizontal: V2Space.x4,
         vertical: V2Space.x3,
       ),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: V2Colors.roseSoft,
         borderRadius: V2Radius.ctlAll,
       ),

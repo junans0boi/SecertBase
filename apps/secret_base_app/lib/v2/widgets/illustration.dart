@@ -141,25 +141,28 @@ class V2SceneIllustration extends StatelessWidget {
       child: SizedBox(
         width: width,
         height: width * 0.75,
-        child: CustomPaint(painter: _ScenePainter(scene, dark: p.dark)),
+        child: CustomPaint(
+          painter: _ScenePainter(scene, dark: p.dark, palette: p),
+        ),
       ),
     );
   }
 }
 
 class _ScenePainter extends CustomPainter {
-  _ScenePainter(this.scene, {required this.dark});
+  _ScenePainter(this.scene, {required this.dark, required this.palette});
 
   final V2Scene scene;
   final bool dark;
+  final V2Palette palette;
 
-  static const _rose = V2Colors.rose;
-  static const _roseDeep = V2Colors.rose600;
-  static const _peach = V2Colors.peach;
-  static const _lilac = V2Colors.lilac;
-  static const _sky = V2Colors.sky;
-  static const _sage = V2Colors.sage;
-  static const _honey = V2Colors.honey;
+  static Color get _rose => V2Colors.rose;
+  static Color get _roseDeep => V2Colors.rose600;
+  static Color get _peach => V2Colors.peach;
+  static Color get _lilac => V2Colors.lilac;
+  static Color get _sky => V2Colors.sky;
+  static Color get _sage => V2Colors.sage;
+  static Color get _honey => V2Colors.honey;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -415,7 +418,7 @@ class _ScenePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ScenePainter old) =>
-      old.scene != scene || old.dark != dark;
+      old.scene != scene || old.dark != dark || old.palette != palette;
 }
 
 /// Night-sky tent hero artwork for the home screen (mockup `.hm-ill`, a
@@ -430,19 +433,37 @@ class V2HeroIllustration extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ExcludeSemantics(
-      child: CustomPaint(painter: _HeroPainter(), size: Size.infinite),
+    return ExcludeSemantics(
+      child: CustomPaint(
+        painter: _HeroPainter(V2Palette.of(context)),
+        size: Size.infinite,
+      ),
     );
   }
 }
 
 class _HeroPainter extends CustomPainter {
-  const _HeroPainter();
+  const _HeroPainter(this.palette);
+
+  final V2Palette palette;
 
   static const _w = 390.0;
   static const _h = 204.0;
   static const _pole = Color(0xFFB07A8F);
   static const _gold = Color(0xFFFFD76A);
+
+  bool get _isBlossom => identical(palette, V2Palettes.blossom);
+  Color get _hillFar => _isBlossom
+      ? const Color(0xFFFFCADD)
+      : Color.lerp(palette.primarySoft, palette.point, .18)!;
+  Color get _hillNear => _isBlossom
+      ? const Color(0xFFFFB2CB)
+      : Color.lerp(palette.primarySoft, palette.point, .4)!;
+  Color get _stripe => _isBlossom
+      ? const Color(0xFFFF8FB3)
+      : palette.point.withValues(alpha: .8);
+  Color get _accent => _isBlossom ? V2Palettes.blossom.primary : palette.point;
+  Color get _poleC => _isBlossom ? _pole : palette.control;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -499,7 +520,7 @@ class _HeroPainter extends CustomPainter {
         ..lineTo(390, _h)
         ..lineTo(0, _h)
         ..close(),
-      fill(const Color(0xFFFFCADD)),
+      fill(_hillFar),
     );
     canvas.drawPath(
       Path()
@@ -509,20 +530,20 @@ class _HeroPainter extends CustomPainter {
         ..lineTo(390, _h)
         ..lineTo(0, _h)
         ..close(),
-      fill(const Color(0xFFFFB2CB)),
+      fill(_hillNear),
     );
 
     // string lights
     canvas.drawLine(
       const Offset(196, 152),
       const Offset(196, 180),
-      stroke(_pole, 3),
+      stroke(_poleC, 3),
     );
     canvas.drawPath(
       Path()
         ..moveTo(196, 152)
         ..quadraticBezierTo(238, 172, 280, 124),
-      stroke(_pole, 1.6),
+      stroke(_poleC, 1.6),
     );
     canvas.drawCircle(const Offset(217, 157), 3.4, fill(_gold));
     canvas.drawCircle(const Offset(238, 154), 3.4, fill(Colors.white));
@@ -543,12 +564,12 @@ class _HeroPainter extends CustomPainter {
         ..lineTo(266, 180)
         ..lineTo(294, 180)
         ..close(),
-      fill(const Color(0xFFFF8FB3)),
+      fill(_stripe),
     );
     canvas.drawLine(
       const Offset(280, 120),
       const Offset(280, 106),
-      stroke(_pole, 2),
+      stroke(_poleC, 2),
     );
     canvas.drawPath(
       Path()
@@ -556,7 +577,7 @@ class _HeroPainter extends CustomPainter {
         ..lineTo(291, 110)
         ..lineTo(280, 114)
         ..close(),
-      fill(V2Colors.rose600),
+      fill(_accent),
     );
 
     // couple
@@ -576,8 +597,8 @@ class _HeroPainter extends CustomPainter {
       );
     }
 
-    person(334, const Color(0xFF5B4A8A));
-    person(350, V2Colors.rose600);
+    person(334, _isBlossom ? const Color(0xFF5B4A8A) : palette.partner);
+    person(350, _isBlossom ? V2Palettes.blossom.primary : palette.me);
 
     void heart(double x, double y, double k, Color c, double o) {
       canvas.save();
@@ -596,13 +617,13 @@ class _HeroPainter extends CustomPainter {
       canvas.restore();
     }
 
-    heart(342, 140, 1.15, V2Colors.rose600, .9);
-    heart(366, 128, .7, const Color(0xFFFF8FB3), .8);
+    heart(342, 140, 1.15, _accent, .9);
+    heart(366, 128, .7, _stripe, .8);
     heart(318, 124, .55, Colors.white, .9);
 
     canvas.restore();
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter old) => false;
+  bool shouldRepaint(_HeroPainter old) => old.palette != palette;
 }

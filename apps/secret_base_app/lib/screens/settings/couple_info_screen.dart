@@ -164,19 +164,19 @@ class _CoupleInfoScreenState extends State<CoupleInfoScreen> {
                 const SizedBox(height: 12),
                 Text(
                   '$me · $partner',
-                  style: V2Text.head.copyWith(color: Colors.white),
+                  style: V2Text.head.copyWith(color: V2Colors.onHeroStrong),
                 ),
                 if (_info?.dDayText.isNotEmpty == true) ...[
                   const SizedBox(height: 4),
                   Text(
                     _info!.dDayText,
-                    style: V2Text.serif(size: 40, color: Colors.white),
+                    style: V2Text.serif(size: 40, color: V2Colors.onHeroStrong),
                   ),
                 ],
                 if (start != null)
                   Text(
                     '${koreanDate(start)}부터 함께해요',
-                    style: V2Text.cap.copyWith(color: Colors.white),
+                    style: V2Text.cap.copyWith(color: V2Colors.onHeroStrong),
                   ),
               ],
             ),
