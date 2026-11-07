@@ -4,8 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../../core/auth_service.dart';
-import '../../core/main_design.dart';
-import '../../core/main_hero.dart';
+import '../../core/main_design.dart' show MainCard;
 import '../../core/socket_service.dart';
 import 'game_lobby_screen.dart';
 import 'games/blackjack_screen.dart';
@@ -26,6 +25,7 @@ import 'games/yut_screen.dart';
 import 'games/marble_screen.dart';
 import '../shop/shop_screen.dart';
 import '../../widgets/game_session_presence.dart';
+import '../../v2/v2.dart';
 
 const _kUnrankedGames = {'telepathy', 'dice'};
 
@@ -123,9 +123,11 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: kMainHoneySoft,
+              color: V2Colors.honeySoft,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: kMainHoney.withValues(alpha: 0.4)),
+              border: Border.all(
+                color: V2Colors.honeyText.withValues(alpha: 0.4),
+              ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -137,7 +139,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: kMainHoney,
+                    color: V2Colors.honeyText,
                   ),
                 ),
               ],
@@ -154,34 +156,34 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  gradient: kRoseGrad,
+                  color: V2Colors.rose600,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (_bonusLoading)
-                      const SizedBox(
+                      SizedBox(
                         width: 12,
                         height: 12,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: V2Colors.onPrimary,
                         ),
                       )
                     else
-                      const Icon(
+                      Icon(
                         Icons.card_giftcard_rounded,
                         size: 14,
-                        color: Colors.white,
+                        color: V2Colors.onPrimary,
                       ),
                     const SizedBox(width: 4),
-                    const Text(
+                    Text(
                       '출석 +500',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
-                        color: Colors.white,
+                        color: V2Colors.onPrimary,
                       ),
                     ),
                   ],
@@ -189,7 +191,10 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
               ),
             )
           else
-            Text('오늘 보너스 수령 완료', style: mainBody(size: 12, color: kMainMuted)),
+            Text(
+              '오늘 보너스 수령 완료',
+              style: V2Text.cap.copyWith(color: V2Colors.muted),
+            ),
           const Spacer(),
           GestureDetector(
             onTap: () => Navigator.of(
@@ -198,21 +203,27 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: kMainLilacSoft,
+                color: V2Colors.lilacSoft,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: kMainLilac.withValues(alpha: 0.4)),
+                border: Border.all(
+                  color: V2Colors.lilacText.withValues(alpha: 0.4),
+                ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.storefront_rounded, size: 14, color: kMainLilac),
+                  Icon(
+                    Icons.storefront_rounded,
+                    size: 14,
+                    color: V2Colors.lilacText,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     '상점',
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: kMainLilac,
+                      color: V2Colors.lilacText,
                     ),
                   ),
                 ],
@@ -262,9 +273,9 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.bar_chart_rounded, size: 16, color: kMainSub),
+              Icon(Icons.bar_chart_rounded, size: 16, color: V2Colors.sub),
               const SizedBox(width: 6),
-              Text('기록', style: mainTitle(size: 14)),
+              Text('기록', style: V2Text.bodyStrong),
             ],
           ),
           const SizedBox(height: 14),
@@ -275,12 +286,12 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                   Icon(
                     Icons.bar_chart_rounded,
                     size: 32,
-                    color: kMainMuted.withValues(alpha: 0.35),
+                    color: V2Colors.muted.withValues(alpha: 0.35),
                   ),
                   const SizedBox(height: 6),
                   Text(
                     '아직 플레이 기록이 없어요',
-                    style: mainBody(size: 11, color: kMainMuted),
+                    style: V2Text.cap.copyWith(color: V2Colors.muted),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -292,13 +303,13 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    _RecordStat('승', '$wins', kMainSky),
-                    _RecordStat('패', '$losses', kMainRose),
-                    if (draws > 0) _RecordStat('무', '$draws', kMainMuted),
+                    _RecordStat('승', '$wins', V2Colors.skyText),
+                    _RecordStat('패', '$losses', V2Colors.rose600),
+                    if (draws > 0) _RecordStat('무', '$draws', V2Colors.muted),
                     _RecordStat(
                       '승률',
                       total > 0 ? '${(wins * 100 ~/ total)}%' : '-',
-                      kMainSage,
+                      V2Colors.sageText,
                     ),
                   ],
                 ),
@@ -325,120 +336,105 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       icon: Icons.style,
       title: '블랙잭',
       description: '숨은 카드 한 장으로 겨루는 21점 대결 · 먼저 2승',
-      color: kMainRose,
-      background: kMainRoseSoft,
+      tone: V2Tone.rose,
     ),
     _GameInfo(
       type: 'oldmaid',
       icon: Icons.elderly_rounded,
       title: '도둑잡기',
       description: '상대 카드를 뽑아 짝을 맞추고 조커를 피하는 동화 속 심리전',
-      color: kMainHoney,
-      background: kMainHoneySoft,
+      tone: V2Tone.honey,
     ),
     _GameInfo(
       type: 'yut',
       icon: Icons.grid_view_rounded,
       title: '윷놀이',
       description: '윷을 던져 말을 업고 잡으며 먼저 골인해요 · 말 2~4개, 30초 턴',
-      color: kMainSky,
-      background: kMainSkySoft,
+      tone: V2Tone.sky,
     ),
     _GameInfo(
       type: 'marble',
       icon: Icons.castle_rounded,
       title: '마블 작전',
       description: '주사위를 굴려 도시를 사고 상대를 파산시키는 2인 전략 보드게임',
-      color: kMainLilac,
-      background: kMainLilacSoft,
+      tone: V2Tone.lilac,
     ),
     _GameInfo(
       type: 'rps',
       icon: Icons.back_hand_outlined,
       title: '가위바위보',
       description: '단판, 3판, 묵찌빠 세 가지 모드',
-      color: kMainSage,
-      background: kMainSageSoft,
+      tone: V2Tone.sage,
     ),
     _GameInfo(
       type: 'zero',
       icon: Icons.exposure_zero_rounded,
       title: '제로',
       description: '손가락을 숨기고 합계를 맞혀요 · 5라운드 승부',
-      color: kMainHoney,
-      background: kMainHoneySoft,
+      tone: V2Tone.honey,
     ),
     _GameInfo(
       type: 'uno',
       icon: Icons.style_rounded,
       title: '원카드',
       description: '색과 숫자를 맞춰 먼저 손패를 비워요 · 마지막 한 장엔 원카드!',
-      color: kMainRose,
-      background: kMainRoseSoft,
+      tone: V2Tone.rose,
     ),
     _GameInfo(
       type: 'dice',
       icon: Icons.casino_outlined,
       title: '주사위',
       description: '1부터 6까지 동시에 굴리는 초간단 내기',
-      color: kMainSky,
-      background: kMainSkySoft,
+      tone: V2Tone.sky,
     ),
     _GameInfo(
       type: 'telepathy',
       icon: Icons.psychology_outlined,
       title: '텔레파시',
       description: '둘 중 하나를 몰래 골라 같은 쪽이면 통했어요! · 밸런스 게임 5·10·15문제',
-      color: kMainLilac,
-      background: kMainLilacSoft,
+      tone: V2Tone.lilac,
     ),
     _GameInfo(
       type: 'pirate',
       icon: Icons.sailing_outlined,
       title: '해적 룰렛',
       description: '칼을 꽂다 터지면 벌칙! 이긴 사람이 벌칙을 정해요',
-      color: kMainRose,
-      background: kMainRoseSoft,
+      tone: V2Tone.rose,
     ),
     _GameInfo(
       type: 'penalty',
       icon: Icons.sports_soccer_rounded,
       title: '패널티킥',
       description: '골대 칸을 골라 넣고 막아요 · 3칸·6칸 중 방장이 골라요',
-      color: kMainSky,
-      background: kMainSkySoft,
+      tone: V2Tone.sky,
     ),
     _GameInfo(
       type: 'bowling',
       icon: Icons.sports_baseball_rounded,
       title: '볼링',
       description: '타이밍 조준으로 10프레임 투구하여 점수 대결',
-      color: kMainLilac,
-      background: kMainLilacSoft,
+      tone: V2Tone.lilac,
     ),
     _GameInfo(
       type: 'catch',
       icon: Icons.brush_outlined,
       title: '그림 맞히기',
       description: '한 사람이 그리면 상대가 힌트를 보며 정답을 맞혀요 · 번갈아 라운드',
-      color: kMainSage,
-      background: kMainSageSoft,
+      tone: V2Tone.sage,
     ),
     _GameInfo(
       type: 'tank',
       icon: Icons.military_tech_rounded,
       title: '탱크 대작전',
       description: '각도와 파워를 조절해 상대 탱크를 포격하는 전략 게임',
-      color: kMainHoney,
-      background: kMainHoneySoft,
+      tone: V2Tone.honey,
     ),
     _GameInfo(
       type: 'gostop',
       icon: Icons.style_outlined,
       title: '고스톱 (맞고)',
       description: '정통 규칙으로 즐기는 2인 맞고 · 25초 턴, 점수와 배수가 한눈에',
-      color: kMainSage,
-      background: kMainSageSoft,
+      tone: V2Tone.sage,
     ),
   ];
 
@@ -527,15 +523,15 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           decoration: BoxDecoration(
-            color: isSelected ? kMainRoseSoft : kMainPaper,
+            color: isSelected ? V2Colors.roseSoft : V2Colors.surface,
             borderRadius: BorderRadius.circular(22),
             border: Border.all(
-              color: isSelected ? kMainRose : Colors.transparent,
+              color: isSelected ? V2Colors.rose600 : Colors.transparent,
               width: 2,
             ),
             boxShadow: [
               BoxShadow(
-                color: kMainRose.withAlpha(isSelected ? 50 : 22),
+                color: V2Colors.rose600.withAlpha(isSelected ? 50 : 22),
                 blurRadius: 14,
                 offset: const Offset(0, 5),
               ),
@@ -561,10 +557,8 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                   textAlign: TextAlign.center,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: mainBody(
-                    size: 12,
-                    color: isSelected ? kMainRose : kMainInk,
-                    weight: FontWeight.w800,
+                  style: V2Text.label.copyWith(
+                    color: isSelected ? V2Colors.rose600 : V2Colors.ink,
                   ),
                 ),
               ),
@@ -580,9 +574,12 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.sports_esports_rounded, size: 60, color: kMainMuted),
+          Icon(Icons.sports_esports_rounded, size: 60, color: V2Colors.muted),
           const SizedBox(height: 14),
-          Text('위에서 게임을 골라보세요', style: mainBody(size: 15, color: kMainSub)),
+          Text(
+            '위에서 게임을 골라보세요',
+            style: V2Text.body.copyWith(color: V2Colors.sub),
+          ),
         ],
       ),
     );
@@ -617,11 +614,11 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(game.title, style: mainTitle(size: 22)),
+                        Text(game.title, style: V2Text.title),
                         const SizedBox(height: 4),
                         Text(
                           game.description,
-                          style: mainBody(size: 13, color: kMainSub),
+                          style: V2Text.cap.copyWith(color: V2Colors.sub),
                         ),
                       ],
                     ),
@@ -640,8 +637,10 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                   ),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    backgroundColor: connected ? game.color : kMainMuted,
-                    foregroundColor: Colors.white,
+                    backgroundColor: V2Colors.rose600,
+                    foregroundColor: V2Colors.onPrimary,
+                    disabledBackgroundColor: V2Colors.soft2,
+                    disabledForegroundColor: V2Colors.muted,
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -654,7 +653,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                 Text(
                   '상대방 연결을 확인하고 있어요',
                   textAlign: TextAlign.center,
-                  style: mainBody(size: 12, color: kMainMuted),
+                  style: V2Text.cap.copyWith(color: V2Colors.muted),
                 ),
               ],
             ],
@@ -684,9 +683,9 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.diamond_rounded, size: 16, color: kMainHoney),
+              Icon(Icons.diamond_rounded, size: 16, color: V2Colors.honeyText),
               const SizedBox(width: 6),
-              Text('내 코인', style: mainTitle(size: 14)),
+              Text('내 코인', style: V2Text.bodyStrong),
             ],
           ),
           const SizedBox(height: 14),
@@ -700,7 +699,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
-                    color: kMainHoney,
+                    color: V2Colors.honeyText,
                   ),
                 ),
               ],
@@ -718,23 +717,13 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     final selected = _selectedIdx != null ? _games[_selectedIdx!] : null;
 
     return ColoredBox(
-      color: kMainCream,
+      color: V2Colors.bg,
       child: Column(
         children: [
-          MainTabHeader(
-            safeTop: true,
+          V2Header(
             title: '둘이서 놀기',
             subtitle: connected ? '오늘은 어떤 게임으로 놀아볼까요?' : '상대방 연결을 확인하고 있어요',
-            trailing: Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: kMainRoseSoft,
-                shape: BoxShape.circle,
-                border: Border.all(color: kMainLine),
-              ),
-              child: const Icon(Icons.sports_esports_rounded, color: kMainRose),
-            ),
+            showBack: false,
           ),
           Expanded(
             child: ListView(
@@ -744,10 +733,10 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                 _buildWalletBar(),
                 Row(
                   children: [
-                    Expanded(child: Text('게임 고르기', style: mainTitle(size: 24))),
+                    Expanded(child: Text('게임 고르기', style: V2Text.title)),
                     Text(
                       '${_games.length}가지',
-                      style: mainBody(size: 12, color: kMainMuted),
+                      style: V2Text.cap.copyWith(color: V2Colors.muted),
                     ),
                   ],
                 ),
@@ -785,17 +774,19 @@ class _GameInfo {
   final IconData icon;
   final String title;
   final String description;
-  final Color color;
-  final Color background;
+  final V2Tone tone;
 
   const _GameInfo({
     required this.type,
     required this.icon,
     required this.title,
     required this.description,
-    required this.color,
-    required this.background,
+    required this.tone,
   });
+
+  /// Icon color in the active theme (AA on [background]).
+  Color get color => V2ToneColors.of(tone).text;
+  Color get background => V2ToneColors.of(tone).soft;
 }
 
 class _RecordStat extends StatelessWidget {
@@ -817,7 +808,7 @@ class _RecordStat extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 2),
-        Text(label, style: mainBody(size: 11, color: kMainSub)),
+        Text(label, style: V2Text.cap.copyWith(color: V2Colors.sub)),
       ],
     );
   }
