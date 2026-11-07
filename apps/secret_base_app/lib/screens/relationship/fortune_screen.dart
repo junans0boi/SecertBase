@@ -468,7 +468,7 @@ class _RelationshipFortuneScreenState extends State<RelationshipFortuneScreen> {
         kind: isCouple ? '오늘 우리의 운세' : '오늘의 운세',
         title: c.title,
         line: line,
-        art: const Icon(V2Icons.sparkle, color: Colors.white, size: 56),
+        art: Icon(V2Icons.sparkle, color: V2Colors.onHeroStrong, size: 56),
       ),
     );
   }

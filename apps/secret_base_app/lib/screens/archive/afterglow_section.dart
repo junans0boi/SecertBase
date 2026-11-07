@@ -468,7 +468,7 @@ class _AfterglowVideoPlayerState extends State<_AfterglowVideoPlayer> {
               children: [
                 VideoPlayer(_controller),
                 if (!playing)
-                  const Icon(
+                  Icon(
                     Icons.play_circle_fill_rounded,
                     size: 56,
                     color: V2Colors.surface,

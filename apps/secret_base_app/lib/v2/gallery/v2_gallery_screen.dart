@@ -139,7 +139,7 @@ class _V2GalleryScreenState extends State<V2GalleryScreen> {
             width: double.infinity,
             height: 72,
             padding: const EdgeInsets.all(14),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: V2Gradients.hero,
               borderRadius: V2Radius.cardAll,
             ),
@@ -158,7 +158,7 @@ class _V2GalleryScreenState extends State<V2GalleryScreen> {
             width: double.infinity,
             height: 56,
             padding: const EdgeInsets.all(14),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: V2Gradients.heroSoft,
               borderRadius: V2Radius.cardAll,
             ),
@@ -369,10 +369,7 @@ class _V2GalleryScreenState extends State<V2GalleryScreen> {
                 ),
               ),
               V2ListTile(
-                leading: const V2Avatar(
-                  name: '서윤',
-                  color: V2Avatar.partnerColor,
-                ),
+                leading: V2Avatar(name: '서윤', color: V2Avatar.partnerColor),
                 title: '서윤',
                 subtitle: '연결된 지 412일',
                 trailing: const V2Badge(count: 2),
@@ -426,9 +423,9 @@ class _V2GalleryScreenState extends State<V2GalleryScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          const Row(
+          Row(
             children: [
-              V2Badge(count: 3),
+              const V2Badge(count: 3),
               SizedBox(width: 8),
               V2Badge(count: 120),
               SizedBox(width: 8),

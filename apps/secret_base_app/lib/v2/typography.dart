@@ -10,6 +10,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'palettes.dart';
 import 'tokens.dart';
 
 abstract final class V2Text {
@@ -52,13 +53,12 @@ abstract final class V2Text {
   /// 15/20 w600. List-row titles, emphasized body.
   static final TextStyle bodyStrong = _sans(15, 20, FontWeight.w700);
 
-  /// 13/18 w500 in [V2Colors.sub]. Captions, help text, subtitles.
-  static final TextStyle cap = _sans(
-    13,
-    18,
-    FontWeight.w500,
-    color: V2Colors.sub,
-  );
+  /// 13/18 w500 in the active theme's sub color. Captions, help text,
+  /// subtitles.
+  static TextStyle get cap =>
+      _capCache[V2Palette.current] ??= _capBase.copyWith(color: V2Colors.sub);
+  static final TextStyle _capBase = _sans(13, 18, FontWeight.w500);
+  static final _capCache = <V2Palette, TextStyle>{};
 
   /// 12/16 w700. Overlines, badges, tab labels. Smallest allowed size.
   static final TextStyle label = _sans(
@@ -127,24 +127,25 @@ abstract final class V2Text {
       text.split(' ').map((w) => w.characters.join('\u2060')).join(' ');
 
   /// Material [TextTheme] mapped onto the 2.0 scale.
-  static TextTheme textTheme({Color ink = V2Colors.ink, Color? sub}) {
+  static TextTheme textTheme({Color? ink, Color? sub}) {
+    final i = ink ?? V2Colors.ink;
     final s = sub ?? V2Colors.sub;
     return TextTheme(
-      displayLarge: display.copyWith(color: ink),
-      displayMedium: display.copyWith(color: ink),
-      displaySmall: display.copyWith(color: ink),
-      headlineLarge: display.copyWith(color: ink),
-      headlineMedium: title.copyWith(color: ink),
-      headlineSmall: title.copyWith(color: ink),
-      titleLarge: head.copyWith(color: ink),
-      titleMedium: bodyStrong.copyWith(color: ink),
-      titleSmall: cap.copyWith(color: ink, fontWeight: FontWeight.w700),
-      bodyLarge: body.copyWith(color: ink),
-      bodyMedium: body.copyWith(color: ink),
+      displayLarge: display.copyWith(color: i),
+      displayMedium: display.copyWith(color: i),
+      displaySmall: display.copyWith(color: i),
+      headlineLarge: display.copyWith(color: i),
+      headlineMedium: title.copyWith(color: i),
+      headlineSmall: title.copyWith(color: i),
+      titleLarge: head.copyWith(color: i),
+      titleMedium: bodyStrong.copyWith(color: i),
+      titleSmall: cap.copyWith(color: i, fontWeight: FontWeight.w700),
+      bodyLarge: body.copyWith(color: i),
+      bodyMedium: body.copyWith(color: i),
       bodySmall: cap.copyWith(color: s),
-      labelLarge: button.copyWith(color: ink),
-      labelMedium: label.copyWith(color: ink),
-      labelSmall: label.copyWith(color: ink),
+      labelLarge: button.copyWith(color: i),
+      labelMedium: label.copyWith(color: i),
+      labelSmall: label.copyWith(color: i),
     );
   }
 }

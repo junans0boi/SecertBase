@@ -7,6 +7,7 @@
 /// See lib/v2/README.md for usage and copy rules.
 library;
 
+export 'palettes.dart';
 export 'theme.dart';
 export 'tokens.dart';
 export 'typography.dart';

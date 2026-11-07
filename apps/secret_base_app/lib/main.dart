@@ -34,6 +34,7 @@ Future<void> main() async {
   } catch (_) {
     // 버전 표시만 비고 앱은 그대로 시작한다.
   }
+  await V2ThemeController.instance.load();
   await YutAudio.instance.loadSettings();
   await LocalNotificationService.instance.start();
   UploadOutbox.instance.failureNotifier =
@@ -85,6 +86,7 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
   void initState() {
     super.initState();
     _socket.addListener(_rebuild);
+    V2ThemeController.instance.addListener(_onThemeChanged);
     _auth.addListener(_onAuthChanged);
     // 알림 권한은 연결 축하 화면의 안내 시트를 거쳐서만 묻는다.
     PushService.instance.deferPermissionPrompt = true;
@@ -98,6 +100,7 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
   @override
   void dispose() {
     _socket.removeListener(_rebuild);
+    V2ThemeController.instance.removeListener(_onThemeChanged);
     _auth.removeListener(_onAuthChanged);
     super.dispose();
   }
@@ -187,6 +190,20 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
 
   void _rebuild() => setState(() {});
 
+  /// A color theme switch: rebuild every element so widgets that read
+  /// [V2Colors] / [V2Text] directly (not through `Theme.of`) pick up the new
+  /// palette too. Navigation and screen state are kept.
+  void _onThemeChanged() {
+    if (!mounted) return;
+    setState(() {});
+    void rebuild(Element e) {
+      e.markNeedsBuild();
+      e.visitChildren(rebuild);
+    }
+
+    (context as Element).visitChildren(rebuild);
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -195,7 +212,7 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
       debugShowCheckedModeBanner: false,
       // 2.0 is the whole app's theme (games included). Game screens keep
       // their own explicit per-game styling on top of it.
-      theme: buildV2Theme(),
+      theme: buildV2Theme(palette: V2ThemeController.instance.palette),
       builder: (context, child) => V2AppFrame(child: child),
       // Dev-only 2.0 component gallery (/#/v2-gallery); absent in release.
       routes: kDebugMode

@@ -292,21 +292,27 @@ class _SajuScreenState extends State<SajuScreen> {
           children: [
             Text(
               widget.relationshipFirst ? '우리의 사주 이야기' : '오늘의 나를 천천히 살펴봐요',
-              style: V2Text.label.copyWith(color: Colors.white, fontSize: 13),
+              style: V2Text.label.copyWith(
+                color: V2Colors.onHeroStrong,
+                fontSize: 13,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
               personal.plainTitle,
-              style: V2Text.serif(size: 24, color: Colors.white),
+              style: V2Text.serif(size: 24, color: V2Colors.onHeroStrong),
             ),
             const SizedBox(height: 10),
             Text(
               personal.plainSummary,
-              style: V2Text.body.copyWith(color: Colors.white),
+              style: V2Text.body.copyWith(color: V2Colors.onHeroStrong),
             ),
             if (focus.isNotEmpty) ...[
               const SizedBox(height: 12),
-              Text(focus, style: V2Text.body.copyWith(color: Colors.white)),
+              Text(
+                focus,
+                style: V2Text.body.copyWith(color: V2Colors.onHeroStrong),
+              ),
             ],
           ],
         ),
@@ -703,7 +709,7 @@ class _SajuScreenState extends State<SajuScreen> {
         title: personal.plainTitle,
         line: line,
         gradient: V2Gradients.hero,
-        art: const Icon(V2Icons.sparkle, color: Colors.white, size: 64),
+        art: Icon(V2Icons.sparkle, color: V2Colors.onHeroStrong, size: 64),
       ),
     );
   }

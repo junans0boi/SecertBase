@@ -18,6 +18,7 @@ import 'permission_probe.dart';
 import 'permissions_screen.dart';
 import 'profile_edit_screen.dart';
 import 'settings_common.dart';
+import 'theme_screen.dart';
 import 'support_sheet.dart';
 
 /// 더보기 탭: 4개 구역 허브.
@@ -244,6 +245,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 : (_notificationSummary ?? '받고 싶은 알림만 골라요'),
                             onTap: () =>
                                 _open(const NotificationSettingsScreen()),
+                          ),
+                          V2ListTile(
+                            icon: Icons.palette_outlined,
+                            tone: V2Tone.rose,
+                            title: '화면 테마',
+                            subtitle: V2ThemeController.instance.value.label,
+                            onTap: () => _open(const ThemeScreen()),
                           ),
                           V2ListTile(
                             icon: V2Icons.shield,

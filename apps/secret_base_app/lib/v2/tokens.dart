@@ -13,8 +13,68 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'palettes.dart';
+
 /// Light palette. Use these, never raw `Color(0x...)` in 2.0 screens.
+/// Colors of the active theme (설정 > 화면 테마). Same names as the original
+/// 분홍 palette: `rose600` is the theme's primary, `roseSoft` its soft fill,
+/// `rose700` the accent text on it, `rose` the decorative point color.
 abstract final class V2Colors {
+  static V2Palette get _p => V2Palette.current;
+
+  /// Text/icons on [V2Gradients.hero] (white in most themes, dark in some).
+  static Color get onHeroStrong => _p.onHeroStrong;
+
+  /// Text/icons on [rose600] buttons and fills.
+  static Color get onPrimary => _p.onPrimary;
+  static Color get bg => _p.bg;
+  static Color get surface => _p.surface;
+  static Color get soft => _p.soft;
+  static Color get soft2 => _p.soft2;
+  static Color get line => _p.line;
+  static Color get line2 => _p.line2;
+  static Color get fieldBorder => _p.fieldBorder;
+  static Color get control => _p.control;
+  static Color get ink => _p.ink;
+  static Color get sub => _p.sub;
+  static Color get muted => _p.muted;
+  static Color get disabled => _p.disabled;
+  static Color get scrim => _p.scrim;
+  static Color get snack => _p.snack;
+  static Color get rose => _p.point;
+  static Color get rose600 => _p.primary;
+  static Color get rose700 => _p.onPrimarySoft;
+  static Color get roseSoft => _p.primarySoft;
+  static Color get sage => _p.tone(V2Tone.sage).base;
+  static Color get sageSoft => _p.tone(V2Tone.sage).soft;
+  static Color get sageText => _p.tone(V2Tone.sage).text;
+  static Color get sky => _p.tone(V2Tone.sky).base;
+  static Color get skySoft => _p.tone(V2Tone.sky).soft;
+  static Color get skyText => _p.tone(V2Tone.sky).text;
+  static Color get honey => _p.tone(V2Tone.honey).base;
+  static Color get honeySoft => _p.tone(V2Tone.honey).soft;
+  static Color get honeyText => _p.tone(V2Tone.honey).text;
+  static Color get lilac => _p.tone(V2Tone.lilac).base;
+  static Color get lilacSoft => _p.tone(V2Tone.lilac).soft;
+  static Color get lilacText => _p.tone(V2Tone.lilac).text;
+  static Color get peach => _p.tone(V2Tone.peach).base;
+  static Color get peachSoft => _p.tone(V2Tone.peach).soft;
+  static Color get peachText => _p.tone(V2Tone.peach).text;
+  static Color get ok => _p.tone(V2Tone.ok).base;
+  static Color get okSoft => _p.tone(V2Tone.ok).soft;
+  static Color get okText => _p.tone(V2Tone.ok).text;
+  static Color get warn => _p.tone(V2Tone.warn).base;
+  static Color get warnSoft => _p.tone(V2Tone.warn).soft;
+  static Color get warnText => _p.tone(V2Tone.warn).text;
+  static Color get err => _p.err;
+  static Color get errSoft => _p.errSoft;
+  static Color get errText => _p.errText;
+}
+
+/// The original 분홍 (blossom) light values as constants. Prefer [V2Colors]
+/// (follows the chosen theme); use these only where a compile-time constant
+/// is required.
+abstract final class V2BlossomColors {
   // ─── Neutral ──────────────────────────────────────────────────────
   /// Page background, a warm blush white.
   static const bg = Color(0xFFFFFBFC);
@@ -228,42 +288,22 @@ abstract final class V2Shadow {
 
 /// Gradients for heroes, illustrations and photo placeholders.
 abstract final class V2Gradients {
-  /// Home hero. White text >= 4.5:1 on every stop (4.72 / 5.40 / 4.78), so
-  /// body-size white text is fine on it.
-  static const hero = LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [Color(0xFFD03363), Color(0xFFC12E5E)],
-  );
+  /// Strong accent gradient. Put [V2Colors.onHeroStrong] text on it (AA in
+  /// every theme).
+  static LinearGradient get hero => V2Palette.current.heroStrong;
 
   /// Home hero paper: a barely-there blush to cream wash (the mockup
   /// `.hm-hero`). Use [V2Colors.ink] / rose700 text on it.
-  static const heroPaper = LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    colors: [Color(0xFFFFDDE8), Color(0xFFFFF1E8)],
-  );
+  static LinearGradient get heroPaper => V2Palette.current.heroWash;
 
-  /// Rose to plum, for 우리 이해 / result cards. White text >= 4.72:1.
-  static const berry = LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [Color(0xFFCF2F5F), Color(0xFF9C3F86)],
-  );
+  /// Same as [hero] (kept for older call sites).
+  static LinearGradient get berry => V2Palette.current.heroStrong;
 
   /// Pastel blush → peach → lilac. Use [V2Colors.ink] text on it.
-  static const heroSoft = LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [Color(0xFFFFE3EB), Color(0xFFFFEBE2), Color(0xFFF0E9FF)],
-  );
+  static LinearGradient get heroSoft => V2Palette.current.heroWash;
 
   /// Decorative only (no text): illustration blobs, avatar rings.
-  static const blossom = LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [Color(0xFFFF9FBB), Color(0xFFFF7FA3), Color(0xFFFFA084)],
-  );
+  static LinearGradient get blossom => V2Palette.current.blossom;
 
   /// Dark care/viewer backdrop. Use [V2DarkColors.ink] text.
   static const dusk = LinearGradient(
@@ -337,58 +377,9 @@ class V2ToneColors {
   /// Text color, AA on [soft].
   final Color text;
 
-  static V2ToneColors of(V2Tone tone) => switch (tone) {
-    V2Tone.neutral => const V2ToneColors(
-      V2Colors.sub,
-      V2Colors.soft,
-      V2Colors.sub,
-    ),
-    V2Tone.rose => const V2ToneColors(
-      V2Colors.rose600,
-      V2Colors.roseSoft,
-      V2Colors.rose700,
-    ),
-    V2Tone.ok => const V2ToneColors(
-      V2Colors.ok,
-      V2Colors.okSoft,
-      V2Colors.okText,
-    ),
-    V2Tone.warn => const V2ToneColors(
-      V2Colors.warn,
-      V2Colors.warnSoft,
-      V2Colors.warnText,
-    ),
-    V2Tone.err => const V2ToneColors(
-      V2Colors.err,
-      V2Colors.errSoft,
-      V2Colors.errText,
-    ),
-    V2Tone.sky => const V2ToneColors(
-      V2Colors.sky,
-      V2Colors.skySoft,
-      V2Colors.skyText,
-    ),
-    V2Tone.lilac => const V2ToneColors(
-      V2Colors.lilac,
-      V2Colors.lilacSoft,
-      V2Colors.lilacText,
-    ),
-    V2Tone.sage => const V2ToneColors(
-      V2Colors.sage,
-      V2Colors.sageSoft,
-      V2Colors.sageText,
-    ),
-    V2Tone.peach => const V2ToneColors(
-      V2Colors.peach,
-      V2Colors.peachSoft,
-      V2Colors.peachText,
-    ),
-    V2Tone.honey => const V2ToneColors(
-      V2Colors.honey,
-      V2Colors.honeySoft,
-      V2Colors.honeyText,
-    ),
-  };
+  /// Tone colors of the active theme. Inside widgets prefer
+  /// `V2Palette.of(context).tone(tone)` so dark subtrees resolve correctly.
+  static V2ToneColors of(V2Tone tone) => V2Palette.current.tone(tone);
 }
 
 /// WCAG contrast helper plus the registry of text/background pairs the
@@ -403,43 +394,73 @@ abstract final class V2Contrast {
 
   /// (label, foreground, background, minimum ratio).
   static const pairs = <(String, Color, Color, double)>[
-    ('ink/bg', V2Colors.ink, V2Colors.bg, 4.5),
-    ('ink/surface', V2Colors.ink, V2Colors.surface, 4.5),
-    ('ink/soft', V2Colors.ink, V2Colors.soft, 4.5),
-    ('ink/soft2', V2Colors.ink, V2Colors.soft2, 4.5),
-    ('sub/bg', V2Colors.sub, V2Colors.bg, 4.5),
-    ('sub/surface', V2Colors.sub, V2Colors.surface, 4.5),
-    ('sub/soft', V2Colors.sub, V2Colors.soft, 4.5),
-    ('sub/soft2', V2Colors.sub, V2Colors.soft2, 4.5),
-    ('muted/bg', V2Colors.muted, V2Colors.bg, 4.5),
-    ('muted/surface', V2Colors.muted, V2Colors.surface, 4.5),
-    ('muted/soft', V2Colors.muted, V2Colors.soft, 4.5),
-    ('rose600/surface', V2Colors.rose600, V2Colors.surface, 4.5),
-    ('rose600/bg', V2Colors.rose600, V2Colors.bg, 4.5),
-    ('rose600/soft', V2Colors.rose600, V2Colors.soft, 4.5),
-    ('white/rose600', Colors.white, V2Colors.rose600, 4.5),
-    ('rose700/roseSoft', V2Colors.rose700, V2Colors.roseSoft, 4.5),
-    ('sageText/sageSoft', V2Colors.sageText, V2Colors.sageSoft, 4.5),
-    ('skyText/skySoft', V2Colors.skyText, V2Colors.skySoft, 4.5),
-    ('honeyText/honeySoft', V2Colors.honeyText, V2Colors.honeySoft, 4.5),
-    ('lilacText/lilacSoft', V2Colors.lilacText, V2Colors.lilacSoft, 4.5),
-    ('peachText/peachSoft', V2Colors.peachText, V2Colors.peachSoft, 4.5),
-    ('okText/okSoft', V2Colors.okText, V2Colors.okSoft, 4.5),
-    ('warnText/warnSoft', V2Colors.warnText, V2Colors.warnSoft, 4.5),
-    ('errText/errSoft', V2Colors.errText, V2Colors.errSoft, 4.5),
-    ('white/err', Colors.white, V2Colors.err, 4.5),
-    ('err/surface', V2Colors.err, V2Colors.surface, 4.5),
-    ('ok/surface', V2Colors.ok, V2Colors.surface, 4.5),
-    ('warn/surface', V2Colors.warn, V2Colors.surface, 4.5),
-    ('white/snack', Colors.white, V2Colors.snack, 4.5),
-    ('roseSoft/snack', V2Colors.roseSoft, V2Colors.snack, 4.5),
-    ('white/ink', Colors.white, V2Colors.ink, 4.5),
+    ('ink/bg', V2BlossomColors.ink, V2BlossomColors.bg, 4.5),
+    ('ink/surface', V2BlossomColors.ink, V2BlossomColors.surface, 4.5),
+    ('ink/soft', V2BlossomColors.ink, V2BlossomColors.soft, 4.5),
+    ('ink/soft2', V2BlossomColors.ink, V2BlossomColors.soft2, 4.5),
+    ('sub/bg', V2BlossomColors.sub, V2BlossomColors.bg, 4.5),
+    ('sub/surface', V2BlossomColors.sub, V2BlossomColors.surface, 4.5),
+    ('sub/soft', V2BlossomColors.sub, V2BlossomColors.soft, 4.5),
+    ('sub/soft2', V2BlossomColors.sub, V2BlossomColors.soft2, 4.5),
+    ('muted/bg', V2BlossomColors.muted, V2BlossomColors.bg, 4.5),
+    ('muted/surface', V2BlossomColors.muted, V2BlossomColors.surface, 4.5),
+    ('muted/soft', V2BlossomColors.muted, V2BlossomColors.soft, 4.5),
+    ('rose600/surface', V2BlossomColors.rose600, V2BlossomColors.surface, 4.5),
+    ('rose600/bg', V2BlossomColors.rose600, V2BlossomColors.bg, 4.5),
+    ('rose600/soft', V2BlossomColors.rose600, V2BlossomColors.soft, 4.5),
+    ('white/rose600', Colors.white, V2BlossomColors.rose600, 4.5),
+    (
+      'rose700/roseSoft',
+      V2BlossomColors.rose700,
+      V2BlossomColors.roseSoft,
+      4.5,
+    ),
+    (
+      'sageText/sageSoft',
+      V2BlossomColors.sageText,
+      V2BlossomColors.sageSoft,
+      4.5,
+    ),
+    ('skyText/skySoft', V2BlossomColors.skyText, V2BlossomColors.skySoft, 4.5),
+    (
+      'honeyText/honeySoft',
+      V2BlossomColors.honeyText,
+      V2BlossomColors.honeySoft,
+      4.5,
+    ),
+    (
+      'lilacText/lilacSoft',
+      V2BlossomColors.lilacText,
+      V2BlossomColors.lilacSoft,
+      4.5,
+    ),
+    (
+      'peachText/peachSoft',
+      V2BlossomColors.peachText,
+      V2BlossomColors.peachSoft,
+      4.5,
+    ),
+    ('okText/okSoft', V2BlossomColors.okText, V2BlossomColors.okSoft, 4.5),
+    (
+      'warnText/warnSoft',
+      V2BlossomColors.warnText,
+      V2BlossomColors.warnSoft,
+      4.5,
+    ),
+    ('errText/errSoft', V2BlossomColors.errText, V2BlossomColors.errSoft, 4.5),
+    ('white/err', Colors.white, V2BlossomColors.err, 4.5),
+    ('err/surface', V2BlossomColors.err, V2BlossomColors.surface, 4.5),
+    ('ok/surface', V2BlossomColors.ok, V2BlossomColors.surface, 4.5),
+    ('warn/surface', V2BlossomColors.warn, V2BlossomColors.surface, 4.5),
+    ('white/snack', Colors.white, V2BlossomColors.snack, 4.5),
+    ('roseSoft/snack', V2BlossomColors.roseSoft, V2BlossomColors.snack, 4.5),
+    ('white/ink', Colors.white, V2BlossomColors.ink, 4.5),
     ('white/hero0', Colors.white, Color(0xFFD03363), 4.5),
     ('white/hero1', Colors.white, Color(0xFFC12E5E), 4.5),
     ('white/berry0', Colors.white, Color(0xFFCF2F5F), 4.5),
     ('white/berry1', Colors.white, Color(0xFF9C3F86), 4.5),
-    ('control/surface', V2Colors.control, V2Colors.surface, 3.0),
-    ('control/bg', V2Colors.control, V2Colors.bg, 3.0),
+    ('control/surface', V2BlossomColors.control, V2BlossomColors.surface, 3.0),
+    ('control/bg', V2BlossomColors.control, V2BlossomColors.bg, 3.0),
     ('dark ink/bg', V2DarkColors.ink, V2DarkColors.bg, 4.5),
     ('dark ink/surface', V2DarkColors.ink, V2DarkColors.surface, 4.5),
     ('dark sub/surface', V2DarkColors.sub, V2DarkColors.surface, 4.5),

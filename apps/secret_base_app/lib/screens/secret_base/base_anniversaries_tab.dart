@@ -481,7 +481,7 @@ class _AnniversaryRow extends StatelessWidget {
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: V2Space.x5),
         color: V2Colors.errSoft,
-        child: const Icon(V2Icons.delete, color: V2Colors.errText),
+        child: Icon(V2Icons.delete, color: V2Colors.errText),
       ),
       confirmDismiss: onConfirmDismiss == null
           ? null

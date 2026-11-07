@@ -249,16 +249,12 @@ class _LockedSlot extends StatelessWidget {
               Container(
                 width: 36,
                 height: 36,
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   color: V2Colors.surface,
                   shape: BoxShape.circle,
                   boxShadow: V2Shadow.level1,
                 ),
-                child: const Icon(
-                  V2Icons.lock,
-                  size: 18,
-                  color: V2Colors.rose600,
-                ),
+                child: Icon(V2Icons.lock, size: 18, color: V2Colors.rose600),
               ),
               const SizedBox(height: 6),
               Padding(
@@ -326,7 +322,7 @@ class _MomentSlot extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           V2PhotoPlaceholder(seed: m?.id ?? name),
-          const Center(
+          Center(
             child: Icon(
               Icons.play_circle_fill_rounded,
               color: V2Colors.surface,

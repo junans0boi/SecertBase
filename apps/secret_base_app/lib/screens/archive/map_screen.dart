@@ -749,7 +749,7 @@ class _MapScreenState extends State<MapScreen> {
             V2ListTile(
               title: '${mapCategoryEmojis[c]} $c',
               trailing: _category == c
-                  ? const Icon(V2Icons.ok, color: V2Colors.rose600)
+                  ? Icon(V2Icons.ok, color: V2Colors.rose600)
                   : null,
               onTap: () => Navigator.pop(ctx, c),
             ),
@@ -874,7 +874,7 @@ class _MapScreenState extends State<MapScreen> {
                     point: _temp!,
                     width: 48,
                     height: 48,
-                    child: const Icon(
+                    child: Icon(
                       Icons.location_on_rounded,
                       color: V2Colors.rose600,
                       size: 44,

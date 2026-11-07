@@ -5,35 +5,49 @@
 // for the dark variant (마음관리, photo viewing) and is harmless elsewhere.
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemUiOverlayStyle;
+
+import 'palettes.dart';
+
+export 'palettes.dart';
 
 import 'tokens.dart';
 import 'typography.dart';
 
-ThemeData? _light;
-ThemeData? _dark;
+final _cache = <V2Palette, ThemeData>{};
 
-/// The 2.0 [ThemeData]. Cached; cheap to call repeatedly.
-ThemeData buildV2Theme({bool dark = false}) =>
-    dark ? (_dark ??= _build(dark: true)) : (_light ??= _build(dark: false));
+/// The 2.0 [ThemeData] for [palette] (default: the active theme), or the
+/// 마음관리 dark variant when [dark] is true. Cached per palette.
+ThemeData buildV2Theme({bool dark = false, V2Palette? palette}) {
+  final p = dark
+      ? ((palette ?? V2Palette.current).dark
+            ? (palette ?? V2Palette.current)
+            : V2Palettes.care)
+      : (palette ?? V2Palette.current);
+  return _cache[p] ??= _build(p);
+}
 
-ThemeData _build({required bool dark}) {
-  final bg = dark ? V2DarkColors.bg : V2Colors.bg;
-  final surface = dark ? V2DarkColors.surface : V2Colors.surface;
-  final soft = dark ? V2DarkColors.soft : V2Colors.soft;
-  final soft2 = dark ? V2DarkColors.soft2 : V2Colors.soft2;
-  final line = dark ? V2DarkColors.line : V2Colors.line;
-  final line2 = dark ? V2DarkColors.line2 : V2Colors.line2;
-  final ink = dark ? V2DarkColors.ink : V2Colors.ink;
-  final sub = dark ? V2DarkColors.sub : V2Colors.sub;
-  final muted = dark ? V2DarkColors.muted : V2Colors.muted;
-  final disabled = dark ? V2DarkColors.disabled : V2Colors.disabled;
-  final primary = dark ? V2DarkColors.rose : V2Colors.rose600;
-  final onPrimary = dark ? V2DarkColors.onRose : Colors.white;
-  final primarySoft = dark ? V2DarkColors.roseSoft : V2Colors.roseSoft;
-  final onPrimarySoft = dark ? V2DarkColors.roseText : V2Colors.rose700;
-  final err = dark ? V2DarkColors.err : V2Colors.err;
-  final errSoft = dark ? V2DarkColors.errSoft : V2Colors.errSoft;
-  final control = dark ? V2DarkColors.control : V2Colors.control;
+ThemeData _build(V2Palette p) {
+  final dark = p.dark;
+  final bg = p.bg;
+  final surface = p.surface;
+  final soft = p.soft;
+  final soft2 = p.soft2;
+  final line = p.line;
+  final line2 = p.line2;
+  final ink = p.ink;
+  final sub = p.sub;
+  final muted = p.muted;
+  final disabled = p.disabled;
+  final primary = p.primary;
+  final onPrimary = p.onPrimary;
+  final primarySoft = p.primarySoft;
+  final onPrimarySoft = p.onPrimarySoft;
+  final err = p.err;
+  final errSoft = p.errSoft;
+  final control = p.control;
+  final lilac = p.tone(V2Tone.lilac);
+  final ok = p.tone(V2Tone.ok);
 
   final scheme = ColorScheme(
     brightness: dark ? Brightness.dark : Brightness.light,
@@ -41,16 +55,16 @@ ThemeData _build({required bool dark}) {
     onPrimary: onPrimary,
     primaryContainer: primarySoft,
     onPrimaryContainer: onPrimarySoft,
-    secondary: dark ? V2DarkColors.roseText : V2Colors.lilacText,
-    onSecondary: dark ? V2DarkColors.bg : Colors.white,
-    secondaryContainer: dark ? V2DarkColors.lilacSoft : V2Colors.lilacSoft,
-    onSecondaryContainer: dark ? V2DarkColors.ink : V2Colors.lilacText,
-    tertiary: dark ? V2DarkColors.ok : V2Colors.sageText,
-    onTertiary: dark ? V2DarkColors.bg : Colors.white,
+    secondary: lilac.text,
+    onSecondary: dark ? bg : Colors.white,
+    secondaryContainer: lilac.soft,
+    onSecondaryContainer: lilac.text,
+    tertiary: ok.text,
+    onTertiary: dark ? bg : Colors.white,
     error: err,
-    onError: dark ? V2DarkColors.bg : Colors.white,
+    onError: dark ? bg : Colors.white,
     errorContainer: errSoft,
-    onErrorContainer: dark ? V2DarkColors.ink : V2Colors.errText,
+    onErrorContainer: p.errText,
     surface: surface,
     onSurface: ink,
     onSurfaceVariant: sub,
@@ -62,10 +76,10 @@ ThemeData _build({required bool dark}) {
     outline: control,
     outlineVariant: line,
     shadow: const Color(0xFF3C1428),
-    scrim: V2Colors.scrim,
-    inverseSurface: dark ? V2DarkColors.ink : V2Colors.snack,
-    onInverseSurface: dark ? V2DarkColors.bg : Colors.white,
-    inversePrimary: dark ? V2Colors.rose600 : V2Colors.roseSoft,
+    scrim: p.scrim,
+    inverseSurface: p.snack,
+    onInverseSurface: Colors.white,
+    inversePrimary: p.snackAction,
     surfaceTint: Colors.transparent,
   );
 
@@ -104,6 +118,7 @@ ThemeData _build({required bool dark}) {
 
   return ThemeData(
     useMaterial3: true,
+    extensions: [p],
     brightness: scheme.brightness,
     colorScheme: scheme,
     scaffoldBackgroundColor: bg,
@@ -133,6 +148,9 @@ ThemeData _build({required bool dark}) {
       toolbarHeight: 52,
       titleTextStyle: V2Text.title.copyWith(color: ink),
       iconTheme: IconThemeData(color: ink, size: 24),
+      systemOverlayStyle: dark
+          ? SystemUiOverlayStyle.light
+          : SystemUiOverlayStyle.dark,
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: base(bgc: primary, fg: onPrimary),
@@ -177,8 +195,8 @@ ThemeData _build({required bool dark}) {
       floatingLabelStyle: V2Text.cap.copyWith(color: primary),
       helperStyle: V2Text.cap.copyWith(color: sub),
       errorStyle: V2Text.cap.copyWith(color: err),
-      border: border(dark ? line2 : V2Colors.fieldBorder),
-      enabledBorder: border(dark ? line2 : V2Colors.fieldBorder),
+      border: border(p.fieldBorder),
+      enabledBorder: border(p.fieldBorder),
       focusedBorder: border(primary, 2),
       errorBorder: border(err),
       focusedErrorBorder: border(err, 2),
@@ -241,7 +259,7 @@ ThemeData _build({required bool dark}) {
       backgroundColor: surface,
       surfaceTintColor: Colors.transparent,
       modalBackgroundColor: surface,
-      modalBarrierColor: V2Colors.scrim,
+      modalBarrierColor: p.scrim,
       elevation: 0,
       shape: const RoundedRectangleBorder(borderRadius: V2Radius.sheetTop),
       showDragHandle: false,
@@ -252,7 +270,7 @@ ThemeData _build({required bool dark}) {
       backgroundColor: surface,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
-      barrierColor: V2Colors.scrim,
+      barrierColor: p.scrim,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.all(Radius.circular(24)),
       ),
@@ -261,22 +279,19 @@ ThemeData _build({required bool dark}) {
       insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
     ),
     snackBarTheme: SnackBarThemeData(
-      backgroundColor: dark ? V2DarkColors.soft2 : V2Colors.snack,
+      backgroundColor: p.snack,
       contentTextStyle: V2Text.buttonSm.copyWith(
         color: Colors.white,
         fontWeight: FontWeight.w600,
       ),
-      actionTextColor: dark ? V2DarkColors.roseText : V2Colors.roseSoft,
+      actionTextColor: p.snackAction,
       behavior: SnackBarBehavior.floating,
       elevation: 0,
       insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       shape: const RoundedRectangleBorder(borderRadius: V2Radius.buttonAll),
     ),
     tooltipTheme: TooltipThemeData(
-      decoration: BoxDecoration(
-        color: dark ? V2DarkColors.soft2 : V2Colors.snack,
-        borderRadius: V2Radius.ctlAll,
-      ),
+      decoration: BoxDecoration(color: p.snack, borderRadius: V2Radius.ctlAll),
       textStyle: V2Text.cap.copyWith(color: Colors.white),
       waitDuration: const Duration(milliseconds: 400),
     ),
@@ -316,7 +331,9 @@ ThemeData _build({required bool dark}) {
   );
 }
 
-/// Opt-in wrapper that gives a subtree the 2.0 theme and default text style.
+/// Gives a subtree the 2.0 default text style. With [dark] it switches the
+/// subtree to the dark palette (마음관리, photo viewing); otherwise it keeps
+/// the app's active color theme.
 ///
 /// ```dart
 /// return V2Theme(child: Scaffold(appBar: V2Header(title: '더보기'), ...));
@@ -331,7 +348,14 @@ class V2Theme extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = buildV2Theme(dark: dark);
+    if (!dark) {
+      final theme = Theme.of(context);
+      return DefaultTextStyle.merge(
+        style: theme.textTheme.bodyMedium,
+        child: child,
+      );
+    }
+    final theme = buildV2Theme(dark: true);
     return Theme(
       data: theme,
       child: DefaultTextStyle.merge(
@@ -340,100 +364,4 @@ class V2Theme extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Light/dark-resolved neutral + brand colors. 2.0 widgets read colors
-/// through this so they work inside `V2Theme(dark: true)`.
-///
-/// ```dart
-/// final p = V2Palette.of(context);
-/// Text('메모', style: V2Text.cap.copyWith(color: p.sub));
-/// ```
-class V2Palette {
-  const V2Palette._({
-    required this.dark,
-    required this.bg,
-    required this.surface,
-    required this.soft,
-    required this.soft2,
-    required this.line,
-    required this.line2,
-    required this.control,
-    required this.ink,
-    required this.sub,
-    required this.muted,
-    required this.disabled,
-    required this.primary,
-    required this.onPrimary,
-    required this.primarySoft,
-    required this.onPrimarySoft,
-    required this.err,
-    required this.errSoft,
-  });
-
-  final bool dark;
-  final Color bg;
-  final Color surface;
-  final Color soft;
-  final Color soft2;
-  final Color line;
-  final Color line2;
-  final Color control;
-  final Color ink;
-  final Color sub;
-  final Color muted;
-  final Color disabled;
-
-  /// Buttons / rose text (rose600 in light, rose in dark).
-  final Color primary;
-  final Color onPrimary;
-  final Color primarySoft;
-  final Color onPrimarySoft;
-  final Color err;
-  final Color errSoft;
-
-  static const light = V2Palette._(
-    dark: false,
-    bg: V2Colors.bg,
-    surface: V2Colors.surface,
-    soft: V2Colors.soft,
-    soft2: V2Colors.soft2,
-    line: V2Colors.line,
-    line2: V2Colors.line2,
-    control: V2Colors.control,
-    ink: V2Colors.ink,
-    sub: V2Colors.sub,
-    muted: V2Colors.muted,
-    disabled: V2Colors.disabled,
-    primary: V2Colors.rose600,
-    onPrimary: Colors.white,
-    primarySoft: V2Colors.roseSoft,
-    onPrimarySoft: V2Colors.rose700,
-    err: V2Colors.err,
-    errSoft: V2Colors.errSoft,
-  );
-
-  static const darkSet = V2Palette._(
-    dark: true,
-    bg: V2DarkColors.bg,
-    surface: V2DarkColors.surface,
-    soft: V2DarkColors.soft,
-    soft2: V2DarkColors.soft2,
-    line: V2DarkColors.line,
-    line2: V2DarkColors.line2,
-    control: V2DarkColors.control,
-    ink: V2DarkColors.ink,
-    sub: V2DarkColors.sub,
-    muted: V2DarkColors.muted,
-    disabled: V2DarkColors.disabled,
-    primary: V2DarkColors.rose,
-    onPrimary: V2DarkColors.onRose,
-    primarySoft: V2DarkColors.roseSoft,
-    onPrimarySoft: V2DarkColors.roseText,
-    err: V2DarkColors.err,
-    errSoft: V2DarkColors.errSoft,
-  );
-
-  static V2Palette of(BuildContext context) =>
-      Theme.of(context).brightness == Brightness.dark ? darkSet : light;
 }

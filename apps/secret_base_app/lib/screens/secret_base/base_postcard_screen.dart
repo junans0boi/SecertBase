@@ -365,7 +365,7 @@ class _PostcardCard extends StatelessWidget {
         children: [
           Container(
             padding: const EdgeInsets.all(V2Space.x5),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: V2Gradients.heroSoft,
               borderRadius: BorderRadius.vertical(
                 top: Radius.circular(V2Radius.card),

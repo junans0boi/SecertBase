@@ -213,7 +213,7 @@ class _RevealIntro extends StatelessWidget {
     final p = V2Palette.of(context);
     return Scaffold(
       body: DecoratedBox(
-        decoration: const BoxDecoration(gradient: V2Gradients.heroSoft),
+        decoration: BoxDecoration(gradient: V2Gradients.heroSoft),
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(V2Space.x6),
@@ -487,7 +487,7 @@ class _TodayVideoPlayerState extends State<_TodayVideoPlayer> {
               child: VideoPlayer(_controller),
             ),
             if (!playing)
-              const Icon(
+              Icon(
                 Icons.play_circle_fill_rounded,
                 color: V2Colors.surface,
                 size: 52,
