@@ -1,21 +1,19 @@
 // 해적 룰렛 2.0 게임 모듈(04-foundation-api.md). 규칙은 ../pirate-engine.js.
 //
 // 판은 로비 시작과 함께 서버가 만든다(구멍 수 = 로비 옵션 holes). 상태 키는
-// `pirate:<room>:game`이고 폭발 뒤에도 지우지 않는다(벌칙 단계·복원·재대결이 쓴다).
+// `pirate:<room>:game`이고 폭발 뒤에도 지우지 않는다(복원·재대결이 쓴다).
 // 모든 변화 뒤에 방 전체로 `game:pirate:state`(공개 상태)를 보내고, 연출용으로
-// `slot_picked`·`exploded`·`penalty`·`penalty_done`도 보낸다. 계약: docs/socket-events/pirate.md.
+// `slot_picked`·`exploded`도 보낸다. 계약: docs/socket-events/pirate.md.
 import { normalizeLobbyOptions } from "../lobby-options.js";
 import {
   applyForfeit,
   applyStab,
   applyTimeout,
-  completePenalty,
   createPirateGame,
   nextFirstTurn,
   publicPirateState,
   remainingOf,
   riskPct,
-  setPenalty,
 } from "../pirate-engine.js";
 
 const GAME_TYPE = "pirate";
@@ -106,55 +104,12 @@ const pirate = {
       });
     });
 
-    // 이긴 사람이 벌칙을 정한다(한 번, 1~30자).
-    socket.on("game:pirate:penalty", async (payload, ackRaw) => {
-      const ack = kit.normalizeAck(ackRaw);
-      const who = joined(ack);
-      if (!who) return;
-      await kit.withRoomLock(who.roomCode, async () => {
-        const state = await readState(kit, who.roomCode);
-        if (!state) {
-          ack({ ok: false, reason: "no_game" });
-          return;
-        }
-        const result = setPenalty(state, who.userId, payload?.text, { now: Date.now() });
-        if (!result.ok) {
-          ack({ ok: false, reason: result.reason });
-          return;
-        }
-        await writeState(kit, who.roomCode, result.state);
-        kit.io.to(who.roomCode).emit("game:pirate:penalty", {
-          gameId: state.gameId,
-          by: who.userId,
-          text: result.state.penalty.text,
-        });
-        await this.broadcast(kit, who.roomCode, result.state);
-        ack({ ok: true, text: result.state.penalty.text });
+    // 벌칙 제도는 없어졌다. 예전 앱이 보내면 거절만 하고 끝낸다.
+    for (const event of ["game:pirate:penalty", "game:pirate:penalty_done"]) {
+      socket.on(event, (_payload, ackRaw) => {
+        kit.normalizeAck(ackRaw)({ ok: false, reason: "penalty_removed" });
       });
-    });
-
-    // 진 사람이 "했어요!"를 누른다(한 번).
-    socket.on("game:pirate:penalty_done", async (_payload, ackRaw) => {
-      const ack = kit.normalizeAck(ackRaw);
-      const who = joined(ack);
-      if (!who) return;
-      await kit.withRoomLock(who.roomCode, async () => {
-        const state = await readState(kit, who.roomCode);
-        if (!state) {
-          ack({ ok: false, reason: "no_game" });
-          return;
-        }
-        const result = completePenalty(state, who.userId, { now: Date.now() });
-        if (!result.ok) {
-          ack({ ok: false, reason: result.reason });
-          return;
-        }
-        await writeState(kit, who.roomCode, result.state);
-        kit.io.to(who.roomCode).emit("game:pirate:penalty_done", { gameId: state.gameId, by: who.userId });
-        await this.broadcast(kit, who.roomCode, result.state);
-        ack({ ok: true });
-      });
-    });
+    }
   },
 
   async startFromLobby(roomCode, kit, ctx) {

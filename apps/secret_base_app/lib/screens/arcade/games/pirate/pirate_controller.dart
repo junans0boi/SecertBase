@@ -3,38 +3,6 @@ import 'package:flutter/foundation.dart';
 import '../../../../widgets/play_kit/play_kit.dart';
 import '../game_controller.dart';
 
-/// 벌칙 프리셋(01-grilling Q34). 서버 `PIRATE_PENALTY_PRESETS`와 같다.
-const kPiratePenaltyPresets = [
-  '어깨 주물러 주기',
-  '칭찬 3가지',
-  '노래 한 소절',
-  '오늘 설거지',
-  '딱밤 한 대',
-  '사진 한 장 찍어 주기',
-  '소원 하나 들어주기',
-  '애교 한 번',
-  '아이스크림 사기',
-  '10분 안마',
-];
-
-const kPiratePenaltyMax = 30;
-
-/// 서버와 같은 규칙으로 벌칙 문구를 정리한다(줄바꿈·연속 공백 → 공백 하나, 앞뒤 공백 제거).
-String normalizePiratePenalty(String raw) => raw
-    .replaceAll(RegExp(r'[\u0000-\u001F\u007F]'), ' ')
-    .replaceAll(RegExp(r'\s+'), ' ')
-    .trim();
-
-/// 벌칙 문구 검증. 괜찮으면 null, 아니면 안내 문구.
-String? validatePiratePenalty(String raw) {
-  final text = normalizePiratePenalty(raw);
-  if (text.isEmpty) return '벌칙을 적어 주세요';
-  if (text.runes.length > kPiratePenaltyMax) {
-    return '$kPiratePenaltyMax자까지 적을 수 있어요';
-  }
-  return null;
-}
-
 /// 받침에 맞춘 조사 "이/가". 한글이 아니면 "이(가)".
 String josaIGa(String name) {
   if (name.isEmpty) return '이(가)';
@@ -62,19 +30,6 @@ class PirateStab {
   const PirateStab({required this.slot, required this.by, this.auto = false});
 }
 
-@immutable
-class PiratePenalty {
-  final String text;
-  final String by;
-  final bool done;
-
-  const PiratePenalty({
-    required this.text,
-    required this.by,
-    required this.done,
-  });
-}
-
 /// 서버 `game:pirate:state`를 옮긴 것. 두 사람이 같은 상태를 본다.
 @immutable
 class PirateState {
@@ -94,7 +49,6 @@ class PirateState {
   final String? winner;
   final String? loser;
   final String? reason;
-  final PiratePenalty? penalty;
   final int seq;
   final Map<String, dynamic>? series;
 
@@ -115,7 +69,6 @@ class PirateState {
     required this.winner,
     required this.loser,
     required this.reason,
-    required this.penalty,
     required this.seq,
     required this.series,
   });
@@ -156,7 +109,6 @@ class PirateState {
         receivedAt: receivedAt,
       );
     }
-    final p = m['penalty'];
     return PirateState(
       gameId: '${m['gameId'] ?? ''}',
       round: _int(m['round'], 1),
@@ -177,13 +129,6 @@ class PirateState {
       winner: m['winner'] as String?,
       loser: m['loser'] as String?,
       reason: m['reason'] as String?,
-      penalty: p is Map
-          ? PiratePenalty(
-              text: '${p['text'] ?? ''}',
-              by: '${p['by'] ?? ''}',
-              done: p['doneAt'] != null,
-            )
-          : null,
       seq: _int(m['seq'], 0),
       series: m['series'] is Map
           ? Map<String, dynamic>.from(m['series'] as Map)
@@ -210,12 +155,7 @@ class PirateController extends GameController {
   /// 이 기기에서 실시간으로 본 폭발 횟수(복원으로 들어온 폭발은 세지 않는다).
   int explosionSerial = 0;
 
-  /// 벌칙이 정해짐/완료됨(실시간 변화만).
-  int penaltySetSerial = 0;
-  int penaltyDoneSerial = 0;
-
   bool sendingPick = false;
-  bool sendingPenalty = false;
 
   bool get isMyTurn =>
       state != null && state!.playing && state!.currentTurn == me;
@@ -264,32 +204,6 @@ class PirateController extends GameController {
     });
   }
 
-  /// 이긴 사람이 벌칙을 정한다. 검증에 걸리면 안내 문구를 돌려주고 보내지 않는다.
-  String? sendPenalty(String raw) {
-    final error = validatePiratePenalty(raw);
-    if (error != null) return error;
-    final s = state;
-    if (s == null || !s.exploded || s.winner != me || s.penalty != null) {
-      return '지금은 벌칙을 정할 수 없어요';
-    }
-    if (sendingPenalty) return null;
-    sendingPenalty = true;
-    notifyListeners();
-    emit('game:pirate:penalty', {'text': normalizePiratePenalty(raw)}, (_) {
-      sendingPenalty = false;
-      notifyListeners();
-    });
-    return null;
-  }
-
-  void penaltyDone() {
-    final s = state;
-    if (s == null || s.loser != me || s.penalty == null || s.penalty!.done) {
-      return;
-    }
-    emit('game:pirate:penalty_done', {});
-  }
-
   void requestRestart() => socket.requestRestart('pirate');
 
   /// 새 상태를 받아 연출용 변화를 계산한다.
@@ -300,7 +214,6 @@ class PirateController extends GameController {
     if (!sameGame) {
       lastStab = null;
       sendingPick = false;
-      sendingPenalty = false;
       // 재대결로 새 판이 왔으면 내 요청 대기 표시를 내린다.
       if (prev != null) socket.restartWaiting = false;
     } else {
@@ -310,10 +223,6 @@ class PirateController extends GameController {
         stabSerial++;
       }
       if (prev.playing && next.exploded) explosionSerial++;
-      if (prev.penalty == null && next.penalty != null) penaltySetSerial++;
-      if (prev.penalty?.done != true && next.penalty?.done == true) {
-        penaltyDoneSerial++;
-      }
     }
     state = next;
     syncing = false;
@@ -326,6 +235,5 @@ class PirateController extends GameController {
     lastStab = null;
     syncing = false;
     sendingPick = false;
-    sendingPenalty = false;
   }
 }
