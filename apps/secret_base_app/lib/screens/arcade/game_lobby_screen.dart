@@ -23,6 +23,7 @@ import 'games/zero/zero_lobby.dart';
 import 'games/zero/zero_screen.dart' show kZeroHowToLines;
 import 'lobby_kit.dart';
 import 'lobby_options.dart';
+import '../../v2/v2.dart';
 
 const _kStakeOptions = [0, 500, 1000, 3000];
 const _kGostopStakeOptions = [0, 100, 500, 1000];
@@ -493,7 +494,7 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
     }
 
     return Scaffold(
-      backgroundColor: kMainBg,
+      backgroundColor: V2Colors.bg,
       body: SafeArea(
         child: CozyPage(
           child: Padding(
@@ -591,9 +592,9 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
                                         )
                                       : null,
                                   style: FilledButton.styleFrom(
-                                    backgroundColor: kMainInk,
-                                    disabledBackgroundColor: kMainLine,
-                                    foregroundColor: kMainPaper,
+                                    backgroundColor: V2Colors.ink,
+                                    disabledBackgroundColor: V2Colors.line,
+                                    foregroundColor: V2Colors.surface,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(16),
                                     ),
@@ -603,7 +604,9 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
                                     startLabel,
                                     style: mainBody(
                                       size: 15,
-                                      color: canStart ? kMainPaper : kMainMuted,
+                                      color: canStart
+                                          ? V2Colors.surface
+                                          : V2Colors.muted,
                                       weight: FontWeight.w800,
                                       height: 1,
                                     ),
@@ -629,7 +632,7 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
                               Text(
                                 '방장이 게임을 시작할 때까지 기다려주세요',
                                 textAlign: TextAlign.center,
-                                style: mainBody(size: 14, color: kMainSub),
+                                style: mainBody(size: 14, color: V2Colors.sub),
                               ),
                           ],
                         ),
@@ -639,7 +642,7 @@ class _GameLobbyScreenState extends State<GameLobbyScreen> {
                 ),
                 Text(
                   '먼저 들어온 사람이 방장이 됩니다',
-                  style: mainBody(size: 12, color: kMainMuted),
+                  style: mainBody(size: 12, color: V2Colors.muted),
                 ),
               ],
             ),
@@ -673,7 +676,7 @@ class _ReadyButton extends StatelessWidget {
               ? '$stake코인 판돈에 동의했어요. 방장이 시작하면 바로 시작돼요.'
               : '이 판에는 $stake코인이 걸려 있어요. 동의하면 준비 완료를 눌러 주세요.',
           textAlign: TextAlign.center,
-          style: mainBody(size: 13, color: kMainSub),
+          style: mainBody(size: 13, color: V2Colors.sub),
         ),
         const SizedBox(height: 10),
         SizedBox(
@@ -682,7 +685,7 @@ class _ReadyButton extends StatelessWidget {
           child: OutlinedButton(
             onPressed: () => onChanged(!ready),
             style: OutlinedButton.styleFrom(
-              foregroundColor: ready ? kMainPaper : color,
+              foregroundColor: ready ? V2Colors.surface : color,
               backgroundColor: ready ? color : Colors.transparent,
               side: BorderSide(color: color, width: 1.5),
               shape: RoundedRectangleBorder(
@@ -693,7 +696,7 @@ class _ReadyButton extends StatelessWidget {
               ready ? '준비 완료 취소' : '준비 완료',
               style: mainBody(
                 size: 15,
-                color: ready ? kMainPaper : color,
+                color: ready ? V2Colors.surface : color,
                 weight: FontWeight.w800,
                 height: 1,
               ),
@@ -730,11 +733,7 @@ class _Header extends StatelessWidget {
         children: [
           IconButton(
             onPressed: onBack,
-            icon: const Icon(
-              Icons.arrow_back_ios_new,
-              size: 18,
-              color: kMainInk,
-            ),
+            icon: Icon(Icons.arrow_back_ios_new, size: 18, color: V2Colors.ink),
           ),
           DoodleBadge(
             color: color,
@@ -801,10 +800,12 @@ class _PlayerSlot extends StatelessWidget {
                 width: 82,
                 height: 82,
                 decoration: BoxDecoration(
-                  color: player == null ? kMainPaperSoft : color.withAlpha(32),
+                  color: player == null ? V2Colors.soft : color.withAlpha(32),
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: player == null ? kMainLine : color.withAlpha(150),
+                    color: player == null
+                        ? V2Colors.line
+                        : color.withAlpha(150),
                     width: player == null ? 1 : 1.5,
                   ),
                 ),
@@ -818,7 +819,7 @@ class _PlayerSlot extends StatelessWidget {
                           emoji,
                           style: TextStyle(
                             fontSize: player == null ? 24 : 38,
-                            color: kMainMuted,
+                            color: V2Colors.muted,
                           ),
                         ),
                 ),
@@ -828,13 +829,13 @@ class _PlayerSlot extends StatelessWidget {
                   top: -4,
                   child: Container(
                     padding: const EdgeInsets.all(5),
-                    decoration: const BoxDecoration(
-                      color: kMainHoneySoft,
+                    decoration: BoxDecoration(
+                      color: V2Colors.honeySoft,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.workspace_premium,
-                      color: kMainHoney,
+                      color: V2Colors.honeyText,
                       size: 18,
                     ),
                   ),
@@ -848,7 +849,7 @@ class _PlayerSlot extends StatelessWidget {
           textAlign: TextAlign.center,
           style: mainBody(
             size: 14,
-            color: player == null ? kMainMuted : kMainInk,
+            color: player == null ? V2Colors.muted : V2Colors.ink,
             weight: player == null ? FontWeight.w500 : FontWeight.w800,
             height: 1.1,
           ),
@@ -888,7 +889,7 @@ class _StakeSelector extends StatelessWidget {
               '판돈',
               style: mainBody(
                 size: 13,
-                color: kMainInk,
+                color: V2Colors.ink,
                 weight: FontWeight.w900,
                 height: 1,
               ),
@@ -896,7 +897,7 @@ class _StakeSelector extends StatelessWidget {
             const SizedBox(width: 8),
             Text(
               isHost ? '방장이 선택' : '방장이 선택한 금액',
-              style: mainBody(size: 11, color: kMainMuted, height: 1),
+              style: mainBody(size: 11, color: V2Colors.muted, height: 1),
             ),
           ],
         ),
@@ -918,10 +919,10 @@ class _StakeSelector extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: selected
                           ? color.withValues(alpha: 0.12)
-                          : kMainPaperSoft,
+                          : V2Colors.soft,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: selected ? color : kMainLine,
+                        color: selected ? color : V2Colors.line,
                         width: selected ? 1.8 : 1,
                       ),
                     ),
@@ -933,7 +934,7 @@ class _StakeSelector extends StatelessWidget {
                         fontWeight: selected
                             ? FontWeight.w800
                             : FontWeight.w500,
-                        color: selected ? color : kMainSub,
+                        color: selected ? color : V2Colors.sub,
                       ),
                     ),
                   ),
@@ -978,7 +979,7 @@ class LobbyOptionPicker extends StatelessWidget {
               def.title,
               style: mainBody(
                 size: 13,
-                color: kMainInk,
+                color: V2Colors.ink,
                 weight: FontWeight.w900,
                 height: 1,
               ),
@@ -986,7 +987,7 @@ class LobbyOptionPicker extends StatelessWidget {
             const SizedBox(width: 8),
             Text(
               isHost ? '방장이 선택' : '방장이 고른 설정',
-              style: mainBody(size: 11, color: kMainMuted, height: 1),
+              style: mainBody(size: 11, color: V2Colors.muted, height: 1),
             ),
           ],
         ),
@@ -1048,10 +1049,10 @@ class _LobbyChoiceTile extends StatelessWidget {
             constraints: const BoxConstraints(minHeight: 64),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
             decoration: BoxDecoration(
-              color: selected ? color.withValues(alpha: 0.12) : kMainPaperSoft,
+              color: selected ? color.withValues(alpha: 0.12) : V2Colors.soft,
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: selected ? color : kMainLine,
+                color: selected ? color : V2Colors.line,
                 width: selected ? 1.8 : 1,
               ),
             ),
@@ -1063,7 +1064,7 @@ class _LobbyChoiceTile extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: mainBody(
                     size: 14,
-                    color: selected ? color : kMainInk,
+                    color: selected ? color : V2Colors.ink,
                     weight: FontWeight.w900,
                     height: 1.1,
                   ),
@@ -1074,7 +1075,11 @@ class _LobbyChoiceTile extends StatelessWidget {
                   textAlign: TextAlign.center,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: mainBody(size: 10.5, color: kMainSub, height: 1.25),
+                  style: mainBody(
+                    size: 10.5,
+                    color: V2Colors.sub,
+                    height: 1.25,
+                  ),
                 ),
               ],
             ),
