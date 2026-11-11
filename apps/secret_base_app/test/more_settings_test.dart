@@ -56,7 +56,7 @@ void main() {
   setUpAll(setUpMoreServer);
 
   group('더보기 허브', () {
-    testWidgets('connected: four zones, no tab shortcuts or debug info', (
+    testWidgets('connected: couple card, 4 shortcuts, grouped list', (
       tester,
     ) async {
       _mockPackage();
@@ -66,22 +66,23 @@ void main() {
       expect(find.text('민지 · 서윤'), findsOneWidget);
       expect(find.text('D+412'), findsOneWidget);
       for (final label in [
-        '우리 이야기',
+        '운세',
+        '우리 이해',
         '기념일',
         '비밀기지',
-        '우리 이해',
+        '코인',
         '상점',
         '앱 설정',
         '알림',
+        '화면 테마',
         '개인정보·권한',
-        '도움말·정보',
+        '도움말',
         '고객센터·FAQ',
         '앱 정보·약관',
         '계정',
       ]) {
         expect(find.text(label), findsOneWidget, reason: label);
       }
-      expect(find.text('500일까지 88일'), findsOneWidget);
       expect(find.text('52,300'), findsOneWidget);
       expect(find.text('2.0.0'), findsOneWidget);
       expect(find.text('개인 보관함'), findsNothing);
@@ -98,7 +99,9 @@ void main() {
       expect(find.text('아직 연결 전이에요'), findsOneWidget);
       expect(find.text('파트너 연결하기'), findsOneWidget);
       expect(find.text('개인 보관함'), findsOneWidget);
-      expect(find.text('연결하면 열려요'), findsNWidgets(2));
+      await tester.tap(find.text('기념일'));
+      await tester.pump();
+      expect(find.text('파트너와 연결하면 열려요'), findsOneWidget);
       // 연결 전에도 계정·고객센터·약관은 열려요.
       expect(find.text('계정'), findsOneWidget);
       expect(find.text('고객센터·FAQ'), findsOneWidget);
