@@ -24,9 +24,6 @@ const mapEmotionTags = [
 
 final koreaCenter = LatLng(36.35, 127.85);
 
-const mapTileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-const mapFallbackTileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-
 String pinStatus(Map<String, dynamic> pin) {
   final status = pin['status'];
   if (status == 'wishlist' || status == 'visited') return '$status';

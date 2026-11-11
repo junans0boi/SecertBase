@@ -4,14 +4,58 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:secret_base_app/screens/archive/map/secret_map.dart';
 import 'package:secret_base_app/screens/archive/map_screen.dart';
 
 void main() {
-  test('map tiles use a keyless primary and fallback provider', () {
-    expect(mapTileUrl, contains('openstreetmap.org'));
-    expect(mapFallbackTileUrl, contains('openstreetmap.org'));
-    expect(mapTileUrl.toLowerCase(), isNot(contains('api_key')));
-    expect(mapTileUrl.toLowerCase(), isNot(contains('apikey')));
+  setUpAll(() => SecretMap.debugFake = true);
+
+  test('base map is the keyless OpenFreeMap style with Korean labels', () {
+    expect(SecretMap.styleUrl, startsWith('https://tiles.openfreemap.org/'));
+    expect(SecretMap.styleUrl.toLowerCase(), isNot(contains('key')));
+    final style = SecretMap.koreanizeStyle({
+      'layers': [
+        {
+          'id': 'place',
+          'layout': {
+            'text-field': [
+              'case',
+              ['has', 'name:nonlatin'],
+              [
+                'concat',
+                ['get', 'name:latin'],
+                '\n',
+                ['get', 'name:nonlatin'],
+              ],
+              [
+                'coalesce',
+                ['get', 'name_en'],
+                ['get', 'name'],
+              ],
+            ],
+          },
+        },
+        {
+          'id': 'road-shield',
+          'layout': {
+            'text-field': [
+              'to-string',
+              ['get', 'ref'],
+            ],
+          },
+        },
+      ],
+    });
+    final layers = style['layers'] as List;
+    expect(layers[0]['layout']['text-field'], [
+      'coalesce',
+      ['get', 'name:ko'],
+      ['get', 'name'],
+    ]);
+    expect(layers[1]['layout']['text-field'], [
+      'to-string',
+      ['get', 'ref'],
+    ]);
   });
 
   test('normalizePlaceResultForMap accepts Kakao string coordinates', () {
@@ -157,7 +201,7 @@ void main() {
         expect(find.text('가고 싶은 곳 1'), findsOneWidget);
         expect(find.text('Date Afterglow'), findsNothing);
         expect(find.byKey(const Key('map-pin-1')), findsOneWidget);
-        expect(find.textContaining('OpenStreetMap'), findsWidgets);
+        expect(find.textContaining('OpenFreeMap'), findsWidgets);
       });
     });
 

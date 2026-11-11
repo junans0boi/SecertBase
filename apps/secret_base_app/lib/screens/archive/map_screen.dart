@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
@@ -15,6 +14,7 @@ import '../../v2/v2.dart';
 import 'map/map_api.dart';
 import 'map/map_logic.dart';
 import 'map/map_sheets.dart';
+import 'map/secret_map.dart';
 import 'moment/couple_names.dart';
 import 'moment/moment_format.dart' show josa;
 import 'moment_loop_screen.dart';
@@ -22,8 +22,6 @@ import 'moment_loop_screen.dart';
 export 'map/map_logic.dart'
     show
         linkedSetlogPostsForMap,
-        mapFallbackTileUrl,
-        mapTileUrl,
         normalizePlaceResultForMap,
         placeDoubleForMap,
         placeIntForMap;
@@ -55,8 +53,7 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen> {
   final _auth = AuthService();
-  final _mapController = MapController();
-  final _stripController = MapController();
+  SecretMapController? _mapController;
   late bool _fullMap = !widget.collectionFirst;
   String _shelf = 'visited';
   final _searchCtrl = TextEditingController();
@@ -74,7 +71,6 @@ class _MapScreenState extends State<MapScreen> {
   bool _showResults = false;
   bool _locating = false;
   String? _locationNotice;
-  bool _tileError = false;
   String _status = 'all';
   String? _category;
   LatLng? _user;
@@ -132,7 +128,6 @@ class _MapScreenState extends State<MapScreen> {
       setState(() {
         _loading = true;
         _error = null;
-        _tileError = false;
       });
     }
     try {
@@ -168,19 +163,12 @@ class _MapScreenState extends State<MapScreen> {
 
   LatLng _searchOrigin() {
     if (_user != null) return _user!;
-    try {
-      return _mapController.camera.center;
-    } catch (_) {
-      return koreaCenter;
-    }
+    return _mapController?.center ?? koreaCenter;
   }
 
   void _moveTo(LatLng point, {double zoom = 15}) {
-    try {
-      _mapController.move(point, zoom);
-    } catch (_) {
-      // The map may still be mounting.
-    }
+    // The map may still be mounting; then there is nothing to move.
+    _mapController?.move(point, zoom: zoom);
   }
 
   LatLng? _pinPoint(Map<String, dynamic> pin) {
@@ -864,46 +852,27 @@ class _MapScreenState extends State<MapScreen> {
                   child: Stack(
                     children: [
                       AbsorbPointer(
-                        child: FlutterMap(
-                          mapController: _stripController,
-                          options: MapOptions(
-                            initialCenter: points.isNotEmpty
-                                ? points.first
-                                : (_user ?? koreaCenter),
-                            initialZoom: points.isNotEmpty ? 13 : 6.5,
-                            initialCameraFit: points.length >= 2
-                                ? CameraFit.coordinates(
-                                    coordinates: points,
-                                    padding: const EdgeInsets.all(36),
-                                    maxZoom: 14,
-                                  )
-                                : null,
-                            interactionOptions: const InteractionOptions(
-                              flags: InteractiveFlag.none,
-                            ),
-                          ),
-                          children: [
-                            TileLayer(
-                              urlTemplate: mapTileUrl,
-                              fallbackUrl: mapFallbackTileUrl,
-                              subdomains: const ['a', 'b', 'c'],
-                              userAgentPackageName: 'com.secretbase.app',
-                            ),
-                            MarkerLayer(
-                              markers: [
-                                for (final pin in _pins)
-                                  if (_pinPoint(pin) != null)
-                                    Marker(
-                                      point: _pinPoint(pin)!,
-                                      width: 34,
-                                      height: 34,
-                                      child: _MiniPin(
-                                        visited: pinStatus(pin) == 'visited',
-                                        imageUrl: _pinImage(pin),
-                                      ),
-                                    ),
-                              ],
-                            ),
+                        child: SecretMap(
+                          center: points.isNotEmpty
+                              ? points.first
+                              : (_user ?? koreaCenter),
+                          zoom: points.isNotEmpty ? 13 : 6.5,
+                          fit: points,
+                          fitPadding: const EdgeInsets.all(36),
+                          fitMaxZoom: 14,
+                          interactive: false,
+                          showAttribution: false,
+                          markers: [
+                            for (final pin in _pins)
+                              if (_pinPoint(pin) != null)
+                                SecretMapMarker(
+                                  point: _pinPoint(pin)!,
+                                  size: const Size(34, 34),
+                                  child: _MiniPin(
+                                    visited: pinStatus(pin) == 'visited',
+                                    imageUrl: _pinImage(pin),
+                                  ),
+                                ),
                           ],
                         ),
                       ),
@@ -1092,86 +1061,49 @@ class _MapScreenState extends State<MapScreen> {
 
     return Stack(
       children: [
-        FlutterMap(
-          mapController: _mapController,
-          options: MapOptions(
-            initialCenter: center,
-            initialZoom: pins.isNotEmpty ? 14 : (_user == null ? 6.5 : 14),
-            initialCameraFit: points.length >= 2
-                ? CameraFit.coordinates(
-                    coordinates: points,
-                    padding: const EdgeInsets.fromLTRB(48, 150, 48, 120),
-                    maxZoom: 15,
-                  )
-                : null,
-            maxZoom: 18,
-            minZoom: 3,
-            onTap: (_, point) {
-              setState(() => _showResults = false);
-              FocusManager.instance.primaryFocus?.unfocus();
-              _openAdd(point);
-            },
-          ),
-          children: [
-            TileLayer(
-              urlTemplate: mapTileUrl,
-              fallbackUrl: mapFallbackTileUrl,
-              subdomains: const ['a', 'b', 'c'],
-              userAgentPackageName: 'com.secretbase.app',
-              errorTileCallback: (_, _, _) {
-                if (mounted && !_tileError) setState(() => _tileError = true);
-              },
-            ),
-            MarkerLayer(
-              markers: [
-                if (_user != null)
-                  Marker(
-                    point: _user!,
-                    width: 28,
-                    height: 28,
-                    child: const _UserDot(),
-                  ),
-                for (final pin in pins)
-                  if (_pinPoint(pin) != null)
-                    Marker(
-                      point: _pinPoint(pin)!,
-                      width: 56,
-                      height: 56,
-                      child: _PinMarker(
-                        key: Key('map-pin-${pin['id']}'),
-                        label:
-                            '${pin['place_name'] ?? '장소'}, ${pinStatus(pin) == 'visited' ? '다녀온 곳' : '가고 싶은 곳'}',
-                        emoji: mapCategoryEmojis[pin['category']] ?? '📍',
-                        visited: pinStatus(pin) == 'visited',
-                        active:
-                            _selectedId != null &&
-                            '$_selectedId' == '${pin['id']}',
-                        onTap: () => _openPin(pin),
-                      ),
-                    ),
-                if (_temp != null)
-                  Marker(
-                    point: _temp!,
-                    width: 48,
-                    height: 48,
-                    child: Icon(
-                      Icons.location_on_rounded,
-                      color: V2Colors.rose600,
-                      size: 44,
-                    ),
-                  ),
-              ],
-            ),
-            RichAttributionWidget(
-              attributions: [
-                TextSourceAttribution(
-                  '© OpenStreetMap contributors',
-                  onTap: () => launchUrl(
-                    Uri.parse('https://www.openstreetmap.org/copyright'),
+        SecretMap(
+          center: center,
+          zoom: pins.isNotEmpty ? 14 : (_user == null ? 6.5 : 14),
+          fit: points,
+          fitPadding: const EdgeInsets.fromLTRB(48, 150, 48, 120),
+          onReady: (c) => _mapController = c,
+          onTap: (point) {
+            setState(() => _showResults = false);
+            FocusManager.instance.primaryFocus?.unfocus();
+            _openAdd(point);
+          },
+          markers: [
+            if (_user != null)
+              SecretMapMarker(
+                point: _user!,
+                size: const Size(28, 28),
+                child: const _UserDot(),
+              ),
+            for (final pin in pins)
+              if (_pinPoint(pin) != null)
+                SecretMapMarker(
+                  point: _pinPoint(pin)!,
+                  size: const Size(56, 56),
+                  child: _PinMarker(
+                    key: Key('map-pin-${pin['id']}'),
+                    label:
+                        '${pin['place_name'] ?? '장소'}, ${pinStatus(pin) == 'visited' ? '다녀온 곳' : '가고 싶은 곳'}',
+                    emoji: mapCategoryEmojis[pin['category']] ?? '📍',
+                    visited: pinStatus(pin) == 'visited',
+                    active:
+                        _selectedId != null && '$_selectedId' == '${pin['id']}',
+                    onTap: () => _openPin(pin),
                   ),
                 ),
-              ],
-            ),
+            if (_temp != null)
+              SecretMapMarker(
+                point: _temp!,
+                child: Icon(
+                  Icons.location_on_rounded,
+                  color: V2Colors.rose600,
+                  size: 44,
+                ),
+              ),
           ],
         ),
         Positioned(
@@ -1310,16 +1242,6 @@ class _MapScreenState extends State<MapScreen> {
             actionLabel: '설정 열기',
             onAction: () => Geolocator.openAppSettings(),
             onDismiss: () => setState(() => _locationNotice = null),
-          ),
-        ],
-        if (_tileError) ...[
-          const SizedBox(height: V2Space.x2),
-          V2Banner(
-            tone: V2BannerTone.warn,
-            message: '지도 이미지를 모두 불러오지 못했어요',
-            actionLabel: '다시 시도',
-            onAction: () => _load(),
-            onDismiss: () => setState(() => _tileError = false),
           ),
         ],
         if (_error != null && _pins.isNotEmpty) ...[
