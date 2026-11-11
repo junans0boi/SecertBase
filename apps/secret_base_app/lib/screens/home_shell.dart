@@ -90,7 +90,7 @@ class _HomeShellState extends State<HomeShell> {
         context,
       ).push<void>(MaterialPageRoute(builder: (_) => const PartnerScreen())),
     ),
-    2 => const MapScreen(),
+    2 => const MapScreen(collectionFirst: true),
     3 => const ArcadeScreen(),
     _ => SettingsScreen(onNavigate: _handleHomeNavigation),
   };

@@ -16,6 +16,7 @@ import 'map/map_api.dart';
 import 'map/map_logic.dart';
 import 'map/map_sheets.dart';
 import 'moment/couple_names.dart';
+import 'moment/moment_format.dart' show josa;
 import 'moment_loop_screen.dart';
 
 export 'map/map_logic.dart'
@@ -34,10 +35,19 @@ enum _Directions { naver, kakao, tmap, web }
 class MapScreen extends StatefulWidget {
   final bool closeAsModal;
 
+  /// 지도 탭 (2.1 "B"): opens on the place collection (a small map on top,
+  /// photo cards below); "지도 크게 보기" opens the full map.
+  final bool collectionFirst;
+
   /// Test seam; production uses the ambient HTTP client.
   final http.Client? client;
 
-  const MapScreen({super.key, this.closeAsModal = false, this.client});
+  const MapScreen({
+    super.key,
+    this.closeAsModal = false,
+    this.collectionFirst = false,
+    this.client,
+  });
 
   @override
   State<MapScreen> createState() => _MapScreenState();
@@ -46,6 +56,9 @@ class MapScreen extends StatefulWidget {
 class _MapScreenState extends State<MapScreen> {
   final _auth = AuthService();
   final _mapController = MapController();
+  final _stripController = MapController();
+  late bool _fullMap = !widget.collectionFirst;
+  String _shelf = 'visited';
   final _searchCtrl = TextEditingController();
   late final MapApi _api = MapApi(auth: _auth, client: widget.client);
   Timer? _debounce;
@@ -769,11 +782,278 @@ class _MapScreenState extends State<MapScreen> {
       child: Scaffold(
         backgroundColor: p.bg,
         appBar: V2Header(
-          title: '비밀지도',
+          title: widget.collectionFirst ? '지도' : '비밀지도',
           showBack: widget.closeAsModal ? true : null,
           backTooltip: widget.closeAsModal ? '닫기' : '뒤로 가기',
+          actions: [
+            if (widget.collectionFirst && _fullMap)
+              V2IconButton(
+                key: const Key('map_back_to_collection'),
+                icon: Icons.grid_view_rounded,
+                tooltip: '장소 모음으로',
+                onPressed: () => setState(() => _fullMap = false),
+              ),
+            if (widget.collectionFirst && !_fullMap) ...[
+              V2IconButton(
+                key: const Key('map_open_search'),
+                icon: V2Icons.search,
+                tooltip: '장소 검색',
+                onPressed: () => setState(() => _fullMap = true),
+              ),
+              V2IconButton(
+                key: const Key('map_add_place'),
+                icon: V2Icons.add,
+                tooltip: '장소 남기기',
+                onPressed: () {
+                  setState(() => _fullMap = true);
+                  showV2Snack(context, '지도를 누르거나 검색해서 장소를 남겨요');
+                },
+              ),
+            ],
+          ],
         ),
-        body: _body(p),
+        body: _fullMap ? _body(p) : _collection(p),
+      ),
+    );
+  }
+
+  // ── 장소 모음 (2.1 "B") ─────────────────────────────────────────────────────
+
+  Widget _collection(V2Palette p) {
+    if (_loading && _pins.isEmpty && _error == null) {
+      return const Padding(
+        padding: EdgeInsets.all(V2Space.page),
+        child: V2Shimmer(
+          child: V2SkeletonBox(height: 420, radius: V2Radius.card),
+        ),
+      );
+    }
+    final error = _error;
+    if (error != null && _pins.isEmpty) {
+      if (error.unpaired) {
+        return V2EmptyState.unpaired(
+          body: '상대와 연결하면 둘만의 지도를 함께 채울 수 있어요.',
+          onAction: () => Navigator.of(context).popUntil((r) => r.isFirst),
+        );
+      }
+      return error.offline
+          ? V2ErrorState.offline(onRetry: _load)
+          : V2ErrorState(
+              title: '지도를 불러오지 못했어요',
+              body: '잠시 후 다시 시도해 주세요.',
+              onRetry: _load,
+            );
+    }
+    final shelf = _pins.where((pin) => pinStatus(pin) == _shelf).toList();
+    final points = [for (final pin in _pins) ?_pinPoint(pin)];
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 6, 20, 32),
+        children: [
+          Semantics(
+            button: true,
+            label: '지도 크게 보기',
+            child: GestureDetector(
+              onTap: () => setState(() => _fullMap = true),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(22),
+                child: SizedBox(
+                  height: 190,
+                  child: Stack(
+                    children: [
+                      AbsorbPointer(
+                        child: FlutterMap(
+                          mapController: _stripController,
+                          options: MapOptions(
+                            initialCenter: points.isNotEmpty
+                                ? points.first
+                                : (_user ?? koreaCenter),
+                            initialZoom: points.isNotEmpty ? 13 : 6.5,
+                            initialCameraFit: points.length >= 2
+                                ? CameraFit.coordinates(
+                                    coordinates: points,
+                                    padding: const EdgeInsets.all(36),
+                                    maxZoom: 14,
+                                  )
+                                : null,
+                            interactionOptions: const InteractionOptions(
+                              flags: InteractiveFlag.none,
+                            ),
+                          ),
+                          children: [
+                            TileLayer(
+                              urlTemplate: mapTileUrl,
+                              fallbackUrl: mapFallbackTileUrl,
+                              subdomains: const ['a', 'b', 'c'],
+                              userAgentPackageName: 'com.secretbase.app',
+                            ),
+                            MarkerLayer(
+                              markers: [
+                                for (final pin in _pins)
+                                  if (_pinPoint(pin) != null)
+                                    Marker(
+                                      point: _pinPoint(pin)!,
+                                      width: 34,
+                                      height: 34,
+                                      child: _MiniPin(
+                                        visited: pinStatus(pin) == 'visited',
+                                        imageUrl: _pinImage(pin),
+                                      ),
+                                    ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      Positioned(
+                        right: 10,
+                        bottom: 10,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 11,
+                            vertical: 7,
+                          ),
+                          decoration: BoxDecoration(
+                            color: p.surface,
+                            borderRadius: V2Radius.pillAll,
+                            boxShadow: V2Shadow.level1,
+                          ),
+                          child: Text(
+                            '지도 크게 보기',
+                            style: V2Text.label.copyWith(
+                              color: p.ink,
+                              letterSpacing: 0,
+                              fontSize: 12.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          V2Segmented<String>(
+            segments: [
+              V2Segment(value: 'visited', label: '다녀온 곳 ${_count('visited')}'),
+              V2Segment(
+                value: 'wishlist',
+                label: '가고 싶은 곳 ${_count('wishlist')}',
+              ),
+            ],
+            selected: _shelf,
+            onChanged: (v) => setState(() => _shelf = v),
+          ),
+          const SizedBox(height: 14),
+          if (shelf.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 24),
+              child: V2EmptyState(
+                key: const Key('map_shelf_empty'),
+                icon: _shelf == 'visited' ? V2Icons.location : V2Icons.heart,
+                title: _shelf == 'visited'
+                    ? '아직 다녀온 곳이 없어요'
+                    : '가고 싶은 곳이 아직 없어요',
+                body: '지도에서 검색하거나 눌러서 남겨 보세요.',
+                actionLabel: '지도에서 장소 남기기',
+                onAction: () => setState(() => _fullMap = true),
+              ),
+            )
+          else
+            GridView.builder(
+              key: const Key('map_place_cards'),
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 16,
+                crossAxisSpacing: 12,
+                childAspectRatio: .78,
+              ),
+              itemCount: shelf.length,
+              itemBuilder: (context, i) => _placeCard(p, shelf[i]),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String? _pinImage(Map<String, dynamic> pin) {
+    final raw = '${pin['media_url'] ?? ''}'.trim();
+    if (raw.isEmpty) return null;
+    return raw.startsWith('http') ? raw : '${_auth.baseUrl}$raw';
+  }
+
+  Widget _placeCard(V2Palette p, Map<String, dynamic> pin) {
+    final visited = pinStatus(pin) == 'visited';
+    final name = '${pin['place_name'] ?? '우리 장소'}';
+    final image = _pinImage(pin);
+    final rating = placeIntForMap(pin['rating']);
+    final date = DateTime.tryParse('${pin['visit_date'] ?? ''}');
+    final mine = '${pin['user_id']}' == '${_myId ?? ''}';
+    final sub = visited
+        ? [
+            if (rating != null && rating > 0) '★ $rating',
+            if (date != null) '${date.month}월 ${date.day}일',
+          ].join(' · ')
+        : (mine ? '내가 저장' : '${josa(_partner, '이', '가')} 저장');
+    return Semantics(
+      button: true,
+      label: '$name, ${visited ? '다녀온 곳' : '가고 싶은 곳'}',
+      child: GestureDetector(
+        key: Key('map-card-${pin['id']}'),
+        onTap: () => _openPin(pin),
+        child: ExcludeSemantics(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(18),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: image != null
+                        ? Image.network(
+                            image,
+                            fit: BoxFit.cover,
+                            cacheWidth: 400,
+                            errorBuilder: (_, _, _) =>
+                                V2PhotoPlaceholder(seed: pin['id'] ?? name),
+                          )
+                        : visited
+                        ? V2PhotoPlaceholder(seed: pin['id'] ?? name)
+                        : ColoredBox(
+                            color: p.primarySoft,
+                            child: Icon(
+                              Icons.favorite_rounded,
+                              color: p.primary,
+                              size: 30,
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: V2Text.bodyStrong,
+              ),
+              if (sub.isNotEmpty)
+                Text(
+                  sub,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: V2Text.cap,
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1228,6 +1508,44 @@ class _UserDot extends StatelessWidget {
           border: Border.all(color: Colors.white, width: 3),
           boxShadow: V2Shadow.level1,
         ),
+      ),
+    );
+  }
+}
+
+/// Small pin on the collection strip map.
+class _MiniPin extends StatelessWidget {
+  const _MiniPin({required this.visited, required this.imageUrl});
+
+  final bool visited;
+  final String? imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = V2Palette.of(context);
+    return Container(
+      padding: const EdgeInsets.all(2.5),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        boxShadow: V2Shadow.level1,
+      ),
+      child: ClipOval(
+        child: visited && imageUrl != null
+            ? Image.network(
+                imageUrl!,
+                fit: BoxFit.cover,
+                cacheWidth: 80,
+                errorBuilder: (_, _, _) => ColoredBox(color: p.primarySoft),
+              )
+            : ColoredBox(
+                color: visited ? p.primarySoft : Colors.white,
+                child: Icon(
+                  visited ? V2Icons.location : Icons.favorite_rounded,
+                  size: 15,
+                  color: p.primary,
+                ),
+              ),
       ),
     );
   }

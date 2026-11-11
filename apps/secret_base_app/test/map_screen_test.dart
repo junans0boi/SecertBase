@@ -119,13 +119,16 @@ void main() {
       WidgetTester tester,
       Future<void> Function() body, {
       MockClientHandler? handleRequest,
+      bool collectionFirst = false,
     }) async {
       tester.view.physicalSize = const Size(800, 1200);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       await http.runWithClient(
         () async {
-          await tester.pumpWidget(const MaterialApp(home: MapScreen()));
+          await tester.pumpWidget(
+            MaterialApp(home: MapScreen(collectionFirst: collectionFirst)),
+          );
           await tester.pump(const Duration(milliseconds: 300));
           await body();
         },
@@ -155,6 +158,28 @@ void main() {
         expect(find.text('Date Afterglow'), findsNothing);
         expect(find.byKey(const Key('map-pin-1')), findsOneWidget);
         expect(find.textContaining('OpenStreetMap'), findsWidgets);
+      });
+    });
+
+    testWidgets('지도 탭 opens on the place collection', (tester) async {
+      await withMap(collectionFirst: true, tester, () async {
+        expect(find.text('지도'), findsOneWidget);
+        expect(find.text('지도 크게 보기'), findsOneWidget);
+        expect(find.byKey(const Key('map_place_cards')), findsOneWidget);
+        expect(find.byKey(const Key('map-card-1')), findsOneWidget);
+        expect(find.byKey(const Key('map-card-2')), findsNothing);
+
+        await tester.tap(find.text('가고 싶은 곳 1'));
+        await tester.pump();
+        expect(find.byKey(const Key('map-card-2')), findsOneWidget);
+        expect(find.byKey(const Key('map-card-1')), findsNothing);
+
+        await tester.tap(find.text('지도 크게 보기'));
+        await tester.pump();
+        expect(find.byKey(const Key('map_search')), findsOneWidget);
+        await tester.tap(find.byKey(const Key('map_back_to_collection')));
+        await tester.pump();
+        expect(find.byKey(const Key('map_place_cards')), findsOneWidget);
       });
     });
 
