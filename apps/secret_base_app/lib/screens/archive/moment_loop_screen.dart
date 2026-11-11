@@ -240,7 +240,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     if (groups.isEmpty) {
       showV2Snack(context, '이 순간을 찾을 수 없어요', tone: V2Tone.warn);
     } else {
-      _openDetail(groups.first, initialPostId: widget.initialPostId);
+      unawaited(_openDetail(groups.first, initialPostId: widget.initialPostId));
     }
   }
 
@@ -383,13 +383,13 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
 
   // ── Detail ─────────────────────────────────────────────────────────────────
 
-  void _openDetail(List<Moment> group, {int? initialPostId}) {
+  Future<void> _openDetail(List<Moment> group, {int? initialPostId}) async {
     final locked = group.first.todayLocked && group.first.userId != _userId;
     if (locked) {
       showV2Snack(context, '내 순간을 남기면 $_partnerName의 순간이 열려요');
       return;
     }
-    Navigator.of(context).push(
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => MomentDetailPage(
           group: group,
@@ -440,12 +440,12 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     }
   }
 
-  void _openComments(Moment post) {
+  Future<void> _openComments(Moment post) async {
     if (post.todayLocked && post.userId != _userId) {
       showV2Snack(context, '내 순간을 남기면 $_partnerName의 순간이 열려요');
       return;
     }
-    showV2Sheet<void>(
+    await showV2Sheet<void>(
       context,
       title: '댓글',
       builder: (_) => MomentCommentSheet(
@@ -555,7 +555,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
             myName: _myName,
             partnerName: _partnerName,
             onCompose: (source) => _openComposer(source: source),
-            onOpenGroup: (group) => _openDetail(group),
+            onOpenGroup: _openDetail,
             onHeart: _heart,
             onComments: _openComments,
             onShowCalendar: () => setState(() => _calendar = true),
