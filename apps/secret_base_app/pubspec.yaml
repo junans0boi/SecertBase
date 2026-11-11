@@ -90,17 +90,20 @@ flutter:
     - assets/images/yut/
 
   fonts:
-    # Pretendard (SIL OFL 1.1, assets/fonts/pretendard/OFL.txt). Only the
-    # weights the 2.1 design uses; 400 falls back to Medium.
+    # Pretendard Std (SIL OFL 1.1, assets/fonts/pretendard/OFL.txt): the
+    # official subset with the 2,350 KS X 1001 Hangul syllables, ~318KB per
+    # weight instead of 1.6MB (Flutter web downloads every font before the
+    # first frame). Rare syllables fall back to the platform/Noto font.
+    # Only the weights the 2.1 design uses; 400 falls back to Medium.
     - family: Pretendard
       fonts:
-        - asset: assets/fonts/pretendard/Pretendard-Medium.otf
+        - asset: assets/fonts/pretendard/PretendardStd-Medium.otf
           weight: 500
-        - asset: assets/fonts/pretendard/Pretendard-SemiBold.otf
+        - asset: assets/fonts/pretendard/PretendardStd-SemiBold.otf
           weight: 600
-        - asset: assets/fonts/pretendard/Pretendard-Bold.otf
+        - asset: assets/fonts/pretendard/PretendardStd-Bold.otf
           weight: 700
-        - asset: assets/fonts/pretendard/Pretendard-ExtraBold.otf
+        - asset: assets/fonts/pretendard/PretendardStd-ExtraBold.otf
           weight: 800
 
   # An image asset can refer to one or more resolution-specific "variants", see
