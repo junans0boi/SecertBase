@@ -18,10 +18,12 @@ MockClient _client({
   int balance = 60000,
   List<Map<String, dynamic>> missions = const [],
   bool failItems = false,
+  Set<String> fail = const {},
   List<http.Request>? log,
 }) => MockClient((request) async {
   log?.add(request);
   if (request.method == 'GET') {
+    if (fail.contains(request.url.path)) return _json({}, 500);
     return switch (request.url.path) {
       '/api/shop/items' =>
         failItems ? _json({}, 500) : _json({'items': <Object>[]}),
@@ -83,6 +85,24 @@ void main() {
     expect(find.text('다시 시도'), findsOneWidget);
     expect(find.textContaining('오류'), findsNothing);
     expect(find.textContaining('Exception'), findsNothing);
+  });
+
+  testWidgets('one failing section never blanks the whole shop', (
+    tester,
+  ) async {
+    // Production bug: "상점 조회 안 됨" — any of the 7 calls failing used to
+    // turn the whole shop into an error page.
+    await _open(
+      tester,
+      _client(
+        balance: 52300,
+        fail: {'/api/missions', '/api/shop/owned', '/api/user/level'},
+      ),
+    );
+    expect(find.text('상점을 열지 못했어요'), findsNothing);
+    expect(find.byKey(const Key('shop_partial_error')), findsOneWidget);
+    expect(find.text('52,300'), findsOneWidget);
+    expect(find.text('윷놀이'), findsWidgets);
   });
 
   testWidgets('coin pill is the one balance and opens 코인 얻는 법', (tester) async {
