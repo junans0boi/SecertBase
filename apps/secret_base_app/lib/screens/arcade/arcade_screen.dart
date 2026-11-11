@@ -398,7 +398,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       type: 'pirate',
       icon: Icons.sailing_outlined,
       title: '해적 룰렛',
-      description: '칼을 꽂다 터지면 벌칙! 이긴 사람이 벌칙을 정해요',
+      description: '번갈아 칼을 꽂다 폭탄 구멍을 찌르면 져요',
       tone: V2Tone.rose,
     ),
     _GameInfo(

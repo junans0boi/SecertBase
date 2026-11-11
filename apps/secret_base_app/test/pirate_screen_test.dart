@@ -1,4 +1,4 @@
-// 해적 룰렛 2.0: 구멍 수별 배치(넘침 없음), 확률 게이지, 벌칙 입력 검증, 진 사람 대기 화면.
+// 해적 룰렛 2.0: 구멍 수별 배치(넘침 없음), 확률 게이지, 폭발 뒤 바로 결과(벌칙 없음).
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -23,7 +23,6 @@ Map<String, dynamic> stateMap({
   int? bombSlot,
   String? winner,
   String? loser,
-  Map<String, dynamic>? penalty,
   int seq = 0,
   String reason = 'bomb',
 }) {
@@ -51,7 +50,6 @@ Map<String, dynamic> stateMap({
     'winner': winner,
     'loser': loser,
     'reason': phase == 'playing' ? null : reason,
-    'penalty': penalty,
     'seq': seq,
     'series': {
       'wins': {me: 1, partner: 2},
@@ -196,74 +194,30 @@ void main() {
     });
   });
 
-  group('penalty input', () {
-    test('validation: trimmed, 1..30 characters, never empty', () {
-      expect(validatePiratePenalty(''), isNotNull);
-      expect(validatePiratePenalty('    '), isNotNull);
-      expect(validatePiratePenalty('가' * 30), isNull);
-      expect(validatePiratePenalty('가' * 31), isNotNull);
-      expect(validatePiratePenalty('  노래 한 소절 '), isNull);
-      expect(normalizePiratePenalty('  노래\n한   소절 '), '노래 한 소절');
-      expect(kPiratePenaltyPresets.length, 10);
-      for (final p in kPiratePenaltyPresets) {
-        expect(validatePiratePenalty(p), isNull);
-      }
-    });
-
-    testWidgets(
-      'send is disabled until valid, input stops at 30, chips fill the field',
-      (tester) async {
-        tester.view.physicalSize = const Size(360, 900);
-        tester.view.devicePixelRatio = 1;
-        addTearDown(tester.view.reset);
-        final sent = <String>[];
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Scaffold(
-              body: SingleChildScrollView(
-                child: PiratePenaltyPicker(
-                  theme: GameTheme.pirateNight,
-                  loserName: '하늘',
-                  onSubmit: (text) {
-                    sent.add(text);
-                    return null;
-                  },
-                ),
-              ),
-            ),
-          ),
-        );
-        await tester.pump();
-        expect(tester.takeException(), isNull);
-        for (final p in kPiratePenaltyPresets) {
-          expect(find.text(p), findsOneWidget);
-        }
-        final send = find.byKey(const ValueKey('pirate-penalty-send'));
-        await tester.tap(send);
-        expect(sent, isEmpty, reason: 'empty penalty cannot be sent');
-
-        final input = find.byKey(const ValueKey('pirate-penalty-input'));
-        await tester.enterText(input, '     ');
-        await tester.pump();
-        await tester.tap(send);
-        expect(sent, isEmpty, reason: 'spaces only cannot be sent');
-
-        await tester.enterText(input, '가' * 35);
-        await tester.pump();
-        expect(tester.widget<TextField>(input).controller!.text.length, 30);
-
-        await tester.tap(find.text('딱밤 한 대'));
-        await tester.pump();
-        expect(tester.widget<TextField>(input).controller!.text, '딱밤 한 대');
-        await tester.tap(send);
-        await tester.pump();
-        expect(sent, ['딱밤 한 대']);
-      },
-    );
-
-    testWidgets('winner sees the picker after a restored explosion', (
+  group('after the explosion (no penalty)', () {
+    testWidgets('a restored explosion shows the result right away', (
       tester,
     ) async {
+      await pumpScreen(
+        tester,
+        stateMap(
+          phase: 'exploded',
+          picked: const [5],
+          bombSlot: 5,
+          winner: partner,
+          loser: me,
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 800));
+      expect(find.text('해적이 날아갔어요'), findsOneWidget);
+      expect(find.text('한 판 더!'), findsOneWidget);
+      expect(find.text('이번 방 전적'), findsOneWidget);
+      expect(find.textContaining('벌칙'), findsNothing);
+      expect(find.textContaining('PARTNER-CODE'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('winner sees 살았다 with no penalty picker', (tester) async {
       await pumpScreen(
         tester,
         stateMap(
@@ -274,17 +228,16 @@ void main() {
           loser: partner,
         ),
       );
-      expect(find.text('벌칙을 정해 주세요'), findsOneWidget);
-      expect(find.text('하늘에게 줄 벌칙을 고르거나 직접 적어요'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 800));
+      expect(find.text('살았다!'), findsWidgets);
+      expect(find.textContaining('벌칙'), findsNothing);
       expect(tester.takeException(), isNull);
     });
-  });
 
-  testWidgets(
-    'live bomb stab: knife drop, explosion, then the penalty phase opens',
-    (tester) async {
+    testWidgets('live bomb stab: knife drop, explosion, then the result', (
+      tester,
+    ) async {
       await pumpScreen(tester, stateMap(gameId: 'live', slots: 6, seq: 0));
-      expect(find.text('벌칙을 정해 주세요'), findsNothing);
       PirateController.instance.apply(
         PirateState.fromMap(
           stateMap(
@@ -302,78 +255,18 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
       expect(
-        find.text('하늘이 벌칙을 고르는 중…'),
+        find.text('해적이 날아갔어요'),
         findsNothing,
-        reason: 'the penalty phase waits for the explosion',
+        reason: 'the result waits for the explosion',
       );
       await tester.pump(const Duration(milliseconds: 400)); // 칼이 꽂히고 폭발 시작
       expect(find.text('펑!'), findsOneWidget);
       await tester.pump(const Duration(milliseconds: 1800)); // 폭발 끝
       await tester.pump(const Duration(milliseconds: 500));
       await tester.pump(const Duration(milliseconds: 500));
-      expect(find.text('하늘이 벌칙을 고르는 중…'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    },
-  );
-
-  group('loser views', () {
-    testWidgets('loser waits while the winner picks', (tester) async {
-      await pumpScreen(
-        tester,
-        stateMap(
-          phase: 'exploded',
-          picked: const [5],
-          bombSlot: 5,
-          winner: partner,
-          loser: me,
-        ),
-      );
-      expect(find.text('하늘이 벌칙을 고르는 중…'), findsOneWidget);
-      expect(find.text('벌칙을 정해 주세요'), findsNothing);
-      expect(find.textContaining('PARTNER-CODE'), findsNothing);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('loser gets the big penalty card with a done button', (
-      tester,
-    ) async {
-      await pumpScreen(
-        tester,
-        stateMap(
-          phase: 'exploded',
-          picked: const [5],
-          bombSlot: 5,
-          winner: partner,
-          loser: me,
-          penalty: {'text': '아이스크림 사기', 'by': partner, 'doneAt': null},
-        ),
-      );
-      await tester.pump(const Duration(milliseconds: 800));
-      expect(find.byKey(const ValueKey('pirate-penalty-card')), findsOneWidget);
-      expect(find.text('아이스크림 사기'), findsOneWidget);
-      expect(find.byKey(const ValueKey('pirate-penalty-done')), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('a finished penalty opens the result with series and rematch', (
-      tester,
-    ) async {
-      await pumpScreen(
-        tester,
-        stateMap(
-          phase: 'exploded',
-          picked: const [5],
-          bombSlot: 5,
-          winner: partner,
-          loser: me,
-          penalty: {'text': '10분 안마', 'by': partner, 'doneAt': 1},
-        ),
-      );
-      await tester.pump(const Duration(milliseconds: 800));
       expect(find.text('해적이 날아갔어요'), findsOneWidget);
-      expect(find.text('한 판 더!'), findsOneWidget);
-      expect(find.text('벌칙: 10분 안마'), findsOneWidget);
-      expect(find.text('이번 방 전적'), findsOneWidget);
+      expect(find.textContaining('벌칙'), findsNothing);
+      expect(tester.takeException(), isNull);
     });
   });
 

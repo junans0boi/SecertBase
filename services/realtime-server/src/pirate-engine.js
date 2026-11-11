@@ -6,8 +6,7 @@
 // 선공은 홀수 번째 찌르기를 맡으니 선공이 질 확률은 ceil(holes/2)/holes —
 // 짝수 holes에서만 정확히 50%다(00-analysis §5). 그래서 짝수 프리셋만 허용한다.
 //
-// 폭발 뒤에는 벌칙 단계: 이긴 사람이 벌칙 문구(1~30자)를 한 번 정하고,
-// 진 사람이 "했어요!"를 한 번 누른다.
+// 폭발하면 판이 끝난다. 벌칙 단계는 없다(2026-11 제거).
 
 export const PIRATE_HOLES = Object.freeze([6, 8, 12]);
 export const PIRATE_DEFAULT_HOLES = 8;
@@ -15,19 +14,6 @@ export const PIRATE_DEFAULT_HOLES = 8;
 export const PIRATE_TURN_MS = 20_000;
 /** 연속 시간 초과가 이 횟수에 이르면 기권패. */
 export const PIRATE_MAX_TIMEOUTS = 3;
-export const PIRATE_PENALTY_MAX = 30;
-export const PIRATE_PENALTY_PRESETS = Object.freeze([
-  "어깨 주물러 주기",
-  "칭찬 3가지",
-  "노래 한 소절",
-  "오늘 설거지",
-  "딱밤 한 대",
-  "사진 한 장 찍어 주기",
-  "소원 하나 들어주기",
-  "애교 한 번",
-  "아이스크림 사기",
-  "10분 안마",
-]);
 
 /** 허용되지 않은 값은 기본 8로. */
 export function normalizeHoles(holes) {
@@ -94,7 +80,6 @@ export function createPirateGame({
     loser: null,
     reason: null,
     explodedAt: null,
-    penalty: null,
     seq: 0,
   };
 }
@@ -171,43 +156,6 @@ export function applyForfeit(state, loser, { now = Date.now() } = {}) {
   return { ok: true, state: explode({ ...state, seq: (state.seq ?? 0) + 1 }, loser, { reason: "afk", now }) };
 }
 
-/** 벌칙 문구 검증: 문자열, 공백 정리, 1~30자(코드 포인트 기준). */
-export function normalizePenaltyText(raw) {
-  if (typeof raw !== "string") return { ok: false, reason: "invalid_payload" };
-  // 제어 문자·줄바꿈은 공백으로, 연속 공백은 하나로.
-  // eslint-disable-next-line no-control-regex
-  const text = raw.replace(/[\u0000-\u001F\u007F]/g, " ").replace(/\s+/g, " ").trim();
-  const length = Array.from(text).length;
-  if (length === 0) return { ok: false, reason: "penalty_empty" };
-  if (length > PIRATE_PENALTY_MAX) return { ok: false, reason: "penalty_too_long" };
-  return { ok: true, text };
-}
-
-/** 이긴 사람이 벌칙을 정한다(한 번만). */
-export function setPenalty(state, by, raw, { now = Date.now() } = {}) {
-  if (!state || state.phase !== "exploded") return { ok: false, reason: "not_exploded" };
-  if (by !== state.winner) return { ok: false, reason: "not_winner" };
-  if (state.penalty) return { ok: false, reason: "penalty_already_set" };
-  const checked = normalizePenaltyText(raw);
-  if (!checked.ok) return checked;
-  return {
-    ok: true,
-    state: { ...state, penalty: { text: checked.text, by, at: now, doneAt: null }, seq: (state.seq ?? 0) + 1 },
-  };
-}
-
-/** 진 사람이 벌칙을 했다고 알린다(한 번만). */
-export function completePenalty(state, by, { now = Date.now() } = {}) {
-  if (!state || state.phase !== "exploded") return { ok: false, reason: "not_exploded" };
-  if (by !== state.loser) return { ok: false, reason: "not_loser" };
-  if (!state.penalty) return { ok: false, reason: "no_penalty" };
-  if (state.penalty.doneAt) return { ok: false, reason: "penalty_already_done" };
-  return {
-    ok: true,
-    state: { ...state, penalty: { ...state.penalty, doneAt: now }, seq: (state.seq ?? 0) + 1 },
-  };
-}
-
 /** 재대결의 선공: 지난 판 선공의 상대. */
 export function nextFirstTurn(previous, players) {
   const prev = previous?.firstTurn;
@@ -238,7 +186,6 @@ export function publicPirateState(state, { series = null, now = Date.now() } = {
     winner: state.winner,
     loser: state.loser,
     reason: state.reason,
-    penalty: state.penalty ? { ...state.penalty } : null,
     seq: state.seq ?? 0,
     series,
     serverNow: now,

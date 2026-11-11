@@ -116,7 +116,7 @@ test('picks alternate, carry remaining and riskPct, and the bomb keeps the explo
   assert.equal(e.reason, 'bomb');
   assert.deepEqual(e.series.wins, { [ALPHA]: 0, [BETA]: 1 });
   const kept = JSON.parse(await f.redis.get(`pirate:${f.roomCode}:game`));
-  assert.equal(kept.phase, 'exploded', 'the state is preserved for the penalty phase');
+  assert.equal(kept.phase, 'exploded', 'the state is preserved for restore and rematch');
   assert.equal(kept.loser, ALPHA);
   assert.equal((await f.call(1, 'game:pirate:pick', { slot: 6 })).reason, 'not_playing');
   assert.equal(f.results.length, 1);
@@ -134,34 +134,18 @@ async function explodedGame(t, f) {
   return s; // ALPHA lost, BETA won
 }
 
-test('only the winner picks the penalty once, trimmed to 1..30 characters, then the loser completes it', async t => {
-  const f = await fixture(t);
-  const penalties = record(f, 'game:pirate:penalty');
-  const dones = record(f, 'game:pirate:penalty_done');
-  const states = record(f, 'game:pirate:state');
-  const s = await explodedGame(t, f);
-  assert.equal((await f.call(0, 'game:pirate:penalty', { text: '딱밤 한 대' })).reason, 'not_winner');
-  assert.equal((await f.call(1, 'game:pirate:penalty', { text: '    ' })).reason, 'penalty_empty');
-  assert.equal((await f.call(1, 'game:pirate:penalty', { text: '가'.repeat(31) })).reason, 'penalty_too_long');
-  assert.equal((await f.call(1, 'game:pirate:penalty', {})).reason, 'invalid_payload');
-  assert.equal((await f.call(0, 'game:pirate:penalty_done', {})).reason, 'no_penalty');
-  assert.deepEqual(await f.call(1, 'game:pirate:penalty', { text: '  아이스크림 사기 ' }), { ok: true, text: '아이스크림 사기' });
-  assert.equal((await f.call(1, 'game:pirate:penalty', { text: '다른 벌칙' })).reason, 'penalty_already_set');
-  await flush();
-  assert.deepEqual(penalties[0][0], { gameId: s.gameId, by: BETA, text: '아이스크림 사기' });
-  assert.equal(states[0].at(-1).penalty.text, '아이스크림 사기');
-  assert.equal((await f.call(1, 'game:pirate:penalty_done', {})).reason, 'not_loser');
-  assert.deepEqual(await f.call(0, 'game:pirate:penalty_done', {}), { ok: true });
-  assert.equal((await f.call(0, 'game:pirate:penalty_done', {})).reason, 'penalty_already_done');
-  await flush();
-  assert.deepEqual(dones[1][0], { gameId: s.gameId, by: ALPHA });
-  assert.equal(states[1].at(-1).penalty.doneAt, NOW);
-});
-
-test('restore brings back the exploded game with its penalty phase', async t => {
+test('penalty events are gone: old clients get a rejection and the state has no penalty', async t => {
   const f = await fixture(t);
   await explodedGame(t, f);
-  await f.call(1, 'game:pirate:penalty', { text: '애교 한 번' });
+  assert.deepEqual(await f.call(1, 'game:pirate:penalty', { text: '딱밤 한 대' }), { ok: false, reason: 'penalty_removed' });
+  assert.deepEqual(await f.call(0, 'game:pirate:penalty_done', {}), { ok: false, reason: 'penalty_removed' });
+  const kept = JSON.parse(await f.redis.get(`pirate:${f.roomCode}:game`));
+  assert.equal('penalty' in kept, false);
+});
+
+test('restore brings back the exploded game', async t => {
+  const f = await fixture(t);
+  await explodedGame(t, f);
   const states = record(f, 'game:pirate:state');
   const restored = await f.call(0, 'session:restore', {});
   assert.equal(restored.ok, true);
@@ -171,7 +155,7 @@ test('restore brings back the exploded game with its penalty phase', async t => 
   assert.equal(view.phase, 'exploded');
   assert.equal(view.loser, ALPHA);
   assert.equal(view.bombSlot, 0);
-  assert.equal(view.penalty.text, '애교 한 번');
+  assert.equal('penalty' in view, false);
   assert.equal(view.series.wins[BETA], 1);
 });
 
@@ -186,7 +170,6 @@ test('consented restart keeps holes and series, alternates the first player and 
   assert.notEqual(second.gameId, first.gameId);
   assert.equal(second.firstTurn, BETA, 'rematch alternates the first player');
   assert.equal(second.phase, 'playing');
-  assert.equal(second.penalty, null);
   assert.equal(second.round, 2);
   // 두 번째 판: 폭탄 0번(난수 0), BETA가 찔러서 진다 → 전적 1:1.
   const exploded = record(f, 'game:pirate:exploded');

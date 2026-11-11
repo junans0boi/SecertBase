@@ -15,7 +15,6 @@ const kPirateHowToLines = [
   '통에 난 구멍 중 하나에 폭탄이 숨어 있어요.',
   '번갈아 구멍을 하나씩 골라 칼을 꽂아요. 한 차례는 20초!',
   '폭탄 구멍을 찌르면 해적이 하늘로 날아가고, 찌른 사람이 져요.',
-  '이긴 사람이 벌칙을 정하고, 진 사람은 벌칙을 한 뒤 "했어요!"를 눌러요.',
 ];
 
 /// 해적 룰렛 2.0 화면(해적선 야경). 판은 로비 시작 때 서버가 만든다.
@@ -46,16 +45,12 @@ class _PirateGameScreenState extends State<PirateGameScreen>
   String? _gameId;
   int _stabSerial = 0;
   int _explosionSerial = 0;
-  int _penaltyDoneSerial = 0;
   bool _wasMyTurn = false;
   int _lastRisk = 0;
 
-  /// 폭발 연출이 끝나 벌칙 단계를 보여도 되는지.
-  bool _penaltyReady = false;
-  bool _awaitingExplosion = false;
-
-  /// 결과 카드를 보여 주는지(벌칙 완료 뒤, 또는 "결과 화면 보기").
+  /// 폭발 연출이 끝나 결과 카드를 보여도 되는지.
   bool _showResult = false;
+  bool _awaitingExplosion = false;
 
   String? _toast;
   int _toastId = 0;
@@ -81,7 +76,6 @@ class _PirateGameScreenState extends State<PirateGameScreen>
     ]);
     _stabSerial = _c.stabSerial;
     _explosionSerial = _c.explosionSerial;
-    _penaltyDoneSerial = _c.penaltyDoneSerial;
     _c.addListener(_onChange);
     _adopt(initial: true);
     if (widget.syncOnOpen) _c.sync();
@@ -123,14 +117,11 @@ class _PirateGameScreenState extends State<PirateGameScreen>
     if (s == null) return;
     if (s.gameId != _gameId) {
       _gameId = s.gameId;
-      _showResult = false;
       _awaitingExplosion = false;
-      _penaltyReady = s.exploded;
-      // 복원으로 이미 끝난 판에 들어왔으면 바로 결과까지.
-      if (s.exploded && s.penalty?.done == true) _showResult = true;
+      // 복원으로 이미 끝난 판에 들어왔으면 바로 결과.
+      _showResult = s.exploded;
       _stabSerial = _c.stabSerial;
       _explosionSerial = _c.explosionSerial;
-      _penaltyDoneSerial = _c.penaltyDoneSerial;
       _lastRisk = s.riskPct;
       _wasMyTurn = _c.isMyTurn;
       if (!initial && _c.isMyTurn) GameSfx.instance.play(GameSound.turnMine);
@@ -151,23 +142,9 @@ class _PirateGameScreenState extends State<PirateGameScreen>
     if (_c.explosionSerial != _explosionSerial) {
       _explosionSerial = _c.explosionSerial;
       _awaitingExplosion = true;
-      _penaltyReady = false;
+      _showResult = false;
     }
-    if (s.exploded && !_awaitingExplosion) _penaltyReady = true;
-    if (_c.penaltyDoneSerial != _penaltyDoneSerial) {
-      _penaltyDoneSerial = _c.penaltyDoneSerial;
-      final loser = _c.displayName(s.loser);
-      if (s.winner == _c.me) {
-        _say('$loser${josaIGa(loser)} 벌칙을 했어요!');
-        GameSfx.instance.play(GameSound.sparkle);
-      }
-      final gameId = s.gameId;
-      Future.delayed(const Duration(milliseconds: 1200), () {
-        if (mounted && _c.state?.gameId == gameId) {
-          setState(() => _showResult = true);
-        }
-      });
-    }
+    if (s.exploded && !_awaitingExplosion) _showResult = true;
     final myTurn = _c.isMyTurn;
     if (myTurn && !_wasMyTurn) GameSfx.instance.play(GameSound.turnMine);
     _wasMyTurn = myTurn;
@@ -190,7 +167,7 @@ class _PirateGameScreenState extends State<PirateGameScreen>
       if (!mounted || _c.state?.gameId != gameId) return;
       setState(() {
         _awaitingExplosion = false;
-        _penaltyReady = true;
+        _showResult = true;
       });
     });
   }
@@ -446,7 +423,6 @@ class _PirateGameScreenState extends State<PirateGameScreen>
 
   List<Widget> _overlays(PirateState s) {
     final me = _c.me;
-    final winnerName = _c.displayName(s.winner);
     final loserName = _c.displayName(s.loser);
     return [
       Positioned(
@@ -494,15 +470,6 @@ class _PirateGameScreenState extends State<PirateGameScreen>
           ),
         ),
       ),
-      if (s.exploded && _penaltyReady && !_showResult)
-        // 상단 바(뒤로·메뉴)는 가리지 않는다.
-        Positioned(
-          top: 52,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          child: _penaltyPhase(s, winnerName, loserName),
-        ),
       if (s.exploded && _showResult)
         Positioned.fill(
           child: GameResultOverlay(
@@ -513,7 +480,6 @@ class _PirateGameScreenState extends State<PirateGameScreen>
             series: s.series,
             me: me,
             resultId: s.gameId,
-            details: _resultDetails(s),
             onRematch: _c.requestRestart,
             rematchWaiting: _socket.restartWaiting,
           ),
@@ -528,76 +494,5 @@ class _PirateGameScreenState extends State<PirateGameScreen>
       'afk' => '$loserName$ga 오래 자리를 비워 기권했어요',
       _ => '$loserName$ga ${(s.bombSlot ?? 0) + 1}번 폭탄 구멍을 찔렀어요',
     };
-  }
-
-  Widget? _resultDetails(PirateState s) {
-    final p = s.penalty;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (p != null)
-          GameChip(
-            theme: _theme,
-            leading: p.done ? '✅' : '📜',
-            label: '벌칙: ${p.text}',
-            emphasized: true,
-          ),
-        if (p == null || !p.done)
-          TextButton(
-            onPressed: () => setState(() => _showResult = false),
-            child: Text(
-              p == null ? '벌칙 정하러 가기' : '벌칙 화면으로',
-              style: _theme.body(size: 13, color: _theme.gold),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _penaltyPhase(PirateState s, String winnerName, String loserName) {
-    final me = _c.me;
-    final penalty = s.penalty;
-    void skip() => setState(() => _showResult = true);
-    final Widget content;
-    if (penalty == null) {
-      content = s.winner == me
-          ? PiratePenaltyPicker(
-              theme: _theme,
-              loserName: loserName,
-              sending: _c.sendingPenalty,
-              onSubmit: _c.sendPenalty,
-              onSkip: skip,
-            )
-          : PiratePenaltyWaiting(
-              theme: _theme,
-              winnerName: winnerName,
-              onSkip: skip,
-            );
-    } else {
-      content = PiratePenaltyCard(
-        key: ValueKey('card-${s.gameId}'),
-        theme: _theme,
-        text: penalty.text,
-        winnerName: winnerName,
-        loserName: loserName,
-        iAmLoser: s.loser == me,
-        done: penalty.done,
-        onDone: () {
-          GameSfx.instance.play(GameSound.confirm);
-          _c.penaltyDone();
-        },
-        onSkip: skip,
-      );
-    }
-    return ColoredBox(
-      color: Colors.black.withValues(alpha: 0.38),
-      child: Align(
-        alignment: Alignment.bottomCenter,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(12, 60, 12, 12),
-          child: PiratePhasePanel(theme: _theme, child: content),
-        ),
-      ),
-    );
   }
 }

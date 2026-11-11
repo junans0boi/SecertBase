@@ -3,21 +3,17 @@ import test from 'node:test';
 import {
   PIRATE_HOLES,
   PIRATE_MAX_TIMEOUTS,
-  PIRATE_PENALTY_PRESETS,
   PIRATE_TURN_MS,
   applyForfeit,
   applyStab,
   applyTimeout,
-  completePenalty,
   createPirateGame,
   firstPlayerLossProbability,
   freeSlots,
   nextFirstTurn,
   normalizeHoles,
-  normalizePenaltyText,
   publicPirateState,
   riskPct,
-  setPenalty,
 } from '../src/pirate-engine.js';
 
 const players = ['A', 'B'];
@@ -146,34 +142,6 @@ test('afk forfeit ends a playing game for the waiting player', () => {
   assert.equal(r.state.loser, 'A');
   assert.equal(r.state.reason, 'afk');
   assert.equal(applyForfeit(r.state, 'B').ok, false);
-});
-
-test('penalty text is trimmed, 1..30 characters, never empty', () => {
-  assert.deepEqual(normalizePenaltyText('  노래 한 소절  '), { ok: true, text: '노래 한 소절' });
-  assert.equal(normalizePenaltyText('   ').reason, 'penalty_empty');
-  assert.equal(normalizePenaltyText('').reason, 'penalty_empty');
-  assert.equal(normalizePenaltyText(42).reason, 'invalid_payload');
-  assert.equal(normalizePenaltyText('가'.repeat(30)).ok, true);
-  assert.equal(normalizePenaltyText('가'.repeat(31)).reason, 'penalty_too_long');
-  assert.equal(normalizePenaltyText('🍦'.repeat(30)).ok, true, 'emoji count as one character');
-  assert.equal(normalizePenaltyText('a\n\tb').text, 'a b');
-  assert.equal(PIRATE_PENALTY_PRESETS.length, 10);
-  for (const p of PIRATE_PENALTY_PRESETS) assert.equal(normalizePenaltyText(p).text, p);
-});
-
-test('only the winner sets the penalty once; only the loser completes it once', () => {
-  const playing = createPirateGame({ players, random: seq(0, 0) });
-  assert.equal(setPenalty(playing, 'B', '딱밤 한 대').reason, 'not_exploded');
-  const exploded = applyStab(playing, 'A', 0).state; // A loses
-  assert.equal(setPenalty(exploded, 'A', '딱밤 한 대').reason, 'not_winner');
-  assert.equal(completePenalty(exploded, 'A').reason, 'no_penalty');
-  const set = setPenalty(exploded, 'B', ' 딱밤 한 대 ', { now: 7 });
-  assert.deepEqual(set.state.penalty, { text: '딱밤 한 대', by: 'B', at: 7, doneAt: null });
-  assert.equal(setPenalty(set.state, 'B', '다른 것').reason, 'penalty_already_set');
-  assert.equal(completePenalty(set.state, 'B').reason, 'not_loser');
-  const done = completePenalty(set.state, 'A', { now: 8 });
-  assert.equal(done.state.penalty.doneAt, 8);
-  assert.equal(completePenalty(done.state, 'A').reason, 'penalty_already_done');
 });
 
 test('rematch alternates the first player', () => {

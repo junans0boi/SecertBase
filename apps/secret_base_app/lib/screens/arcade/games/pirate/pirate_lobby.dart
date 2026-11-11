@@ -81,7 +81,6 @@ class PirateLobbyView extends StatelessWidget {
   static const _rules = [
     ('차례', '번갈아 한 구멍씩 칼을 꽂아요 · 20초'),
     ('패배', '폭탄 구멍을 찌른 사람이 져요'),
-    ('벌칙', '이긴 사람이 벌칙을 정해요'),
   ];
 
   static int riskPct(int holes) => (100 / holes).round();
