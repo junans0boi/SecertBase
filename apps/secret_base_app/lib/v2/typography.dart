@@ -1,5 +1,7 @@
-// 비밀기지 2.0 type scale: six steps of Noto Sans KR plus a Gowun Batang
-// serif for emotional numbers and titles (D+412, result titles).
+// 비밀기지 2.1 type scale: Pretendard (bundled, assets/fonts/pretendard).
+// One family for everything, including big numbers (412일, D-26). [serif]
+// is kept as an API for older call sites and now renders Pretendard
+// ExtraBold, so the app has a single, plain typeface.
 //
 // Minimum sizes: body copy 13px (cap), labels 12px. Nothing smaller.
 //
@@ -8,19 +10,26 @@
 // `V2Theme(dark: true)`). `cap` is [V2Colors.sub]; in dark screens use
 // `V2Text.cap.copyWith(color: V2Palette.of(context).sub)`.
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'palettes.dart';
 import 'tokens.dart';
 
 abstract final class V2Text {
+  /// Bundled family name (pubspec.yaml).
+  static const family = 'Pretendard';
+
+  /// Korean glyphs Pretendard lacks fall back to the platform font.
+  static const fallback = <String>['Apple SD Gothic Neo', 'Noto Sans KR'];
+
   static TextStyle _sans(
     double size,
     double lineHeight,
     FontWeight weight, {
     double letterSpacing = 0,
     Color? color,
-  }) => GoogleFonts.notoSansKr(
+  }) => TextStyle(
+    fontFamily: family,
+    fontFamilyFallback: fallback,
     fontSize: size,
     height: lineHeight / size,
     fontWeight: weight,
@@ -28,30 +37,35 @@ abstract final class V2Text {
     color: color,
   );
 
-  /// 28/34 w800. Big page moments (온보딩, 홈 히어로 숫자 옆 제목).
+  /// 30/36 w700. Big page moments (홈 "함께한 지 412일", 온보딩).
   static final TextStyle display = _sans(
-    28,
-    34,
+    30,
+    36,
     FontWeight.w700,
-    letterSpacing: -0.56,
+    letterSpacing: -0.8,
   );
 
-  /// 22/28 w800. Tab page titles, sheet titles.
+  /// 26/32 w800. Tab page titles (놀이, 지도, 더보기), sheet titles.
   static final TextStyle title = _sans(
-    22,
-    28,
-    FontWeight.w700,
-    letterSpacing: -0.33,
+    26,
+    32,
+    FontWeight.w800,
+    letterSpacing: -0.6,
   );
 
-  /// 18/24 w700. Card titles, dialog titles, section heads.
-  static final TextStyle head = _sans(18, 24, FontWeight.w700);
+  /// 17/24 w700. Card titles, dialog titles, section heads.
+  static final TextStyle head = _sans(
+    17,
+    24,
+    FontWeight.w700,
+    letterSpacing: -0.2,
+  );
 
   /// 15/22 w500. Default body copy.
   static final TextStyle body = _sans(15, 22, FontWeight.w500);
 
   /// 15/20 w600. List-row titles, emphasized body.
-  static final TextStyle bodyStrong = _sans(15, 20, FontWeight.w700);
+  static final TextStyle bodyStrong = _sans(15, 20, FontWeight.w600);
 
   /// 13/18 w500 in the active theme's sub color. Captions, help text,
   /// subtitles.
@@ -77,30 +91,33 @@ abstract final class V2Text {
   /// 17/24 w700. Centered title of a back-style header.
   static final TextStyle headerBack = _sans(17, 24, FontWeight.w700);
 
-  /// Gowun Batang serif, only for emotional numbers and result titles.
+  /// Big emotional numbers and result titles. Since 2.1 this is Pretendard
+  /// ExtraBold with tight tracking (the serif face was dropped).
   ///
   /// ```dart
-  /// Text('D+412', style: V2Text.serif(size: 40, color: Colors.white))
+  /// Text('412', style: V2Text.serif(size: 46))
   /// ```
   static TextStyle serif({
     double size = 28,
-    FontWeight weight = FontWeight.w700,
+    FontWeight weight = FontWeight.w800,
     Color? color,
     double? height,
-    double letterSpacing = -0.2,
+    double? letterSpacing,
   }) {
     assert(size >= 12, '2.0 type never goes below 12px');
-    return GoogleFonts.gowunBatang(
+    return TextStyle(
+      fontFamily: family,
+      fontFamilyFallback: fallback,
       fontSize: size,
       fontWeight: weight,
       color: color,
-      height: height ?? 1.25,
-      letterSpacing: letterSpacing,
+      height: height ?? 1.2,
+      letterSpacing: letterSpacing ?? -size * 0.03,
     );
   }
 
-  /// Noto Sans KR at an arbitrary size, for rare one-offs (stat numbers).
-  /// Prefer the six steps above.
+  /// Pretendard at an arbitrary size, for rare one-offs (stat numbers).
+  /// Prefer the steps above.
   static TextStyle sans({
     required double size,
     FontWeight weight = FontWeight.w500,
@@ -109,7 +126,9 @@ abstract final class V2Text {
     double letterSpacing = 0,
   }) {
     assert(size >= 12, '2.0 type never goes below 12px');
-    return GoogleFonts.notoSansKr(
+    return TextStyle(
+      fontFamily: family,
+      fontFamilyFallback: fallback,
       fontSize: size,
       fontWeight: weight,
       color: color,

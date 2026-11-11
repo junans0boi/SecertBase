@@ -4,13 +4,14 @@ import '../theme.dart';
 import '../tokens.dart';
 
 enum V2CardVariant {
-  /// White, hairline border, level-1 shadow.
+  /// 2.1: a gray block on white pages (no border, no shadow). On tinted
+  /// pages (종이, 버터) it is a white block instead.
   raised,
 
-  /// White, hairline border, no shadow.
+  /// Same as [raised] (kept for older call sites).
   flat,
 
-  /// Soft blush fill, no border, no shadow.
+  /// Soft fill, no border, no shadow.
   soft,
 }
 
@@ -53,16 +54,16 @@ class V2Card extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = V2Palette.of(context);
     final br = BorderRadius.circular(radius);
-    final fill = color ?? (variant == V2CardVariant.soft ? p.soft : p.surface);
-    final bordered = variant != V2CardVariant.soft && gradient == null;
+    // 2.1: cards are flat blocks. On a white page a white card would vanish,
+    // so it takes the soft gray; on tinted pages it stays the surface color.
+    final whitePage = p.bg == p.surface;
+    final fill =
+        color ??
+        (variant == V2CardVariant.soft || whitePage ? p.soft : p.surface);
     final decoration = BoxDecoration(
       color: gradient == null ? fill : null,
       gradient: gradient,
       borderRadius: br,
-      border: bordered ? Border.all(color: p.line) : null,
-      boxShadow: variant == V2CardVariant.raised && !p.dark
-          ? V2Shadow.level1
-          : null,
     );
     if (onTap == null) {
       return Container(decoration: decoration, padding: padding, child: child);

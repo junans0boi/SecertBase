@@ -61,8 +61,8 @@ void main() {
     expect(V2Text.cap.color, V2Palettes.night.sub);
     expect(V2Gradients.hero, V2Palettes.night.heroStrong);
     await c.select(V2ThemeId.blossom);
-    expect(V2Colors.bg, V2BlossomColors.bg);
-    expect(V2Text.cap.color, V2BlossomColors.sub);
+    expect(V2Colors.bg, V2Palettes.blossom.bg);
+    expect(V2Text.cap.color, V2Palettes.blossom.sub);
   });
 
   test('the choice is saved and restored on this device', () async {
@@ -79,7 +79,7 @@ void main() {
     expect(V2Palette.current, V2Palettes.sage);
   });
 
-  test('an unknown saved value falls back to 분홍', () async {
+  test('an unknown saved value falls back to 코랄', () async {
     SharedPreferences.setMockInitialValues({
       V2ThemeController.prefsKey: 'neon',
     });
@@ -102,24 +102,24 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('화면 테마'), findsOneWidget);
-    expect(find.text('분홍'), findsOneWidget);
-    expect(find.text('밤의 비밀기지'), findsOneWidget);
+    expect(find.text('코랄'), findsOneWidget);
+    expect(find.text('블루'), findsOneWidget);
 
-    await tester.tap(find.text('밤의 비밀기지'));
+    await tester.tap(find.text('블루'));
     await tester.pumpAndSettle();
-    expect(c.value, V2ThemeId.night);
+    expect(c.value, V2ThemeId.clean);
     expect(
-      Theme.of(tester.element(find.byType(Scaffold))).scaffoldBackgroundColor,
-      V2Palettes.night.bg,
+      Theme.of(tester.element(find.byType(Scaffold))).colorScheme.primary,
+      V2Palettes.clean.primary,
     );
 
     await tester.dragUntilVisible(
-      find.text('버터 팝'),
+      find.text('버터'),
       find.byType(ListView),
       const Offset(0, -200),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('버터 팝'));
+    await tester.tap(find.text('버터'));
     await tester.pumpAndSettle();
     expect(c.value, V2ThemeId.butter);
   });
