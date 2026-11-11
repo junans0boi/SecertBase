@@ -24,15 +24,23 @@ class V2List extends StatelessWidget {
     final items = <Widget>[];
     for (var i = 0; i < children.length; i++) {
       if (i > 0) {
-        items.add(Divider(height: 1, thickness: 1, color: p.line));
+        items.add(
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: p.bg == p.surface ? p.soft2 : p.line,
+          ),
+        );
       }
       items.add(children[i]);
     }
+    // 2.1: a flat block like V2Card — gray on white pages, white on tinted
+    // pages, no border.
+    final whitePage = p.bg == p.surface;
     return Container(
       decoration: BoxDecoration(
-        color: p.surface,
+        color: whitePage ? p.soft : p.surface,
         borderRadius: V2Radius.cardAll,
-        border: Border.all(color: p.line),
       ),
       child: ClipRRect(
         borderRadius: V2Radius.cardAll,

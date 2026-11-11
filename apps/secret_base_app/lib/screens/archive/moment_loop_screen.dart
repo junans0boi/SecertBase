@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/auth_service.dart';
 import '../../core/http/api_client.dart';
@@ -13,17 +12,15 @@ import '../../features/moment_loop/data/moment_loop_repository.dart';
 import '../../features/moment_loop/domain/moment.dart';
 import '../../features/moment_loop/domain/moment_edit.dart';
 import '../../v2/v2.dart';
-import '../home/today_loop_viewer.dart';
 import 'moment/couple_names.dart';
 import 'moment/moment_composer.dart';
 import 'moment/moment_detail.dart';
 import 'moment/moment_feed.dart';
 import 'moment/moment_format.dart';
 import 'moment/moment_sheets.dart';
+import 'moment/moment_story_feed.dart';
 
-enum _FeedTab { today, week, past }
-
-/// 기록 (구 MomentLoop): 오늘 카드, 오늘/이번 주/지난 기록, 작성기.
+/// 기록 (2.1): 하루 한 장 피드 + 스토리 줄 + "내 순간 올리기", 모아보기 달력, 작성기.
 class MomentLoopScreen extends StatefulWidget {
   final http.Client? client;
   final String? baseUrl;
@@ -72,13 +69,14 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
   late final UploadOutbox _outbox;
   TodayApi? _todayApi;
 
-  _FeedTab _tab = _FeedTab.today;
-  bool _gridView = true;
+  /// 모아보기(달력) instead of the one-day-per-page feed.
+  bool _calendar = false;
+
+  /// Day the feed should scroll to next (calendar pick, after posting).
+  DateTime? _jumpTo;
   bool _openedInitialTarget = false;
   late DateTime _weekStart;
   TodayState? _today;
-  bool _todayLoading = true;
-  bool _todayFailed = false;
   String? _partner;
   String? _storageError;
   int _lastDraftCount = 0;
@@ -137,7 +135,6 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     _outbox.addListener(_onOutboxChanged);
     _outbox.feedRevision.addListener(_onFeedChanged);
     _lastDraftCount = _outbox.drafts.length;
-    unawaited(_loadViewMode());
     unawaited(_initializeOutbox());
     unawaited(_loadPartner());
     unawaited(_loadToday());
@@ -182,23 +179,6 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     unawaited(_loadToday());
   }
 
-  Future<void> _loadViewMode() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final grid = prefs.getBool('moment_loop_grid_view') ?? true;
-      if (mounted && grid != _gridView) setState(() => _gridView = grid);
-    } catch (_) {}
-  }
-
-  Future<void> _toggleViewMode() async {
-    final next = !_gridView;
-    setState(() => _gridView = next);
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('moment_loop_grid_view', next);
-    } catch (_) {}
-  }
-
   Future<void> _initializeOutbox() async {
     try {
       await _outbox.initialize();
@@ -229,31 +209,6 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     if (mounted && name != null) setState(() => _partner = name);
   }
 
-  /// 둘의 순간이 열렸다면 홈과 같은 뷰어로 함께 보고, 아니면 오늘 탭으로 돌아온다.
-  Future<void> _openTodayLoop() async {
-    final state = _today;
-    final opened =
-        state != null &&
-        (state.status == TodayStatus.complete ||
-            state.status == TodayStatus.viewed);
-    if (!opened) {
-      setState(() => _tab = _FeedTab.today);
-      return;
-    }
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => TodayLoopViewer(
-          state: state,
-          baseUrl: _baseUrl,
-          myName: _myName,
-          partnerName: _partnerName,
-          reveal: true,
-        ),
-      ),
-    );
-    if (mounted) unawaited(_loadToday());
-  }
-
   Future<void> _loadToday() async {
     _todayApi ??= TodayApi(
       baseUrl: _baseUrl,
@@ -263,18 +218,9 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     try {
       final state = await _todayApi!.fetchState();
       if (!mounted) return;
-      setState(() {
-        _today = state;
-        _todayLoading = false;
-        _todayFailed = false;
-      });
+      setState(() => _today = state);
     } catch (_) {
-      if (mounted) {
-        setState(() {
-          _todayLoading = false;
-          _todayFailed = true;
-        });
-      }
+      // The feed works without it; the CTA just falls back to my own posts.
     }
   }
 
@@ -304,7 +250,10 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
 
   // ── Composer / drafts ──────────────────────────────────────────────────────
 
-  Future<void> _openComposer({bool todayMoment = true}) async {
+  Future<void> _openComposer({
+    bool todayMoment = true,
+    MomentStartSource source = MomentStartSource.none,
+  }) async {
     final created = await Navigator.of(context).push<Object?>(
       MaterialPageRoute(
         fullscreenDialog: true,
@@ -313,6 +262,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
           outbox: _outbox,
           mediaPicker: widget.mediaPicker,
           startWithTodayMoment: todayMoment,
+          startSource: source,
           initialPinId: widget.initialPinId,
           initialPinName: widget.initialPinName,
         ),
@@ -325,17 +275,9 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
   }
 
   void _showDate(DateTime date) {
-    final day = dateOnly(date);
-    final thisWeek = mondayOf(DateTime.now());
     setState(() {
-      if (day == dateOnly(DateTime.now())) {
-        _tab = _FeedTab.today;
-      } else if (mondayOf(day) == thisWeek) {
-        _tab = _FeedTab.week;
-        _weekStart = thisWeek;
-      } else {
-        _tab = _FeedTab.past;
-      }
+      _calendar = false;
+      _jumpTo = dateOnly(date);
     });
   }
 
@@ -486,91 +428,55 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     }
   }
 
-  void _showCalendar() {
-    final days = <String>{};
-    for (final m in _controller.state.moments) {
-      final d = momentDay(m);
-      if (d != null) days.add(dayKey(d));
+  // ── Build ──────────────────────────────────────────────────────────────
+
+  Future<void> _heart(Moment post) async {
+    try {
+      await _controller.toggleReaction(sessionId: post.sessionKey, emoji: '❤️');
+    } catch (_) {
+      if (mounted) {
+        showV2Snack(context, '하트를 보내지 못했어요', tone: V2Tone.err);
+      }
+    }
+  }
+
+  void _openComments(Moment post) {
+    if (post.todayLocked && post.userId != _userId) {
+      showV2Snack(context, '내 순간을 남기면 $_partnerName의 순간이 열려요');
+      return;
     }
     showV2Sheet<void>(
       context,
-      title: '날짜로 찾기',
-      builder: (sheetContext) => MomentCalendarSheet(
-        month: _weekStart,
-        daysWithMoments: days,
-        onDay: (day) {
-          Navigator.pop(sheetContext);
-          setState(() {
-            _weekStart = mondayOf(day);
-            _tab = _FeedTab.week;
-          });
-        },
+      title: '댓글',
+      builder: (_) => MomentCommentSheet(
+        postId: post.id,
+        myUserId: _userId,
+        auth: _auth,
+        onCount: (_) {},
       ),
     );
   }
-
-  // ── Build ──────────────────────────────────────────────────────────────────
-
-  bool get _isCurrentWeek => _weekStart == mondayOf(DateTime.now());
 
   @override
   Widget build(BuildContext context) {
     final p = V2Palette.of(context);
-    final drafts = _outbox.drafts;
-    return V2Theme(
-      child: Scaffold(
-        backgroundColor: p.bg,
-        appBar: V2Header(
-          title: '기록',
-          actions: [
-            if (drafts.isNotEmpty)
-              V2IconButton(
-                key: const Key('moment_drafts_entry'),
-                icon: V2Icons.refresh,
-                tooltip: '올리는 중인 기록 ${drafts.length}개',
-                dot: drafts.any((d) => d.status == UploadDraftStatus.failed),
-                onPressed: _showDrafts,
-              ),
-            if (!_unpaired)
-              V2IconButton(
-                key: const Key('moment_add'),
-                icon: V2Icons.add,
-                tooltip: '순간 남기기',
-                onPressed: () => _openComposer(),
-              ),
-          ],
-        ),
-        body: SafeArea(top: false, child: _body(p)),
-      ),
-    );
-  }
-
-  Widget _body(V2Palette p) {
     final state = _controller.state;
-    if (_unpaired) {
-      return V2EmptyState.unpaired(
-        onAction:
-            widget.onGoPairing ??
-            () => Navigator.of(context).popUntil((r) => r.isFirst),
-      );
-    }
     final failed = state.status == MomentLoopStatus.failure;
     final loading =
         state.status != MomentLoopStatus.ready &&
         state.moments.isEmpty &&
         !failed;
-    final me = _userId;
-    final partner = _partnerName;
-    final drafts = _outbox.drafts;
     final offline = _errorCode == 'network_error';
 
-    final groups = groupMoments(state.moments);
-    final today = dateOnly(DateTime.now());
-    final thisWeek = mondayOf(today);
-
-    final Widget feed;
-    if (failed && state.moments.isEmpty) {
-      feed = offline
+    Widget? plain;
+    if (_unpaired) {
+      plain = V2EmptyState.unpaired(
+        onAction:
+            widget.onGoPairing ??
+            () => Navigator.of(context).popUntil((r) => r.isFirst),
+      );
+    } else if (failed && state.moments.isEmpty) {
+      plain = offline
           ? V2ErrorState.offline(onRetry: _refresh)
           : V2ErrorState(
               title: '기록을 불러오지 못했어요',
@@ -578,256 +484,88 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
               onRetry: _refresh,
             );
     } else if (loading) {
-      feed = const SingleChildScrollView(
+      plain = const SingleChildScrollView(
         padding: EdgeInsets.all(V2Space.page),
         physics: NeverScrollableScrollPhysics(),
         child: MomentFeedSkeleton(),
       );
-    } else {
-      feed = switch (_tab) {
-        _FeedTab.today => _todayFeed(groups, today, me, partner),
-        _FeedTab.week => _weekFeed(groups, me, partner),
-        _FeedTab.past => _pastFeed(groups, thisWeek, me, partner),
-      };
+    }
+    if (plain != null) {
+      return V2Theme(
+        child: Scaffold(
+          backgroundColor: p.bg,
+          appBar: const V2Header(title: '기록'),
+          body: SafeArea(top: false, child: plain),
+        ),
+      );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            V2Space.page,
-            V2Space.x2,
-            V2Space.page,
-            V2Space.x3,
-          ),
-          child: MomentTodayCard(
-            state: _today,
-            loading: _todayLoading,
-            failed: _todayFailed,
-            myName: _myName,
-            partnerName: partner,
-            onCompose: () => _openComposer(),
-            onOpenLoop: _openTodayLoop,
-          ),
-        ),
-        if (drafts.isNotEmpty || _storageError != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              V2Space.page,
-              0,
-              V2Space.page,
-              V2Space.x3,
-            ),
-            child: _storageError != null
-                ? V2Banner(tone: V2BannerTone.err, message: _storageError!)
-                : MomentUploadBanner(
-                    drafts: drafts,
-                    onRetry: _resumeUploads,
-                    onOpen: _showDrafts,
-                  ),
-          ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: V2Space.page),
-          child: V2Segmented<_FeedTab>(
-            segments: const [
-              V2Segment(value: _FeedTab.today, label: '오늘'),
-              V2Segment(value: _FeedTab.week, label: '이번 주'),
-              V2Segment(value: _FeedTab.past, label: '지난 기록'),
-            ],
-            selected: _tab,
-            onChanged: (t) => setState(() {
-              _tab = t;
-              if (t == _FeedTab.week) _weekStart = mondayOf(DateTime.now());
-            }),
-          ),
-        ),
-        if (failed && state.moments.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              V2Space.page,
-              V2Space.x3,
-              V2Space.page,
-              0,
-            ),
-            child: offline
-                ? V2Banner.offline()
-                : V2Banner(
-                    tone: V2BannerTone.warn,
-                    message: '최신 기록을 불러오지 못했어요',
-                    actionLabel: '다시 시도',
-                    onAction: _refresh,
-                  ),
-          ),
-        Expanded(child: feed),
-      ],
-    );
-  }
+    final me = _userId;
+    final pages = buildMomentDayPages(state.moments, me);
+    final todayKey = dayKey(dateOnly(DateTime.now()));
+    final todayPage = pages.where((pg) => dayKey(pg.day) == todayKey);
+    final postedToday = todayPage.isNotEmpty && todayPage.first.hasMine;
+    final partnerToday = todayPage.isNotEmpty && todayPage.first.hasTheirs
+        ? todayPage.first.theirs.first
+        : null;
+    // When I have not posted, today's page is the "내 순간 올리기" page.
+    final feedPages = postedToday
+        ? pages
+        : pages.where((pg) => dayKey(pg.day) != todayKey).toList();
 
-  Widget _scroll(List<Widget> children) => RefreshIndicator(
-    onRefresh: _refresh,
-    child: ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(
-        V2Space.page,
-        V2Space.x2,
-        V2Space.page,
-        V2Space.x12,
-      ),
-      children: children,
-    ),
-  );
-
-  Widget _toolbar({required bool weekNav, String? label}) => MomentWeekToolbar(
-    weekStart: _weekStart,
-    isCurrentWeek: _isCurrentWeek,
-    showWeekNav: weekNav,
-    label: label,
-    onPrev: () => setState(
-      () => _weekStart = _weekStart.subtract(const Duration(days: 7)),
-    ),
-    onNext: _isCurrentWeek
-        ? null
-        : () => setState(
-            () => _weekStart = _weekStart.add(const Duration(days: 7)),
-          ),
-    onCalendar: _showCalendar,
-    gridView: _gridView,
-    onToggleView: _toggleViewMode,
-  );
-
-  Widget _emptyFor({required String title, String? body, bool cta = true}) {
-    return V2EmptyState(
-      key: const Key('moment_empty'),
-      illustration: const V2SceneIllustration(V2Scene.photo),
-      title: title,
-      body: body,
-      actionLabel: cta ? '순간 남기기' : null,
-      onAction: cta ? () => _openComposer() : null,
-    );
-  }
-
-  Widget _todayFeed(
-    List<List<Moment>> groups,
-    DateTime today,
-    int? me,
-    String partner,
-  ) {
-    final todays = groups.where((g) => momentDay(g.first) == today).toList();
-    return _scroll([
-      _toolbar(weekNav: false, label: '오늘의 기록'),
-      if (todays.isEmpty)
-        Padding(
-          padding: const EdgeInsets.only(top: V2Space.x4),
-          child: _emptyFor(
-            title: '오늘은 아직 기록이 없어요',
-            body: '사진 한 장, 한 줄이면 충분해요.',
-          ),
-        )
-      else
-        MomentDaySection(
-          day: today,
-          groups: todays,
-          gridView: _gridView,
-          baseUrl: _baseUrl,
-          myUserId: me,
-          myName: _myName,
-          partnerName: partner,
-          onTap: _openDetail,
-        ),
-    ]);
-  }
-
-  Widget _weekFeed(List<List<Moment>> groups, int? me, String partner) {
-    final end = _weekStart.add(const Duration(days: 7));
-    final inWeek = groups.where((g) {
-      final d = momentDay(g.first);
-      return d != null && !d.isBefore(_weekStart) && d.isBefore(end);
-    }).toList();
-    final days = <DateTime, List<List<Moment>>>{};
-    for (final g in inWeek) {
-      days.putIfAbsent(momentDay(g.first)!, () => []).add(g);
+    final drafts = _outbox.drafts;
+    Widget? banner;
+    if (_storageError != null) {
+      banner = V2Banner(tone: V2BannerTone.err, message: _storageError!);
+    } else if (drafts.isNotEmpty) {
+      banner = MomentUploadBanner(
+        key: const Key('moment_drafts_entry'),
+        drafts: drafts,
+        onRetry: _resumeUploads,
+        onOpen: _showDrafts,
+      );
+    } else if (failed) {
+      banner = offline
+          ? V2Banner.offline()
+          : V2Banner(
+              tone: V2BannerTone.warn,
+              message: '최신 기록을 불러오지 못했어요',
+              actionLabel: '다시 시도',
+              onAction: _refresh,
+            );
     }
-    final ordered = days.keys.toList()..sort((a, b) => b.compareTo(a));
-    return _scroll([
-      _toolbar(weekNav: true),
-      if (ordered.isEmpty)
-        Padding(
-          padding: const EdgeInsets.only(top: V2Space.x4),
-          child: _isCurrentWeek
-              ? _emptyFor(
-                  title: '이번 주 첫 순간을 남겨 보세요',
-                  body: '사진·짧은 영상·한 줄 중 하나면 충분해요.',
-                )
-              : _emptyFor(title: '이 주에는 기록이 없어요', cta: false),
-        )
-      else
-        for (final d in ordered)
-          MomentDaySection(
-            day: d,
-            groups: days[d]!,
-            gridView: _gridView,
+
+    final body = _calendar
+        ? MomentMonthGrid(
+            pages: pages,
+            baseUrl: _baseUrl,
+            myUserId: me,
+            todayOpen: postedToday,
+            onShowFeed: () => setState(() => _calendar = false),
+            onPickDay: _showDate,
+          )
+        : MomentStoryFeed(
+            pages: feedPages,
+            showTodayCta: !postedToday,
+            partnerPostedToday:
+                partnerToday != null || (_today?.hasPartnerMoment ?? false),
+            partnerTodayMoment: partnerToday,
             baseUrl: _baseUrl,
             myUserId: me,
             myName: _myName,
-            partnerName: partner,
-            onTap: _openDetail,
-          ),
-    ]);
-  }
+            partnerName: _partnerName,
+            onCompose: (source) => _openComposer(source: source),
+            onOpenGroup: (group) => _openDetail(group),
+            onHeart: _heart,
+            onComments: _openComments,
+            onShowCalendar: () => setState(() => _calendar = true),
+            banner: banner == null ? null : V2Theme(child: banner),
+            jumpTo: _jumpTo,
+          );
 
-  Widget _pastFeed(
-    List<List<Moment>> groups,
-    DateTime thisWeek,
-    int? me,
-    String partner,
-  ) {
-    final past = groups.where((g) {
-      final d = momentDay(g.first);
-      return d != null && d.isBefore(thisWeek);
-    }).toList();
-    final months = <DateTime, List<List<Moment>>>{};
-    for (final g in past) {
-      final d = momentDay(g.first)!;
-      months.putIfAbsent(DateTime(d.year, d.month), () => []).add(g);
-    }
-    final ordered = months.keys.toList()..sort((a, b) => b.compareTo(a));
-    return _scroll([
-      _toolbar(weekNav: false, label: '달별로 모아 봤어요'),
-      if (ordered.isEmpty)
-        Padding(
-          padding: const EdgeInsets.only(top: V2Space.x4),
-          child: _emptyFor(
-            title: '지난 기록이 아직 없어요',
-            body: '지난주까지 남긴 기록이 여기에 쌓여요.',
-            cta: false,
-          ),
-        )
-      else
-        for (final m in ordered)
-          MomentMonthSection(
-            month: m,
-            groups: months[m]!,
-            bothDays: _bothDays(months[m]!, me),
-            gridView: _gridView,
-            baseUrl: _baseUrl,
-            myUserId: me,
-            myName: _myName,
-            partnerName: partner,
-            onTap: _openDetail,
-          ),
-    ]);
-  }
-
-  /// Days of the month where both of us left a moment.
-  int _bothDays(List<List<Moment>> groups, int? me) {
-    final mine = <String>{};
-    final theirs = <String>{};
-    for (final g in groups) {
-      final d = momentDay(g.first);
-      if (d == null) continue;
-      (g.first.userId == me ? mine : theirs).add(dayKey(d));
-    }
-    return mine.intersection(theirs).length;
+    return Scaffold(
+      backgroundColor: const Color(0xFF0C0C0E),
+      body: RefreshIndicator(onRefresh: _refresh, child: body),
+    );
   }
 }

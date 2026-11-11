@@ -46,7 +46,6 @@ dependencies:
   google_sign_in: ^7.2.0
   google_sign_in_web: ^1.1.3
   url_launcher: ^6.3.2
-  flutter_map: ^8.2.2
   latlong2: ^0.9.0
   geolocator: ^14.0.2
   geocoding: ^4.0.0
@@ -60,6 +59,7 @@ dependencies:
   image: ^4.5.4
   package_info_plus: ^9.0.1
   video_thumbnail: ^0.5.3
+  maplibre: ^0.3.5
 
 dev_dependencies:
   flutter_test:
@@ -88,6 +88,20 @@ flutter:
     - assets/images/hwatu/
     - assets/sounds/yut/
     - assets/images/yut/
+
+  fonts:
+    # Pretendard (SIL OFL 1.1, assets/fonts/pretendard/OFL.txt). Only the
+    # weights the 2.1 design uses; 400 falls back to Medium.
+    - family: Pretendard
+      fonts:
+        - asset: assets/fonts/pretendard/Pretendard-Medium.otf
+          weight: 500
+        - asset: assets/fonts/pretendard/Pretendard-SemiBold.otf
+          weight: 600
+        - asset: assets/fonts/pretendard/Pretendard-Bold.otf
+          weight: 700
+        - asset: assets/fonts/pretendard/Pretendard-ExtraBold.otf
+          weight: 800
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

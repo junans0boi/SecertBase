@@ -118,6 +118,8 @@ ThemeData _build(V2Palette p) {
 
   return ThemeData(
     useMaterial3: true,
+    fontFamily: V2Text.family,
+    fontFamilyFallback: V2Text.fallback,
     extensions: [p],
     brightness: scheme.brightness,
     colorScheme: scheme,
@@ -146,7 +148,7 @@ ThemeData _build(V2Palette p) {
       scrolledUnderElevation: 0,
       centerTitle: false,
       toolbarHeight: 52,
-      titleTextStyle: V2Text.title.copyWith(color: ink),
+      titleTextStyle: V2Text.headerBack.copyWith(color: ink),
       iconTheme: IconThemeData(color: ink, size: 24),
       systemOverlayStyle: dark
           ? SystemUiOverlayStyle.light

@@ -82,20 +82,39 @@ void main() {
     expect(queue.drafts, isEmpty);
   });
 
-  testWidgets('empty 기록 shows the pinned today card and week CTA', (
-    tester,
-  ) async {
+  testWidgets('empty 기록 opens on the "내 순간 올리기" page', (tester) async {
     final api = MockClient((_) async => _json({'ok': true, 'posts': []}));
     await _pump(tester, api);
     expect(find.text('기록'), findsWidgets);
-    expect(find.text('MomentLoop'), findsNothing);
-    expect(find.byKey(const Key('moment_today_card')), findsOneWidget);
-    expect(find.text('오늘은 아직 기록이 없어요'), findsOneWidget);
-    await tester.tap(find.text('이번 주'));
-    await tester.pump(const Duration(milliseconds: 200));
-    expect(find.text('이번 주 첫 순간을 남겨 보세요'), findsOneWidget);
+    expect(find.byKey(const Key('moment_today_cta')), findsOneWidget);
+    expect(find.text('내 순간 올리기'), findsOneWidget);
+    expect(find.text('카메라로 찍거나 앨범에서 골라요'), findsOneWidget);
     expect(find.byTooltip('순간 남기기'), findsOneWidget);
   });
+
+  testWidgets(
+    'the upload button asks camera or album, album opens the picker',
+    (tester) async {
+      var picked = 0;
+      final api = MockClient((_) async => _json({'ok': true, 'posts': []}));
+      await _pump(
+        tester,
+        api,
+        mediaPicker: () async {
+          picked++;
+          return const [];
+        },
+      );
+      await tester.tap(find.byKey(const Key('moment_upload_cta')));
+      await tester.pumpAndSettle();
+      expect(find.text('카메라로 찍기'), findsOneWidget);
+      expect(find.text('앨범에서 고르기'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('moment_source_gallery')));
+      await tester.pumpAndSettle();
+      expect(find.text('새 순간'), findsOneWidget);
+      expect(picked, 1);
+    },
+  );
 
   testWidgets('409 active_couple_required is shown as unpaired, not empty', (
     tester,
@@ -115,7 +134,9 @@ void main() {
     expect(find.text('다시 시도'), findsWidgets);
   });
 
-  testWidgets('switches between the persisted grid and list', (tester) async {
+  testWidgets('a day page shows the post; 모아보기 jumps back to that day', (
+    tester,
+  ) async {
     final api = MockClient(
       (_) async => _json({
         'ok': true,
@@ -134,15 +155,20 @@ void main() {
       }),
     );
     await _pump(tester, api);
-    expect(find.byKey(const Key('moment_three_column_grid')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('moment_view_toggle')));
+    // I posted today, so the feed opens on today's page, not the CTA.
+    expect(find.byKey(const Key('moment_today_cta')), findsNothing);
+    expect(find.text('group caption'), findsWidgets);
+    await tester.tap(find.byKey(const Key('moment_calendar_toggle')));
     await tester.pump(const Duration(milliseconds: 200));
-    expect(find.byKey(const Key('moment_three_column_grid')), findsNothing);
-    expect(find.byTooltip('격자로 보기'), findsOneWidget);
+    expect(find.byKey(const Key('moment_month_grid')), findsOneWidget);
     expect(
-      (await SharedPreferences.getInstance()).getBool('moment_loop_grid_view'),
-      isFalse,
+      find.text('${DateTime.now().month}월에 1일 남겼어요', findRichText: true),
+      findsOneWidget,
     );
+    await tester.tap(find.text('한 장씩'));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byKey(const Key('moment_month_grid')), findsNothing);
+    expect(find.text('group caption'), findsWidgets);
   });
 
   testWidgets('openComposer opens the composer with 오늘의 순간 on', (tester) async {

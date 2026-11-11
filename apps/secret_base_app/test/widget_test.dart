@@ -27,37 +27,35 @@ void main() {
       const MaterialApp(home: Scaffold(body: ArcadeScreen())),
     );
 
-    expect(find.text('윷놀이'), findsOneWidget);
-    expect(find.text('가위바위보'), findsOneWidget);
-    expect(find.text('원카드'), findsOneWidget);
-    expect(find.text('제로'), findsOneWidget);
+    // Today's pick may repeat a title in the hero card.
+    expect(find.text('윷놀이'), findsWidgets);
+    expect(find.text('가위바위보'), findsWidgets);
+    expect(find.text('원카드'), findsWidgets);
+    expect(find.text('제로'), findsWidgets);
     // 하나빼기는 제로로 분리 — 가위바위보 설명에서 제외.
     // (설명은 아이콘 선택 시 상세 카드에 노출된다.)
-    await tester.tap(find.text('가위바위보'));
+    await tester.ensureVisible(find.byKey(const ValueKey('arcade_game_rps')));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text('단판, 3판, 묵찌빠 세 가지 모드'),
-      500,
-      scrollable: find.byType(Scrollable).first,
-    );
+    await tester.tap(find.byKey(const ValueKey('arcade_game_rps')));
+    await tester.pumpAndSettle();
     expect(find.text('단판, 3판, 묵찌빠 세 가지 모드'), findsOneWidget);
     // 상표 노출 금지 (ADR 0001) — 사용자 노출명은 원카드만.
     expect(find.text('UNO'), findsNothing);
-    expect(find.text('주사위'), findsOneWidget);
-    expect(find.text('텔레파시'), findsOneWidget);
-    expect(find.text('해적 룰렛'), findsOneWidget);
-    expect(find.text('그림 맞히기'), findsOneWidget);
+    expect(find.text('주사위'), findsWidgets);
+    expect(find.text('텔레파시'), findsWidgets);
+    expect(find.text('해적 룰렛'), findsWidgets);
+    expect(find.text('그림 맞히기'), findsWidgets);
     // 타 게임 상표 노출 금지.
     expect(find.text('캐치마인드'), findsNothing);
     // 폭탄 돌리기/룰렛은 Phase 2에서 폐기 — 노출 금지.
     expect(find.text('폭탄 돌리기'), findsNothing);
     expect(find.text('룰렛'), findsNothing);
     // Phase 1~2 신규 게임 노출 확인.
-    expect(find.text('블랙잭'), findsOneWidget);
-    expect(find.text('도둑잡기'), findsOneWidget);
-    expect(find.text('패널티킥'), findsOneWidget);
+    expect(find.text('블랙잭'), findsWidgets);
+    expect(find.text('도둑잡기'), findsWidgets);
+    expect(find.text('패널티킥'), findsWidgets);
     // 사용자 피드백으로 농구 자유투는 서비스에서 완전히 제외했다.
     expect(find.text('농구 자유투'), findsNothing);
-    expect(find.text('볼링'), findsOneWidget);
+    expect(find.text('볼링'), findsWidgets);
   });
 }

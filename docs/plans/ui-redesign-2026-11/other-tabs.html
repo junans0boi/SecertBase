@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>다른 탭 목업</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+:root{--page:#E7E5E1;--pageInk:#22201D;--pageSub:#6B665F;--ink:#191F28;--sub:#6B7684;--mut:#8B95A1;--line:#F0F1F3;--soft:#F5F6F8;--soft2:#EEF0F3}
+body{--acc:#FF5A3C;--accSoft:color-mix(in srgb,var(--acc) 12%,#fff)}
+body[data-acc="blue"]{--acc:#3478F6}body[data-acc="green"]{--acc:#22936A}body[data-acc="lavender"]{--acc:#7357F6}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--page);color:var(--pageInk);font-family:Pretendard,-apple-system,"Apple SD Gothic Neo",sans-serif;-webkit-font-smoothing:antialiased;word-break:keep-all}
+button{font:inherit;border:0;background:none;color:inherit;cursor:pointer}
+svg.i{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.top{max-width:1960px;margin:0 auto;padding:32px 24px 8px}
+.top h1{font-size:24px;font-weight:800;letter-spacing:-.4px}
+.top p{color:var(--pageSub);font-size:14px;margin-top:6px;line-height:1.55}
+.ctrl{display:flex;gap:16px;margin-top:16px;align-items:center}.ctrl .lbl{font-size:13px;font-weight:700;color:var(--pageSub)}
+.swatches{display:inline-flex;gap:8px}.swatches button{width:28px;height:28px;border-radius:50%;box-shadow:inset 0 0 0 3px rgba(255,255,255,.9);outline:2px solid transparent;outline-offset:2px}.swatches button.on{outline-color:#22201D}
+.sec{max-width:1960px;margin:0 auto;padding:30px 24px 6px}
+.sec h2{font-size:20px;font-weight:800;letter-spacing:-.3px}
+.sec p{font-size:13.5px;color:var(--pageSub);margin-top:4px}
+.grid{max-width:1960px;margin:0 auto;padding:18px 24px 20px;display:flex;flex-wrap:wrap;gap:40px 36px;justify-content:center}
+.opt{width:360px}
+.opt h3{font-size:16px;font-weight:800;margin-top:20px}
+.opt h3 span{display:inline-grid;place-items:center;min-width:24px;height:24px;padding:0 6px;border-radius:7px;background:#22201D;color:#fff;font-size:12.5px;margin-right:8px;vertical-align:1px}
+.opt p{font-size:13.5px;color:var(--pageSub);line-height:1.55;margin-top:6px}
+
+/* phone */
+.phone{width:360px;height:780px;border-radius:46px;position:relative;overflow:hidden;box-shadow:0 0 0 9px #141414,0 28px 60px rgba(0,0,0,.28);isolation:isolate;background:#fff;color:var(--ink)}
+.sb{position:absolute;top:0;left:0;right:0;height:46px;display:flex;align-items:center;justify-content:space-between;padding:6px 28px 0 30px;font-size:15px;font-weight:600;z-index:40;pointer-events:none}
+.sb .r{display:flex;gap:6px;align-items:center}.sb .bat{width:24px;height:12px;border:1.5px solid currentColor;border-radius:4px;position:relative}.sb .bat:after{content:"";position:absolute;inset:1.5px;right:5px;background:currentColor;border-radius:1.5px}
+.island{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:104px;height:30px;background:#000;border-radius:20px;z-index:41}
+.scr{position:absolute;top:0;left:0;right:0;bottom:82px;overflow-y:auto;padding:50px 20px 24px;scrollbar-width:none}
+.scr::-webkit-scrollbar{display:none}
+.tab{position:absolute;left:0;right:0;bottom:0;height:82px;display:flex;justify-content:space-around;padding:8px 6px 0;z-index:20;background:rgba(255,255,255,.97);border-top:1px solid var(--line)}
+.tab a{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10.5px;font-weight:600;width:56px;color:#B0B8C1}.tab a.on{color:var(--ink)}
+.tab a svg.i{width:23px;height:23px}
+.home-ind{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:120px;height:5px;border-radius:3px;background:#191F28;z-index:60}
+
+/* shared atoms */
+.ttl{display:flex;justify-content:space-between;align-items:center;height:52px}
+.ttl h4{font-size:26px;font-weight:800;letter-spacing:-.6px}
+.pill{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px;border-radius:999px;background:var(--soft);font-size:13.5px;font-weight:700}
+.pill.acc{background:var(--accSoft);color:var(--acc)}
+.coin{width:16px;height:16px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#FFE38A,#F5B82E 60%,#D99512);box-shadow:inset 0 0 0 1.5px rgba(160,100,0,.25)}
+.ib{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:var(--soft);color:var(--ink)}
+.h5{font-size:17px;font-weight:700;margin:26px 0 10px;display:flex;justify-content:space-between;align-items:baseline}
+.h5 small{font-size:13px;color:var(--mut);font-weight:500}
+.chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
+.chips button{flex:none;height:34px;padding:0 14px;border-radius:999px;background:var(--soft);font-size:13.5px;font-weight:600;color:var(--sub)}
+.chips button.on{background:var(--ink);color:#fff}
+.seg{display:flex;background:var(--soft2);border-radius:12px;padding:3px}
+.seg button{flex:1;height:36px;border-radius:9px;font-size:13.5px;font-weight:600;color:var(--sub)}
+.seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.row{display:flex;align-items:center;gap:14px;padding:14px 2px;border-bottom:1px solid var(--line);cursor:pointer}
+.row:last-child{border-bottom:0}
+.row .t{flex:1;min-width:0}.row .t b{display:block;font-size:15px;font-weight:600}.row .t span{display:block;font-size:13px;color:var(--mut);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .v{font-size:14px;font-weight:600;color:var(--sub)}
+.row .chev{color:#C5CCD3}
+.ico{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:var(--accSoft);color:var(--acc);flex:none;position:relative}
+.ico.g{background:var(--soft);color:var(--sub)}
+.ico .dot{position:absolute;top:-2px;right:-2px;width:9px;height:9px;border-radius:50%;background:var(--acc);box-shadow:0 0 0 2px #fff}
+.btn{width:100%;height:52px;border-radius:16px;background:var(--acc);color:#fff;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn.dark{background:var(--ink)}.btn.ghost{background:var(--soft);color:var(--ink)}
+.btn[disabled]{background:var(--soft2);color:var(--mut)}
+.av{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;font-size:12px;font-weight:700;color:#fff;font-style:normal}
+.av.me{background:#FF7A59}.av.pt{background:#4F7CF6}
+.pair{display:flex}.pair .av{box-shadow:0 0 0 2.5px #fff}.pair .av+.av{margin-left:-9px}
+.card{background:var(--soft);border-radius:22px;padding:16px}
+.prog{height:8px;border-radius:4px;background:var(--soft2);overflow:hidden}.prog i{display:block;height:100%;border-radius:4px;background:var(--acc)}
+
+/* photo stand-ins */
+.ph{position:relative;overflow:hidden;background:#999}
+.ph:after{content:"";position:absolute;inset:0;opacity:.3;mix-blend-mode:overlay;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")}
+.ph-a{background:radial-gradient(60% 40% at 70% 38%,rgba(255,236,190,.95),rgba(255,236,190,0) 70%),linear-gradient(180deg,#F3C9A3 0%,#E9967A 42%,#9C5B60 70%,#3B2A36 100%)}
+.ph-b{background:radial-gradient(45% 35% at 30% 30%,rgba(255,255,255,.9),rgba(255,255,255,0) 70%),linear-gradient(165deg,#DCE7EE 0%,#A9BED0 45%,#6E8299 75%,#3D4757 100%)}
+.ph-c{background:radial-gradient(70% 50% at 50% 0%,#F7F4EC,rgba(247,244,236,0) 70%),linear-gradient(180deg,#BFD9E4 0%,#7FB1C9 40%,#2F7FA0 62%,#E4D2B4 63%,#CDB590 100%)}
+.ph-d{background:radial-gradient(50% 50% at 40% 45%,#FBE7D0,rgba(251,231,208,0) 70%),linear-gradient(140deg,#5B4636,#2E241D)}
+.ph-e{background:radial-gradient(40% 30% at 70% 22%,rgba(255,250,220,.95),rgba(255,250,220,0) 70%),linear-gradient(180deg,#E3EEDC 0%,#A9CDA2 42%,#5E8C61 72%,#2F4B36 100%)}
+.ph-f{background:radial-gradient(6% 4% at 22% 58%,#FFD58A,transparent),radial-gradient(5% 3% at 64% 48%,#FFB3A0,transparent),linear-gradient(180deg,#151735 0%,#2E2A55 45%,#7B4B6A 80%,#D9845F 100%)}
+
+/* map stand-in */
+.map{position:absolute;inset:0;background:#EEF0E8;overflow:hidden}
+.map:before{content:"";position:absolute;inset:-40%;background:
+  linear-gradient(90deg,transparent 47%,#fff 47%,#fff 49%,transparent 49%) 0 0/180px 180px,
+  linear-gradient(0deg,transparent 47%,#fff 47%,#fff 49%,transparent 49%) 0 0/150px 150px;transform:rotate(-14deg)}
+.map:after{content:"";position:absolute;left:-10%;right:-10%;top:58%;height:70px;background:#CFE1EE;transform:rotate(-8deg);box-shadow:0 0 0 6px rgba(255,255,255,.5)}
+.map .park{position:absolute;left:58%;top:16%;width:120px;height:90px;border-radius:40% 50% 45% 55%;background:#D6E7CC;z-index:1}
+.map .road{position:absolute;left:-10%;right:-10%;top:36%;height:12px;background:#FFE7B8;transform:rotate(18deg);z-index:1;box-shadow:0 0 0 2px #fff}
+.pin{position:absolute;z-index:3;transform:translate(-50%,-100%);cursor:pointer;display:flex;flex-direction:column;align-items:center}
+.pin .b{width:44px;height:44px;border-radius:50%;padding:3px;background:#fff;box-shadow:0 6px 14px rgba(0,0,0,.2)}
+.pin .b .ph{display:block;width:100%;height:100%;border-radius:50%}
+.pin .b.want{display:grid;place-items:center;background:#fff;color:var(--acc)}
+.pin .b.want svg{width:20px;height:20px;fill:var(--acc);stroke:var(--acc)}
+.pin:after{content:"";width:10px;height:10px;background:#fff;transform:rotate(45deg);margin-top:-6px;box-shadow:3px 3px 6px rgba(0,0,0,.08)}
+.pin .nm{position:absolute;top:50px;font-size:11.5px;font-weight:700;background:#fff;padding:2px 7px;border-radius:999px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.1)}
+.pin.sel .b{box-shadow:0 0 0 3px var(--acc),0 6px 14px rgba(0,0,0,.2)}
+.me-dot{position:absolute;left:38%;top:62%;width:18px;height:18px;border-radius:50%;background:#3478F6;box-shadow:0 0 0 4px #fff,0 0 0 14px rgba(52,120,246,.18);z-index:2}
+.mtop{position:absolute;top:52px;left:14px;right:14px;z-index:5}
+.search{display:flex;align-items:center;gap:10px;height:48px;padding:0 16px;border-radius:16px;background:#fff;box-shadow:0 6px 18px rgba(0,0,0,.1);font-size:15px;color:var(--mut)}
+.mtop .chips{margin-top:10px}.mtop .chips button{background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.mtop .chips button.on{background:var(--ink)}
+.fab{position:absolute;right:14px;z-index:5;width:46px;height:46px;border-radius:50%;background:#fff;display:grid;place-items:center;box-shadow:0 6px 16px rgba(0,0,0,.15)}
+.peek{position:absolute;left:0;right:0;bottom:82px;z-index:6;background:#fff;border-radius:24px 24px 0 0;box-shadow:0 -6px 24px rgba(0,0,0,.1);padding:8px 18px 14px;transition:height .25s;height:150px;overflow:hidden}
+.peek.big{height:470px}
+.grab{width:38px;height:5px;border-radius:3px;background:#D5DAE0;margin:0 auto 10px}
+.peek .hd{display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+.peek .hd b{font-size:17px}
+.plist .row .ph{width:52px;height:52px;border-radius:14px;flex:none}
+.plist .row .want{width:52px;height:52px;border-radius:14px;flex:none;display:grid;place-items:center;background:var(--accSoft);color:var(--acc)}
+.tag{display:inline-block;font-size:11.5px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--accSoft);color:var(--acc);margin-right:6px}
+.tag.g{background:var(--soft2);color:var(--sub)}
+.stars{color:#F5B82E;font-size:13px;letter-spacing:1px}
+/* map B */
+.mstrip{position:relative;height:190px;border-radius:22px;overflow:hidden;margin-top:6px}
+.mstrip .map{border-radius:22px}
+.mstrip .open{position:absolute;right:10px;bottom:10px;z-index:4;font-size:12.5px;font-weight:700;background:#fff;padding:7px 11px;border-radius:999px;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.pgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.pcard{cursor:pointer}
+.pcard .ph,.pcard .wantbox{height:150px;border-radius:18px}
+.pcard .wantbox{display:grid;place-items:center;background:var(--accSoft);color:var(--acc);position:relative}
+.pcard .wantbox svg{width:30px;height:30px}
+.pcard b{display:block;font-size:14.5px;margin-top:8px}
+.pcard span{display:block;font-size:12.5px;color:var(--mut);margin-top:2px}
+
+/* sheets */
+.bd{position:absolute;inset:0;background:rgba(0,0,0,.4);z-index:30;opacity:0;pointer-events:none;transition:opacity .2s}
+.bd.show{opacity:1;pointer-events:auto}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:31;background:#fff;border-radius:26px 26px 0 0;padding:10px 20px 34px;transform:translateY(105%);transition:transform .25s ease;max-height:86%;overflow-y:auto;scrollbar-width:none}
+.sheet.show{transform:none}
+.sheet h5{font-size:21px;font-weight:800;letter-spacing:-.4px}
+.sheet .meta{font-size:13.5px;color:var(--mut);margin-top:4px}
+.sheet .hero{height:180px;border-radius:18px;margin:14px 0 4px}
+.sheet .hero.want{display:grid;place-items:center;background:var(--accSoft);color:var(--acc)}
+.sheet .note{background:var(--soft);border-radius:16px;padding:14px;margin-top:12px;font-size:14px;line-height:1.5}
+.sheet .note small{display:block;font-size:12px;color:var(--mut);margin-top:6px}
+.sheet .acts{display:flex;gap:8px;margin-top:16px}
+.sheet .acts .btn{flex:1;height:50px;font-size:15px}
+.toast{position:absolute;left:50%;top:96px;transform:translate(-50%,-8px);z-index:50;background:rgba(25,31,40,.92);color:#fff;font-size:13px;font-weight:600;padding:10px 14px;border-radius:14px;opacity:0;pointer-events:none;transition:all .2s;white-space:nowrap}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* play */
+.pa-hero{position:relative;height:200px;border-radius:24px;overflow:hidden;margin-top:6px;color:#fff;cursor:pointer}
+.pa-hero .art{position:absolute;inset:0}
+.pa-hero .over{position:absolute;inset:0;padding:18px;display:flex;flex-direction:column;justify-content:space-between;background:linear-gradient(180deg,rgba(0,0,0,0) 30%,rgba(0,0,0,.45))}
+.pa-hero .k{font-size:12.5px;font-weight:700;opacity:.9}
+.pa-hero h6{font-size:24px;font-weight:800;letter-spacing:-.5px}
+.pa-hero .sub{font-size:13px;opacity:.9;margin-top:2px}
+.pa-hero .go{align-self:flex-start;margin-top:12px;height:40px;padding:0 16px;border-radius:999px;background:#fff;color:var(--ink);font-weight:700;font-size:14px;display:inline-flex;align-items:center;gap:6px}
+.recent{display:flex;gap:10px;overflow-x:auto;scrollbar-width:none}.recent::-webkit-scrollbar{display:none}
+.recent .g{flex:none;width:92px;cursor:pointer}
+.gart{border-radius:20px;display:grid;place-items:center;font-size:30px;position:relative;overflow:hidden}
+.recent .gart{width:92px;height:92px}
+.recent b{display:block;font-size:13px;margin-top:6px;text-align:center}
+.glist .gart{width:52px;height:52px;border-radius:16px;font-size:24px}
+.rec{font-size:12px;font-weight:700;color:var(--sub);background:var(--soft);padding:4px 8px;border-radius:8px;white-space:nowrap}
+.pb-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.pb-grid .tile{cursor:pointer}
+.pb-grid .gart{height:132px;font-size:42px;border-radius:22px}
+.pb-grid .gart .badge{position:absolute;left:10px;top:10px;font-size:11px;font-weight:800;background:rgba(255,255,255,.85);color:var(--ink);padding:3px 7px;border-radius:7px}
+.pb-grid b{display:block;font-size:14.5px;margin-top:8px}
+.pb-grid span{display:block;font-size:12.5px;color:var(--mut);margin-top:1px}
+.att{display:flex;align-items:center;gap:12px;background:var(--accSoft);border-radius:18px;padding:12px 14px;margin-top:10px}
+.att b{font-size:14.5px;flex:1}.att b small{display:block;font-size:12.5px;font-weight:500;color:var(--sub);margin-top:2px}
+.att button{height:36px;padding:0 14px;border-radius:999px;background:var(--acc);color:#fff;font-weight:700;font-size:13.5px}
+.att.done button{background:var(--soft2);color:var(--mut)}
+.gsheet .gart{width:72px;height:72px;font-size:36px;border-radius:22px}
+.gsheet .top3{display:flex;gap:14px;align-items:center}
+.stat3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px}
+.stat3 div{background:var(--soft);border-radius:14px;padding:12px;text-align:center}
+.stat3 b{display:block;font-size:20px;font-weight:800}.stat3 span{font-size:12px;color:var(--mut)}
+.rules{margin-top:14px;font-size:13.5px;color:var(--sub);line-height:1.6}
+.rules li{margin-left:18px}
+
+/* more */
+.couple{display:flex;align-items:center;gap:14px;padding:16px;border-radius:22px;background:var(--soft);margin-top:4px;cursor:pointer}
+.couple .pair .av{width:46px;height:46px;font-size:17px}
+.couple .pair .av+.av{margin-left:-14px}
+.couple .t{flex:1}.couple b{font-size:17px;display:block}.couple span{font-size:13px;color:var(--mut)}
+.quick4{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:16px}
+.quick4 a{display:flex;flex-direction:column;align-items:center;gap:7px;font-size:12.5px;font-weight:600;cursor:pointer;color:var(--ink)}
+.quick4 .ico{width:52px;height:52px;border-radius:18px}
+.grp{margin-top:18px;background:#fff}
+.grp .lab{font-size:13px;font-weight:700;color:var(--mut);margin:6px 2px 2px}
+.mb-tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.mb-tiles .tl{background:var(--soft);border-radius:20px;padding:14px;min-height:118px;display:flex;flex-direction:column;justify-content:space-between;cursor:pointer;position:relative}
+.mb-tiles .tl .lab{font-size:12.5px;font-weight:700;color:var(--mut)}
+.mb-tiles .tl b{font-size:16px;line-height:1.3}
+.mb-tiles .tl .big{font-size:26px;font-weight:800;letter-spacing:-.5px}
+.mb-tiles .tl .dot{position:absolute;top:12px;right:12px;width:8px;height:8px;border-radius:50%;background:var(--acc)}
+.shopcard{display:flex;align-items:center;gap:14px;background:var(--ink);color:#fff;border-radius:20px;padding:16px;margin-top:10px;cursor:pointer}
+.shopcard .t{flex:1}.shopcard b{font-size:16px;display:block}.shopcard span{font-size:12.5px;opacity:.7}
+.shopcard .pill{background:rgba(255,255,255,.14);color:#fff}
+.thsw{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px}
+.thsw button{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--sub)}
+.thsw i{width:48px;height:48px;border-radius:50%;box-shadow:inset 0 0 0 3px #fff;outline:2px solid transparent;outline-offset:2px}
+.thsw button.on i{outline-color:var(--ink)}.thsw button.on{color:var(--ink)}
+
+/* shop */
+.lvl{display:flex;align-items:center;gap:10px;margin-top:4px}
+.lvl b{font-size:13px}.lvl .prog{flex:1}
+.lvl span{font-size:12px;color:var(--mut)}
+.gacha{position:relative;height:118px;border-radius:22px;overflow:hidden;margin-top:14px;color:#fff;cursor:pointer;background:linear-gradient(120deg,#2B2250,#5B3FA8 55%,var(--acc))}
+.gacha:before{content:"";position:absolute;right:-20px;top:-30px;width:170px;height:170px;border-radius:50%;background:radial-gradient(circle,#ffffff44,#ffffff00 65%)}
+.gacha .in{position:absolute;inset:0;padding:16px 18px;display:flex;flex-direction:column;justify-content:space-between}
+.gacha b{font-size:20px}.gacha span{font-size:13px;opacity:.85}
+.gacha .tk{align-self:flex-start;font-size:12.5px;font-weight:700;background:rgba(255,255,255,.2);padding:5px 10px;border-radius:999px}
+.gacha .cap{position:absolute;right:22px;top:26px;width:66px;height:66px;border-radius:50%;background:linear-gradient(180deg,#FFE7A3 50%,#fff 50%);box-shadow:0 8px 20px rgba(0,0,0,.3),inset 0 0 0 3px rgba(0,0,0,.08)}
+.igrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.item{background:var(--soft);border-radius:20px;padding:12px;cursor:pointer;position:relative}
+.item .art{height:96px;border-radius:14px;display:grid;place-items:center;font-size:40px;background:#fff}
+.item b{display:block;font-size:14px;margin-top:8px}
+.item .pr{display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;margin-top:4px}
+.item .gr{position:absolute;left:18px;top:18px;font-size:11px;font-weight:800;padding:2px 7px;border-radius:6px;background:#E9ECF0;color:#4E5968}
+.item .gr.A{background:#E3EDFF;color:#2F64D6}.item .gr.S{background:#FFF0D6;color:#B07200}
+.item .own{position:absolute;right:18px;top:18px;font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--ink);color:#fff}
+.mis{background:var(--soft);border-radius:18px;padding:14px;margin-top:10px}
+.mis .h{display:flex;justify-content:space-between;align-items:center}
+.mis b{font-size:14.5px}.mis .rw{font-size:13px;font-weight:700;display:flex;align-items:center;gap:4px}
+.mis .prog{margin-top:10px}
+.mis .f{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12.5px;color:var(--mut)}
+.mis .f button{height:32px;padding:0 14px;border-radius:999px;background:var(--acc);color:#fff;font-weight:700;font-size:13px}
+.mis .f button[disabled]{background:var(--soft2);color:var(--mut)}
+.cpn{display:flex;border-radius:18px;overflow:hidden;margin-top:10px;background:var(--accSoft)}
+.cpn .l{flex:1;padding:14px}
+.cpn .l b{font-size:15px;display:block}.cpn .l span{font-size:12.5px;color:var(--sub);margin-top:3px;display:block}
+.cpn .r{width:84px;border-left:2px dashed #fff;display:grid;place-items:center;font-size:13px;font-weight:800;color:var(--acc);cursor:pointer}
+</style>
+</head>
+<body data-acc="coral">
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></symbol>
+  <symbol id="book" viewBox="0 0 24 24"><path d="M12 6.5C10 5 7 4.5 3.5 5v13c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5C17 4.5 14 5 12 6.5Z"/><path d="M12 6.5v13"/></symbol>
+  <symbol id="map" viewBox="0 0 24 24"><path d="m3 6 6-2.5 6 2.5 6-2.5v14.5L15 20.5 9 18l-6 2.5Z"/><path d="M9 3.5V18M15 6v14.5"/></symbol>
+  <symbol id="game" viewBox="0 0 24 24"><rect x="2.5" y="7" width="19" height="11" rx="5.5"/><path d="M7.5 10.5v4M5.5 12.5h4"/><circle cx="15.5" cy="11.5" r=".6" fill="currentColor"/><circle cx="17.5" cy="13.5" r=".6" fill="currentColor"/></symbol>
+  <symbol id="more" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/><circle cx="18.5" cy="12" r="1.2" fill="currentColor"/></symbol>
+  <symbol id="chev" viewBox="0 0 24 24"><path d="m9.5 6 6 6-6 6"/></symbol>
+  <symbol id="search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></symbol>
+  <symbol id="loc" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/></symbol>
+  <symbol id="nav" viewBox="0 0 24 24"><path d="m4 11 16-7-7 16-2-7Z"/></symbol>
+  <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="heart" viewBox="0 0 24 24"><path d="M12 20s-7.5-4.4-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.6-7.5 10-7.5 10Z"/></symbol>
+  <symbol id="cam" viewBox="0 0 24 24"><path d="M4 8h3l1.8-2.5h6.4L17 8h3v11H4Z"/><circle cx="12" cy="13.2" r="3.6"/></symbol>
+  <symbol id="list" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+  <symbol id="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></symbol>
+  <symbol id="cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></symbol>
+  <symbol id="hut" viewBox="0 0 24 24"><path d="M3 11 12 4l9 7"/><path d="M6 10v10h12V10"/><path d="M10 20v-5h4v5"/></symbol>
+  <symbol id="spark" viewBox="0 0 24 24"><path d="M12 3c.6 4.2 2.8 6.4 7 7-4.2.6-6.4 2.8-7 7-.6-4.2-2.8-6.4-7-7 4.2-.6 6.4-2.8 7-7Z"/></symbol>
+  <symbol id="bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15Z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></symbol>
+  <symbol id="palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.2 0 1.8-.9 1.4-2-.4-1 .2-2 1.4-2H17a4 4 0 0 0 4-4c0-5.5-4-10-9-10Z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7.5" r="1"/></symbol>
+  <symbol id="shield" viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 5 3 8.5 7 10 4-1.5 7-5 7-10V6Z"/></symbol>
+  <symbol id="box" viewBox="0 0 24 24"><path d="M4 8 12 4l8 4v8l-8 4-8-4Z"/><path d="M4 8l8 4 8-4M12 12v8"/></symbol>
+  <symbol id="help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 0 1 5 .3c0 1.7-2.5 2-2.5 3.7M12 17h.01"/></symbol>
+  <symbol id="info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/></symbol>
+  <symbol id="out" viewBox="0 0 24 24"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/></symbol>
+  <symbol id="store" viewBox="0 0 24 24"><path d="M4 9h16l-1.5-5h-13Z"/><path d="M5 9v11h14V9M9 20v-5h6v5"/></symbol>
+  <symbol id="mind" viewBox="0 0 24 24"><path d="M12 20s-7-4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 6-7 10-7 10Z"/><path d="M9 11h6"/></symbol>
+</svg>
+
+<template id="sbtpl"><div class="sb"><span>9:41</span><span class="r"><svg class="i" style="width:17px;height:17px" viewBox="0 0 24 24"><path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="19" r=".8" fill="currentColor"/></svg><span class="bat"></span></span></div><div class="island"></div></template>
+<template id="tabtpl"><nav class="tab"><a><svg class="i"><use href="#home"/></svg>홈</a><a><svg class="i"><use href="#book"/></svg>기록</a><a><svg class="i"><use href="#map"/></svg>지도</a><a><svg class="i"><use href="#game"/></svg>놀이</a><a><svg class="i"><use href="#more"/></svg>더보기</a></nav><div class="home-ind"></div><div class="bd"></div><div class="toast"></div></template>
+
+<header class="top">
+  <h1>지도 · 놀이 · 더보기 · 상점 목업</h1>
+  <p>홈·기록과 같은 말투로 맞췄어요: 흰 바탕, 큰 제목, 장식 없음, 강조색 하나. 지도·놀이·더보기는 2안씩, 상점은 1안이에요.<br>칩·탭·핀·게임·아이템·설정 줄을 눌러 보세요. 시트가 열리거나 화면이 바뀌어요.</p>
+  <div class="ctrl"><span class="lbl">강조색</span><span class="swatches" id="accsw"><button data-v="coral" class="on" style="background:#FF5A3C"></button><button data-v="blue" style="background:#3478F6"></button><button data-v="green" style="background:#22936A"></button><button data-v="lavender" style="background:#7357F6"></button></span></div>
+</header>
+
+<!-- ═══════════════ 지도 ═══════════════ -->
+<div class="sec"><h2>지도</h2><p>지금 기능: 장소 저장(가고 싶은 곳 / 다녀온 곳), 검색, 내 위치, 우리의 여운(별점·한마디·사진), 길찾기, 이 장소에서 순간 남기기</p></div>
+<main class="grid">
+
+<section class="opt">
+  <div class="phone" data-tab="2">
+    <div class="map" style="z-index:0"><div class="park"></div><div class="road"></div><div class="me-dot"></div>
+      <div class="pin" style="left:30%;top:34%" data-place='{"n":"성수 연무장길 카페","k":"다녀온 곳","d":"10월 25일 다녀옴 · 별점 5","ph":"ph-b","note":"창가 자리 햇살이 좋았어","by":"서윤"}' data-cat="went"><span class="b"><span class="ph ph-b"></span></span><span class="nm">연무장길 카페</span></div>
+      <div class="pin" style="left:70%;top:46%" data-place='{"n":"서울숲 산책로","k":"다녀온 곳","d":"11월 2일 다녀옴 · 별점 4","ph":"ph-e","note":"다음엔 돗자리 챙기기","by":"민지"}' data-cat="went"><span class="b"><span class="ph ph-e"></span></span><span class="nm">서울숲</span></div>
+      <div class="pin" style="left:56%;top:70%" data-place='{"n":"한강 노을 포인트","k":"가고 싶은 곳","d":"서윤이 저장 · 11월 9일","ph":"","note":"","by":"서윤"}' data-cat="want"><span class="b want"><svg class="i"><use href="#heart"/></svg></span><span class="nm">한강 노을</span></div>
+      <div class="pin" style="left:22%;top:58%" data-place='{"n":"을지로 와인바","k":"가고 싶은 곳","d":"민지가 저장 · 11월 1일","ph":"","note":"","by":"민지"}' data-cat="want"><span class="b want"><svg class="i"><use href="#heart"/></svg></span><span class="nm">을지로 와인바</span></div>
+    </div>
+    <div class="mtop"><div class="search"><svg class="i"><use href="#search"/></svg>장소나 주소를 검색해요</div>
+      <div class="chips" data-filter><button class="on" data-v="all">전체 4</button><button data-v="went">다녀온 곳 2</button><button data-v="want">가고 싶은 곳 2</button></div></div>
+    <button class="fab" style="bottom:250px" data-toast="내 위치로 이동했어요"><svg class="i"><use href="#nav"/></svg></button>
+    <button class="fab" style="bottom:304px;background:var(--acc);color:#fff" data-toast="지도를 눌러 장소를 고르거나 검색해요"><svg class="i"><use href="#plus"/></svg></button>
+    <div class="peek" data-peek>
+      <div class="grab"></div>
+      <div class="hd" data-peek-toggle><b>우리 장소 4곳</b><span class="pill">목록 펼치기</span></div>
+      <div class="plist" style="margin-top:6px">
+        <div class="row" data-cat="went" data-open-place="0"><span class="ph ph-b"></span><span class="t"><b>성수 연무장길 카페</b><span><i class="tag">다녀온 곳</i><span class="stars">★★★★★</span></span></span></div>
+        <div class="row" data-cat="went" data-open-place="1"><span class="ph ph-e"></span><span class="t"><b>서울숲 산책로</b><span><i class="tag">다녀온 곳</i><span class="stars">★★★★☆</span></span></span></div>
+        <div class="row" data-cat="want" data-open-place="2"><span class="want"><svg class="i"><use href="#heart"/></svg></span><span class="t"><b>한강 노을 포인트</b><span><i class="tag g">가고 싶은 곳</i>서윤이 저장</span></span></div>
+        <div class="row" data-cat="want" data-open-place="3"><span class="want"><svg class="i"><use href="#heart"/></svg></span><span class="t"><b>을지로 와인바</b><span><i class="tag g">가고 싶은 곳</i>민지가 저장</span></span></div>
+      </div>
+    </div>
+    <div class="sheet" data-sheet="place">
+      <div class="grab"></div>
+      <div data-f="k" class="tag" style="margin-bottom:8px"></div>
+      <h5 data-f="n"></h5><div class="meta" data-f="d"></div>
+      <div class="hero" data-f="ph"></div>
+      <div class="note" data-f="note"></div>
+      <div class="acts"><button class="btn ghost" data-toast="네이버 지도로 길찾기를 열어요"><svg class="i"><use href="#nav"/></svg>길찾기</button><button class="btn" data-f="cta"><svg class="i"><use href="#cam"/></svg><span>여기서 순간 남기기</span></button></div>
+    </div>
+  </div>
+  <h3><span>지도 A</span>지도 + 아래 목록</h3>
+  <p>네이버·애플 지도처럼 지도가 화면 전체예요. 다녀온 곳은 사진 핀, 가고 싶은 곳은 하트 핀이에요. 아래 목록을 끌어 올리면 장소가 다 보여요. 핀이나 목록을 누르면 장소 카드가 떠요.</p>
+</section>
+
+<section class="opt">
+  <div class="phone" data-tab="2">
+    <div class="scr">
+      <div class="ttl"><h4>지도</h4><span style="display:flex;gap:8px"><span class="ib"><svg class="i"><use href="#search"/></svg></span><span class="ib" style="background:var(--acc);color:#fff" data-toast="지도를 눌러 장소를 고르거나 검색해요"><svg class="i"><use href="#plus"/></svg></span></span></div>
+      <div class="mstrip"><div class="map"><div class="park"></div><div class="road"></div>
+        <div class="pin" style="left:30%;top:48%"><span class="b" style="width:34px;height:34px"><span class="ph ph-b"></span></span></div>
+        <div class="pin" style="left:68%;top:56%"><span class="b" style="width:34px;height:34px"><span class="ph ph-e"></span></span></div>
+        <div class="pin" style="left:52%;top:86%"><span class="b want" style="width:34px;height:34px"><svg class="i"><use href="#heart"/></svg></span></div></div>
+        <span class="open" data-toast="지도를 크게 열어요">지도 크게 보기</span></div>
+      <div class="seg" style="margin-top:14px" data-filterseg><button class="on" data-v="went">다녀온 곳 2</button><button data-v="want">가고 싶은 곳 2</button></div>
+      <div class="pgrid">
+        <div class="pcard" data-cat="went" data-open-place="0"><div class="ph ph-b"></div><b>성수 연무장길 카페</b><span>★ 5 · 10월 25일</span></div>
+        <div class="pcard" data-cat="went" data-open-place="1"><div class="ph ph-e"></div><b>서울숲 산책로</b><span>★ 4 · 11월 2일</span></div>
+        <div class="pcard" data-cat="want" data-open-place="2" style="display:none"><div class="wantbox"><svg class="i"><use href="#heart"/></svg></div><b>한강 노을 포인트</b><span>서윤이 저장</span></div>
+        <div class="pcard" data-cat="want" data-open-place="3" style="display:none"><div class="wantbox"><svg class="i"><use href="#heart"/></svg></div><b>을지로 와인바</b><span>민지가 저장</span></div>
+      </div>
+    </div>
+    <div class="sheet" data-sheet="place">
+      <div class="grab"></div>
+      <div data-f="k" class="tag" style="margin-bottom:8px"></div>
+      <h5 data-f="n"></h5><div class="meta" data-f="d"></div>
+      <div class="hero" data-f="ph"></div>
+      <div class="note" data-f="note"></div>
+      <div class="acts"><button class="btn ghost" data-toast="네이버 지도로 길찾기를 열어요"><svg class="i"><use href="#nav"/></svg>길찾기</button><button class="btn" data-f="cta"><svg class="i"><use href="#cam"/></svg><span>여기서 순간 남기기</span></button></div>
+    </div>
+  </div>
+  <h3><span>지도 B</span>장소 모음 우선</h3>
+  <p>위에 작은 지도, 아래는 사진 카드 모음이에요. 인스타 저장 폴더처럼 "우리가 간 곳"을 사진으로 훑어봐요. 지도를 크게 보고 싶을 때만 펼쳐요.</p>
+</section>
+</main>
+
+<!-- ═══════════════ 놀이 ═══════════════ -->
+<div class="sec"><h2>놀이</h2><p>지금 기능: 게임 15개, 코인, 출석 보너스(+500), 상점 바로가기, 게임별 전적, 시작하기</p></div>
+<main class="grid">
+
+<section class="opt">
+  <div class="phone" data-tab="3">
+    <div class="scr">
+      <div class="ttl"><h4>놀이</h4><span class="pill" data-open="shop"><i class="coin"></i>12,340</span></div>
+      <div class="att" data-att><b>오늘 출석하고 500코인 받기<small>매일 한 번</small></b><button>받기</button></div>
+      <div class="pa-hero" data-game="tank"><div class="art ph ph-f"></div><div class="over"><span class="k">오늘의 추천 · 둘 다 아직 안 해 봤어요</span><div><h6>탱크 대작전</h6><div class="sub">포탄 각도를 맞춰 상대 탱크를 맞혀요</div><span class="go">▶ 시작하기</span></div></div></div>
+      <div class="h5">최근에 한 게임<small>전적은 게임을 누르면</small></div>
+      <div class="recent">
+        <div class="g" data-game="yut"><div class="gart" style="background:#FFF1D6">🎲</div><b>윷놀이</b></div>
+        <div class="g" data-game="onecard"><div class="gart" style="background:#FFE3E3">🃏</div><b>원카드</b></div>
+        <div class="g" data-game="pirate"><div class="gart" style="background:#E3ECFF">🏴‍☠️</div><b>해적 룰렛</b></div>
+        <div class="g" data-game="telepathy"><div class="gart" style="background:#EFE6FF">🔮</div><b>텔레파시</b></div>
+      </div>
+      <div class="h5">전체 게임<small>15개</small></div>
+      <div class="glist">
+        <div class="row" data-game="blackjack"><span class="gart" style="background:#FFE3E3">♠️</span><span class="t"><b>블랙잭</b><span>숨은 카드 한 장으로 21점 대결</span></span><span class="rec">8승 6패</span></div>
+        <div class="row" data-game="oldmaid"><span class="gart" style="background:#FFF1D6">🃏</span><span class="t"><b>도둑잡기</b><span>마지막 조커를 든 사람이 도둑</span></span><span class="rec">3승 4패</span></div>
+        <div class="row" data-game="marble"><span class="gart" style="background:#EFE6FF">🏰</span><span class="t"><b>마블 작전</b><span>땅을 사고 통행료를 받아요</span></span><span class="rec">2승 1패</span></div>
+        <div class="row" data-game="rps"><span class="gart" style="background:#E2F5EA">✊</span><span class="t"><b>가위바위보</b><span>3판 2선승</span></span><span class="rec">12승 10패</span></div>
+        <div class="row" data-game="gostop"><span class="gart" style="background:#FFE3E3">🎴</span><span class="t"><b>고스톱 (맞고)</b><span>둘이 치는 화투</span></span><span class="rec">처음</span></div>
+      </div>
+    </div>
+  </div>
+  <h3><span>놀이 A</span>추천 + 목록</h3>
+  <p>오늘 해 볼 게임 하나를 크게 추천하고, 최근 게임과 전체 목록(전적 포함)을 아래에 둬요. 고민 없이 바로 시작하기 좋아요.</p>
+</section>
+
+<section class="opt">
+  <div class="phone" data-tab="3">
+    <div class="scr">
+      <div class="ttl"><h4>놀이</h4><span style="display:flex;gap:8px"><span class="pill" data-open="shop"><i class="coin"></i>12,340</span></span></div>
+      <div class="chips" data-filter><button class="on" data-v="all">전체</button><button data-v="board">보드</button><button data-v="card">카드</button><button data-v="quick">순발력</button><button data-v="talk">마음</button></div>
+      <div class="pb-grid">
+        <div class="tile" data-cat="board" data-game="yut"><div class="gart" style="background:linear-gradient(150deg,#FFE7B0,#FFC46B)">🎲<span class="badge">인기</span></div><b>윷놀이</b><span>12승 9패</span></div>
+        <div class="tile" data-cat="card" data-game="onecard"><div class="gart" style="background:linear-gradient(150deg,#FFD3D3,#FF8E8E)">🃏</div><b>원카드</b><span>7승 7패</span></div>
+        <div class="tile" data-cat="quick" data-game="tank"><div class="gart" style="background:linear-gradient(150deg,#C9D6FF,#7D93F0)">💣<span class="badge">NEW</span></div><b>탱크 대작전</b><span>처음</span></div>
+        <div class="tile" data-cat="talk" data-game="telepathy"><div class="gart" style="background:linear-gradient(150deg,#E6D9FF,#B49CF5)">🔮</div><b>텔레파시</b><span>협동</span></div>
+        <div class="tile" data-cat="quick" data-game="pirate"><div class="gart" style="background:linear-gradient(150deg,#CFE6FF,#7BB4EE)">🏴‍☠️</div><b>해적 룰렛</b><span>5승 3패</span></div>
+        <div class="tile" data-cat="card" data-game="gostop"><div class="gart" style="background:linear-gradient(150deg,#FFD6C7,#F59A7A)">🎴</div><b>고스톱</b><span>처음</span></div>
+        <div class="tile" data-cat="board" data-game="marble"><div class="gart" style="background:linear-gradient(150deg,#D9F2E3,#8FD3AE)">🏰</div><b>마블 작전</b><span>2승 1패</span></div>
+        <div class="tile" data-cat="quick" data-game="rps"><div class="gart" style="background:linear-gradient(150deg,#FFF0C2,#F7D266)">✊</div><b>가위바위보</b><span>12승 10패</span></div>
+      </div>
+      <div class="att" data-att style="margin-top:16px"><b>오늘 출석하고 500코인 받기<small>매일 한 번</small></b><button>받기</button></div>
+    </div>
+  </div>
+  <h3><span>놀이 B</span>게임 타일</h3>
+  <p>앱스토어·닌텐도처럼 큰 타일로 게임을 고르는 화면이에요. 위 칩으로 종류를 나눠요. 그림이 커서 고르는 재미가 있어요.</p>
+</section>
+
+<section class="opt">
+  <div class="phone" data-tab="3">
+    <div class="scr">
+      <div class="ttl"><h4>놀이</h4><span class="pill" data-open="shop"><i class="coin"></i><span data-bal>12,340</span></span></div>
+      <div class="att" data-att><b>오늘 출석하고 500코인 받기<small>매일 한 번</small></b><button>받기</button></div>
+      <div class="pa-hero" data-game="tank" style="margin-top:12px"><div class="art ph ph-f"></div><div class="over"><span class="k">오늘의 추천 · 둘 다 아직 안 해 봤어요</span><div><h6>탱크 대작전</h6><div class="sub">포탄 각도를 맞춰 상대 탱크를 맞혀요</div><span class="go">▶ 시작하기</span></div></div></div>
+      <div class="h5">최근에 한 게임</div>
+      <div class="recent">
+        <div class="g" data-game="yut"><div class="gart" style="background:linear-gradient(150deg,#FFE7B0,#FFC46B)">🎲</div><b>윷놀이</b></div>
+        <div class="g" data-game="onecard"><div class="gart" style="background:linear-gradient(150deg,#FFD3D3,#FF8E8E)">🃏</div><b>원카드</b></div>
+        <div class="g" data-game="pirate"><div class="gart" style="background:linear-gradient(150deg,#CFE6FF,#7BB4EE)">🏴‍☠️</div><b>해적 룰렛</b></div>
+        <div class="g" data-game="telepathy"><div class="gart" style="background:linear-gradient(150deg,#E6D9FF,#B49CF5)">🔮</div><b>텔레파시</b></div>
+      </div>
+      <div class="h5">전체 게임<small>15개</small></div>
+      <div class="chips" data-filter><button class="on" data-v="all">전체</button><button data-v="board">보드</button><button data-v="card">카드</button><button data-v="quick">순발력</button><button data-v="talk">마음</button></div>
+      <div class="pb-grid">
+        <div class="tile" data-cat="board" data-game="yut"><div class="gart" style="background:linear-gradient(150deg,#FFE7B0,#FFC46B)">🎲<span class="badge">인기</span></div><b>윷놀이</b><span>12승 9패</span></div>
+        <div class="tile" data-cat="card" data-game="onecard"><div class="gart" style="background:linear-gradient(150deg,#FFD3D3,#FF8E8E)">🃏</div><b>원카드</b><span>7승 7패</span></div>
+        <div class="tile" data-cat="quick" data-game="tank"><div class="gart" style="background:linear-gradient(150deg,#C9D6FF,#7D93F0)">💣<span class="badge">NEW</span></div><b>탱크 대작전</b><span>처음</span></div>
+        <div class="tile" data-cat="talk" data-game="telepathy"><div class="gart" style="background:linear-gradient(150deg,#E6D9FF,#B49CF5)">🔮</div><b>텔레파시</b><span>협동</span></div>
+        <div class="tile" data-cat="quick" data-game="pirate"><div class="gart" style="background:linear-gradient(150deg,#CFE6FF,#7BB4EE)">🏴‍☠️</div><b>해적 룰렛</b><span>5승 3패</span></div>
+        <div class="tile" data-cat="card" data-game="gostop"><div class="gart" style="background:linear-gradient(150deg,#FFD6C7,#F59A7A)">🎴</div><b>고스톱</b><span>처음</span></div>
+        <div class="tile" data-cat="board" data-game="marble"><div class="gart" style="background:linear-gradient(150deg,#D9F2E3,#8FD3AE)">🏰</div><b>마블 작전</b><span>2승 1패</span></div>
+        <div class="tile" data-cat="quick" data-game="rps"><div class="gart" style="background:linear-gradient(150deg,#FFF0C2,#F7D266)">✊</div><b>가위바위보</b><span>12승 10패</span></div>
+        <div class="tile" data-cat="card" data-game="blackjack"><div class="gart" style="background:linear-gradient(150deg,#FFD3D3,#F28B8B)">♠️</div><b>블랙잭</b><span>8승 6패</span></div>
+        <div class="tile" data-cat="card" data-game="oldmaid"><div class="gart" style="background:linear-gradient(150deg,#FFF0C2,#F2C46A)">🃏</div><b>도둑잡기</b><span>3승 4패</span></div>
+      </div>
+    </div>
+  </div>
+  <h3><span>놀이 확정</span>A + B</h3>
+  <p>출석 → 오늘의 추천(A) → 최근에 한 게임(A) → 종류 칩과 큰 게임 타일(B) 순서예요. 아래로 내려 보세요.</p>
+</section>
+</main>
+
+<!-- ═══════════════ 더보기 ═══════════════ -->
+<div class="sec"><h2>더보기</h2><p>지금 기능: 커플 정보, 기념일, 비밀기지, 우리 이해(운세·마음 돌봄), 상점, 알림, 화면 테마, 개인정보·권한, 개인 보관함, 고객센터, 앱 정보, 로그아웃·탈퇴 · 홈에서 뺀 4칸 메뉴도 여기로 와요</p></div>
+<main class="grid">
+
+<section class="opt">
+  <div class="phone" data-tab="4">
+    <div class="scr">
+      <div class="ttl"><h4>더보기</h4><span class="ib"><svg class="i"><use href="#bell"/></svg></span></div>
+      <div class="couple" data-toast="커플 정보를 열어요"><span class="pair"><i class="av me">민</i><i class="av pt">서</i></span><span class="t"><b>민지 · 서윤</b><span>함께한 지 412일 · 2025. 9. 26부터</span></span><svg class="i" style="color:#C5CCD3"><use href="#chev"/></svg></div>
+      <div class="quick4">
+        <a data-toast="오늘의 운세를 열어요"><span class="ico"><svg class="i"><use href="#sun"/></svg><i class="dot"></i></span>운세</a>
+        <a data-toast="우리 이해를 열어요"><span class="ico"><svg class="i"><use href="#mind"/></svg></span>우리 이해</a>
+        <a data-toast="기념일을 열어요"><span class="ico"><svg class="i"><use href="#cal"/></svg></span>기념일</a>
+        <a data-toast="비밀기지를 열어요"><span class="ico"><svg class="i"><use href="#hut"/></svg></span>비밀기지</a>
+      </div>
+      <div class="grp"><div class="lab">코인</div>
+        <div class="row" data-open="shop"><span class="ico"><svg class="i"><use href="#store"/></svg></span><span class="t"><b>상점</b><span>꾸미기 아이템 · 미션 · 쿠폰</span></span><span class="v" style="display:flex;align-items:center;gap:5px"><i class="coin"></i>12,340</span></div></div>
+      <div class="grp"><div class="lab">앱 설정</div>
+        <div class="row" data-toast="받고 싶은 알림만 골라요"><span class="ico g"><svg class="i"><use href="#bell"/></svg></span><span class="t"><b>알림</b></span><span class="v">켜짐</span></div>
+        <div class="row" data-open="theme"><span class="ico g"><svg class="i"><use href="#palette"/></svg></span><span class="t"><b>화면 테마</b></span><span class="v" data-themename>코랄</span></div>
+        <div class="row" data-toast="위치·카메라·알림 권한"><span class="ico g"><svg class="i"><use href="#shield"/></svg></span><span class="t"><b>개인정보·권한</b></span><svg class="i chev"><use href="#chev"/></svg></div>
+        <div class="row" data-toast="연결 전에 남긴 나만의 기록"><span class="ico g"><svg class="i"><use href="#box"/></svg></span><span class="t"><b>개인 보관함</b></span><svg class="i chev"><use href="#chev"/></svg></div></div>
+      <div class="grp"><div class="lab">도움말</div>
+        <div class="row" data-toast="자주 묻는 질문과 문의"><span class="ico g"><svg class="i"><use href="#help"/></svg></span><span class="t"><b>고객센터·FAQ</b></span><svg class="i chev"><use href="#chev"/></svg></div>
+        <div class="row" data-toast="버전 2.1.0"><span class="ico g"><svg class="i"><use href="#info"/></svg></span><span class="t"><b>앱 정보·약관</b></span><svg class="i chev"><use href="#chev"/></svg></div>
+        <div class="row" data-toast="로그아웃 · 탈퇴"><span class="ico g"><svg class="i"><use href="#out"/></svg></span><span class="t"><b>계정</b></span><svg class="i chev"><use href="#chev"/></svg></div></div>
+    </div>
+  </div>
+  <h3><span>더보기 A</span>바로가기 + 설정 목록</h3>
+  <p>위에 커플 카드와 4개 바로가기(운세·우리 이해·기념일·비밀기지), 아래는 아이폰 설정처럼 묶은 목록이에요. 가장 익숙하고 찾기 쉬워요.</p>
+</section>
+
+<section class="opt">
+  <div class="phone" data-tab="4">
+    <div class="scr">
+      <div class="ttl"><h4>더보기</h4><span class="pair"><i class="av me">민</i><i class="av pt">서</i></span></div>
+      <div class="mb-tiles">
+        <div class="tl" data-toast="오늘의 운세를 열어요"><i class="dot"></i><span class="lab">오늘의 운세</span><b>차분히 쌓아 가는 하루</b></div>
+        <div class="tl" data-toast="기념일을 열어요"><span class="lab">다음 기념일</span><div><div class="big">D-26</div><span style="font-size:12.5px;color:var(--mut)">서윤 생일 · 12월 7일</span></div></div>
+        <div class="tl" data-toast="우리 이해를 열어요"><span class="lab">우리 이해</span><b>심리검사 1개 진행 중</b></div>
+        <div class="tl" data-toast="비밀기지를 열어요"><span class="lab">비밀기지</span><div><div class="big">7</div><span style="font-size:12.5px;color:var(--mut)">받을 보상</span></div></div>
+      </div>
+      <div class="shopcard" data-open="shop"><span class="ico" style="background:rgba(255,255,255,.12);color:#fff"><svg class="i"><use href="#store"/></svg></span><span class="t"><b>상점</b><span>뽑기권 2장 · 미션 보상 2개</span></span><span class="pill"><i class="coin"></i>12,340</span></div>
+      <div class="grp" style="margin-top:20px">
+        <div class="row" data-toast="커플 정보를 열어요"><span class="t"><b>커플 정보</b><span>함께한 지 412일</span></span><svg class="i chev"><use href="#chev"/></svg></div>
+        <div class="row" data-toast="받고 싶은 알림만 골라요"><span class="t"><b>알림</b></span><span class="v">켜짐</span></div>
+        <div class="row" data-open="theme"><span class="t"><b>화면 테마</b></span><span class="v" data-themename>코랄</span></div>
+        <div class="row" data-toast="위치·카메라·알림 권한"><span class="t"><b>개인정보·권한</b></span><svg class="i chev"><use href="#chev"/></svg></div>
+        <div class="row" data-toast="연결 전에 남긴 나만의 기록"><span class="t"><b>개인 보관함</b></span><svg class="i chev"><use href="#chev"/></svg></div>
+        <div class="row" data-toast="자주 묻는 질문과 문의"><span class="t"><b>고객센터·FAQ</b></span><svg class="i chev"><use href="#chev"/></svg></div>
+        <div class="row" data-toast="로그아웃 · 탈퇴"><span class="t"><b>계정·앱 정보</b></span><svg class="i chev"><use href="#chev"/></svg></div>
+      </div>
+    </div>
+  </div>
+  <h3><span>더보기 B</span>정보 타일 + 짧은 목록</h3>
+  <p>운세·기념일·우리 이해·비밀기지를 내용이 보이는 타일로 둬요. 들어가지 않아도 오늘 운세와 D-26이 보여요. 설정은 아이콘 없이 짧은 목록이에요.</p>
+</section>
+</main>
+
+<!-- ═══════════════ 상점 ═══════════════ -->
+<div class="sec"><h2>상점</h2><p>지금 기능: 레벨·경험치, 뽑기(뽑기권), 아이템 구매(B·A등급, S 이상은 뽑기 전용), 내 아이템 장착, 미션 보상, 데이트 쿠폰 보내기·사용 · 조회 오류는 섹션별로 따로 불러오게 고쳐요</p></div>
+<main class="grid">
+<section class="opt">
+  <div class="phone" data-tab="3" id="shopPhone">
+    <div class="scr">
+      <div class="ttl"><h4>상점</h4><span class="pill"><i class="coin"></i><span data-bal>12,340</span></span></div>
+      <div class="seg" data-tabs><button class="on" data-v="store">상점</button><button data-v="mine">내 아이템</button><button data-v="mis">미션 2</button><button data-v="cpn">쿠폰</button></div>
+
+      <div data-pane="store">
+        <div class="lvl" style="margin-top:14px"><b>Lv.7</b><div class="prog"><i style="width:48%"></i></div><span>340/700 XP</span></div>
+        <div class="gacha" data-toast="뽑기를 열어요 · 3,000코인 또는 뽑기권 1장"><span class="cap"></span><div class="in"><span class="tk">뽑기권 2장</span><div><b>뽑기</b><br><span>무엇이 나올까요? 3,000코인부터</span></div></div></div>
+        <div class="chips" data-filter style="margin-top:16px"><button class="on" data-v="all">전체</button><button data-v="yut">윷놀이</button><button data-v="onecard">원카드</button><button data-v="marble">마블</button></div>
+        <div class="igrid">
+          <div class="item" data-cat="yut" data-item='{"n":"벚꽃 윷","g":"B","p":1200,"e":"🌸","own":0}'><span class="gr">B</span><div class="art">🌸</div><b>벚꽃 윷</b><div class="pr"><i class="coin"></i>1,200</div></div>
+          <div class="item" data-cat="yut" data-item='{"n":"황금 윷","g":"A","p":4800,"e":"🏆","own":1}'><span class="gr A">A</span><span class="own">장착 중</span><div class="art">🏆</div><b>황금 윷</b><div class="pr" style="color:var(--mut)">보유</div></div>
+          <div class="item" data-cat="onecard" data-item='{"n":"하트 카드 뒷면","g":"B","p":900,"e":"❤️","own":0}'><span class="gr">B</span><div class="art">❤️</div><b>하트 카드 뒷면</b><div class="pr"><i class="coin"></i>900</div></div>
+          <div class="item" data-cat="onecard" data-item='{"n":"무지개 카드 뒷면","g":"S","p":0,"e":"🌈","own":0}'><span class="gr S">S</span><div class="art">🌈</div><b>무지개 카드 뒷면</b><div class="pr" style="color:var(--mut)">뽑기 전용</div></div>
+          <div class="item" data-cat="marble" data-item='{"n":"별 말","g":"A","p":3600,"e":"⭐","own":0}'><span class="gr A">A</span><div class="art">⭐</div><b>별 말</b><div class="pr"><i class="coin"></i>3,600</div></div>
+          <div class="item" data-cat="marble" data-item='{"n":"고양이 말","g":"B","p":1500,"e":"🐱","own":0}'><span class="gr">B</span><div class="art">🐱</div><b>고양이 말</b><div class="pr"><i class="coin"></i>1,500</div></div>
+        </div>
+      </div>
+
+      <div data-pane="mine" style="display:none">
+        <div class="h5" style="margin-top:16px">윷놀이</div>
+        <div class="row"><span class="gart" style="width:48px;height:48px;border-radius:14px;background:var(--soft);font-size:24px;display:grid;place-items:center">🏆</span><span class="t"><b>황금 윷</b><span>A등급 · 행운 +3</span></span><button class="pill acc" data-equip>장착 중</button></div>
+        <div class="row"><span class="gart" style="width:48px;height:48px;border-radius:14px;background:var(--soft);font-size:24px;display:grid;place-items:center">🎋</span><span class="t"><b>대나무 윷</b><span>B등급</span></span><button class="pill" data-equip>장착하기</button></div>
+        <div class="h5">원카드</div>
+        <div class="row"><span class="gart" style="width:48px;height:48px;border-radius:14px;background:var(--soft);font-size:24px;display:grid;place-items:center">🌸</span><span class="t"><b>벚꽃 카드 뒷면</b><span>B등급</span></span><button class="pill" data-equip>장착하기</button></div>
+      </div>
+
+      <div data-pane="mis" style="display:none">
+        <div class="mis"><div class="h"><b>이번 주 순간 5번 남기기</b><span class="rw"><i class="coin"></i>+1,000</span></div><div class="prog"><i style="width:100%"></i></div><div class="f"><span>5 / 5</span><button data-claim="1000">받기</button></div></div>
+        <div class="mis"><div class="h"><b>놀이 3판 하기</b><span class="rw"><i class="coin"></i>+500</span></div><div class="prog"><i style="width:100%"></i></div><div class="f"><span>3 / 3</span><button data-claim="500">받기</button></div></div>
+        <div class="mis"><div class="h"><b>새 장소 1곳 남기기</b><span class="rw">뽑기권 +1</span></div><div class="prog"><i style="width:0%"></i></div><div class="f"><span>0 / 1</span><button disabled>진행 중</button></div></div>
+      </div>
+
+      <div data-pane="cpn" style="display:none">
+        <div class="cpn"><div class="l"><b>주말 늦잠 허락권</b><span>서윤이 보냄 · 12월 10일까지</span></div><div class="r" data-toast="쿠폰을 사용했어요 · 서윤에게 알려요">사용</div></div>
+        <div class="cpn" style="background:var(--soft)"><div class="l"><b>설거지 면제권</b><span>내가 보냄 · 서윤이 아직 안 씀</span></div><div class="r" style="color:var(--mut)">보냄</div></div>
+        <button class="btn dark" style="margin-top:16px" data-toast="쿠폰 이름을 적고 500코인으로 보내요"><svg class="i"><use href="#plus"/></svg>쿠폰 만들어 보내기</button>
+      </div>
+    </div>
+    <div class="sheet" data-sheet="item">
+      <div class="grab"></div>
+      <div style="height:150px;border-radius:20px;background:var(--soft);display:grid;place-items:center;font-size:64px;margin-top:4px" data-f="e"></div>
+      <h5 style="margin-top:14px" data-f="n"></h5><div class="meta" data-f="g"></div>
+      <div class="note" data-f="bal"></div>
+      <div class="acts"><button class="btn" data-f="buy"></button></div>
+    </div>
+  </div>
+  <h3><span>상점</span>한 화면 네 칸</h3>
+  <p>위쪽 칸으로 상점·내 아이템·미션·쿠폰을 오가요. 아이템을 누르면 살 수 있는지와 남는 코인을 보여 줘요. 미션 "받기"와 아이템 "장착하기"도 눌러 보세요.</p>
+</section>
+</main>
+
+<!-- 상점 시트를 다른 폰에서도 열기 위한 테마 시트 -->
+<template id="themeSheet"><div class="sheet" data-sheet="theme"><div class="grab"></div><h5>화면 테마</h5><div class="meta">색만 바뀌고 배치는 그대로예요</div>
+  <div class="thsw"><button data-acc="coral" class="on"><i style="background:#FF5A3C"></i>코랄</button><button data-acc="blue"><i style="background:#3478F6"></i>블루</button><button data-acc="green"><i style="background:#22936A"></i>그린</button><button data-acc="lavender"><i style="background:#7357F6"></i>라벤더</button></div></div></template>
+
+<script>
+const ACCN={coral:'코랄',blue:'블루',green:'그린',lavender:'라벤더'};
+const GAMES={tank:['💣','탱크 대작전','포탄 각도와 힘을 맞춰 상대 탱크를 맞혀요','처음','0','0'],yut:['🎲','윷놀이','말 네 개를 먼저 다 내보내면 이겨요','12','9','57%'],onecard:['🃏','원카드','같은 무늬나 숫자를 내고 먼저 다 털면 이겨요','7','7','50%'],pirate:['🏴‍☠️','해적 룰렛','번갈아 칼을 꽂다 폭탄 구멍을 찌르면 져요','5','3','63%'],telepathy:['🔮','텔레파시','같은 답을 고르면 둘이 함께 점수를 얻어요','협동','-','-'],blackjack:['♠️','블랙잭','숨은 카드 한 장으로 21점 대결 · 먼저 2승','8','6','57%'],oldmaid:['🃏','도둑잡기','마지막 조커를 든 사람이 도둑','3','4','43%'],marble:['🏰','마블 작전','땅을 사고 통행료를 받아요','2','1','67%'],rps:['✊','가위바위보','3판 2선승','12','10','55%'],gostop:['🎴','고스톱 (맞고)','둘이 치는 화투','처음','0','0']};
+let bal=12340;
+const fmt=n=>n.toLocaleString('ko-KR');
+
+document.querySelectorAll('.phone').forEach(ph=>{
+  ph.prepend(document.getElementById('sbtpl').content.cloneNode(true));
+  const t=document.getElementById('tabtpl').content.cloneNode(true);
+  t.querySelectorAll('.tab a').forEach((a,i)=>a.classList.toggle('on',i===+ph.dataset.tab));
+  ph.append(t);
+  ph.append(document.getElementById('themeSheet').content.cloneNode(true));
+  // game sheet
+  const gs=document.createElement('div'); gs.className='sheet gsheet'; gs.dataset.sheet='game';
+  gs.innerHTML=`<div class="grab"></div><div class="top3"><span class="gart" data-f="e" style="background:var(--accSoft)"></span><div><h5 data-f="n"></h5><div class="meta" data-f="d"></div></div></div>
+    <div class="stat3"><div><b data-f="w"></b><span>이김</span></div><div><b data-f="l"></b><span>짐</span></div><div><b data-f="r"></b><span>승률</span></div></div>
+    <ul class="rules"><li>상대가 접속해 있으면 바로 시작해요</li><li>로비에서 판돈을 정할 수 있어요</li></ul>
+    <div class="acts"><button class="btn" data-toast="서윤에게 초대를 보냈어요">▶ 시작하기</button></div>`;
+  ph.append(gs);
+});
+const toastIn=(ph,msg)=>{const el=ph.querySelector('.toast'); el.textContent=msg; el.classList.add('show'); clearTimeout(el._h); el._h=setTimeout(()=>el.classList.remove('show'),1700)};
+const open=(ph,name)=>{ph.querySelector('.bd').classList.add('show'); ph.querySelector(`[data-sheet="${name}"]`).classList.add('show')};
+const closeAll=ph=>{ph.querySelector('.bd').classList.remove('show'); ph.querySelectorAll('.sheet').forEach(s=>s.classList.remove('show'))};
+const PLACES=[...document.querySelectorAll('.phone')[0].querySelectorAll('.pin[data-place]')].map(p=>JSON.parse(p.dataset.place));
+
+function openPlace(ph,i){
+  const p=PLACES[i], s=ph.querySelector('[data-sheet="place"]');
+  s.querySelector('[data-f="k"]').textContent=p.k; s.querySelector('[data-f="n"]').textContent=p.n; s.querySelector('[data-f="d"]').textContent=p.d;
+  const hero=s.querySelector('[data-f="ph"]'); hero.className='hero '+(p.ph?'ph '+p.ph:'want'); hero.innerHTML=p.ph?'':'<svg class="i" style="width:40px;height:40px"><use href="#heart"/></svg>';
+  const note=s.querySelector('[data-f="note"]'); note.innerHTML=p.note?`“${p.note}”<small>${p.by}의 한마디</small>`:'아직 같이 안 가 본 곳이에요. 다녀오면 별점과 한마디를 남길 수 있어요.';
+  const cta=s.querySelector('[data-f="cta"] span'); cta.textContent=p.ph?'여기서 순간 남기기':'다녀왔어요';
+  ph.querySelectorAll('.pin').forEach((pin,k)=>pin.classList.toggle('sel',k===i));
+  open(ph,'place');
+}
+
+document.addEventListener('click',e=>{
+  const ph=e.target.closest('.phone'); if(!ph) return;
+  if(e.target.closest('.bd')){closeAll(ph); ph.querySelectorAll('.pin').forEach(p=>p.classList.remove('sel')); return}
+  const tst=e.target.closest('[data-toast]'); if(tst){toastIn(ph,tst.dataset.toast); return}
+  const pin=e.target.closest('.pin[data-place]'); if(pin){openPlace(ph,[...ph.querySelectorAll('.pin[data-place]')].indexOf(pin)); return}
+  const op=e.target.closest('[data-open-place]'); if(op){openPlace(ph,+op.dataset.openPlace); return}
+  const pk=e.target.closest('[data-peek-toggle]'); if(pk){const peek=ph.querySelector('[data-peek]'); peek.classList.toggle('big'); pk.querySelector('.pill').textContent=peek.classList.contains('big')?'접기':'목록 펼치기'; return}
+  const fb=e.target.closest('[data-filter] button'); if(fb){const g=fb.parentElement; g.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===fb)); const v=fb.dataset.v;
+    const scope=g.closest('[data-pane]')||ph; scope.querySelectorAll('[data-cat]').forEach(x=>x.style.display=(v==='all'||x.dataset.cat===v)?'':'none'); return}
+  const fs=e.target.closest('[data-filterseg] button'); if(fs){const g=fs.parentElement; g.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===fs)); ph.querySelectorAll('.pcard[data-cat]').forEach(x=>x.style.display=x.dataset.cat===fs.dataset.v?'':'none'); return}
+  const tb=e.target.closest('[data-tabs] button'); if(tb){tb.parentElement.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===tb)); ph.querySelectorAll('[data-pane]').forEach(p=>p.style.display=p.dataset.pane===tb.dataset.v?'':'none'); return}
+  const gm=e.target.closest('[data-game]'); if(gm){const g=GAMES[gm.dataset.game]; const s=ph.querySelector('[data-sheet="game"]');
+    ['e','n','d','w','l','r'].forEach((k,i)=>s.querySelector(`[data-f="${k}"]`).textContent=g[i]); open(ph,'game'); return}
+  const at=e.target.closest('[data-att] button'); if(at){const box=at.closest('[data-att]'); if(box.classList.contains('done')) return; box.classList.add('done'); at.textContent='받았어요'; bal+=500; document.querySelectorAll('[data-bal]').forEach(b=>b.textContent=fmt(bal)); toastIn(ph,'+500코인 받았어요'); return}
+  const os=e.target.closest('[data-open="shop"]'); if(os){toastIn(ph,'상점으로 이동해요 (아래 상점 목업)'); document.getElementById('shopPhone').scrollIntoView({behavior:'smooth',block:'center'}); return}
+  const ot=e.target.closest('[data-open="theme"]'); if(ot){open(ph,'theme'); return}
+  const ta=e.target.closest('[data-acc]'); if(ta && ta.closest('[data-sheet="theme"]')){setAcc(ta.dataset.acc); return}
+  const it=e.target.closest('[data-item]'); if(it){const d=JSON.parse(it.dataset.item), s=ph.querySelector('[data-sheet="item"]');
+    s.querySelector('[data-f="e"]').textContent=d.e; s.querySelector('[data-f="n"]').textContent=d.n; s.querySelector('[data-f="g"]').textContent=`${d.g}등급 · ${d.own?'보유 중':d.g==='S'?'뽑기에서만 나와요':fmt(d.p)+'코인'}`;
+    const b=s.querySelector('[data-f="buy"]'), note=s.querySelector('[data-f="bal"]');
+    if(d.own){b.textContent='장착 중'; b.disabled=true; note.textContent='이미 가지고 있어요. 내 아이템에서 바꿔 낄 수 있어요.'}
+    else if(d.g==='S'){b.textContent='뽑기에서만 얻을 수 있어요'; b.disabled=true; note.textContent='S등급 이상은 뽑기로만 나와요.'}
+    else{b.disabled=false; b.textContent=`${fmt(d.p)}코인으로 사기`; note.textContent=`지금 코인 ${fmt(bal)} → 산 뒤 ${fmt(bal-d.p)}`;
+      b.onclick=()=>{bal-=d.p; document.querySelectorAll('[data-bal]').forEach(x=>x.textContent=fmt(bal)); d.own=1; it.dataset.item=JSON.stringify(d); it.querySelector('.pr').innerHTML='<span style="color:var(--mut)">보유</span>'; closeAll(ph); toastIn(ph,`${d.n}을 보관함에 넣었어요`)}}
+    open(ph,'item'); return}
+  const cl=e.target.closest('[data-claim]'); if(cl){bal+=+cl.dataset.claim; document.querySelectorAll('[data-bal]').forEach(x=>x.textContent=fmt(bal)); cl.textContent='받았어요'; cl.disabled=true; toastIn(ph,`+${fmt(+cl.dataset.claim)}코인 받았어요`); return}
+  const eq=e.target.closest('[data-equip]'); if(eq){const grp=[...eq.closest('[data-pane]').querySelectorAll('[data-equip]')]; const sec=eq.closest('.row').previousElementSibling;
+    let start=eq.closest('.row'); while(start.previousElementSibling&&start.previousElementSibling.classList.contains('row')) start=start.previousElementSibling;
+    let r=start; while(r&&r.classList.contains('row')){const b=r.querySelector('[data-equip]'); b.textContent='장착하기'; b.classList.remove('acc'); r=r.nextElementSibling}
+    eq.textContent='장착 중'; eq.classList.add('acc'); toastIn(ph,'장착했어요 · 다음 판부터 보여요'); return}
+});
+function setAcc(v){document.body.dataset.acc=v; document.querySelectorAll('#accsw button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+  document.querySelectorAll('[data-sheet="theme"] [data-acc]').forEach(b=>b.classList.toggle('on',b.dataset.acc===v));
+  document.querySelectorAll('[data-themename]').forEach(x=>x.textContent=ACCN[v])}
+document.getElementById('accsw').addEventListener('click',e=>{const b=e.target.closest('button'); if(b) setAcc(b.dataset.v)});
+</script>
+</body>
+</html>

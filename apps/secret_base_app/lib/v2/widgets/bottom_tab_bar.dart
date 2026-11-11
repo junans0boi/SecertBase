@@ -33,6 +33,7 @@ class V2BottomTabBar extends StatelessWidget {
     this.items = defaultItems,
     this.badges = const {},
     this.dots = const {},
+    this.dark = false,
   });
 
   /// 홈 · 기록 · 지도 · 놀이 · 더보기
@@ -70,18 +71,25 @@ class V2BottomTabBar extends StatelessWidget {
   /// Tab indexes showing an unread dot.
   final Set<int> dots;
 
+  /// Black bar for full-bleed photo tabs (기록).
+  final bool dark;
+
   @override
   Widget build(BuildContext context) {
     final p = V2Palette.of(context);
     final duration = V2Motion.of(context, V2Motion.fast);
     return Material(
-      color: p.surface,
+      color: dark ? const Color(0xFF0C0C0E) : p.surface,
       elevation: 0,
       shadowColor: Colors.transparent,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          border: Border(top: BorderSide(color: p.line)),
-          boxShadow: p.dark
+          border: Border(
+            top: BorderSide(
+              color: dark ? Colors.white.withValues(alpha: .08) : p.line,
+            ),
+          ),
+          boxShadow: p.dark || dark
               ? null
               : const [
                   BoxShadow(
@@ -106,6 +114,7 @@ class V2BottomTabBar extends StatelessWidget {
                       count: items.length,
                       badge: badges[i],
                       dot: dots.contains(i),
+                      dark: dark,
                       duration: duration,
                       onTap: () => onTap(i),
                     ),
@@ -127,10 +136,12 @@ class _Tab extends StatelessWidget {
     required this.count,
     required this.badge,
     required this.dot,
+    required this.dark,
     required this.duration,
     required this.onTap,
   });
 
+  final bool dark;
   final V2TabItem item;
   final bool selected;
   final int index;
@@ -143,7 +154,11 @@ class _Tab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = V2Palette.of(context);
-    final color = selected ? p.primary : p.muted;
+    // 2.1: the selected tab is ink on a soft pill; the accent stays for
+    // content, not navigation.
+    final color = dark
+        ? (selected ? Colors.white : Colors.white.withValues(alpha: .55))
+        : (selected ? p.ink : p.muted);
     final icon = Icon(
       selected ? (item.activeIcon ?? item.icon) : item.icon,
       size: 26,
@@ -183,9 +198,11 @@ class _Tab extends StatelessWidget {
                           width: 56,
                           height: 30,
                           decoration: BoxDecoration(
-                            color: selected
-                                ? p.primarySoft
-                                : Colors.transparent,
+                            color: !selected
+                                ? Colors.transparent
+                                : dark
+                                ? Colors.white.withValues(alpha: .14)
+                                : p.soft2,
                             borderRadius: V2Radius.pillAll,
                           ),
                           alignment: Alignment.center,

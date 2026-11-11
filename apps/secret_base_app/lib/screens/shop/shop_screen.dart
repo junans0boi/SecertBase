@@ -90,52 +90,76 @@ class _ShopScreenState extends State<ShopScreen> {
     return jsonDecode(res.body) as Map;
   }
 
+  /// Sections that failed on the last load (path → reason), for the banner
+  /// and for logs. A failing section no longer blanks the whole shop.
+  Map<String, String> _sectionErrors = {};
+
+  Future<Map?> _try(String path) async {
+    try {
+      return await _get(path);
+    } catch (e) {
+      debugPrint('[Shop] $path failed: $e');
+      _sectionErrors[path] = '$e';
+      return null;
+    }
+  }
+
   Future<void> _load() async {
     if (!mounted) return;
     setState(() {
       _loading = true;
       _failed = false;
     });
-    try {
-      final r = await Future.wait([
-        _get('/api/shop/items'),
-        _get('/api/wallet/balance'),
-        _get('/api/shop/coupons'),
-        _get('/api/shop/owned'),
-        _get('/api/shop/equipped'),
-        _get('/api/user/level'),
-        _get('/api/missions'),
-      ]);
-      final owned = (r[3]['owned'] as List? ?? []).cast<Map<String, dynamic>>();
-      final slots = (r[4]['slots'] as Map? ?? {}).values.toList();
-      if (!mounted) return;
-      setState(() {
-        _items = (r[0]['items'] as List? ?? []).cast<Map<String, dynamic>>();
-        _balance = (r[1]['balance'] as num?)?.toInt() ?? _balance;
-        _coupons = (r[2]['coupons'] as List? ?? [])
-            .cast<Map<String, dynamic>>();
-        _ownedItemIds = owned.map((o) => (o['item_id'] as num).toInt()).toSet();
-        _equippedItemIds = slots
-            .map((s) => ((s as Map)['item_id'] as num).toInt())
-            .toSet();
-        if (r[5]['ok'] == true) {
-          _userLevel = (r[5]['level'] as num?)?.toInt() ?? 1;
-          _userXp = (r[5]['xp'] as num?)?.toInt() ?? 0;
-          _xpNeeded = (r[5]['xpNeeded'] as num?)?.toInt() ?? 100;
-          _tickets = (r[5]['tickets'] as num?)?.toInt() ?? 0;
-        }
-        _missions = (r[6]['missions'] as List? ?? [])
-            .cast<Map<String, dynamic>>();
-        _loading = false;
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _failed = true;
-        });
+    _sectionErrors = {};
+    final r = await Future.wait([
+      _try('/api/shop/items'),
+      _try('/api/wallet/balance'),
+      _try('/api/shop/coupons'),
+      _try('/api/shop/owned'),
+      _try('/api/shop/equipped'),
+      _try('/api/user/level'),
+      _try('/api/missions'),
+    ]);
+    if (!mounted) return;
+    List<Map<String, dynamic>> listOf(Map? body, String key) =>
+        (body?[key] as List? ?? const [])
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+    setState(() {
+      final items = r[0];
+      if (items != null) _items = listOf(items, 'items');
+      final wallet = r[1];
+      if (wallet != null) {
+        _balance = (wallet['balance'] as num?)?.toInt() ?? _balance;
       }
-    }
+      if (r[2] != null) _coupons = listOf(r[2], 'coupons');
+      if (r[3] != null) {
+        _ownedItemIds = listOf(
+          r[3],
+          'owned',
+        ).map((o) => (o['item_id'] as num?)?.toInt()).whereType<int>().toSet();
+      }
+      final slots = r[4]?['slots'];
+      if (slots is Map) {
+        _equippedItemIds = slots.values
+            .whereType<Map>()
+            .map((s) => (s['item_id'] as num?)?.toInt())
+            .whereType<int>()
+            .toSet();
+      }
+      final level = r[5];
+      if (level != null && level['ok'] == true) {
+        _userLevel = (level['level'] as num?)?.toInt() ?? 1;
+        _userXp = (level['xp'] as num?)?.toInt() ?? 0;
+        _xpNeeded = (level['xpNeeded'] as num?)?.toInt() ?? 100;
+        _tickets = (level['tickets'] as num?)?.toInt() ?? 0;
+      }
+      if (r[6] != null) _missions = listOf(r[6], 'missions');
+      _loading = false;
+      // Only the catalog is essential; other sections degrade quietly.
+      _failed = items == null;
+    });
   }
 
   // ── Purchase ────────────────────────────────────────────────────────────────
@@ -536,12 +560,13 @@ class _ShopScreenState extends State<ShopScreen> {
       child: ListView(
         padding: const EdgeInsets.only(bottom: 40),
         children: [
-          if (_failed)
+          if (_failed || _sectionErrors.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
               child: V2Banner(
+                key: const Key('shop_partial_error'),
                 tone: V2BannerTone.warn,
-                message: '최신 정보를 불러오지 못했어요.',
+                message: '일부 정보를 불러오지 못했어요. 코인과 아이템은 그대로 안전해요.',
                 actionLabel: '다시 시도',
                 onAction: _load,
               ),

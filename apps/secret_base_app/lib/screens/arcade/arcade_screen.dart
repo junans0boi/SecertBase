@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../../core/auth_service.dart';
-import '../../core/main_design.dart' show MainCard;
 import '../../core/socket_service.dart';
 import 'game_lobby_screen.dart';
 import 'games/blackjack_screen.dart';
@@ -37,8 +36,6 @@ class ArcadeScreen extends StatefulWidget {
 }
 
 class _ArcadeScreenState extends State<ArcadeScreen> {
-  int? _selectedIdx;
-
   final _auth = AuthService();
   int? _balance;
   bool _bonusClaimed = false;
@@ -114,127 +111,6 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     }
   }
 
-  Widget _buildWalletBar() {
-    final balance = _balance;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 18),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: V2Colors.honeySoft,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: V2Colors.honeyText.withValues(alpha: 0.4),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('🪙', style: TextStyle(fontSize: 14)),
-                const SizedBox(width: 4),
-                Text(
-                  balance != null ? '${_formatCoins(balance)}코인' : '...',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: V2Colors.honeyText,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          if (!_bonusClaimed)
-            GestureDetector(
-              onTap: _bonusLoading ? null : _claimBonus,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: V2Colors.rose600,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_bonusLoading)
-                      SizedBox(
-                        width: 12,
-                        height: 12,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: V2Colors.onPrimary,
-                        ),
-                      )
-                    else
-                      Icon(
-                        Icons.card_giftcard_rounded,
-                        size: 14,
-                        color: V2Colors.onPrimary,
-                      ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '출석 +500',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: V2Colors.onPrimary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          else
-            Text(
-              '오늘 보너스 수령 완료',
-              style: V2Text.cap.copyWith(color: V2Colors.muted),
-            ),
-          const Spacer(),
-          GestureDetector(
-            onTap: () => Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const ShopScreen())),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: V2Colors.lilacSoft,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: V2Colors.lilacText.withValues(alpha: 0.4),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.storefront_rounded,
-                    size: 14,
-                    color: V2Colors.lilacText,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '상점',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: V2Colors.lilacText,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _fetchRecords() async {
     final token = _auth.token;
     if (token == null) return;
@@ -260,67 +136,6 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     } catch (_) {}
   }
 
-  Widget _buildRecordCard(String gameType) {
-    final r = _records[gameType];
-    final wins = r?['wins'] ?? 0;
-    final losses = r?['losses'] ?? 0;
-    final draws = r?['draws'] ?? 0;
-    final total = r?['total'] ?? 0;
-    return MainCard(
-      radius: 26,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.bar_chart_rounded, size: 16, color: V2Colors.sub),
-              const SizedBox(width: 6),
-              Text('기록', style: V2Text.bodyStrong),
-            ],
-          ),
-          const SizedBox(height: 14),
-          if (total == 0)
-            Center(
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.bar_chart_rounded,
-                    size: 32,
-                    color: V2Colors.muted.withValues(alpha: 0.35),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '아직 플레이 기록이 없어요',
-                    style: V2Text.cap.copyWith(color: V2Colors.muted),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            )
-          else
-            Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _RecordStat('승', '$wins', V2Colors.skyText),
-                    _RecordStat('패', '$losses', V2Colors.rose600),
-                    if (draws > 0) _RecordStat('무', '$draws', V2Colors.muted),
-                    _RecordStat(
-                      '승률',
-                      total > 0 ? '${(wins * 100 ~/ total)}%' : '-',
-                      V2Colors.sageText,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          const SizedBox(height: 4),
-        ],
-      ),
-    );
-  }
-
   String _formatCoins(int v) {
     if (v >= 10000) {
       final man = v ~/ 10000;
@@ -337,6 +152,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       title: '블랙잭',
       description: '숨은 카드 한 장으로 겨루는 21점 대결 · 먼저 2승',
       tone: V2Tone.rose,
+      kind: _Kind.card,
     ),
     _GameInfo(
       type: 'oldmaid',
@@ -344,6 +160,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       title: '도둑잡기',
       description: '상대 카드를 뽑아 짝을 맞추고 조커를 피하는 동화 속 심리전',
       tone: V2Tone.honey,
+      kind: _Kind.card,
     ),
     _GameInfo(
       type: 'yut',
@@ -351,6 +168,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       title: '윷놀이',
       description: '윷을 던져 말을 업고 잡으며 먼저 골인해요 · 말 2~4개, 30초 턴',
       tone: V2Tone.sky,
+      kind: _Kind.board,
     ),
     _GameInfo(
       type: 'marble',
@@ -358,6 +176,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       title: '마블 작전',
       description: '주사위를 굴려 도시를 사고 상대를 파산시키는 2인 전략 보드게임',
       tone: V2Tone.lilac,
+      kind: _Kind.board,
     ),
     _GameInfo(
       type: 'rps',
@@ -365,6 +184,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       title: '가위바위보',
       description: '단판, 3판, 묵찌빠 세 가지 모드',
       tone: V2Tone.sage,
+      kind: _Kind.quick,
     ),
     _GameInfo(
       type: 'zero',
@@ -372,6 +192,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       title: '제로',
       description: '손가락을 숨기고 합계를 맞혀요 · 5라운드 승부',
       tone: V2Tone.honey,
+      kind: _Kind.card,
     ),
     _GameInfo(
       type: 'uno',
@@ -379,6 +200,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       title: '원카드',
       description: '색과 숫자를 맞춰 먼저 손패를 비워요 · 마지막 한 장엔 원카드!',
       tone: V2Tone.rose,
+      kind: _Kind.card,
     ),
     _GameInfo(
       type: 'dice',
@@ -386,6 +208,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       title: '주사위',
       description: '1부터 6까지 동시에 굴리는 초간단 내기',
       tone: V2Tone.sky,
+      kind: _Kind.quick,
     ),
     _GameInfo(
       type: 'telepathy',
@@ -393,6 +216,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       title: '텔레파시',
       description: '둘 중 하나를 몰래 골라 같은 쪽이면 통했어요! · 밸런스 게임 5·10·15문제',
       tone: V2Tone.lilac,
+      kind: _Kind.talk,
     ),
     _GameInfo(
       type: 'pirate',
@@ -400,6 +224,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       title: '해적 룰렛',
       description: '번갈아 칼을 꽂다 폭탄 구멍을 찌르면 져요',
       tone: V2Tone.rose,
+      kind: _Kind.quick,
     ),
     _GameInfo(
       type: 'penalty',
@@ -407,6 +232,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       title: '패널티킥',
       description: '골대 칸을 골라 넣고 막아요 · 3칸·6칸 중 방장이 골라요',
       tone: V2Tone.sky,
+      kind: _Kind.quick,
     ),
     _GameInfo(
       type: 'bowling',
@@ -414,6 +240,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       title: '볼링',
       description: '타이밍 조준으로 10프레임 투구하여 점수 대결',
       tone: V2Tone.lilac,
+      kind: _Kind.quick,
     ),
     _GameInfo(
       type: 'catch',
@@ -421,6 +248,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       title: '그림 맞히기',
       description: '한 사람이 그리면 상대가 힌트를 보며 정답을 맞혀요 · 번갈아 라운드',
       tone: V2Tone.sage,
+      kind: _Kind.talk,
     ),
     _GameInfo(
       type: 'tank',
@@ -428,6 +256,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       title: '탱크 대작전',
       description: '각도와 파워를 조절해 상대 탱크를 포격하는 전략 게임',
       tone: V2Tone.honey,
+      kind: _Kind.quick,
     ),
     _GameInfo(
       type: 'gostop',
@@ -435,6 +264,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       title: '고스톱 (맞고)',
       description: '정통 규칙으로 즐기는 2인 맞고 · 25초 턴, 점수와 배수가 한눈에',
       tone: V2Tone.sage,
+      kind: _Kind.card,
     ),
   ];
 
@@ -510,202 +340,118 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     ).then(refresh);
   }
 
-  Widget _buildStoryIcon(int idx) {
-    final game = _games[idx];
-    final isSelected = _selectedIdx == idx;
-    return Semantics(
-      button: true,
-      selected: isSelected,
-      label: '${game.title}${isSelected ? ' 선택됨' : ''}',
-      child: GestureDetector(
-        key: ValueKey('arcade_game_${game.type}'),
-        onTap: () => setState(() => _selectedIdx = isSelected ? null : idx),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          decoration: BoxDecoration(
-            color: isSelected ? V2Colors.roseSoft : V2Colors.surface,
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(
-              color: isSelected ? V2Colors.rose600 : Colors.transparent,
-              width: 2,
+  // ── 2.1 UI: 출석 → 오늘의 추천 → 최근에 한 게임 → 종류 칩 + 게임 타일 ──
+
+  _Kind? _kind;
+
+  int get _dayOfYear {
+    final now = DateTime.now();
+    return now.difference(DateTime(now.year)).inDays;
+  }
+
+  /// One game a day: something neither of us has played yet, else any.
+  _GameInfo get _recommended {
+    final fresh = _games
+        .where(
+          (g) =>
+              !_kUnrankedGames.contains(g.type) &&
+              (_records[g.type]?['total'] ?? 0) == 0,
+        )
+        .toList();
+    final pool = fresh.isNotEmpty ? fresh : _games;
+    return pool[_dayOfYear % pool.length];
+  }
+
+  List<_GameInfo> get _recent {
+    final played =
+        _games.where((g) => (_records[g.type]?['total'] ?? 0) > 0).toList()
+          ..sort(
+            (a, b) => (_records[b.type]!['total']!).compareTo(
+              _records[a.type]!['total']!,
             ),
-            boxShadow: [
-              BoxShadow(
-                color: V2Colors.rose600.withAlpha(isSelected ? 50 : 22),
-                blurRadius: 14,
-                offset: const Offset(0, 5),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: game.background,
-                ),
-                child: Icon(game.icon, color: game.color, size: 24),
-              ),
-              const SizedBox(height: 7),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Text(
-                  game.title,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: V2Text.label.copyWith(
-                    color: isSelected ? V2Colors.rose600 : V2Colors.ink,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+          );
+    return played.take(8).toList();
   }
 
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
+  String _recordText(_GameInfo g) {
+    if (_kUnrankedGames.contains(g.type)) return '함께 하는 게임';
+    final r = _records[g.type];
+    final total = r?['total'] ?? 0;
+    if (total == 0) return '처음';
+    final draws = r?['draws'] ?? 0;
+    return '${r?['wins'] ?? 0}승 ${r?['losses'] ?? 0}패${draws > 0 ? ' $draws무' : ''}';
+  }
+
+  void _openShop() => Navigator.of(
+    context,
+  ).push(MaterialPageRoute(builder: (_) => const ShopScreen()));
+
+  void _showGame(_GameInfo game) {
+    final connected = SocketService().isConnected;
+    final r = _records[game.type];
+    final ranked = !_kUnrankedGames.contains(game.type);
+    final wins = r?['wins'] ?? 0;
+    final losses = r?['losses'] ?? 0;
+    final total = r?['total'] ?? 0;
+    showV2Sheet<void>(
+      context,
+      builder: (sheetContext) => Column(
         mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.sports_esports_rounded, size: 60, color: V2Colors.muted),
-          const SizedBox(height: 14),
-          Text(
-            '위에서 게임을 골라보세요',
-            style: V2Text.body.copyWith(color: V2Colors.sub),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDetailCard(
-    BuildContext context,
-    _GameInfo game,
-    bool connected,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Game info + start button
-        MainCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      color: game.background,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Icon(game.icon, color: game.color, size: 32),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(game.title, style: V2Text.title),
-                        const SizedBox(height: 4),
-                        Text(
-                          game.description,
-                          style: V2Text.cap.copyWith(color: V2Colors.sub),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: connected ? () => _open(context, game) : null,
-                  icon: const Icon(Icons.play_arrow_rounded, size: 22),
-                  label: const Text(
-                    '시작하기',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    backgroundColor: V2Colors.rose600,
-                    foregroundColor: V2Colors.onPrimary,
-                    disabledBackgroundColor: V2Colors.soft2,
-                    disabledForegroundColor: V2Colors.muted,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-              if (!connected) ...[
-                const SizedBox(height: 8),
-                Text(
-                  '상대방 연결을 확인하고 있어요',
-                  textAlign: TextAlign.center,
-                  style: V2Text.cap.copyWith(color: V2Colors.muted),
-                ),
-              ],
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        // 승패가 없는 협동·도구성 게임(텔레파시·주사위)에는 기록 카드를 두지 않는다.
-        Row(
-          children: [
-            if (!_kUnrankedGames.contains(game.type)) ...[
-              Expanded(child: _buildRecordCard(game.type)),
-              const SizedBox(width: 10),
-            ],
-            Expanded(child: _buildWalletCard()),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildWalletCard() {
-    final balance = _balance;
-    return MainCard(
-      radius: 26,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Icon(Icons.diamond_rounded, size: 16, color: V2Colors.honeyText),
-              const SizedBox(width: 6),
-              Text('내 코인', style: V2Text.bodyStrong),
+              _GameArt(game: game, size: 72, radius: 22, iconSize: 36),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      game.title,
+                      style: V2Text.title.copyWith(fontSize: 22),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(game.description, style: V2Text.cap),
+                  ],
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 14),
-          Center(
-            child: Column(
+          if (ranked) ...[
+            const SizedBox(height: 16),
+            Row(
               children: [
-                const Text('🪙', style: TextStyle(fontSize: 28)),
-                const SizedBox(height: 4),
-                Text(
-                  balance != null ? '${_formatCoins(balance)}코인' : '...',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                    color: V2Colors.honeyText,
-                  ),
+                _Stat(value: '$wins', label: '이김'),
+                const SizedBox(width: 8),
+                _Stat(value: '$losses', label: '짐'),
+                const SizedBox(width: 8),
+                _Stat(
+                  value: total > 0 ? '${wins * 100 ~/ total}%' : '-',
+                  label: '승률',
                 ),
               ],
             ),
+          ],
+          const SizedBox(height: 18),
+          V2Button(
+            label: '시작하기',
+            icon: Icons.play_arrow_rounded,
+            onPressed: connected
+                ? () {
+                    Navigator.pop(sheetContext);
+                    _open(context, game);
+                  }
+                : null,
           ),
-          const SizedBox(height: 4),
+          if (!connected) ...[
+            const SizedBox(height: 8),
+            Text(
+              '상대방 연결을 확인하고 있어요',
+              textAlign: TextAlign.center,
+              style: V2Text.cap,
+            ),
+          ],
         ],
       ),
     );
@@ -713,57 +459,159 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final p = V2Palette.of(context);
     final connected = SocketService().isConnected;
-    final selected = _selectedIdx != null ? _games[_selectedIdx!] : null;
-
-    return ColoredBox(
-      color: V2Colors.bg,
-      child: Column(
-        children: [
-          V2Header(
-            title: '둘이서 놀기',
-            subtitle: connected ? '오늘은 어떤 게임으로 놀아볼까요?' : '상대방 연결을 확인하고 있어요',
-            showBack: false,
-          ),
-          Expanded(
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(18, 16, 18, 32),
-              children: [
-                _buildWalletBar(),
-                Row(
-                  children: [
-                    Expanded(child: Text('게임 고르기', style: V2Text.title)),
-                    Text(
-                      '${_games.length}가지',
-                      style: V2Text.cap.copyWith(color: V2Colors.muted),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                GridView.count(
-                  crossAxisCount: 3,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  mainAxisSpacing: 10,
-                  crossAxisSpacing: 10,
-                  children: [
-                    for (var i = 0; i < _games.length; i++) _buildStoryIcon(i),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                if (selected == null)
-                  MainCard(
-                    radius: 26,
-                    padding: const EdgeInsets.symmetric(vertical: 38),
-                    child: _buildEmptyState(),
-                  )
-                else
-                  _buildDetailCard(context, selected, connected),
-              ],
+    final hero = _recommended;
+    final recent = _recent;
+    final visible = _kind == null
+        ? _games
+        : _games.where((g) => g.kind == _kind).toList();
+    return V2Theme(
+      child: Scaffold(
+        backgroundColor: p.bg,
+        appBar: V2Header(
+          title: '놀이',
+          subtitle: connected ? null : '상대방 연결을 확인하고 있어요',
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: _CoinPill(
+                text: _balance == null ? '...' : _formatCoins(_balance!),
+                onTap: _openShop,
+              ),
             ),
+          ],
+        ),
+        body: RefreshIndicator(
+          onRefresh: () async {
+            await Future.wait([_fetchBalance(), _fetchRecords()]);
+          },
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
+            children: [
+              _Attendance(
+                claimed: _bonusClaimed,
+                loading: _bonusLoading,
+                onClaim: _claimBonus,
+              ),
+              const SizedBox(height: 12),
+              _HeroGame(
+                game: hero,
+                fresh: (_records[hero.type]?['total'] ?? 0) == 0,
+                onTap: () => _showGame(hero),
+              ),
+              if (recent.isNotEmpty) ...[
+                const SizedBox(height: 26),
+                Text('최근에 한 게임', style: V2Text.head),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 118,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: recent.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 10),
+                    itemBuilder: (context, i) {
+                      final g = recent[i];
+                      return Semantics(
+                        button: true,
+                        label: '${g.title}, ${_recordText(g)}',
+                        child: GestureDetector(
+                          onTap: () => _showGame(g),
+                          child: SizedBox(
+                            width: 88,
+                            child: Column(
+                              children: [
+                                _GameArt(game: g, size: 88, radius: 22),
+                                const SizedBox(height: 6),
+                                Text(
+                                  g.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: V2Text.cap.copyWith(
+                                    color: p.ink,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+              const SizedBox(height: 26),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Expanded(child: Text('전체 게임', style: V2Text.head)),
+                  Text('${_games.length}개', style: V2Text.cap),
+                ],
+              ),
+              const SizedBox(height: 10),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (final k in <_Kind?>[null, ..._Kind.values])
+                      Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: V2Chip(
+                          label: k?.label ?? '전체',
+                          selected: _kind == k,
+                          onTap: () => setState(() => _kind = k),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              GridView.builder(
+                key: const Key('arcade_game_tiles'),
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 14,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: .86,
+                ),
+                itemCount: visible.length,
+                itemBuilder: (context, i) {
+                  final g = visible[i];
+                  return Semantics(
+                    button: true,
+                    label: '${g.title}, ${_recordText(g)}',
+                    child: GestureDetector(
+                      key: ValueKey('arcade_game_${g.type}'),
+                      onTap: () => _showGame(g),
+                      child: ExcludeSemantics(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: _GameArt(
+                                game: g,
+                                radius: 22,
+                                iconSize: 46,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(g.title, style: V2Text.bodyStrong),
+                            Text(_recordText(g), style: V2Text.cap),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -776,12 +624,16 @@ class _GameInfo {
   final String description;
   final V2Tone tone;
 
+  /// 칩 분류: 보드 · 카드 · 순발력 · 마음.
+  final _Kind kind;
+
   const _GameInfo({
     required this.type,
     required this.icon,
     required this.title,
     required this.description,
     required this.tone,
+    required this.kind,
   });
 
   /// Icon color in the active theme (AA on [background]).
@@ -789,27 +641,271 @@ class _GameInfo {
   Color get background => V2ToneColors.of(tone).soft;
 }
 
-class _RecordStat extends StatelessWidget {
+enum _Kind {
+  board('보드'),
+  card('카드'),
+  quick('순발력'),
+  talk('마음');
+
+  const _Kind(this.label);
   final String label;
-  final String value;
-  final Color color;
-  const _RecordStat(this.label, this.value, this.color);
+}
+
+/// Tone-gradient tile with the game icon (no illustrations).
+class _GameArt extends StatelessWidget {
+  const _GameArt({
+    required this.game,
+    this.size,
+    this.radius = 20,
+    this.iconSize = 34,
+  });
+
+  final _GameInfo game;
+  final double? size;
+  final double radius;
+  final double iconSize;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            color: color,
+    final t = V2Palette.of(context).tone(game.tone);
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(radius),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [t.soft, Color.lerp(t.soft, t.base, .55)!],
+        ),
+      ),
+      alignment: Alignment.center,
+      child: Icon(game.icon, color: t.text, size: iconSize),
+    );
+  }
+}
+
+class _CoinPill extends StatelessWidget {
+  const _CoinPill({required this.text, required this.onTap});
+
+  final String text;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = V2Palette.of(context);
+    return Semantics(
+      button: true,
+      label: '코인 $text, 상점 열기',
+      child: ExcludeSemantics(
+        child: Material(
+          color: p.soft,
+          shape: const StadiumBorder(),
+          child: InkWell(
+            customBorder: const StadiumBorder(),
+            onTap: onTap,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 40),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('🪙', style: TextStyle(fontSize: 15)),
+                    const SizedBox(width: 6),
+                    Text(text, style: V2Text.buttonSm.copyWith(color: p.ink)),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
-        const SizedBox(height: 2),
-        Text(label, style: V2Text.cap.copyWith(color: V2Colors.sub)),
-      ],
+      ),
+    );
+  }
+}
+
+class _Attendance extends StatelessWidget {
+  const _Attendance({
+    required this.claimed,
+    required this.loading,
+    required this.onClaim,
+  });
+
+  final bool claimed;
+  final bool loading;
+  final VoidCallback onClaim;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = V2Palette.of(context);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+      decoration: BoxDecoration(
+        color: claimed ? p.soft : p.primarySoft,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  claimed ? '오늘 출석 완료' : '오늘 출석하고 500코인 받기',
+                  style: V2Text.bodyStrong,
+                ),
+                const SizedBox(height: 2),
+                Text(claimed ? '내일 또 받을 수 있어요' : '매일 한 번', style: V2Text.cap),
+              ],
+            ),
+          ),
+          if (!claimed)
+            V2Button(
+              label: '출석 +500',
+              size: V2ButtonSize.sm,
+              fullWidth: false,
+              loading: loading,
+              onPressed: onClaim,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeroGame extends StatelessWidget {
+  const _HeroGame({
+    required this.game,
+    required this.fresh,
+    required this.onTap,
+  });
+
+  final _GameInfo game;
+  final bool fresh;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = V2Palette.of(context).tone(game.tone);
+    return Semantics(
+      button: true,
+      label: '오늘의 추천 ${game.title}',
+      child: GestureDetector(
+        onTap: onTap,
+        child: ExcludeSemantics(
+          child: Container(
+            height: 196,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(26),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color.lerp(t.text, Colors.black, .35)!,
+                  Color.lerp(t.base, t.text, .35)!,
+                ],
+              ),
+            ),
+            child: Stack(
+              children: [
+                Positioned(
+                  right: -18,
+                  top: -10,
+                  child: Icon(
+                    game.icon,
+                    size: 170,
+                    color: Colors.white.withValues(alpha: .14),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        fresh ? '오늘의 추천 · 둘 다 아직 안 해 봤어요' : '오늘의 추천',
+                        style: V2Text.label.copyWith(
+                          color: Colors.white.withValues(alpha: .9),
+                          letterSpacing: 0,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        game.title,
+                        style: V2Text.title.copyWith(color: Colors.white),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        game.description,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: V2Text.cap.copyWith(
+                          color: Colors.white.withValues(alpha: .88),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        height: 40,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        decoration: const ShapeDecoration(
+                          color: Colors.white,
+                          shape: StadiumBorder(),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.play_arrow_rounded,
+                              color: Color(0xFF191F28),
+                              size: 20,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '시작하기',
+                              style: V2Text.buttonSm.copyWith(
+                                color: const Color(0xFF191F28),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Stat extends StatelessWidget {
+  const _Stat({required this.value, required this.label});
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = V2Palette.of(context);
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: p.soft,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          children: [
+            Text(value, style: V2Text.sans(size: 20, weight: FontWeight.w800)),
+            Text(label, style: V2Text.cap),
+          ],
+        ),
+      ),
     );
   }
 }

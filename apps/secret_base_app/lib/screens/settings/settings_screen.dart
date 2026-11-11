@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../../core/app_info.dart';
 import '../../core/auth_service.dart';
+import '../../core/fortune_api.dart';
 import '../../core/http/api_client.dart';
 import '../../v2/v2.dart';
 import '../archive/personal_history_screen.dart';
 import '../auth/partner_screen.dart';
 import '../home/anniversaries_screen.dart';
+import '../home/home_focus.dart' show HomeFortuneSeen;
+import '../relationship/fortune_screen.dart';
 import '../relationship/relationship_understanding_screen.dart';
 import '../secret_base/secret_base_screen.dart';
 import '../shop/shop_screen.dart';
@@ -21,9 +24,8 @@ import 'settings_common.dart';
 import 'theme_screen.dart';
 import 'support_sheet.dart';
 
-/// 더보기 탭: 4개 구역 허브.
-///
-/// ① 프로필·커플 ② 우리 이야기 ③ 앱 설정 ④ 도움말·정보·계정.
+/// 더보기 탭 (2.1 "A"): 커플 카드, 바로가기 4개(운세·우리 이해·기념일·
+/// 비밀기지), 그리고 묶은 목록(코인 · 앱 설정 · 도움말).
 /// 탭과 겹치는 바로가기, 디버그 정보(Ping·접속자·방 코드)는 두지 않는다.
 class SettingsScreen extends StatefulWidget {
   /// 홈 셸이 넘겨 주던 탭 이동 콜백. 2.0 더보기는 탭 바로가기를 두지 않아
@@ -53,6 +55,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   OsPermission _osNotification = OsPermission.unknown;
   AppInfo? _appInfo;
   bool _bannerDismissed = false;
+  bool _fortuneSeen = true;
 
   @override
   void initState() {
@@ -78,6 +81,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadCouple();
     _loadNotificationSummary();
     _loadCoins();
+    HomeFortuneSeen.today().then((seen) {
+      if (mounted) setState(() => _fortuneSeen = seen);
+    });
     widget.permissionProbe.notification().then((state) {
       if (mounted) setState(() => _osNotification = state);
     });
@@ -176,42 +182,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       onPair: () => _open(const PartnerScreen()),
                     ),
-                    V2Section(
-                      title: '우리 이야기',
-                      child: V2List(
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 18, 16, 4),
+                      child: Row(
                         children: [
-                          V2ListTile(
+                          _Quick(
+                            icon: V2Icons.sparkle,
+                            label: '운세',
+                            dot: !_fortuneSeen,
+                            onTap: _openFortune,
+                          ),
+                          _Quick(
+                            icon: V2Icons.care,
+                            label: '우리 이해',
+                            onTap: () =>
+                                _open(const RelationshipUnderstandingScreen()),
+                          ),
+                          _Quick(
                             icon: V2Icons.event,
-                            title: '기념일',
-                            subtitle: paired
-                                ? _anniversarySubtitle()
-                                : '연결하면 열려요',
+                            label: '기념일',
                             onTap: paired
                                 ? () => _open(const AnniversariesScreen())
                                 : _needsPartner,
                           ),
-                          V2ListTile(
+                          _Quick(
                             icon: V2Icons.base,
-                            tone: V2Tone.lilac,
-                            title: '비밀기지',
-                            subtitle: paired ? '둘만의 공간' : '연결하면 열려요',
+                            label: '비밀기지',
                             onTap: paired ? _openBase : _needsPartner,
                           ),
-                          V2ListTile(
-                            icon: V2Icons.care,
-                            tone: V2Tone.honey,
-                            title: '우리 이해',
-                            subtitle: paired
-                                ? '오늘의 운세와 마음 돌봄'
-                                : '내 운세부터 볼 수 있어요',
-                            onTap: () =>
-                                _open(const RelationshipUnderstandingScreen()),
-                          ),
+                        ],
+                      ),
+                    ),
+                    V2Section(
+                      title: '코인',
+                      child: V2List(
+                        children: [
                           V2ListTile(
                             icon: V2Icons.shop,
-                            tone: V2Tone.sky,
+                            tone: V2Tone.rose,
                             title: '상점',
-                            subtitle: '꾸미기 아이템과 미션',
+                            subtitle: '꾸미기 아이템 · 미션 · 쿠폰',
                             trailing: _coins == null
                                 ? null
                                 : Text(
@@ -221,14 +231,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             showChevron: true,
                             onTap: () => _open(const ShopScreen()),
                           ),
-                          if (!paired)
-                            V2ListTile(
-                              icon: V2Icons.lock,
-                              tone: V2Tone.sage,
-                              title: '개인 보관함',
-                              subtitle: '연결 전에 남긴 나만의 기록',
-                              onTap: () => _open(const PersonalHistoryScreen()),
-                            ),
                         ],
                       ),
                     ),
@@ -238,7 +240,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         children: [
                           V2ListTile(
                             icon: V2Icons.bell,
-                            tone: V2Tone.lilac,
+                            tone: V2Tone.neutral,
                             title: '알림',
                             subtitle: _osNotification == OsPermission.denied
                                 ? '꺼짐 · 휴대폰 설정에서 켤 수 있어요'
@@ -248,28 +250,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                           V2ListTile(
                             icon: Icons.palette_outlined,
-                            tone: V2Tone.rose,
+                            tone: V2Tone.neutral,
                             title: '화면 테마',
                             subtitle: V2ThemeController.instance.value.label,
                             onTap: () => _open(const ThemeScreen()),
                           ),
                           V2ListTile(
                             icon: V2Icons.shield,
-                            tone: V2Tone.sage,
+                            tone: V2Tone.neutral,
                             title: '개인정보·권한',
                             subtitle: '위치 · 카메라 · 알림',
                             onTap: () => _open(const PermissionsScreen()),
                           ),
+                          if (!paired)
+                            V2ListTile(
+                              icon: V2Icons.lock,
+                              tone: V2Tone.neutral,
+                              title: '개인 보관함',
+                              subtitle: '연결 전에 남긴 나만의 기록',
+                              onTap: () => _open(const PersonalHistoryScreen()),
+                            ),
                         ],
                       ),
                     ),
                     V2Section(
-                      title: '도움말·정보',
+                      title: '도움말',
                       child: V2List(
                         children: [
                           V2ListTile(
                             icon: V2Icons.help,
-                            tone: V2Tone.sky,
+                            tone: V2Tone.neutral,
                             title: '고객센터·FAQ',
                             subtitle: '자주 묻는 질문과 문의',
                             onTap: () => showSupportSheet(context),
@@ -289,7 +299,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                           V2ListTile(
                             icon: V2Icons.person,
-                            tone: V2Tone.peach,
+                            tone: V2Tone.neutral,
                             title: '계정',
                             subtitle: '로그아웃 · 탈퇴',
                             onTap: () => _open(const AccountScreen()),
@@ -304,13 +314,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  String _anniversarySubtitle() {
-    final label = _couple?.nextAnniversaryLabel;
-    final days = _couple?.nextAnniversaryDays;
-    if (label == null || label.isEmpty || days == null) {
-      return '소중한 날을 챙겨 보세요';
-    }
-    return days <= 0 ? '$label 오늘이에요' : '$label까지 $days일';
+  void _openFortune() {
+    HomeFortuneSeen.mark();
+    setState(() => _fortuneSeen = true);
+    _open(
+      RelationshipFortuneScreen(
+        api: FortuneApi(baseUrl: _auth.baseUrl, token: _auth.token ?? ''),
+        onEditProfile: () => _open(
+          const RelationshipUnderstandingScreen(editBirthProfileOnly: true),
+        ),
+        onOpenPartner: () => _open(const PartnerScreen()),
+      ),
+    );
   }
 
   void _openBase() => _open(
@@ -376,7 +391,7 @@ class _ProfileEntry extends StatelessWidget {
                             Text('함께한 지 ', style: V2Text.cap),
                             Text(
                               dDay,
-                              style: V2Text.serif(size: 16, color: p.primary),
+                              style: V2Text.bodyStrong.copyWith(color: p.point),
                             ),
                           ],
                         )
@@ -397,6 +412,81 @@ class _ProfileEntry extends StatelessWidget {
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One of the four shortcuts under the couple card.
+class _Quick extends StatelessWidget {
+  const _Quick({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.dot = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool dot;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = V2Palette.of(context);
+    return Expanded(
+      child: Semantics(
+        button: true,
+        label: dot ? '$label, 새 소식' : label,
+        child: ExcludeSemantics(
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: V2Radius.ctlAll,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Column(
+                children: [
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        width: 54,
+                        height: 54,
+                        decoration: BoxDecoration(
+                          color: p.primarySoft,
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        child: Icon(icon, color: p.primary, size: 25),
+                      ),
+                      if (dot)
+                        Positioned(
+                          top: -2,
+                          right: -2,
+                          child: Container(
+                            width: 11,
+                            height: 11,
+                            decoration: BoxDecoration(
+                              color: p.point,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: p.bg, width: 2),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 7),
+                  Text(
+                    label,
+                    style: V2Text.cap.copyWith(
+                      color: p.ink,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
