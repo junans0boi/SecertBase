@@ -16,13 +16,11 @@ import '../relationship/fortune_screen.dart';
 import '../relationship/relationship_understanding_screen.dart';
 import '../secret_base/base_api.dart';
 import '../secret_base/base_common.dart';
-import '../secret_base/base_rewards_tab.dart';
 import '../secret_base/secret_base_screen.dart';
 import '../settings/notification_settings_screen.dart';
-import 'anniversaries_screen.dart';
+import 'home_focus.dart';
 import 'home_format.dart';
 import 'start_date_sheet.dart';
-import 'today_card.dart';
 import 'today_loop_viewer.dart';
 import 'today_poke.dart';
 
@@ -48,6 +46,12 @@ class HomeScreen extends StatefulWidget {
 
   final TodayPoke? poke;
 
+  /// Whether today's fortune was opened (defaults to [HomeFortuneSeen]).
+  final Future<bool> Function()? fortuneSeen;
+
+  /// One-line title of today's fortune, or null (defaults to the API).
+  final Future<String?> Function()? fortuneHeadline;
+
   const HomeScreen({
     super.key,
     required this.onNavigate,
@@ -59,6 +63,8 @@ class HomeScreen extends StatefulWidget {
     this.claimableRewards,
     this.saveStartDate,
     this.poke,
+    this.fortuneSeen,
+    this.fortuneHeadline,
   });
 
   @override
@@ -74,8 +80,13 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _poking = false;
   bool _notificationsBlocked = false;
   bool _notificationBannerDismissed = false;
-  int _claimable = 0;
   bool _savingStart = false;
+  bool _fortuneSeen = false;
+  String? _fortuneHeadline;
+
+  /// "나중에" on the focus card, for this visit only.
+  bool _momentLater = false;
+  bool _fortuneLater = false;
 
   Map<String, String> get _authHeaders => {
     if (_auth.token != null) 'Authorization': 'Bearer ${_auth.token}',
@@ -140,12 +151,30 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadSideInfo() async {
     final blocked = await (widget.notificationsBlocked ?? _defaultBlocked)();
-    final claimable = await (widget.claimableRewards ?? _defaultClaimable)();
+    final seen = await (widget.fortuneSeen ?? HomeFortuneSeen.today)();
     if (!mounted) return;
     setState(() {
       _notificationsBlocked = blocked;
-      _claimable = claimable;
+      _fortuneSeen = seen;
     });
+    final headline = await (widget.fortuneHeadline ?? _defaultHeadline)();
+    if (mounted) setState(() => _fortuneHeadline = headline);
+  }
+
+  Future<String?> _defaultHeadline() async {
+    final token = _auth.token;
+    if (token == null) return null;
+    final api = FortuneApi(baseUrl: _auth.baseUrl, token: token);
+    try {
+      final today = await api.fetchToday();
+      final c = today.personal ?? today.relationship ?? today.emotionalFlow;
+      final title = c?.title.trim();
+      return title == null || title.isEmpty ? null : title;
+    } catch (_) {
+      return null;
+    } finally {
+      api.close();
+    }
   }
 
   static Future<bool> _defaultBlocked() async {
@@ -156,25 +185,6 @@ class _HomeScreenState extends State<HomeScreen> {
       return !await FirebasePushPlatform().permissionGranted();
     } catch (_) {
       return false;
-    }
-  }
-
-  Future<int> _defaultClaimable() async {
-    if (_auth.token == null) return 0;
-    final api = BaseApi(baseUrl: _auth.baseUrl, headers: _authHeaders);
-    try {
-      final body = await api.get('/retention/secret-base/milestones');
-      final raw = body['milestones'];
-      if (raw is! List) return 0;
-      return raw
-          .whereType<Map>()
-          .map((m) => Milestone.fromJson(Map<String, dynamic>.from(m)))
-          .where((m) => m.claimable)
-          .length;
-    } catch (_) {
-      return 0;
-    } finally {
-      api.close();
     }
   }
 
@@ -289,35 +299,18 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) => page));
   }
 
-  void _openFortune() => _push(
-    RelationshipFortuneScreen(
-      api: FortuneApi(baseUrl: _auth.baseUrl, token: _auth.token ?? ''),
-      onEditProfile: () => _push(
-        const RelationshipUnderstandingScreen(editBirthProfileOnly: true),
+  void _openFortune() {
+    HomeFortuneSeen.mark();
+    setState(() => _fortuneSeen = true);
+    _push(
+      RelationshipFortuneScreen(
+        api: FortuneApi(baseUrl: _auth.baseUrl, token: _auth.token ?? ''),
+        onEditProfile: () => _push(
+          const RelationshipUnderstandingScreen(editBirthProfileOnly: true),
+        ),
+        onOpenPartner: () => _push(const PartnerScreen()),
       ),
-      onOpenPartner: () => _push(const PartnerScreen()),
-    ),
-  );
-
-  void _openUnderstanding() => _push(
-    RelationshipUnderstandingScreen(
-      assessmentStatus: widget.relationshipStatus ?? _defaultRelationshipStatus,
-      hasActiveCouple: _couple != null,
-    ),
-  );
-
-  RelationshipAssessmentStatus get _defaultRelationshipStatus {
-    final birthDate = _auth.user?['BirthDate'] ?? _auth.user?['birthDate'];
-    if (birthDate == null || '$birthDate'.trim().isEmpty) {
-      return RelationshipAssessmentStatus.profileIncomplete;
-    }
-    return switch (_overview?.assessmentStatus) {
-      HomeAssessmentStatus.inProgress =>
-        RelationshipAssessmentStatus.inProgress,
-      HomeAssessmentStatus.resultReady =>
-        RelationshipAssessmentStatus.resultReady,
-      _ => RelationshipAssessmentStatus.notStarted,
-    };
+    );
   }
 
   void _openBase([int tab = 0]) => _push(
@@ -360,64 +353,50 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     }
+    final top = MediaQuery.paddingOf(context).top;
     return RefreshIndicator(
       onRefresh: _refresh,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.zero,
+        padding: EdgeInsets.fromLTRB(22, top + 14, 22, V2Space.x10),
         children: [
-          _hero(),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              V2Space.page,
-              V2Space.x4,
-              V2Space.page,
-              V2Space.x10,
+          _header(),
+          if (_controller.state.status == HomeStatus.failure) ...[
+            const SizedBox(height: V2Space.x4),
+            V2Banner(
+              tone: V2BannerTone.err,
+              message: '새 소식을 불러오지 못했어요. 마지막으로 받은 내용을 보여 줘요.',
+              actionLabel: '다시 불러오기',
+              onAction: _refresh,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (_controller.state.status == HomeStatus.failure) ...[
-                  V2Banner(
-                    tone: V2BannerTone.err,
-                    message: '새 소식을 불러오지 못했어요. 마지막으로 받은 내용을 보여 줘요.',
-                    actionLabel: '다시 불러오기',
-                    onAction: _refresh,
-                  ),
-                  const SizedBox(height: V2Space.x3),
-                ],
-                if (_notificationsBlocked && !_notificationBannerDismissed) ...[
-                  V2Banner(
-                    tone: V2BannerTone.warn,
-                    icon: V2Icons.bellOff,
-                    title: '알림이 꺼져 있어요',
-                    message: '새 순간과 콕을 놓칠 수 있어요',
-                    actionLabel: '설정 열기',
-                    onAction: _openNotifications,
-                    onDismiss: () =>
-                        setState(() => _notificationBannerDismissed = true),
-                  ),
-                  const SizedBox(height: V2Space.x3),
-                ],
-                _todayEntry(),
-                ..._partnerLine(),
-                if (_showChecklist) ...[
-                  const SizedBox(height: V2Space.x4),
-                  _checklist(),
-                ],
-                const SizedBox(height: V2Space.x5),
-                _shortcuts(),
-                const SizedBox(height: V2Space.x5),
-                _memory(),
-              ],
+          ],
+          if (_notificationsBlocked && !_notificationBannerDismissed) ...[
+            const SizedBox(height: V2Space.x4),
+            V2Banner(
+              tone: V2BannerTone.warn,
+              icon: V2Icons.bellOff,
+              title: '알림이 꺼져 있어요',
+              message: '새 순간과 콕을 놓칠 수 있어요',
+              actionLabel: '설정 열기',
+              onAction: _openNotifications,
+              onDismiss: () =>
+                  setState(() => _notificationBannerDismissed = true),
             ),
-          ),
+          ],
+          const SizedBox(height: 22),
+          _focus(),
+          const SizedBox(height: V2Space.x2),
+          ..._rows(),
+          if (_showChecklist) ...[
+            const SizedBox(height: V2Space.x4),
+            _checklist(),
+          ],
         ],
       ),
     );
   }
 
-  // hero
+  // header: 날짜 · 함께한 날 · 다음 기념일 · 두 사람
 
   ({String label, int days})? get _nextEvent {
     final candidates = <({String label, int days})>[];
@@ -435,8 +414,8 @@ class _HomeScreenState extends State<HomeScreen> {
     return candidates.first;
   }
 
-  Widget _hero() {
-    final top = MediaQuery.paddingOf(context).top;
+  Widget _header() {
+    final p = V2Palette.of(context);
     final start = _startDay;
     final dDay = start != null ? dPlus(start) : _couple?.dDay;
     final next = _nextEvent;
@@ -445,135 +424,96 @@ class _HomeScreenState extends State<HomeScreen> {
         : next.days == 0
         ? '오늘은 ${next.label}이에요'
         : '${next.label}까지 ${next.days}일';
-    return Container(
-      constraints: BoxConstraints(minHeight: top + 152),
-      decoration: BoxDecoration(gradient: V2Gradients.heroPaper),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        children: [
-          const Positioned.fill(child: V2HeroIllustration()),
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              V2Space.page,
-              top + V2Space.x2,
-              V2Space.page,
-              V2Space.x6,
-            ),
-            child: _heroContent(dDay, pill),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _heroContent(int? dDay, String? pill) {
-    return Column(
+    return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            ExcludeSemantics(
-              child: V2AvatarPair(
-                me: _myName,
-                partner: _partnerName,
-                size: V2AvatarSize.sm,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                monthDayWeekday(DateTime.now()),
+                style: V2Text.body.copyWith(color: p.muted),
               ),
-            ),
-            const SizedBox(width: V2Space.x2),
-            Expanded(
-              child: Text(
-                '$_myName · $_partnerName',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: V2Text.cap.copyWith(
-                  color: V2Colors.sub,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: V2Colors.surface.withValues(alpha: .78),
-                shape: BoxShape.circle,
-              ),
-              child: IconButton(
-                tooltip: '알림 설정',
-                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-                icon: Badge(
-                  isLabelVisible: _notificationsBlocked,
-                  smallSize: 8,
-                  child: Icon(V2Icons.bell, color: V2Colors.ink),
-                ),
-                onPressed: _openNotifications,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: V2Space.x3),
-        if (dDay == null)
-          _startPrompt()
-        else ...[
-          Semantics(
-            label: '함께한 지 $dDay일째',
-            child: ExcludeSemantics(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  Text(
-                    'D+',
-                    style: V2Text.serif(size: 32, color: V2Colors.rose700),
-                  ),
-                  const SizedBox(width: 2),
-                  Flexible(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        '$dDay',
-                        style: V2Text.serif(size: 52, color: V2Colors.ink)
-                            .copyWith(
+              const SizedBox(height: 2),
+              if (dDay == null)
+                _startPrompt()
+              else ...[
+                Semantics(
+                  label: '함께한 지 $dDay일',
+                  child: ExcludeSemantics(
+                    child: Text.rich(
+                      TextSpan(
+                        children: [
+                          const TextSpan(text: '함께한 지 '),
+                          TextSpan(
+                            text: '$dDay',
+                            style: TextStyle(
+                              color: p.point,
+                              fontWeight: FontWeight.w800,
                               fontFeatures: const [
                                 FontFeature.tabularFigures(),
                               ],
                             ),
+                          ),
+                          const TextSpan(text: '일'),
+                        ],
                       ),
+                      style: V2Text.display.copyWith(color: p.ink),
+                    ),
+                  ),
+                ),
+                if (pill != null) ...[
+                  const SizedBox(height: V2Space.x3),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: p.soft,
+                      borderRadius: V2Radius.pillAll,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: p.point,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            pill,
+                            style: V2Text.cap.copyWith(
+                              color: p.sub,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
-              ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(width: V2Space.x3),
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: ExcludeSemantics(
+            child: V2AvatarPair(
+              me: _myName,
+              partner: _partnerName,
+              size: V2AvatarSize.md,
             ),
           ),
-          if (pill != null) ...[
-            const SizedBox(height: V2Space.x1),
-            Container(
-              height: 30,
-              padding: const EdgeInsets.symmetric(horizontal: V2Space.x3),
-              decoration: BoxDecoration(
-                color: V2Colors.surface.withValues(alpha: .85),
-                borderRadius: V2Radius.pillAll,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(V2Icons.event, size: 16, color: V2Colors.rose700),
-                  const SizedBox(width: V2Space.x1),
-                  Flexible(
-                    child: Text(
-                      pill,
-                      style: V2Text.label.copyWith(
-                        color: V2Colors.rose700,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
+        ),
       ],
     );
   }
@@ -584,14 +524,14 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         Text(
           '우리의 첫날을\n알려 주세요',
-          style: V2Text.serif(size: 30, color: V2Colors.ink),
+          style: V2Text.display.copyWith(color: V2Colors.ink),
         ),
         const SizedBox(height: V2Space.x1),
         Text(
           _coupleFailed
               ? '정보를 불러오지 못했어요. 아래로 당겨 새로고침해 보세요.'
               : '연결한 날이 기본이에요. 바꿔도 돼요',
-          style: V2Text.cap.copyWith(color: V2Colors.ink),
+          style: V2Text.cap,
         ),
         if (!_coupleFailed) ...[
           const SizedBox(height: V2Space.x3),
@@ -609,87 +549,277 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // today
+  // 지금 할 일: one card, the most important thing not done yet.
 
-  Widget _todayEntry() {
-    final state = _todayState;
-    final failed = _overview?.todayLoadFailed ?? true;
-    if (state == null || failed) {
-      return V2Card(
-        child: Column(
+  bool get _todayFailed =>
+      _todayState == null || (_overview?.todayLoadFailed ?? true);
+  bool get _iPosted {
+    final s = _todayState;
+    if (s == null) return false;
+    return s.myMoment != null ||
+        s.status == TodayStatus.selfWaiting ||
+        s.status == TodayStatus.complete ||
+        s.status == TodayStatus.viewed;
+  }
+
+  bool get _partnerPosted {
+    final s = _todayState;
+    if (s == null) return false;
+    return s.hasPartnerMoment ||
+        s.partnerMoment != null ||
+        s.status == TodayStatus.partnerWaiting ||
+        s.status == TodayStatus.complete ||
+        s.status == TodayStatus.viewed;
+  }
+
+  bool get _momentPending => !_todayFailed && !_iPosted && !_momentLater;
+  bool get _fortunePending => !_fortuneSeen && !_fortuneLater;
+
+  Widget _focus() {
+    if (_todayFailed) return _todayError();
+    final state = _todayState!;
+    final steps = (_iPosted ? 0 : 1) + (_fortuneSeen ? 0 : 1);
+    if (_momentPending) {
+      final partnerFirst = _partnerPosted;
+      return HomeFocusCard(
+        background: homeMomentFill(
+          state.partnerMoment,
+          baseUrl: _auth.baseUrl,
+          seed: 'today-${state.date}',
+          blur: true,
+          cacheWidth: 400,
+        ),
+        kicker: '지금 할 일',
+        step: 1,
+        steps: steps,
+        title: partnerFirst
+            ? '${josa(_partnerName, '이', '가')} 오늘의 순간을\n남기고 기다려요'
+            : '오늘의 순간을\n남겨 볼까요?',
+        sub: partnerFirst
+            ? '나도 한 장 남기면 둘의 사진이 열려요'
+            : '${josa(_partnerName, '와', '과')} 서로의 오늘을 바꿔 봐요',
+        action: partnerFirst ? '나도 남기기' : '오늘의 순간 남기기',
+        actionIcon: V2Icons.camera,
+        onAction: _offline ? null : _createMoment,
+        laterLabel: '나중에',
+        onLater: () => setState(() => _momentLater = true),
+      );
+    }
+    if (_fortunePending) {
+      return HomeFocusCard(
+        background: const HomeFortuneBackground(),
+        kicker: '지금 할 일',
+        step: steps,
+        steps: steps,
+        title: '오늘의 운세가\n도착했어요',
+        sub: '열어 보면 오늘 하루 힌트가 나와요',
+        action: '열어 보기',
+        onAction: _openFortune,
+        laterLabel: '나중에',
+        onLater: () => setState(() => _fortuneLater = true),
+      );
+    }
+    if (_iPosted && !_partnerPosted) {
+      return HomeFocusCard(
+        background: homeMomentFill(
+          state.myMoment,
+          baseUrl: _auth.baseUrl,
+          seed: 'mine-${state.date}',
+          cacheWidth: 800,
+        ),
+        kicker: '오늘의 순간',
+        title: '${josa(_partnerName, '을', '를')} 기다리는 중이에요',
+        sub: '${josa(_partnerName, '이', '가')} 남기면 둘의 사진이 함께 열려요',
+        action: _pokedToday
+            ? '오늘은 콕 찔렀어요'
+            : '${josa(_partnerName, '에게', '에게')} 콕 찌르기',
+        actionIcon: V2Icons.heart,
+        busy: _poking,
+        onAction: _pokedToday || _offline ? null : _sendPoke,
+      );
+    }
+    if (_iPosted) {
+      final mine = clockLabel(
+        state.myMoment?.capturedAt ?? state.myMoment?.takenAt,
+      );
+      final theirs = clockLabel(
+        state.partnerMoment?.capturedAt ?? state.partnerMoment?.takenAt,
+      );
+      return HomeFocusCard(
+        background: Row(
           children: [
-            const V2Art(icon: V2Icons.error, tone: V2Tone.err),
-            const SizedBox(height: V2Space.x3),
-            Text(
-              '오늘의 순간을 불러오지 못했어요',
-              style: V2Text.head,
-              textAlign: TextAlign.center,
+            Expanded(
+              child: homeMomentFill(
+                state.myMoment,
+                baseUrl: _auth.baseUrl,
+                seed: 'mine-${state.date}',
+                cacheWidth: 500,
+              ),
             ),
-            const SizedBox(height: V2Space.x1),
-            Text(
-              V2Text.keepAll('잠시 후 다시 해 보세요. 아래 다른 기능은 그대로 쓸 수 있어요.'),
-              style: V2Text.cap,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: V2Space.x4),
-            V2Button(
-              label: '다시 불러오기',
-              icon: V2Icons.refresh,
-              variant: V2ButtonVariant.soft,
-              onPressed: _refresh,
+            const SizedBox(width: 3),
+            Expanded(
+              child: homeMomentFill(
+                state.partnerMoment,
+                baseUrl: _auth.baseUrl,
+                seed: 'partner-${state.date}',
+                cacheWidth: 500,
+              ),
             ),
           ],
         ),
+        kicker: '✓ 오늘 할 일 끝',
+        title: '오늘의 순간',
+        sub: [
+          if (mine != null) '$_myName $mine',
+          if (theirs != null) '$_partnerName $theirs',
+        ].join(' · '),
+        onTap: _openLoop,
+        semanticLabel: '오늘의 순간, 둘 다 남겼어요. 크게 보기',
       );
     }
-    return TodayCard(
-      state: state,
-      myName: _myName,
-      partnerName: _partnerName,
-      // _createMoment → openMomentComposer → MomentLoopScreen(openComposer: true).
-      onCreateMoment: _createMoment,
-      onOpenLoop: _openLoop,
-      onPoke: _sendPoke,
-      pokedToday: _pokedToday,
-      poking: _poking,
-      offline: _offline,
-      baseUrl: _auth.baseUrl,
+    // Moment postponed with "나중에" and fortune already handled.
+    return HomeFocusCard(
+      background: homeMomentFill(
+        null,
+        baseUrl: _auth.baseUrl,
+        seed: 'later-${state.date}',
+      ),
+      kicker: '오늘의 순간',
+      title: '오늘의 순간은\n아직 비어 있어요',
+      sub: '생각날 때 한 장 남겨 주세요',
+      action: '남기기',
+      actionIcon: V2Icons.camera,
+      onAction: _offline ? null : _createMoment,
     );
   }
 
-  List<Widget> _partnerLine() {
+  Widget _todayError() {
+    return V2Card(
+      child: Column(
+        children: [
+          const V2Art(icon: V2Icons.error, tone: V2Tone.err),
+          const SizedBox(height: V2Space.x3),
+          Text(
+            '오늘의 순간을 불러오지 못했어요',
+            style: V2Text.head,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: V2Space.x1),
+          Text(
+            V2Text.keepAll('잠시 후 다시 해 보세요. 아래 다른 기능은 그대로 쓸 수 있어요.'),
+            style: V2Text.cap,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: V2Space.x4),
+          V2Button(
+            label: '다시 불러오기',
+            icon: V2Icons.refresh,
+            variant: V2ButtonVariant.soft,
+            onPressed: _refresh,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // quiet rows
+
+  List<Widget> _rows() {
+    final rows = <Widget>[];
     final state = _todayState;
-    if (state == null || (_overview?.todayLoadFailed ?? true)) return const [];
-    final name = _partnerName;
-    final moment = state.partnerMoment;
-    final clock = clockLabel(moment?.capturedAt ?? moment?.takenAt);
-    final text = switch (state.status) {
-      TodayStatus.empty => '${josa(name, '도', '도')} 아직이에요',
-      TodayStatus.selfWaiting => '${josa(name, '은', '는')} 아직 남기지 않았어요',
-      _ =>
-        clock != null
-            ? '${josa(name, '이', '가')} $clock에 남겼어요'
-            : '${josa(name, '이', '가')} 오늘의 순간을 남겼어요',
-    };
+    final fortuneIsFocus = !_momentPending && _fortunePending;
+    if (!fortuneIsFocus) {
+      rows.add(
+        HomeRow(
+          icon: V2Icons.sparkle,
+          title: '오늘의 운세',
+          sub: _fortuneSeen
+              ? (_fortuneHeadline ?? '오늘 운세를 봤어요')
+              : '아직 안 봤어요 · 한 줄 열어 보기',
+          hot: !_fortuneSeen,
+          dot: !_fortuneSeen,
+          onTap: _openFortune,
+        ),
+      );
+    }
+    if (fortuneIsFocus && state != null && !_todayFailed) {
+      final both = _iPosted && _partnerPosted;
+      rows.add(
+        HomeRow(
+          icon: V2Icons.camera,
+          title: '오늘의 순간',
+          sub: both
+              ? '둘 다 남겼어요 · 크게 보기'
+              : _iPosted
+              ? '${josa(_partnerName, '을', '를')} 기다리는 중'
+              : '아직 안 남겼어요',
+          trailing: both
+              ? _thumbs([state.myMoment, state.partnerMoment])
+              : null,
+          onTap: both
+              ? _openLoop
+              : _iPosted
+              ? null
+              : _createMoment,
+        ),
+      );
+    }
+    final memory = _overview?.memoryCard;
+    if (memory != null &&
+        !(_overview?.failedSections.contains(HomeSection.memory) ?? false)) {
+      final title = memory.caption?.trim().isNotEmpty == true
+          ? memory.caption!
+          : (memory.placeName ?? '그날의 기록');
+      rows.add(
+        HomeRow(
+          icon: V2Icons.calendar,
+          title: '${memory.yearsAgo}년 전 오늘',
+          sub: title,
+          secondaryIcon: true,
+          onTap: () => _openBase(3),
+        ),
+      );
+    }
+    rows.add(
+      HomeRow(
+        icon: V2Icons.record,
+        title: '지난 순간',
+        sub: '기록에서 우리의 하루들을 넘겨 봐요',
+        secondaryIcon: true,
+        onTap: () => widget.onNavigate(1),
+      ),
+    );
     return [
-      const SizedBox(height: V2Space.x3),
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: V2Space.x1),
-        child: Row(
-          children: [
-            ExcludeSemantics(
-              child: V2Avatar(
-                name: name,
-                color: V2Avatar.partnerColor,
-                size: V2AvatarSize.sm,
+      for (var i = 0; i < rows.length; i++) ...[
+        if (i > 0) Divider(height: 1, color: V2Colors.line),
+        rows[i],
+      ],
+    ];
+  }
+
+  Widget _thumbs(List<TodayMoment?> moments) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final (i, m) in moments.indexed)
+          Padding(
+            padding: EdgeInsets.only(left: i == 0 ? 0 : 4),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(9),
+              child: SizedBox(
+                width: 36,
+                height: 36,
+                child: homeMomentFill(
+                  m,
+                  baseUrl: _auth.baseUrl,
+                  seed: 'thumb-$i',
+                  cacheWidth: 120,
+                ),
               ),
             ),
-            const SizedBox(width: V2Space.x2),
-            Expanded(child: Text(text, style: V2Text.cap)),
-          ],
-        ),
-      ),
-    ];
+          ),
+      ],
+    );
   }
 
   // first-use checklist
@@ -745,199 +875,6 @@ class _HomeScreenState extends State<HomeScreen> {
             onTap: _openNotifications,
           ),
         ],
-      ),
-    );
-  }
-
-  // shortcuts
-
-  Widget _shortcuts() {
-    final items = [
-      (
-        icon: V2Icons.sparkle,
-        label: '오늘의 운세',
-        tone: V2Tone.honey,
-        badge: 0,
-        onTap: _openFortune,
-      ),
-      (
-        icon: V2Icons.heart,
-        label: '우리 이해',
-        tone: V2Tone.lilac,
-        badge: 0,
-        onTap: _openUnderstanding,
-      ),
-      (
-        icon: V2Icons.event,
-        label: '기념일',
-        tone: V2Tone.rose,
-        badge: 0,
-        onTap: () => _push(const AnniversariesScreen()),
-      ),
-      (
-        icon: V2Icons.base,
-        label: '비밀기지',
-        tone: V2Tone.sage,
-        badge: _claimable,
-        onTap: () => _openBase(),
-      ),
-    ];
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.symmetric(horizontal: BorderSide(color: V2Colors.line2)),
-      ),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (var i = 0; i < items.length; i++) ...[
-              if (i > 0) VerticalDivider(width: 1, color: V2Colors.line),
-              Expanded(
-                child: _Shortcut(
-                  icon: items[i].icon,
-                  label: items[i].label,
-                  tone: items[i].tone,
-                  badge: items[i].badge,
-                  onTap: items[i].onTap,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  // memory
-
-  Widget _memory() {
-    final card = _overview?.memoryCard;
-    if (_overview?.failedSections.contains(HomeSection.memory) ?? false) {
-      return const SizedBox.shrink();
-    }
-    if (card == null) {
-      return V2Card(
-        variant: V2CardVariant.soft,
-        child: Row(
-          children: [
-            const V2Art(icon: V2Icons.calendar, tone: V2Tone.honey),
-            const SizedBox(width: V2Space.x3),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('n년 전 오늘', style: V2Text.bodyStrong),
-                  Text('기록이 쌓이면 1년 뒤 오늘 여기서 만나요', style: V2Text.cap),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-    final total = _overview?.memoryCardTotal ?? 0;
-    final title = card.caption?.trim().isNotEmpty == true
-        ? card.caption!
-        : (card.placeName ?? '그날의 기록');
-    final media = card.mediaUrl;
-    return V2Card(
-      onTap: () => _openBase(3),
-      semanticLabel: '${card.yearsAgo}년 전 오늘, $title. 추억 모아 보기',
-      child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: V2Radius.ctlAll,
-            child: SizedBox(
-              width: 64,
-              height: 64,
-              child: media == null
-                  ? const V2PhotoPlaceholder(seed: 'memory')
-                  : Image.network(
-                      media.startsWith('http')
-                          ? media
-                          : '${_auth.baseUrl}$media',
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) =>
-                          const V2PhotoPlaceholder(seed: 'memory'),
-                    ),
-            ),
-          ),
-          const SizedBox(width: V2Space.x3),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('${card.yearsAgo}년 전 오늘', style: V2Text.label),
-                const SizedBox(height: 2),
-                Text(
-                  title,
-                  style: V2Text.bodyStrong,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (total > 1) Text('이 날의 기록 $total개', style: V2Text.cap),
-              ],
-            ),
-          ),
-          Icon(Icons.chevron_right_rounded, color: V2Colors.muted),
-        ],
-      ),
-    );
-  }
-}
-
-class _Shortcut extends StatelessWidget {
-  const _Shortcut({
-    required this.icon,
-    required this.label,
-    required this.tone,
-    required this.badge,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final V2Tone tone;
-  final int badge;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      container: true,
-      button: true,
-      label: badge > 0 ? '$label, 받을 보상 $badge개' : label,
-      onTap: onTap,
-      child: ExcludeSemantics(
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: V2Space.x1,
-              vertical: V2Space.x3 + 2,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Badge(
-                  isLabelVisible: badge > 0,
-                  label: Text('$badge'),
-                  child: SizedBox(
-                    width: 44,
-                    height: 36,
-                    child: Icon(icon, color: V2Colors.ink, size: 26),
-                  ),
-                ),
-                const SizedBox(height: V2Space.x2),
-                Text(
-                  V2Text.keepAll(label),
-                  textAlign: TextAlign.center,
-                  style: V2Text.label,
-                ),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -1012,20 +949,21 @@ class _HomeSkeleton extends StatelessWidget {
         child: SingleChildScrollView(
           physics: const NeverScrollableScrollPhysics(),
           child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              V2Space.page,
-              top + V2Space.x4,
-              V2Space.page,
-              0,
-            ),
+            padding: EdgeInsets.fromLTRB(22, top + 18, 22, 0),
             child: const Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                V2SkeletonBox(height: 190, radius: V2Radius.sheet),
+                V2SkeletonBox(height: 18, width: 120, radius: 6),
+                SizedBox(height: V2Space.x2),
+                V2SkeletonBox(height: 34, width: 220, radius: 8),
+                SizedBox(height: V2Space.x3),
+                V2SkeletonBox(height: 30, width: 160, radius: 15),
+                SizedBox(height: 22),
+                V2SkeletonBox(height: HomeFocusCard.height, radius: 28),
                 SizedBox(height: V2Space.x4),
-                V2SkeletonBox(height: 240, radius: V2Radius.card),
-                SizedBox(height: V2Space.x4),
-                V2SkeletonBox(height: 92, radius: V2Radius.card),
+                V2SkeletonBox(height: 56, radius: V2Radius.ctl),
+                SizedBox(height: V2Space.x2),
+                V2SkeletonBox(height: 56, radius: V2Radius.ctl),
               ],
             ),
           ),

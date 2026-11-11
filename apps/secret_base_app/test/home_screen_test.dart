@@ -9,7 +9,6 @@ import 'package:secret_base_app/screens/auth/partner_screen.dart';
 import 'package:secret_base_app/screens/home/home_format.dart';
 import 'package:secret_base_app/screens/home/home_screen.dart';
 import 'package:secret_base_app/screens/home/today_poke.dart';
-import 'package:secret_base_app/screens/secret_base/secret_base_screen.dart';
 import 'package:secret_base_app/v2/v2.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -58,6 +57,7 @@ Widget _home(
   TodayPoke? poke,
   Future<void> Function(DateTime)? saveStartDate,
   Future<bool> Function()? blocked,
+  bool fortuneSeen = false,
 }) => MaterialApp(
   home: HomeScreen(
     onNavigate: onNavigate ?? (_) {},
@@ -66,8 +66,12 @@ Widget _home(
     claimableRewards: () async => 2,
     poke: poke,
     saveStartDate: saveStartDate,
+    fortuneSeen: () async => fortuneSeen,
+    fortuneHeadline: () async => '차분히 쌓아 가는 하루',
   ),
 );
+
+Finder _together(int days) => find.text('함께한 지 $days일', findRichText: true);
 
 void _tall(WidgetTester tester) {
   tester.view.physicalSize = const Size(390, 1600);
@@ -78,7 +82,7 @@ void _tall(WidgetTester tester) {
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  testWidgets('home shows the D+n hero, one today card and four shortcuts', (
+  testWidgets('home: date, 함께한 날, next day, one focus card, quiet rows', (
     tester,
   ) async {
     _tall(tester);
@@ -87,19 +91,49 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('412'), findsOneWidget);
+    expect(find.text(monthDayWeekday(DateTime.now())), findsOneWidget);
+    expect(_together(412), findsOneWidget);
     expect(find.textContaining('500일까지'), findsOneWidget);
-    expect(find.text('오늘의 순간'), findsOneWidget);
-    // One primary CTA for the day; the old big duplicate cards are gone.
+    // One primary CTA for the day.
     expect(find.text('오늘의 순간 남기기'), findsOneWidget);
-    expect(find.text('순간 남기기'), findsNothing);
-    expect(find.text('함께 놀기'), findsNothing);
-    for (final label in ['오늘의 운세', '우리 이해', '기념일', '비밀기지']) {
-      expect(find.text(V2Text.keepAll(label)), findsOneWidget);
-    }
-    expect(find.byTooltip('알림 설정'), findsOneWidget);
-    expect(find.text('n년 전 오늘'), findsOneWidget);
+    expect(find.text('지금 할 일'), findsOneWidget);
+    // Quiet rows; the old four shortcut tiles moved to 더보기.
+    expect(find.text('오늘의 운세'), findsOneWidget);
+    expect(find.text('아직 안 봤어요 · 한 줄 열어 보기'), findsOneWidget);
+    expect(find.text('지난 순간'), findsOneWidget);
+    expect(find.text(V2Text.keepAll('비밀기지')), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('after the moment, the fortune becomes the one thing to do', (
+    tester,
+  ) async {
+    _tall(tester);
+    final repo = _FakeRepo(() async => _overview(status: TodayStatus.complete));
+    await tester.pumpWidget(_home(repo));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('오늘의 운세가\n도착했어요'), findsOneWidget);
+    expect(find.text('열어 보기'), findsOneWidget);
+    expect(find.text('둘 다 남겼어요 · 크게 보기'), findsOneWidget);
+
+    await tester.tap(find.text('나중에'));
+    await tester.pump();
+    expect(find.text('✓ 오늘 할 일 끝'), findsOneWidget);
+  });
+
+  testWidgets('with everything done the card shows both moments', (
+    tester,
+  ) async {
+    _tall(tester);
+    final repo = _FakeRepo(() async => _overview(status: TodayStatus.complete));
+    await tester.pumpWidget(_home(repo, fortuneSeen: true));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('✓ 오늘 할 일 끝'), findsOneWidget);
+    expect(find.text('차분히 쌓아 가는 하루'), findsOneWidget);
   });
 
   testWidgets('empty-day CTA opens the 기록 composer', (tester) async {
@@ -148,8 +182,8 @@ void main() {
     await tester.pump();
 
     expect(find.text('오늘의 순간을 불러오지 못했어요'), findsOneWidget);
-    expect(find.text('412'), findsOneWidget);
-    expect(find.text(V2Text.keepAll('비밀기지')), findsOneWidget);
+    expect(_together(412), findsOneWidget);
+    expect(find.text('지난 순간'), findsOneWidget);
 
     failing = false;
     await tester.tap(find.text('다시 불러오기'));
@@ -203,19 +237,17 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('shortcuts open 비밀기지 with the reward badge', (tester) async {
+  testWidgets('지난 순간 goes to the 기록 tab', (tester) async {
     _tall(tester);
+    int? tab;
     final repo = _FakeRepo(() async => _overview());
-    await tester.pumpWidget(_home(repo));
+    await tester.pumpWidget(_home(repo, onNavigate: (i) => tab = i));
     await tester.pump();
     await tester.pump();
 
-    expect(find.bySemanticsLabel('비밀기지, 받을 보상 2개'), findsOneWidget);
-    await tester.tap(find.text(V2Text.keepAll('비밀기지')));
+    await tester.tap(find.text('지난 순간'));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(find.byType(SecretBaseScreen), findsOneWidget);
-    await tester.pumpWidget(const SizedBox());
+    expect(tab, 1);
   });
 
   testWidgets('notification-denied banner and first-use checklist show', (
@@ -232,7 +264,7 @@ void main() {
 
     expect(find.text('알림이 꺼져 있어요'), findsOneWidget);
     expect(find.text('시작해 볼까요?'), findsOneWidget);
-    expect(find.text('1'), findsWidgets); // D+1 hero number
+    expect(_together(1), findsOneWidget);
   });
 
   testWidgets('poke is sent once a day and then rests', (tester) async {
@@ -247,7 +279,7 @@ void main() {
     final repo = _FakeRepo(
       () async => _overview(status: TodayStatus.selfWaiting),
     );
-    await tester.pumpWidget(_home(repo, poke: poke));
+    await tester.pumpWidget(_home(repo, poke: poke, fortuneSeen: true));
     await tester.pump();
     await tester.pump();
 
