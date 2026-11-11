@@ -77,7 +77,8 @@ export function thumbHandler(uploadsRoot, options = {}) {
       res.setHeader('Cache-Control', IMMUTABLE);
       res.setHeader('X-Content-Type-Options', 'nosniff');
       res.type('image/webp');
-      return res.sendFile(out);
+      // The cache lives in a dot folder; only this handler may read it.
+      return res.sendFile(out, { dotfiles: 'allow' });
     } catch (err) {
       console.error('[uploads] thumbnail failed', file, width, err?.message ?? err);
       return res.redirect(302, original);
