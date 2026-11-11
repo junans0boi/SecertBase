@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/afterglow_api.dart';
 import '../../core/auth_service.dart';
+import '../../core/upload_image.dart';
 import '../../core/http/api_client.dart';
 import '../../v2/v2.dart';
 import 'map/map_api.dart';
@@ -986,12 +987,11 @@ class _MapScreenState extends State<MapScreen> {
                   child: SizedBox(
                     width: double.infinity,
                     child: image != null
-                        ? Image.network(
-                            image,
-                            fit: BoxFit.cover,
-                            cacheWidth: 400,
-                            errorBuilder: (_, _, _) =>
-                                V2PhotoPlaceholder(seed: pin['id'] ?? name),
+                        ? UploadImage(
+                            raw: image,
+                            baseUrl: _auth.baseUrl,
+                            pixelWidth: 480,
+                            error: V2PhotoPlaceholder(seed: pin['id'] ?? name),
                           )
                         : visited
                         ? V2PhotoPlaceholder(seed: pin['id'] ?? name)
@@ -1454,11 +1454,11 @@ class _MiniPin extends StatelessWidget {
       ),
       child: ClipOval(
         child: visited && imageUrl != null
-            ? Image.network(
-                imageUrl!,
-                fit: BoxFit.cover,
-                cacheWidth: 80,
-                errorBuilder: (_, _, _) => ColoredBox(color: p.primarySoft),
+            ? UploadImage(
+                raw: imageUrl!,
+                baseUrl: '',
+                pixelWidth: 160,
+                error: ColoredBox(color: p.primarySoft),
               )
             : ColoredBox(
                 color: visited ? p.primarySoft : Colors.white,

@@ -4,6 +4,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../../core/upload_image.dart';
 import '../../../features/moment_loop/domain/moment.dart';
 import '../../../v2/v2.dart';
 import 'moment_format.dart';
@@ -106,12 +107,11 @@ class MomentFill extends StatelessWidget {
         ],
       );
     } else if (m.mediaUrl != null && m.mediaType != 'text') {
-      final raw = m.mediaUrl!;
-      fill = Image.network(
-        raw.startsWith('http') ? raw : '$baseUrl$raw',
-        fit: BoxFit.cover,
-        cacheWidth: cacheWidth,
-        errorBuilder: (_, _, _) => V2PhotoPlaceholder(seed: m.id),
+      fill = UploadImage(
+        raw: m.mediaUrl!,
+        baseUrl: baseUrl,
+        pixelWidth: cacheWidth,
+        error: V2PhotoPlaceholder(seed: m.id),
       );
     } else {
       fill = Container(
@@ -1369,8 +1369,13 @@ class _StoryDayState extends State<_StoryDay>
         next.mediaType == 'text') {
       return;
     }
-    final url = raw.startsWith('http') ? raw : '${widget.baseUrl}$raw';
-    precacheImage(NetworkImage(url), context, onError: (_, _) {});
+    // Same key as the UploadImage that will show it (1080px server copy).
+    final url = uploadUrl(raw, widget.baseUrl, width: 1080)!;
+    precacheImage(
+      ResizeImage(NetworkImage(url), width: 1080),
+      context,
+      onError: (_, _) {},
+    );
   }
 
   void _next() {
