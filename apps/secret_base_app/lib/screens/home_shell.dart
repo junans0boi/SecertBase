@@ -191,6 +191,7 @@ class _HomeShellState extends State<HomeShell> {
         bottomNavigationBar: V2BottomTabBar(
           currentIndex: _index,
           onTap: _select,
+          dark: _index == 1,
         ),
       ),
     );

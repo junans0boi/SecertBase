@@ -19,6 +19,7 @@ import '../../../v2/v2.dart';
 import '../map_screen.dart';
 import 'moment_format.dart';
 import 'moment_media.dart';
+import 'moment_story_feed.dart' show MomentStartSource;
 
 /// One attachment in the composer: a new file or an existing post.
 class PickedMoment {
@@ -105,7 +106,12 @@ class MomentComposerPage extends StatefulWidget {
     this.startWithTodayMoment = true,
     this.initialPinId,
     this.initialPinName,
+    this.startSource = MomentStartSource.none,
   });
+
+  /// Opens the camera or the gallery right away (from 기록's
+  /// "내 순간 올리기" sheet).
+  final MomentStartSource startSource;
 
   @override
   State<MomentComposerPage> createState() => _MomentComposerPageState();
@@ -138,6 +144,16 @@ class _MomentComposerPageState extends State<MomentComposerPage> {
   @override
   void initState() {
     super.initState();
+    if (widget.startSource != MomentStartSource.none) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (widget.startSource == MomentStartSource.camera) {
+          unawaited(_capture());
+        } else {
+          unawaited(_addFromGallery());
+        }
+      });
+    }
     final initial = _initial;
     _media = widget.edit != null
         ? widget.edit!.items
