@@ -171,6 +171,68 @@ void main() {
     expect(find.text('group caption'), findsWidgets);
   });
 
+  testWidgets('a day plays like stories: auto next, tap, hold to pause', (
+    tester,
+  ) async {
+    Map<String, Object> post(int id, int user, String caption, int minute) => {
+      'id': id,
+      'user_id': user,
+      'media_type': 'text',
+      'caption': caption,
+      'taken_at': _today(),
+      'captured_at': DateTime.now()
+          .copyWith(hour: 9, minute: minute)
+          .toUtc()
+          .toIso8601String(),
+      'session_id': 's-$user-$id',
+      'position': 0,
+    };
+    final api = MockClient(
+      (_) async => _json({
+        'ok': true,
+        'posts': [
+          post(1, 7, 'first', 1),
+          post(2, 7, 'second', 2),
+          post(3, 7, 'third', 3),
+          post(4, 8, 'partner one', 4),
+        ],
+      }),
+    );
+    await _pump(tester, api);
+    Finder item(int id) => find.byKey(ValueKey('story-item-$id'));
+    expect(item(1), findsOneWidget);
+
+    // Photos advance on their own after 5 seconds.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump();
+    expect(item(2), findsOneWidget);
+
+    // Holding pauses the timer.
+    final tap = find.byKey(ValueKey('story_tap_${dayKey(DateTime.now())}'));
+    final gesture = await tester.startGesture(tester.getCenter(tap));
+    await tester.pump(const Duration(milliseconds: 600)); // long press
+    await tester.pump(const Duration(seconds: 6));
+    expect(item(2), findsOneWidget);
+    await gesture.up();
+    await tester.pump();
+
+    // Tap the right side for the next one, the left side to go back.
+    final box = tester.getRect(tap);
+    await tester.tapAt(Offset(box.right - 20, box.center.dy));
+    await tester.pump();
+    expect(item(3), findsOneWidget);
+    await tester.tapAt(Offset(box.left + 20, box.center.dy));
+    await tester.pump();
+    expect(item(2), findsOneWidget);
+
+    // After my last item come the partner's.
+    await tester.tapAt(Offset(box.right - 20, box.center.dy));
+    await tester.pump();
+    await tester.tapAt(Offset(box.right - 20, box.center.dy));
+    await tester.pump();
+    expect(item(4), findsOneWidget);
+  });
+
   testWidgets('openComposer opens the composer with 오늘의 순간 on', (tester) async {
     final posted = <Map<String, String>>[];
     final api = _recordingApi(posted);

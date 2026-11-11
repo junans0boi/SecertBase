@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
 
 import '../../../features/moment_loop/domain/moment.dart';
 import '../../../v2/v2.dart';
@@ -169,9 +170,9 @@ class MomentStoryFeed extends StatefulWidget {
   final String myName;
   final String partnerName;
   final void Function(MomentStartSource source) onCompose;
-  final void Function(List<Moment> group) onOpenGroup;
+  final Future<void> Function(List<Moment> group) onOpenGroup;
   final Future<void> Function(Moment post) onHeart;
-  final void Function(Moment post) onComments;
+  final Future<void> Function(Moment post) onComments;
   final VoidCallback onShowCalendar;
 
   /// Upload / storage banner shown under the stories row.
@@ -187,9 +188,10 @@ class MomentStoryFeed extends StatefulWidget {
 class _MomentStoryFeedState extends State<MomentStoryFeed> {
   final _pager = PageController();
   final _stories = ScrollController();
-  final _swapped = <String>{};
   int _index = 0;
-  String? _burst;
+
+  /// Stories stop while a sheet or the full view is open.
+  bool _hold = false;
 
   int get _offset => widget.showTodayCta ? 1 : 0;
   int get _count => widget.pages.length + _offset;
@@ -247,35 +249,17 @@ class _MomentStoryFeedState extends State<MomentStoryFeed> {
     );
   }
 
-  bool _isSwapped(MomentDayPage p) => _swapped.contains(dayKey(p.day));
+  Moment? _thumb(MomentDayPage p) => p.mine.isNotEmpty
+      ? p.mine.first
+      : (p.theirs.isEmpty ? null : p.theirs.first);
 
-  void _swap(MomentDayPage p) {
-    if (!p.hasMine || !p.hasTheirs) return;
-    setState(() {
-      final k = dayKey(p.day);
-      if (!_swapped.remove(k)) _swapped.add(k);
-    });
-  }
-
-  ({Moment? main, Moment? small}) _pick(MomentDayPage p) {
-    final mine = p.mine.isEmpty ? null : p.mine.first;
-    final theirs = p.theirs.isEmpty ? null : p.theirs.first;
-    final mainIsMine = _isSwapped(p) ? false : mine != null;
-    return mainIsMine
-        ? (main: mine, small: theirs)
-        : (main: theirs ?? mine, small: theirs == null ? null : mine);
-  }
-
-  Future<void> _heart(Moment post, {bool burst = false}) async {
-    if (burst) {
-      final mine = post.reactions.any((r) => r.userId == widget.myUserId);
-      setState(() => _burst = '${post.id}');
-      Timer(const Duration(milliseconds: 750), () {
-        if (mounted) setState(() => _burst = null);
-      });
-      if (mine) return; // double tap only ever likes
+  Future<void> _holdWhile(Future<void> Function() action) async {
+    setState(() => _hold = true);
+    try {
+      await action();
+    } finally {
+      if (mounted) setState(() => _hold = false);
     }
-    await widget.onHeart(post);
   }
 
   Future<void> _chooseSource() async {
@@ -347,7 +331,25 @@ class _MomentStoryFeedState extends State<MomentStoryFeed> {
             onPageChanged: _onPage,
             itemBuilder: (context, i) {
               if (widget.showTodayCta && i == 0) return _todayCta();
-              return _dayPage(widget.pages[i - _offset]);
+              final page = widget.pages[i - _offset];
+              return _StoryDay(
+                key: ValueKey('story-${dayKey(page.day)}'),
+                page: page,
+                active: i == _index && !_hold,
+                baseUrl: widget.baseUrl,
+                myUserId: widget.myUserId,
+                myName: widget.myName,
+                partnerName: widget.partnerName,
+                onHeart: widget.onHeart,
+                onComments: (m) => _holdWhile(() => widget.onComments(m)),
+                onOpen: (g) => _holdWhile(() => widget.onOpenGroup(g)),
+                onDone: () {
+                  if (i + 1 < _count) _goTo(i + 1);
+                },
+                onBack: () {
+                  if (i > 0) _goTo(i - 1);
+                },
+              );
             },
           ),
           // Top: title, buttons, stories.
@@ -432,7 +434,7 @@ class _MomentStoryFeedState extends State<MomentStoryFeed> {
       for (final p in widget.pages.take(30))
         (
           label: momentFeedDayLabel(p.day),
-          thumb: _pick(p).main,
+          thumb: _thumb(p),
           locked: false,
           fresh: momentFeedDayLabel(p.day) == '오늘',
         ),
@@ -615,214 +617,6 @@ class _MomentStoryFeedState extends State<MomentStoryFeed> {
                 '카메라로 찍거나 앨범에서 골라요',
                 style: V2Text.cap.copyWith(color: Colors.white70),
               ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _dayPage(MomentDayPage p) {
-    final pick = _pick(p);
-    final main = pick.main;
-    final small = pick.small;
-    if (main == null) return const SizedBox.shrink();
-    final mainIsMine = main.userId == widget.myUserId;
-    final group = (mainIsMine ? p.mine : p.theirs)
-        .where((m) => m.sessionKey == main.sessionKey)
-        .toList();
-    final mineHeart = main.reactions.any((r) => r.userId == widget.myUserId);
-    final theirHeart = main.reactions.any(
-      (r) => r.userId != null && r.userId != widget.myUserId,
-    );
-    final likes = mineHeart && theirHeart
-        ? '${josa(widget.partnerName, '와', '과')} 내가 좋아해요'
-        : theirHeart
-        ? '${josa(widget.partnerName, '이', '가')} 좋아해요'
-        : mineHeart
-        ? '내가 좋아해요'
-        : null;
-    final caption = main.caption?.trim();
-    final owner = mainIsMine ? widget.myName : widget.partnerName;
-    final lockedSmall = small != null && small.todayLocked;
-    return Stack(
-      key: Key('moment_day_${dayKey(p.day)}'),
-      fit: StackFit.expand,
-      children: [
-        GestureDetector(
-          onTap: () => widget.onOpenGroup(group.isEmpty ? [main] : group),
-          onDoubleTap: () => _heart(main, burst: true),
-          onHorizontalDragEnd: (d) {
-            if ((d.primaryVelocity ?? 0).abs() > 120) _swap(p);
-          },
-          child: MomentFill(
-            moment: main,
-            baseUrl: widget.baseUrl,
-            cacheWidth: 1080,
-          ),
-        ),
-        const IgnorePointer(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                stops: [0, .22, .4, .52, 1],
-                colors: [
-                  Color(0x8C000000),
-                  Color(0x26000000),
-                  Color(0x00000000),
-                  Color(0x00000000),
-                  Color(0xB8000000),
-                ],
-              ),
-            ),
-          ),
-        ),
-        if (_burst == '${main.id}')
-          const IgnorePointer(child: Center(child: _HeartBurst())),
-        if (small != null)
-          Positioned(
-            right: 16,
-            top: MediaQuery.paddingOf(context).top + 142,
-            child: Semantics(
-              button: true,
-              label: '${mainIsMine ? widget.partnerName : '내'} 사진으로 바꾸기',
-              child: GestureDetector(
-                onTap: lockedSmall ? null : () => _swap(p),
-                child: Container(
-                  width: 92,
-                  height: 122,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Colors.white, width: 2.5),
-                    boxShadow: const [
-                      BoxShadow(color: Color(0x66000000), blurRadius: 20),
-                    ],
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      MomentFill(
-                        moment: small,
-                        baseUrl: widget.baseUrl,
-                        blur: lockedSmall,
-                        cacheWidth: 240,
-                      ),
-                      Positioned(
-                        left: 6,
-                        bottom: 6,
-                        child: _Tag(
-                          mainIsMine ? widget.partnerName : widget.myName,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        Positioned(
-          left: 16,
-          right: 16,
-          bottom: 18,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  ExcludeSemantics(
-                    child: V2AvatarPair(
-                      me: widget.myName,
-                      partner: widget.partnerName,
-                      size: V2AvatarSize.sm,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${widget.myName} · ${widget.partnerName}',
-                    style: V2Text.bodyStrong.copyWith(color: Colors.white),
-                  ),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      momentFeedDayLong(p.day),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: V2Text.cap.copyWith(color: Colors.white70),
-                    ),
-                  ),
-                ],
-              ),
-              if (caption != null &&
-                  caption.isNotEmpty &&
-                  !main.todayLocked) ...[
-                const SizedBox(height: 10),
-                Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(
-                        text: '$owner  ',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      TextSpan(text: caption),
-                    ],
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: V2Text.body.copyWith(color: Colors.white),
-                ),
-              ],
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  _ActionIcon(
-                    key: Key('moment_heart_${main.id}'),
-                    icon: mineHeart
-                        ? Icons.favorite_rounded
-                        : Icons.favorite_border_rounded,
-                    color: mineHeart ? V2Colors.rose : Colors.white,
-                    tooltip: mineHeart ? '하트 취소' : '하트 보내기',
-                    onTap: () => _heart(main),
-                  ),
-                  _ActionIcon(
-                    key: Key('moment_comments_${main.id}'),
-                    icon: V2Icons.chat,
-                    color: Colors.white,
-                    tooltip: '댓글',
-                    onTap: () => widget.onComments(main),
-                  ),
-                  _ActionIcon(
-                    icon: Icons.open_in_full_rounded,
-                    color: Colors.white,
-                    tooltip: '크게 보기',
-                    onTap: () =>
-                        widget.onOpenGroup(group.isEmpty ? [main] : group),
-                  ),
-                  const Spacer(),
-                  if (p.hasMine && p.hasTheirs)
-                    ExcludeSemantics(
-                      child: Row(
-                        children: [
-                          for (final on in [!_isSwapped(p), _isSwapped(p)])
-                            AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              width: on ? 16 : 6,
-                              height: 6,
-                              margin: const EdgeInsets.only(left: 5),
-                              decoration: BoxDecoration(
-                                color: on ? Colors.white : Colors.white38,
-                                borderRadius: BorderRadius.circular(3),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-              if (likes != null)
-                Text(likes, style: V2Text.cap.copyWith(color: Colors.white)),
             ],
           ),
         ),
@@ -1065,26 +859,6 @@ class _PulseButtonState extends State<_PulseButton>
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _HeartBurst extends StatelessWidget {
-  const _HeartBurst();
-
-  @override
-  Widget build(BuildContext context) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: .3, end: 1),
-      duration: const Duration(milliseconds: 320),
-      curve: Curves.elasticOut,
-      builder: (context, v, child) => Transform.scale(scale: v, child: child),
-      child: const Icon(
-        Icons.favorite_rounded,
-        color: Colors.white,
-        size: 110,
-        shadows: [Shadow(color: Color(0x59000000), blurRadius: 18)],
       ),
     );
   }
@@ -1388,5 +1162,539 @@ class _DayCell extends StatelessWidget {
       label: '$label일 기록 보기',
       child: GestureDetector(onTap: onTap, child: cell),
     );
+  }
+}
+
+/// One day played like Instagram stories: my items, then the partner's,
+/// then the next day. Photos stay [photoTime]; videos play to their end.
+/// Tap the right side for next, the left for previous; hold to pause.
+class _StoryDay extends StatefulWidget {
+  const _StoryDay({
+    super.key,
+    required this.page,
+    required this.active,
+    required this.baseUrl,
+    required this.myUserId,
+    required this.myName,
+    required this.partnerName,
+    required this.onHeart,
+    required this.onComments,
+    required this.onOpen,
+    required this.onDone,
+    required this.onBack,
+  });
+
+  static const photoTime = Duration(seconds: 5);
+
+  final MomentDayPage page;
+
+  /// This page is on screen and nothing covers it.
+  final bool active;
+  final String baseUrl;
+  final int? myUserId;
+  final String myName;
+  final String partnerName;
+  final Future<void> Function(Moment post) onHeart;
+  final Future<void> Function(Moment post) onComments;
+  final Future<void> Function(List<Moment> group) onOpen;
+  final VoidCallback onDone;
+  final VoidCallback onBack;
+
+  @override
+  State<_StoryDay> createState() => _StoryDayState();
+}
+
+class _StoryDayState extends State<_StoryDay>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _clock = AnimationController(
+    vsync: this,
+    duration: _StoryDay.photoTime,
+  )..addStatusListener(_onClock);
+  final _progress = ValueNotifier<double>(0);
+  VideoPlayerController? _video;
+  int _videoToken = 0;
+
+  /// 0: the first person's items, 1: the other person's.
+  int _phase = 0;
+  int _i = 0;
+  bool _holding = false;
+
+  static bool _playable(Moment m) => !m.todayLocked;
+
+  List<Moment> get _mine => widget.page.mine.where(_playable).toList();
+  List<Moment> get _theirs => widget.page.theirs.where(_playable).toList();
+  bool get _mineFirst => _mine.isNotEmpty;
+  List<Moment> get _first => _mineFirst ? _mine : _theirs;
+  List<Moment> get _second => _mineFirst ? _theirs : const [];
+  List<Moment> get _list => _phase == 0 ? _first : _second;
+  Moment? get _cur =>
+      _list.isEmpty ? null : _list[_i.clamp(0, _list.length - 1)];
+  bool get _curIsMine => _phase == 0 ? _mineFirst : false;
+  List<Moment> get _otherList => _phase == 0 ? _second : _first;
+
+  @override
+  void initState() {
+    super.initState();
+    _clock.addListener(() {
+      if (_video == null) _progress.value = _clock.value;
+    });
+  }
+
+  bool _started = false;
+
+  @override
+  void didUpdateWidget(covariant _StoryDay old) {
+    super.didUpdateWidget(old);
+    if (widget.active && !old.active) {
+      // Back on this day: start over from the first item.
+      if (old.page != widget.page || _phase != 0 || _i != 0) {
+        _phase = 0;
+        _i = 0;
+        _start();
+      } else {
+        _sync();
+      }
+    } else if (!widget.active && old.active) {
+      _sync();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_started) {
+      // First build: inherited widgets (TickerMode) are available now.
+      _started = true;
+      if (widget.active) {
+        _start();
+        return;
+      }
+    }
+    _sync(); // tab switched away / back (TickerMode)
+  }
+
+  @override
+  void dispose() {
+    _clock.dispose();
+    _progress.dispose();
+    _video?.dispose();
+    super.dispose();
+  }
+
+  bool get _running =>
+      widget.active && !_holding && TickerMode.valuesOf(context).enabled;
+
+  void _sync() {
+    if (!mounted) return;
+    final run = _running;
+    final v = _video;
+    if (v != null) {
+      if (run && v.value.isInitialized) {
+        v.play();
+      } else {
+        v.pause();
+      }
+      return;
+    }
+    if (run) {
+      if (!_clock.isAnimating && _clock.value < 1) _clock.forward();
+    } else {
+      _clock.stop();
+    }
+  }
+
+  void _onClock(AnimationStatus s) {
+    if (s == AnimationStatus.completed && _video == null) _next();
+  }
+
+  void _start() {
+    final cur = _cur;
+    _clock.stop();
+    _clock.value = 0;
+    _progress.value = 0;
+    final old = _video;
+    _video = null;
+    old?.dispose();
+    if (cur == null) return;
+    _precacheNext();
+    if (cur.isVideo && cur.mediaUrl != null) {
+      final raw = cur.mediaUrl!;
+      final url = raw.startsWith('http') ? raw : '${widget.baseUrl}$raw';
+      final token = ++_videoToken;
+      final v = VideoPlayerController.networkUrl(Uri.parse(url));
+      _video = v;
+      v.addListener(() {
+        if (token != _videoToken) return;
+        final d = v.value.duration.inMilliseconds;
+        if (d <= 0) return;
+        final pos = v.value.position.inMilliseconds;
+        _progress.value = (pos / d).clamp(0, 1).toDouble();
+        if (v.value.isInitialized && !v.value.isPlaying && pos >= d - 120) {
+          _next();
+        }
+      });
+      v
+          .initialize()
+          .then((_) {
+            if (!mounted || token != _videoToken) return;
+            setState(() {});
+            _sync();
+          })
+          .catchError((Object _) {
+            // Can't play: treat it like a photo so the story keeps moving.
+            if (!mounted || token != _videoToken) return;
+            setState(() => _video = null);
+            v.dispose();
+            _sync();
+          });
+      if (mounted) setState(() {});
+      return;
+    }
+    if (mounted) setState(() {});
+    _sync();
+  }
+
+  void _precacheNext() {
+    final list = _list;
+    Moment? next;
+    if (_i + 1 < list.length) {
+      next = list[_i + 1];
+    } else if (_phase == 0 && _second.isNotEmpty) {
+      next = _second.first;
+    }
+    final raw = next?.mediaUrl;
+    if (next == null ||
+        next.isVideo ||
+        raw == null ||
+        next.mediaType == 'text') {
+      return;
+    }
+    final url = raw.startsWith('http') ? raw : '${widget.baseUrl}$raw';
+    precacheImage(NetworkImage(url), context, onError: (_, _) {});
+  }
+
+  void _next() {
+    if (_i + 1 < _list.length) {
+      _i++;
+    } else if (_phase == 0 && _second.isNotEmpty) {
+      _phase = 1;
+      _i = 0;
+    } else {
+      _clock.stop();
+      _video?.pause();
+      widget.onDone();
+      return;
+    }
+    _start();
+  }
+
+  void _prev() {
+    if (_i > 0) {
+      _i--;
+    } else if (_phase == 1) {
+      _phase = 0;
+      _i = _first.length - 1;
+    } else {
+      widget.onBack();
+      return;
+    }
+    _start();
+  }
+
+  void _switchPerson() {
+    if (_otherList.isEmpty) return;
+    _phase = _phase == 0 ? 1 : 0;
+    _i = 0;
+    _start();
+  }
+
+  void _setHold(bool v) {
+    if (_holding == v) return;
+    setState(() => _holding = v);
+    _sync();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cur = _cur;
+    if (cur == null) return const SizedBox.shrink();
+    final top = MediaQuery.paddingOf(context).top;
+    final other = _otherList.isEmpty ? null : _otherList.first;
+    final owner = _curIsMine ? widget.myName : widget.partnerName;
+    final group = _list.where((m) => m.sessionKey == cur.sessionKey).toList();
+    final mineHeart = cur.reactions.any((r) => r.userId == widget.myUserId);
+    final theirHeart = cur.reactions.any(
+      (r) => r.userId != null && r.userId != widget.myUserId,
+    );
+    final likes = mineHeart && theirHeart
+        ? '${josa(widget.partnerName, '와', '과')} 내가 좋아해요'
+        : theirHeart
+        ? '${josa(widget.partnerName, '이', '가')} 좋아해요'
+        : mineHeart
+        ? '내가 좋아해요'
+        : null;
+    final caption = cur.caption?.trim();
+    final time = _clockText(cur.capturedAt ?? cur.takenAt);
+    final v = _video;
+    Widget fade(Widget child) => AnimatedOpacity(
+      opacity: _holding ? 0 : 1,
+      duration: const Duration(milliseconds: 150),
+      child: IgnorePointer(ignoring: _holding, child: child),
+    );
+
+    return Stack(
+      key: Key('moment_day_${dayKey(widget.page.day)}'),
+      fit: StackFit.expand,
+      children: [
+        if (v != null && v.value.isInitialized)
+          FittedBox(
+            fit: BoxFit.cover,
+            clipBehavior: Clip.hardEdge,
+            child: SizedBox(
+              width: v.value.size.width,
+              height: v.value.size.height,
+              child: VideoPlayer(v),
+            ),
+          )
+        else if (v != null)
+          Stack(
+            fit: StackFit.expand,
+            children: [
+              MomentFill(moment: cur, baseUrl: widget.baseUrl, blur: true),
+              const Center(
+                child: SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          )
+        else
+          MomentFill(
+            key: ValueKey('story-item-${cur.id}'),
+            moment: cur,
+            baseUrl: widget.baseUrl,
+            cacheWidth: 1080,
+          ),
+        const IgnorePointer(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                stops: [0, .22, .4, .52, 1],
+                colors: [
+                  Color(0x8C000000),
+                  Color(0x26000000),
+                  Color(0x00000000),
+                  Color(0x00000000),
+                  Color(0xB8000000),
+                ],
+              ),
+            ),
+          ),
+        ),
+        // Tap left / right, hold to pause, swipe sideways for the other
+        // person. Vertical drags still go to the day pager.
+        LayoutBuilder(
+          builder: (context, box) => GestureDetector(
+            key: Key('story_tap_${dayKey(widget.page.day)}'),
+            behavior: HitTestBehavior.opaque,
+            onTapUp: (d) =>
+                d.localPosition.dx < box.maxWidth * .3 ? _prev() : _next(),
+            onLongPressStart: (_) => _setHold(true),
+            onLongPressEnd: (_) => _setHold(false),
+            onLongPressCancel: () => _setHold(false),
+            onHorizontalDragEnd: (d) {
+              if ((d.primaryVelocity ?? 0).abs() > 120) _switchPerson();
+            },
+          ),
+        ),
+        // Progress bars for the person being shown.
+        Positioned(
+          left: 12,
+          right: 12,
+          top: top + 134,
+          child: fade(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ValueListenableBuilder<double>(
+                  valueListenable: _progress,
+                  builder: (context, value, _) => Row(
+                    children: [
+                      for (var k = 0; k < _list.length; k++) ...[
+                        if (k > 0) const SizedBox(width: 3),
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(2),
+                            child: LinearProgressIndicator(
+                              minHeight: 2.5,
+                              value: k < _i ? 1 : (k == _i ? value : 0),
+                              backgroundColor: Colors.white30,
+                              valueColor: const AlwaysStoppedAnimation(
+                                Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    ExcludeSemantics(
+                      child: V2Avatar(
+                        name: owner,
+                        color: _curIsMine
+                            ? V2Avatar.meColor
+                            : V2Avatar.partnerColor,
+                        size: V2AvatarSize.sm,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      owner,
+                      style: V2Text.bodyStrong.copyWith(color: Colors.white),
+                    ),
+                    if (time != null) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        time,
+                        style: V2Text.cap.copyWith(color: Colors.white70),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (other != null)
+          Positioned(
+            right: 16,
+            top: top + 172,
+            child: fade(
+              Semantics(
+                button: true,
+                label: '${_curIsMine ? widget.partnerName : '내'} 순간 보기',
+                child: GestureDetector(
+                  key: Key('story_switch_${dayKey(widget.page.day)}'),
+                  onTap: _switchPerson,
+                  child: Container(
+                    width: 84,
+                    height: 112,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.white, width: 2.5),
+                      boxShadow: const [
+                        BoxShadow(color: Color(0x66000000), blurRadius: 20),
+                      ],
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        MomentFill(
+                          moment: other,
+                          baseUrl: widget.baseUrl,
+                          cacheWidth: 240,
+                        ),
+                        Positioned(
+                          left: 6,
+                          bottom: 6,
+                          child: _Tag(
+                            _curIsMine ? widget.partnerName : widget.myName,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        Positioned(
+          left: 16,
+          right: 16,
+          bottom: 18,
+          child: fade(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  momentFeedDayLong(widget.page.day),
+                  style: V2Text.cap.copyWith(color: Colors.white70),
+                ),
+                if (caption != null && caption.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: '$owner  ',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        TextSpan(text: caption),
+                      ],
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: V2Text.body.copyWith(color: Colors.white),
+                  ),
+                ],
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    _ActionIcon(
+                      key: Key('moment_heart_${cur.id}'),
+                      icon: mineHeart
+                          ? Icons.favorite_rounded
+                          : Icons.favorite_border_rounded,
+                      color: mineHeart ? V2Colors.rose : Colors.white,
+                      tooltip: mineHeart ? '하트 취소' : '하트 보내기',
+                      onTap: () => widget.onHeart(cur),
+                    ),
+                    _ActionIcon(
+                      key: Key('moment_comments_${cur.id}'),
+                      icon: V2Icons.chat,
+                      color: Colors.white,
+                      tooltip: '댓글',
+                      onTap: () => widget.onComments(cur),
+                    ),
+                    _ActionIcon(
+                      icon: Icons.open_in_full_rounded,
+                      color: Colors.white,
+                      tooltip: '크게 보기',
+                      onTap: () => widget.onOpen(group.isEmpty ? [cur] : group),
+                    ),
+                    const Spacer(),
+                    if (likes != null)
+                      Text(
+                        likes,
+                        style: V2Text.cap.copyWith(color: Colors.white),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  static String? _clockText(String? iso) {
+    final d = DateTime.tryParse(iso ?? '')?.toLocal();
+    if (d == null) return null;
+    final am = d.hour < 12;
+    final h = d.hour % 12 == 0 ? 12 : d.hour % 12;
+    return '${am ? '오전' : '오후'} $h:${d.minute.toString().padLeft(2, '0')}';
   }
 }
