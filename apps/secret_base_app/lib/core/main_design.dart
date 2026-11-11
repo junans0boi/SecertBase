@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../v2/v2.dart';
+
 // ─── Neutral ───────────────────────────────────────────────────────
 const kMainBg = Color(0xFFFFFBFD);
 const kMainPaper = Color(0xFFFFFFFF);
@@ -48,14 +50,14 @@ const kSageGrad = LinearGradient(
 // ─── Typography ────────────────────────────────────────────────────
 TextStyle mainTitle({
   double size = 28,
-  Color color = kMainInk,
+  Color? color,
   FontWeight weight = FontWeight.w700,
   double letterSpacing = 0,
 }) {
   return GoogleFonts.gaegu(
     fontSize: size,
     fontWeight: weight,
-    color: color,
+    color: color ?? V2Colors.ink,
     letterSpacing: letterSpacing,
     height: 1.08,
   );
@@ -63,14 +65,14 @@ TextStyle mainTitle({
 
 TextStyle mainBody({
   double size = 13,
-  Color color = kMainSub,
+  Color? color,
   FontWeight weight = FontWeight.w400,
   double height = 1.45,
 }) {
   return GoogleFonts.notoSans(
     fontSize: size,
     fontWeight: weight,
-    color: color,
+    color: color ?? V2Colors.sub,
     letterSpacing: 0,
     height: height,
   );
@@ -119,15 +121,13 @@ class MainCard extends StatelessWidget {
     return Container(
       padding: padding,
       decoration: BoxDecoration(
-        color: gradient == null ? (color ?? kMainPaper) : null,
+        color: gradient == null ? (color ?? V2Colors.surface) : null,
         gradient: gradient,
         borderRadius: BorderRadius.circular(radius),
-        border: borderColor != null
-            ? Border.all(color: borderColor!, width: 1)
-            : null,
+        border: Border.all(color: borderColor ?? V2Colors.line, width: 1),
         boxShadow: [
           BoxShadow(
-            color: kMainRose.withAlpha(16),
+            color: V2Colors.ink.withAlpha(10),
             blurRadius: 24,
             offset: const Offset(0, 8),
           ),
