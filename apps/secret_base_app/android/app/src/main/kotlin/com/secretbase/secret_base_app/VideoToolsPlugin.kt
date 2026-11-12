@@ -3,6 +3,7 @@ package com.secretbase.secret_base_app
 import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import androidx.annotation.OptIn
@@ -14,6 +15,7 @@ import androidx.media3.transformer.AudioEncoderSettings
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.DefaultEncoderFactory
 import androidx.media3.transformer.EditedMediaItem
+import androidx.media3.transformer.EditedMediaItemSequence
 import androidx.media3.transformer.Effects
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
@@ -25,10 +27,11 @@ import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
+import kotlin.math.floor
 
 /**
- * Trims and converts videos to H.264/AAC MP4 with the short side capped,
- * using AndroidX Media3 Transformer.
+ * Trims and converts videos to 8-bit SDR H.264/AAC MP4 that fits 1280x720
+ * (or 720x1280) at maxShortSide 720, using AndroidX Media3 Transformer.
  *
  * MethodChannel `secretbase/video_tools`:
  *  - `convert` {id, path, startMs?, endMs?, maxShortSide, videoBitrate, audioBitrate}
@@ -145,11 +148,9 @@ class VideoToolsPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventCh
                 mediaItemBuilder.setClippingConfiguration(clipping.build())
             }
 
-            // Short side is rotation-invariant, so the stored dimensions are
-            // enough to decide whether to scale; never upscale.
-            val sourceShortSide = shortSideOf(uri)
-            val videoEffects = if (sourceShortSide == null || sourceShortSide > maxShortSide) {
-                listOf(Presentation.createForShortSide(maxShortSide))
+            val targetShortSide = targetShortSide(videoSizeOf(uri), maxShortSide)
+            val videoEffects = if (targetShortSide != null) {
+                listOf(Presentation.createForShortSide(targetShortSide))
             } else {
                 emptyList()
             }
@@ -157,6 +158,15 @@ class VideoToolsPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventCh
             val edited = EditedMediaItem.Builder(mediaItemBuilder.build())
                 .setEffects(Effects(emptyList(), videoEffects))
                 .build()
+            val compositionBuilder = Composition.Builder(
+                EditedMediaItemSequence.Builder(edited).build(),
+            )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // HDR (HLG/HDR10) phone clips would otherwise stay 10-bit or
+                // fall back to HEVC; tone-map so the output is 8-bit SDR H.264.
+                compositionBuilder.setHdrMode(Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_OPEN_GL)
+            }
+            val composition = compositionBuilder.build()
 
             val encoderFactory = DefaultEncoderFactory.Builder(context)
                 .setRequestedVideoEncoderSettings(
@@ -191,7 +201,7 @@ class VideoToolsPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventCh
             created = Job(id, transformer, output, result)
             job = created
             jobs[id] = job
-            transformer.start(edited, output.absolutePath)
+            transformer.start(composition, output.absolutePath)
         } catch (e: Exception) {
             jobs.remove(id)
             output.delete()
@@ -260,7 +270,27 @@ class VideoToolsPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventCh
             Uri.fromFile(File(path))
         }
 
-    private fun shortSideOf(uri: Uri): Int? {
+    /**
+     * Short side to scale to, or null to keep the source size (never upscale).
+     * Caps the short side at [maxShortSide] and the long side at its 16:9
+     * partner (720 → 1280), so wider-than-16:9 clips also fit 1280x720 /
+     * 720x1280. Both sides are rotation-invariant, so stored dimensions do.
+     */
+    private fun targetShortSide(size: Pair<Int, Int>?, maxShortSide: Int): Int? {
+        if (size == null) return maxShortSide
+        val (shortSide, longSide) = size
+        val maxLongSide = maxShortSide * 16 / 9
+        val scale = minOf(
+            maxShortSide.toDouble() / shortSide,
+            maxLongSide.toDouble() / longSide,
+        )
+        if (scale >= 1.0) return null
+        // Even, rounded down, so the derived long side cannot pass the cap.
+        return (floor(shortSide * scale).toInt() and 1.inv()).coerceAtLeast(2)
+    }
+
+    /** (short side, long side) of the first video track, or null. */
+    private fun videoSizeOf(uri: Uri): Pair<Int, Int>? {
         val retriever = MediaMetadataRetriever()
         return try {
             if (uri.scheme == "file") {
@@ -270,7 +300,7 @@ class VideoToolsPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventCh
             }
             val w = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull()
             val h = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull()
-            if (w != null && h != null && w > 0 && h > 0) minOf(w, h) else null
+            if (w != null && h != null && w > 0 && h > 0) Pair(minOf(w, h), maxOf(w, h)) else null
         } catch (_: Exception) {
             null
         } finally {
