@@ -15,7 +15,7 @@ import 'package:secret_base_app/features/moment_loop/data/video_shrinker.dart';
 import 'package:secret_base_app/features/moment_loop/domain/moment.dart';
 import 'package:secret_base_app/screens/archive/moment/moment_composer.dart';
 import 'package:secret_base_app/screens/archive/moment/moment_format.dart';
-import 'package:secret_base_app/screens/archive/moment/moment_trim_page.dart';
+import 'package:secret_base_app/screens/archive/moment/editor/editor_item.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'moment_loop_test_support.dart';
@@ -105,10 +105,20 @@ void main() {
           mediaPicker: mediaPicker,
           videoShrinker: videoShrinker,
           probeDuration: (_) async => clipLength,
+          editorVideoPreview: false,
         ),
       ),
     );
     await tester.pump();
+  }
+
+  Future<void> settle(WidgetTester tester) async {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
   }
 
   testWidgets('files picked before the composer opened are attached', (
@@ -123,8 +133,11 @@ void main() {
         XFile.fromData(png, name: 'album.png', mimeType: 'image/png'),
       ]),
     );
-    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
-    await tester.pumpAndSettle();
+    // The editor opens first; 다음 attaches the photo as it is.
+    await settle(tester);
+    expect(find.byKey(const Key('moment_editor_next')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('moment_editor_next')));
+    await settle(tester);
     expect(find.byKey(const Key('moment_media_reorder_list')), findsOneWidget);
   });
 
@@ -156,19 +169,24 @@ void main() {
   });
 
   group('videos over 30MB', () {
-    testWidgets('are shrunk on the device and attached', (tester) async {
+    testWidgets('open the editor, then are shrunk on the device and attached', (
+      tester,
+    ) async {
       final shrinker = _FakeShrinker();
       await pumpComposer(
         tester,
         startPick: Future.value([_bigVideo()]),
         videoShrinker: shrinker,
       );
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 50)),
-      );
-      await tester.pumpAndSettle();
+      await settle(tester);
+      expect(find.byKey(const Key('moment_editor_next')), findsOneWidget);
+      expect(shrinker.calls, isEmpty);
+      await tester.tap(find.byKey(const Key('moment_editor_next')));
+      await settle(tester);
       expect(shrinker.calls, hasLength(1));
-      expect(find.byKey(const Key('moment_shrink_progress')), findsNothing);
+      // Not cut: the whole clip is shrunk.
+      expect(shrinker.ranges, [(null, null)]);
+      expect(find.byKey(const Key('moment_editor_progress')), findsNothing);
       expect(
         find.byKey(const Key('moment_media_reorder_list')),
         findsOneWidget,
@@ -184,32 +202,32 @@ void main() {
         startPick: Future.value([_bigVideo()]),
         videoShrinker: shrinker,
       );
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 50)),
-      );
-      await tester.pumpAndSettle();
+      await settle(tester);
+      expect(find.byKey(const Key('moment_editor_next')), findsNothing);
       expect(shrinker.calls, isEmpty);
       expect(find.text('30MB 이하만 올릴 수 있어요'), findsOneWidget);
       expect(find.byKey(const Key('moment_media_reorder_list')), findsNothing);
     });
 
-    testWidgets('취소 stops shrinking and attaches nothing', (tester) async {
+    testWidgets('취소 stops shrinking and keeps the editor open', (tester) async {
       final shrinker = _FakeShrinker(waitForCancel: true);
       await pumpComposer(
         tester,
         startPick: Future.value([_bigVideo()]),
         videoShrinker: shrinker,
       );
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 50)),
-      );
+      await settle(tester);
+      await tester.tap(find.byKey(const Key('moment_editor_next')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      expect(find.byKey(const Key('moment_shrink_progress')), findsOneWidget);
+      expect(find.byKey(const Key('moment_editor_progress')), findsOneWidget);
       expect(find.text('50%'), findsOneWidget);
-      await tester.tap(find.text('취소'));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('moment_shrink_progress')), findsNothing);
+      await tester.tap(find.byKey(const Key('moment_editor_cancel')));
+      await settle(tester);
+      expect(find.byKey(const Key('moment_editor_progress')), findsNothing);
+      expect(find.byKey(const Key('moment_editor_next')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('moment_editor_close')));
+      await settle(tester);
       expect(find.byKey(const Key('moment_media_reorder_list')), findsNothing);
       expect(find.byKey(const Key('moment_media_issue')), findsNothing);
     });
@@ -222,16 +240,9 @@ void main() {
       mimeType: 'video/quicktime',
     );
 
-    Future<void> settle(WidgetTester tester) async {
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 50)),
-      );
-      for (var i = 0; i < 10; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
-      }
-    }
-
-    testWidgets('open the trimmer and keep the chosen minute', (tester) async {
+    testWidgets('open the editor on the first minute and keep it', (
+      tester,
+    ) async {
       final shrinker = _FakeShrinker();
       await pumpComposer(
         tester,
@@ -240,10 +251,9 @@ void main() {
         clipLength: const Duration(seconds: 95),
       );
       await settle(tester);
-      expect(find.text('영상 자르기'), findsOneWidget);
-      expect(find.text('60.0초'), findsOneWidget);
-      expect(find.text('1:00'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('moment_trim_done')));
+      expect(find.byKey(const Key('video_trim_hint')), findsOneWidget);
+      expect(find.text('0:00 – 1:00 · 60초'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('moment_editor_next')));
       await settle(tester);
       expect(shrinker.ranges, [(0, 60000)]);
       expect(
@@ -252,7 +262,7 @@ void main() {
       );
     });
 
-    testWidgets('cancelling the trimmer attaches nothing', (tester) async {
+    testWidgets('closing the editor attaches nothing', (tester) async {
       final shrinker = _FakeShrinker();
       await pumpComposer(
         tester,
@@ -261,7 +271,7 @@ void main() {
         clipLength: const Duration(seconds: 95),
       );
       await settle(tester);
-      await tester.tap(find.byKey(const Key('moment_trim_cancel')));
+      await tester.tap(find.byKey(const Key('moment_editor_close')));
       await settle(tester);
       expect(shrinker.calls, isEmpty);
       expect(find.byKey(const Key('moment_media_reorder_list')), findsNothing);
@@ -276,7 +286,7 @@ void main() {
         clipLength: const Duration(seconds: 95),
       );
       await settle(tester);
-      expect(find.text('영상 자르기'), findsNothing);
+      expect(find.byKey(const Key('moment_editor_next')), findsNothing);
       expect(find.text('영상은 1분까지예요'), findsOneWidget);
     });
   });

@@ -14,6 +14,8 @@
 //     Rejects with Error whose message is 'cancelled', 'unsupported' or
 //     'failed: ...' (same codes as the Android channel).
 //   cancel(id)
+//   frames(srcUrl, count, durationSec, height) -> Promise<Uint8Array[]>
+//     evenly spaced JPEG frames for the editor's trim filmstrip
 //   wakeLockHeld()                    -> boolean (for checks)
 (function () {
   'use strict';
@@ -177,10 +179,39 @@
     if (job.conversion) job.conversion.cancel().catch(() => {});
   }
 
+  async function frames(srcUrl, count, durationSec, height) {
+    const mb = await load();
+    const blob = await (await fetch(srcUrl)).blob();
+    const input = new mb.Input({
+      formats: mb.ALL_FORMATS,
+      source: new mb.BlobSource(blob),
+    });
+    try {
+      const video = await input.getPrimaryVideoTrack();
+      if (!video || !(durationSec > 0) || !(count > 0)) return [];
+      const sink = new mb.CanvasSink(video, { height, fit: 'contain' });
+      const step = durationSec / count;
+      const times = Array.from({ length: count }, (_, i) => i * step + step / 2);
+      const out = [];
+      for await (const wrapped of sink.canvasesAtTimestamps(times)) {
+        if (!wrapped) continue;
+        const canvas = wrapped.canvas;
+        const jpeg = canvas.convertToBlob
+          ? await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.7 })
+          : await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.7));
+        if (jpeg) out.push(new Uint8Array(await jpeg.arrayBuffer()));
+      }
+      return out;
+    } finally {
+      if (input.dispose) input.dispose();
+    }
+  }
+
   window.secretBaseVideo = {
     supported,
     shrink,
     cancel,
+    frames,
     wakeLockHeld: () => wakeLock !== null,
   };
 })();
