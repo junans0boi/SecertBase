@@ -61,22 +61,12 @@ void main() {
     final home = tester.state(find.byType(HomeScreen));
 
     for (var i = 1; i <= 4; i++) {
-      await tester.tap(
-        find.descendant(
-          of: find.byType(V2BottomTabBar),
-          matching: find.text(const ['홈', '기록', '지도', '놀이', '더보기'][i]),
-        ),
-      );
+      await tester.tap(find.byKey(Key('v2_tab_$i')));
       await tester.pump();
       expect(_selected(tester), i);
     }
 
-    await tester.tap(
-      find.descendant(
-        of: find.byType(V2BottomTabBar),
-        matching: find.text('홈'),
-      ),
-    );
+    await tester.tap(find.byKey(const Key('v2_tab_0')));
     await tester.pump();
     expect(_selected(tester), 0);
     // Same State object: the home tab was kept alive, not rebuilt.

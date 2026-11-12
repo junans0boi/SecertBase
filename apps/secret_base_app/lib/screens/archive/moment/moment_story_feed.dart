@@ -604,7 +604,8 @@ class _MomentStoryFeedState extends State<MomentStoryFeed> {
         Positioned(
           left: 24,
           right: 24,
-          bottom: 28,
+          // Above the floating tab bar (the shell lets 기록 run under it).
+          bottom: 28 + MediaQuery.paddingOf(context).bottom,
           child: Column(
             children: [
               _PulseButton(
@@ -1628,7 +1629,7 @@ class _StoryDayState extends State<_StoryDay>
         Positioned(
           left: 16,
           right: 16,
-          bottom: 18,
+          bottom: 18 + MediaQuery.paddingOf(context).bottom,
           child: fade(
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,

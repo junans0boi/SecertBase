@@ -1,8 +1,9 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
 import '../tokens.dart';
-import '../typography.dart';
 import 'badge.dart';
 import 'icons.dart';
 
@@ -14,8 +15,9 @@ class V2TabItem {
   final IconData? activeIcon;
 }
 
-/// 5-tab bottom bar with Korean labels and a rose top indicator
-/// (ds.css `.tabbar`). Widget only; navigation state lives in the shell.
+/// 5-tab floating pill bar (icons, Korean labels for screen readers and
+/// tooltips). Widget only; navigation state lives in the shell, which
+/// should set `Scaffold.extendBody` so the page shows around the pill.
 ///
 /// ```dart
 /// V2BottomTabBar(
@@ -74,52 +76,75 @@ class V2BottomTabBar extends StatelessWidget {
   /// Black bar for full-bleed photo tabs (기록).
   final bool dark;
 
+  /// Height of the floating pill (without the gap under it).
+  static const pillHeight = 62.0;
+
   @override
   Widget build(BuildContext context) {
     final p = V2Palette.of(context);
     final duration = V2Motion.of(context, V2Motion.fast);
+    final glass = dark || p.dark
+        ? const Color(0xD91C1C1E)
+        : Colors.white.withValues(alpha: .86);
+    final edge = dark || p.dark
+        ? Colors.white.withValues(alpha: .10)
+        : Colors.black.withValues(alpha: .06);
+    // A floating glass pill (2.2): the page shows around it, the shell
+    // lets 기록 run underneath.
     return Material(
-      color: dark ? const Color(0xFF0C0C0E) : p.surface,
-      elevation: 0,
-      shadowColor: Colors.transparent,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          border: Border(
-            top: BorderSide(
-              color: dark ? Colors.white.withValues(alpha: .08) : p.line,
+      type: MaterialType.transparency,
+      child: SafeArea(
+        top: false,
+        minimum: const EdgeInsets.only(bottom: 10),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 0, 18, 4),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(pillHeight / 2),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x26000000),
+                  blurRadius: 24,
+                  offset: Offset(0, 8),
+                ),
+              ],
             ),
-          ),
-          boxShadow: p.dark || dark
-              ? null
-              : const [
-                  BoxShadow(
-                    color: Color(0x0F3C1428),
-                    blurRadius: 16,
-                    offset: Offset(0, -4),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(pillHeight / 2),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: glass,
+                    borderRadius: BorderRadius.circular(pillHeight / 2),
+                    border: Border.all(color: edge),
                   ),
-                ],
-        ),
-        child: SafeArea(
-          top: false,
-          child: SizedBox(
-            height: 60,
-            child: Row(
-              children: [
-                for (var i = 0; i < items.length; i++)
-                  Expanded(
-                    child: _Tab(
-                      item: items[i],
-                      selected: i == currentIndex,
-                      index: i,
-                      count: items.length,
-                      badge: badges[i],
-                      dot: dots.contains(i),
-                      dark: dark,
-                      duration: duration,
-                      onTap: () => onTap(i),
+                  child: SizedBox(
+                    height: pillHeight,
+                    child: Padding(
+                      padding: const EdgeInsets.all(5),
+                      child: Row(
+                        children: [
+                          for (var i = 0; i < items.length; i++)
+                            Expanded(
+                              child: _Tab(
+                                item: items[i],
+                                selected: i == currentIndex,
+                                index: i,
+                                count: items.length,
+                                badge: badges[i],
+                                dot: dots.contains(i),
+                                dark: dark || p.dark,
+                                duration: duration,
+                                onTap: () => onTap(i),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
-              ],
+                ),
+              ),
             ),
           ),
         ),
@@ -154,16 +179,11 @@ class _Tab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = V2Palette.of(context);
-    // 2.1: the selected tab is ink on a soft pill; the accent stays for
-    // content, not navigation.
+    // 2.2: icons only (the label stays for screen readers); the selected
+    // tab sits on a soft pill inside the floating bar.
     final color = dark
-        ? (selected ? Colors.white : Colors.white.withValues(alpha: .55))
-        : (selected ? p.ink : p.muted);
-    final icon = Icon(
-      selected ? (item.activeIcon ?? item.icon) : item.icon,
-      size: 26,
-      color: color,
-    );
+        ? (selected ? Colors.white : Colors.white.withValues(alpha: .6))
+        : (selected ? p.ink : p.ink.withValues(alpha: .62));
     final hasBadge = badge != null && badge! > 0;
     final extra = hasBadge ? ', 새 소식 $badge개' : (dot ? ', 새 소식' : '');
     return Semantics(
@@ -171,74 +191,51 @@ class _Tab extends StatelessWidget {
       button: true,
       selected: selected,
       label: '${item.label}, 탭 ${index + 1}/$count$extra',
-      // Same onTap as the InkWell: the label below is excluded, so the
-      // semantic tap must be declared here too (Flutter web needs it).
       onTap: onTap,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        hoverColor: p.primary.withValues(alpha: 0.05),
-        highlightColor: p.primary.withValues(alpha: 0.08),
-        splashColor: p.primary.withValues(alpha: 0.10),
-        child: ExcludeSemantics(
-          child: Stack(
-            alignment: Alignment.topCenter,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 5),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Stack(
-                      clipBehavior: Clip.none,
-                      alignment: Alignment.center,
-                      children: [
-                        AnimatedContainer(
-                          duration: duration,
-                          width: 56,
-                          height: 30,
-                          decoration: BoxDecoration(
-                            color: !selected
-                                ? Colors.transparent
-                                : dark
-                                ? Colors.white.withValues(alpha: .14)
-                                : p.soft2,
-                            borderRadius: V2Radius.pillAll,
-                          ),
-                          alignment: Alignment.center,
-                          child: icon,
-                        ),
-                        if (hasBadge)
-                          Positioned(
-                            top: -3,
-                            left: 32,
-                            child: V2Badge(count: badge),
-                          )
-                        else if (dot)
-                          Positioned(
-                            top: 2,
-                            right: 12,
-                            child: V2Badge.dot(borderColor: p.surface),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      item.label,
-                      maxLines: 1,
-                      textScaler: MediaQuery.textScalerOf(
-                        context,
-                      ).clamp(maxScaleFactor: 1.2),
-                      style: V2Text.label.copyWith(
-                        color: color,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0,
+      child: Tooltip(
+        message: item.label,
+        excludeFromSemantics: true,
+        child: InkWell(
+          key: Key('v2_tab_$index'),
+          onTap: onTap,
+          customBorder: const StadiumBorder(),
+          hoverColor: color.withValues(alpha: .06),
+          highlightColor: color.withValues(alpha: .08),
+          splashColor: color.withValues(alpha: .10),
+          child: ExcludeSemantics(
+            child: AnimatedContainer(
+              duration: duration,
+              decoration: BoxDecoration(
+                color: !selected
+                    ? Colors.transparent
+                    : dark
+                    ? Colors.white.withValues(alpha: .16)
+                    : Colors.black.withValues(alpha: .07),
+                borderRadius: V2Radius.pillAll,
+              ),
+              alignment: Alignment.center,
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
+                children: [
+                  Icon(
+                    selected ? (item.activeIcon ?? item.icon) : item.icon,
+                    size: 27,
+                    color: color,
+                  ),
+                  if (hasBadge)
+                    Positioned(top: -6, left: 16, child: V2Badge(count: badge))
+                  else if (dot)
+                    Positioned(
+                      top: -2,
+                      right: -4,
+                      child: V2Badge.dot(
+                        borderColor: dark ? const Color(0xFF1C1C1E) : p.surface,
                       ),
                     ),
-                  ],
-                ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
