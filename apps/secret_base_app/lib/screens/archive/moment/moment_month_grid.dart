@@ -201,6 +201,7 @@ class _SplitCell extends StatelessWidget {
             ColoredBox(color: future ? Colors.transparent : p.soft)
           else
             Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Expanded(child: half(pg.hasMine ? pg.mine.first : null)),
                 const SizedBox(width: 1),
@@ -251,6 +252,7 @@ class _Legend extends StatelessWidget {
             width: 12,
             height: 12,
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Expanded(child: ColoredBox(color: color)),
                 Expanded(child: ColoredBox(color: color2 ?? color)),
