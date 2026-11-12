@@ -124,7 +124,8 @@ export function createMomentLoopRepository({
                         tm.business_date AS today_business_date,
                         tm.revealed_at AS today_revealed_at,
                         viewer_tm.id AS viewer_today_moment_id,
-                        sr.session_reactions
+                        sr.session_reactions,
+                        (SELECT COUNT(*) FROM setlog_comments sc WHERE sc.post_id = p.id) AS comment_count
                  FROM setlog_posts p
                  LEFT JOIN Users u ON p.user_id = u.UserId
                  LEFT JOIN map_pins mp ON mp.id = p.map_pin_id

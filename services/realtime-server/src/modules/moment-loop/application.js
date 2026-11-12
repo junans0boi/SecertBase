@@ -60,6 +60,12 @@ export function MomentLoopService({
     return resolveMomentScope(actor, couple);
   };
 
+  // 기록은 오늘(KST 영업일) 이전 날짜에만 남길 수 있다. YYYY-MM-DD라 문자열 비교로 충분하다.
+  const assertNotFutureDate = (date) => {
+    if (date > now()) throw new MomentLoopError(400, 'moment_future_date');
+    return date;
+  };
+
   const mutationTarget = async (actor, value) => {
     const scope = await scopeFor(actor);
     const id = parseMomentId(value, 'invalid_moment_id');
@@ -87,6 +93,8 @@ export function MomentLoopService({
         const visible = !post.today_locked;
         return {
           ...post,
+          // 잠긴 오늘의 순간 스텁에는 댓글 수도 내보내지 않는다.
+          ...(visible ? { comment_count: Number(source.comment_count ?? 0) } : {}),
           taken_at: dateOnly(post.taken_at),
           today_moment: visible && Boolean(source.today_business_date),
           media_edit_locked: visible && Boolean(source.today_revealed_at && source.today_business_date),
@@ -113,7 +121,7 @@ export function MomentLoopService({
 
         const takenAt = String(fields.taken_at ?? '').trim();
         if (!takenAt) throw new MomentLoopError(400, 'missing_fields');
-        parseMomentDate(takenAt);
+        assertNotFutureDate(parseMomentDate(takenAt));
         const position = parseMomentPosition(fields.position);
         const sessionId = parseMomentSession(fields.session_id) ?? randomUUID();
 
@@ -218,7 +226,7 @@ export function MomentLoopService({
 
       if (caption !== null) changes.caption = caption;
       if (takenAt !== null) {
-        changes.takenAt = parseMomentDate(takenAt);
+        changes.takenAt = assertNotFutureDate(parseMomentDate(takenAt));
         if (await repository.isRevealedMedia({ id })) {
           throw new MomentLoopError(409, 'today_loop_date_locked');
         }
@@ -247,7 +255,9 @@ export function MomentLoopService({
       }
       const changes = {};
       if (typeof fields.caption === 'string') changes.caption = fields.caption.trim();
-      if (fields.taken_at !== undefined) changes.takenAt = parseMomentDate(fields.taken_at);
+      if (fields.taken_at !== undefined) {
+        changes.takenAt = assertNotFutureDate(parseMomentDate(fields.taken_at));
+      }
       if (fields.tags !== undefined) changes.tags = JSON.stringify(parseJsonArray(fields.tags));
       if (Object.prototype.hasOwnProperty.call(fields, 'map_pin_id')) {
         changes.mapPinId = fields.map_pin_id ? await resolveMapPin(repository, fields.map_pin_id, scope.coupleId) : null;

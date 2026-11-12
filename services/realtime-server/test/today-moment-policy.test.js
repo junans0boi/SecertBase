@@ -28,6 +28,7 @@ test('maskLockedTodayMoment exposes only presence metadata to the waiting partne
       linked_place_name: 'private place',
       session_id: 'private-session',
       session_reactions: '[{}]',
+      comment_count: 3,
       today_business_date: '2026-07-29',
       today_revealed_at: null,
       viewer_today_moment_id: null,
