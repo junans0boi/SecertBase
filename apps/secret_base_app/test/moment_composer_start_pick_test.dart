@@ -15,6 +15,7 @@ import 'package:secret_base_app/features/moment_loop/data/video_shrinker.dart';
 import 'package:secret_base_app/features/moment_loop/domain/moment.dart';
 import 'package:secret_base_app/screens/archive/moment/moment_composer.dart';
 import 'package:secret_base_app/screens/archive/moment/moment_format.dart';
+import 'package:secret_base_app/screens/archive/moment/moment_trim_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'moment_loop_test_support.dart';
@@ -26,6 +27,7 @@ class _FakeShrinker extends VideoShrinker {
   final bool supported;
   final bool waitForCancel;
   final calls = <String>[];
+  final ranges = <(int?, int?)>[];
   final _cancelled = Completer<void>();
 
   @override
@@ -40,6 +42,7 @@ class _FakeShrinker extends VideoShrinker {
     int audioBitrate = 128000,
   }) async {
     calls.add(id);
+    ranges.add((startMs, endMs));
     onProgress?.call(0.5);
     if (waitForCancel) {
       await _cancelled.future;
@@ -70,6 +73,7 @@ void main() {
     required Future<List<XFile>> startPick,
     Future<List<MomentMedia>> Function()? mediaPicker,
     VideoShrinker? videoShrinker,
+    Duration? clipLength,
   }) async {
     tester.view.physicalSize = const Size(800, 1600);
     tester.view.devicePixelRatio = 1;
@@ -100,6 +104,7 @@ void main() {
           startPick: startPick,
           mediaPicker: mediaPicker,
           videoShrinker: videoShrinker,
+          probeDuration: (_) async => clipLength,
         ),
       ),
     );
@@ -207,6 +212,107 @@ void main() {
       expect(find.byKey(const Key('moment_shrink_progress')), findsNothing);
       expect(find.byKey(const Key('moment_media_reorder_list')), findsNothing);
       expect(find.byKey(const Key('moment_media_issue')), findsNothing);
+    });
+  });
+
+  group('videos over a minute', () {
+    XFile longVideo() => XFile.fromData(
+      Uint8List(1000),
+      name: 'long.mov',
+      mimeType: 'video/quicktime',
+    );
+
+    Future<void> settle(WidgetTester tester) async {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    testWidgets('open the trimmer and keep the chosen minute', (tester) async {
+      final shrinker = _FakeShrinker();
+      await pumpComposer(
+        tester,
+        startPick: Future.value([longVideo()]),
+        videoShrinker: shrinker,
+        clipLength: const Duration(seconds: 95),
+      );
+      await settle(tester);
+      expect(find.text('영상 자르기'), findsOneWidget);
+      expect(find.text('60.0초'), findsOneWidget);
+      expect(find.text('1:00'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('moment_trim_done')));
+      await settle(tester);
+      expect(shrinker.ranges, [(0, 60000)]);
+      expect(
+        find.byKey(const Key('moment_media_reorder_list')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('cancelling the trimmer attaches nothing', (tester) async {
+      final shrinker = _FakeShrinker();
+      await pumpComposer(
+        tester,
+        startPick: Future.value([longVideo()]),
+        videoShrinker: shrinker,
+        clipLength: const Duration(seconds: 95),
+      );
+      await settle(tester);
+      await tester.tap(find.byKey(const Key('moment_trim_cancel')));
+      await settle(tester);
+      expect(shrinker.calls, isEmpty);
+      expect(find.byKey(const Key('moment_media_reorder_list')), findsNothing);
+      expect(find.byKey(const Key('moment_media_issue')), findsNothing);
+    });
+
+    testWidgets('are refused when the device cannot cut them', (tester) async {
+      await pumpComposer(
+        tester,
+        startPick: Future.value([longVideo()]),
+        videoShrinker: _FakeShrinker(supported: false),
+        clipLength: const Duration(seconds: 95),
+      );
+      await settle(tester);
+      expect(find.text('영상 자르기'), findsNothing);
+      expect(find.text('영상은 1분까지예요'), findsOneWidget);
+    });
+  });
+
+  group('clampTrimRange', () {
+    MomentTrimRange clamp(int s, int e, {bool movedStart = false}) =>
+        clampTrimRange(
+          startMs: s,
+          endMs: e,
+          durationMs: 95000,
+          maxMs: 60000,
+          movedStart: movedStart,
+        );
+
+    test('keeps a valid range', () {
+      expect(clamp(5000, 40000), (startMs: 5000, endMs: 40000));
+    });
+
+    test('dragging the end past a minute pulls the start along', () {
+      expect(clamp(0, 80000), (startMs: 20000, endMs: 80000));
+    });
+
+    test('dragging the start back past a minute pulls the end along', () {
+      expect(clamp(10000, 90000, movedStart: true), (
+        startMs: 10000,
+        endMs: 70000,
+      ));
+    });
+
+    test('never shorter than a second, never outside the clip', () {
+      expect(clamp(30000, 30200), (startMs: 30000, endMs: 31000));
+      expect(clamp(30000, 30200, movedStart: true), (
+        startMs: 29200,
+        endMs: 30200,
+      ));
+      expect(clamp(-500, 99000), (startMs: 35000, endMs: 95000));
     });
   });
 }

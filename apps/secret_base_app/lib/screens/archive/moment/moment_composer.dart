@@ -20,6 +20,7 @@ import '../../../v2/v2.dart';
 import '../map_screen.dart';
 import 'moment_format.dart';
 import 'moment_media.dart';
+import 'moment_trim_page.dart';
 import 'moment_story_feed.dart' show MomentStartSource;
 
 /// One attachment in the composer: a new file or an existing post.
@@ -110,6 +111,7 @@ class MomentComposerPage extends StatefulWidget {
     this.startSource = MomentStartSource.none,
     this.startPick,
     this.videoShrinker,
+    this.probeDuration = probeVideoDuration,
   });
 
   /// Opens the camera or the gallery right away (from 기록's
@@ -122,6 +124,9 @@ class MomentComposerPage extends StatefulWidget {
 
   /// Shrinks videos over 30MB before upload; defaults to the platform one.
   final VideoShrinker? videoShrinker;
+
+  /// Reads a picked clip's length; injected in tests (no video plugin there).
+  final Future<Duration?> Function(XFile file) probeDuration;
 
   @override
   State<MomentComposerPage> createState() => _MomentComposerPageState();
@@ -337,20 +342,32 @@ class _MomentComposerPageState extends State<MomentComposerPage> {
           isVideoName(file.path) ||
           (file.mimeType ?? '').startsWith('video/');
       if (video) {
-        final duration = await probeVideoDuration(file);
+        final duration = await widget.probeDuration(file);
         final length = await file.length();
         final tooBig = length > momentMaxBytes;
-        final problem =
-            momentMediaIssue(isVideo: true, bytes: 0, duration: duration) ??
-            (tooBig && !_shrinker.supported ? MomentMediaIssue.tooLarge : null);
+        final tooLong =
+            momentMediaIssue(isVideo: true, bytes: 0, duration: duration) ==
+            MomentMediaIssue.tooLong;
+        // Over a minute: let the author keep a part of it (needs the
+        // shrinker, which also does the cutting). Otherwise refuse as before.
+        final problem = tooLong
+            ? (_shrinker.supported ? null : MomentMediaIssue.tooLong)
+            : (tooBig && !_shrinker.supported
+                  ? MomentMediaIssue.tooLarge
+                  : null);
         if (problem != null) {
           issue = (label: momentMediaIssueLabel(problem), again: again);
           continue;
         }
+        MomentTrimRange? range;
+        if (tooLong) {
+          range = await _pickTrimRange(file, duration!);
+          if (range == null || !mounted) continue;
+        }
         var name = file.name.isEmpty ? 'clip.mp4' : file.name;
         final Uint8List bytes;
-        if (tooBig) {
-          final shrunk = await _shrinkVideo(file);
+        if (tooBig || range != null) {
+          final shrunk = await _shrinkVideo(file, range: range);
           if (shrunk.bytes == null) {
             if (shrunk.failure != null) {
               issue = (label: shrunk.failure!, again: again);
@@ -413,7 +430,19 @@ class _MomentComposerPageState extends State<MomentComposerPage> {
 
   /// Shrinks a video over 30MB with a progress dialog the user can cancel.
   /// [failure] is null when the user cancelled (nothing to report).
-  Future<({Uint8List? bytes, String? failure})> _shrinkVideo(XFile file) async {
+  Future<MomentTrimRange?> _pickTrimRange(XFile file, Duration duration) {
+    return Navigator.of(context).push<MomentTrimRange>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => MomentTrimPage(path: file.path, duration: duration),
+      ),
+    );
+  }
+
+  Future<({Uint8List? bytes, String? failure})> _shrinkVideo(
+    XFile file, {
+    MomentTrimRange? range,
+  }) async {
     final id = UploadOutbox.newId();
     final progress = ValueNotifier<double>(0);
     var finished = false;
@@ -421,7 +450,9 @@ class _MomentComposerPageState extends State<MomentComposerPage> {
     final dialog = showV2Dialog<void>(
       context,
       title: '영상을 줄이는 중이에요',
-      message: '30MB가 넘어서 720p로 줄여서 올려요. 화면을 켜 둔 채 잠시만 기다려 주세요.',
+      message: range != null
+          ? '고른 부분만 720p로 저장해요. 화면을 켜 둔 채 잠시만 기다려 주세요.'
+          : '30MB가 넘어서 720p로 줄여서 올려요. 화면을 켜 둔 채 잠시만 기다려 주세요.',
       barrierDismissible: false,
       content: ValueListenableBuilder<double>(
         valueListenable: progress,
@@ -452,6 +483,8 @@ class _MomentComposerPageState extends State<MomentComposerPage> {
       final bytes = await _shrinker.shrink(
         id: id,
         path: file.path,
+        startMs: range?.startMs,
+        endMs: range?.endMs,
         onProgress: (p) {
           if (!finished && !cancelled) progress.value = p;
         },
