@@ -8,6 +8,11 @@ import 'api_exception.dart';
 typedef TokenProvider = String? Function();
 
 class ApiClient {
+  /// Multipart uploads (오늘의 순간 media): a clip of up to a minute is ~20MB
+  /// on a phone connection, and the server may still convert it (it gives
+  /// up on its own after 120s), so this has to outlast both.
+  static const defaultUploadTimeout = Duration(seconds: 180);
+
   final Uri _baseUri;
   final TokenProvider _tokenProvider;
   final http.Client _client;
@@ -21,7 +26,7 @@ class ApiClient {
     required TokenProvider tokenProvider,
     http.Client? client,
     Duration timeout = const Duration(seconds: 20),
-    Duration uploadTimeout = const Duration(seconds: 60),
+    Duration uploadTimeout = defaultUploadTimeout,
     void Function()? onUnauthorized,
   }) : _baseUri = _normalizeBaseUri(baseUrl),
        _tokenProvider = tokenProvider,

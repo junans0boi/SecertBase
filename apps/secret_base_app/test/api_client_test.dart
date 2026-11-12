@@ -139,6 +139,28 @@ void main() {
     },
   );
 
+  test(
+    'uploads get their own, longer timeout (3 minutes by default)',
+    () async {
+      expect(ApiClient.defaultUploadTimeout, const Duration(seconds: 180));
+      final api = ApiClient(
+        baseUrl: 'https://example.test',
+        tokenProvider: () => null,
+        timeout: const Duration(milliseconds: 20),
+        client: MockClient((_) async {
+          await Future<void>.delayed(const Duration(milliseconds: 120));
+          return http.Response('{"ok":true}', 200);
+        }),
+      );
+
+      expect(await api.sendMultipart('api/upload'), {'ok': true});
+      await expectLater(
+        api.getJson('api/slow'),
+        throwsA(isA<ApiException>().having((e) => e.code, 'code', 'timeout')),
+      );
+    },
+  );
+
   test('times out a hung request with an ApiException', () async {
     final api = ApiClient(
       baseUrl: 'https://example.test',
