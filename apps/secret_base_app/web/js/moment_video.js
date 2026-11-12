@@ -14,6 +14,7 @@
 //     Rejects with Error whose message is 'cancelled', 'unsupported' or
 //     'failed: ...' (same codes as the Android channel).
 //   cancel(id)
+//   wakeLockHeld()                    -> boolean (for checks)
 (function () {
   'use strict';
 
@@ -38,6 +39,36 @@
 
   const even = (n) => Math.max(2, Math.round(n / 2) * 2);
 
+  // Keep the screen on while any job runs: a phone that dims and locks
+  // suspends the page, and the encode stalls. Browsers drop the lock when
+  // the page is hidden, so it is taken again when the page comes back.
+  let wakeLock = null;
+  const wantWakeLock = () => jobs.size > 0;
+  const takeWakeLock = async () => {
+    if (wakeLock || !wantWakeLock() || document.visibilityState !== 'visible') return;
+    if (!navigator.wakeLock || !navigator.wakeLock.request) return;
+    try {
+      const lock = await navigator.wakeLock.request('screen');
+      if (!wantWakeLock()) {
+        lock.release().catch(() => {});
+        return;
+      }
+      wakeLock = lock;
+      lock.addEventListener('release', () => {
+        if (wakeLock === lock) wakeLock = null;
+      });
+    } catch (_) {
+      // Not allowed (e.g. low battery mode); shrinking still works.
+    }
+  };
+  const dropWakeLock = () => {
+    if (wantWakeLock() || !wakeLock) return;
+    const lock = wakeLock;
+    wakeLock = null;
+    lock.release().catch(() => {});
+  };
+  document.addEventListener('visibilitychange', () => { takeWakeLock(); });
+
   const fail = (code) => new Error(code);
 
   async function shrink(id, srcUrl, options, onProgress) {
@@ -45,6 +76,7 @@
     if (jobs.has(id)) throw fail('failed: a conversion with this id is running');
     const job = { cancelled: false, conversion: null };
     jobs.set(id, job);
+    takeWakeLock();
     try {
       const opts = options || {};
       const maxShort = opts.maxShortSide || 720;
@@ -134,6 +166,7 @@
       throw fail('failed: ' + message);
     } finally {
       jobs.delete(id);
+      dropWakeLock();
     }
   }
 
@@ -144,5 +177,10 @@
     if (job.conversion) job.conversion.cancel().catch(() => {});
   }
 
-  window.secretBaseVideo = { supported, shrink, cancel };
+  window.secretBaseVideo = {
+    supported,
+    shrink,
+    cancel,
+    wakeLockHeld: () => wakeLock !== null,
+  };
 })();
