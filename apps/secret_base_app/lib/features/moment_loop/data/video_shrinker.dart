@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'video_shrinker_stub.dart'
+import 'video_shrinker_io.dart'
     if (dart.library.js_interop) 'video_shrinker_web.dart'
     as impl;
 
@@ -44,6 +44,6 @@ abstract class VideoShrinker {
   void cancel(String id);
 }
 
-/// The browser shrinker on the web (`web/js/moment_video.js`), otherwise an
-/// unsupported stub until the native channels are wired in.
+/// The browser shrinker on the web (`web/js/moment_video.js`); on Android and
+/// iOS the `secretbase/video_tools` platform channel; unsupported elsewhere.
 VideoShrinker createVideoShrinker() => impl.createVideoShrinker();

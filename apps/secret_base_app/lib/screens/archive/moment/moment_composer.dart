@@ -464,7 +464,7 @@ class _MomentComposerPageState extends State<MomentComposerPage> {
       return (
         bytes: null,
         failure: e.code == 'unsupported'
-            ? '이 브라우저에서는 영상을 줄일 수 없어요. 30MB 이하로 올려 주세요'
+            ? '이 기기에서는 영상을 줄일 수 없어요. 30MB 이하로 올려 주세요'
             : '영상을 줄이지 못했어요. 다시 시도해 주세요',
       );
     } catch (_) {
