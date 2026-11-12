@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/auth_service.dart';
 import '../../core/http/api_client.dart';
@@ -254,6 +256,18 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     bool todayMoment = true,
     MomentStartSource source = MomentStartSource.none,
   }) async {
+    Future<List<XFile>>? albumPick;
+    if (kIsWeb &&
+        source == MomentStartSource.gallery &&
+        widget.mediaPicker == null) {
+      // Mobile browsers open a file chooser only inside the user's own tap.
+      // Waiting until the composer is on screen loses that tap: the chooser
+      // never opens and its future never completes, which used to leave the
+      // composer's camera/album buttons stuck. So open it right here, still
+      // inside the "앨범에서 고르기" tap, and hand the result over.
+      albumPick = ImagePicker().pickMultipleMedia(limit: momentMaxMedia);
+      source = MomentStartSource.none;
+    }
     final created = await Navigator.of(context).push<Object?>(
       MaterialPageRoute(
         fullscreenDialog: true,
@@ -263,6 +277,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
           mediaPicker: widget.mediaPicker,
           startWithTodayMoment: todayMoment,
           startSource: source,
+          startPick: albumPick,
           initialPinId: widget.initialPinId,
           initialPinName: widget.initialPinName,
         ),

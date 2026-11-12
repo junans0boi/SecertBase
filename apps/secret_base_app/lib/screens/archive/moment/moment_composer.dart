@@ -107,11 +107,16 @@ class MomentComposerPage extends StatefulWidget {
     this.initialPinId,
     this.initialPinName,
     this.startSource = MomentStartSource.none,
+    this.startPick,
   });
 
   /// Opens the camera or the gallery right away (from 기록's
   /// "내 순간 올리기" sheet).
   final MomentStartSource startSource;
+
+  /// Files the user is already picking (web opens the album chooser inside
+  /// the tap that led here; see `_openComposer`).
+  final Future<List<XFile>>? startPick;
 
   @override
   State<MomentComposerPage> createState() => _MomentComposerPageState();
@@ -154,6 +159,8 @@ class _MomentComposerPageState extends State<MomentComposerPage> {
         }
       });
     }
+    final startPick = widget.startPick;
+    if (startPick != null) unawaited(_takeStartPick(startPick));
     final initial = _initial;
     _media = widget.edit != null
         ? widget.edit!.items
@@ -232,6 +239,20 @@ class _MomentComposerPageState extends State<MomentComposerPage> {
       _toast('사진을 불러오지 못했어요. 다시 시도해 주세요.', tone: V2Tone.err);
     } finally {
       _picking = false;
+    }
+  }
+
+  // Deliberately not guarded by [_picking]: if the browser never answers,
+  // the composer's own camera/album buttons must keep working.
+  Future<void> _takeStartPick(Future<List<XFile>> pick) async {
+    try {
+      final files = await pick;
+      if (!mounted || files.isEmpty) return;
+      final remaining = momentMaxMedia - _media.length;
+      if (remaining <= 0) return;
+      await _ingest(files.take(remaining).toList(), again: _addFromGallery);
+    } catch (_) {
+      _toast('사진을 불러오지 못했어요. 다시 시도해 주세요.', tone: V2Tone.err);
     }
   }
 
