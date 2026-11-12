@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/today_api.dart';
+import '../../core/upload_image.dart';
 import '../../v2/v2.dart';
 import 'home_format.dart';
 
@@ -262,21 +263,17 @@ Widget homeMomentFill(
 }) {
   Widget fill;
   final raw = m?.mediaUrl;
-  final url = raw == null || baseUrl == null
-      ? null
-      : raw.startsWith('http')
-      ? raw
-      : '$baseUrl$raw';
   if (m != null &&
       !m.deleted &&
-      url != null &&
+      raw != null &&
+      baseUrl != null &&
       m.mediaType != 'video' &&
       m.mediaType != 'text') {
-    fill = Image.network(
-      url,
-      fit: BoxFit.cover,
-      cacheWidth: cacheWidth,
-      errorBuilder: (_, _, _) => V2PhotoPlaceholder(seed: seed),
+    fill = UploadImage(
+      raw: raw,
+      baseUrl: baseUrl,
+      pixelWidth: cacheWidth,
+      error: V2PhotoPlaceholder(seed: seed),
     );
   } else {
     fill = V2PhotoPlaceholder(seed: seed);

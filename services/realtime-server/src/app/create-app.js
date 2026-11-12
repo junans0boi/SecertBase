@@ -3,6 +3,7 @@ import express from 'express';
 import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { setUploadResponseHeaders } from '../shared/upload-safety.js';
+import { thumbHandler } from '../shared/upload-thumbs.js';
 
 const legalWebRoot = fileURLToPath(new URL('../../../../apps/secret_base_app/web/', import.meta.url));
 
@@ -47,7 +48,15 @@ export function createApp({
   app.use('/legal', express.static(`${legalWebRoot}/legal`));
 
   if (config.UPLOADS_ROOT) {
-    app.use('/uploads', express.static(config.UPLOADS_ROOT, { setHeaders: setUploadResponseHeaders }));
+    // Small WebP copies for lists and thumbnails (made on first request).
+    app.get('/uploads/w/:width/:file', thumbHandler(config.UPLOADS_ROOT));
+    // Upload names are unique, so browsers may keep them for a year.
+    app.use('/uploads', express.static(config.UPLOADS_ROOT, {
+      dotfiles: 'ignore',
+      immutable: true,
+      maxAge: '365d',
+      setHeaders: setUploadResponseHeaders,
+    }));
   }
 
   app.get('/health', async (_, res) => {
