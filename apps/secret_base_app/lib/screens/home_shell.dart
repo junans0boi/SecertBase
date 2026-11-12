@@ -152,7 +152,8 @@ class _HomeShellState extends State<HomeShell> {
   Widget build(BuildContext context) {
     return V2Theme(
       child: Scaffold(
-        backgroundColor: V2Colors.bg,
+        backgroundColor: _index == 1 ? Colors.black : V2Colors.bg,
+        extendBody: true,
         body: Column(
           children: [
             if (_offline)
@@ -172,17 +173,35 @@ class _HomeShellState extends State<HomeShell> {
               child: SafeArea(
                 top: false,
                 bottom: false,
-                child: IndexedStack(
-                  index: _index,
-                  children: [
-                    for (var i = 0; i < 5; i++)
-                      _visited.contains(i)
-                          ? TickerMode(
-                              enabled: i == _index,
-                              child: _buildPage(i),
-                            )
-                          : const SizedBox.shrink(),
-                  ],
+                // The tab bar floats (extendBody). 기록 runs underneath it
+                // and lifts its own controls; other tabs stop above it.
+                child: Builder(
+                  builder: (context) {
+                    final under = MediaQuery.paddingOf(context).bottom;
+                    return IndexedStack(
+                      index: _index,
+                      children: [
+                        for (var i = 0; i < 5; i++)
+                          _visited.contains(i)
+                              ? TickerMode(
+                                  enabled: i == _index,
+                                  child: i == 1
+                                      ? _buildPage(i)
+                                      : Padding(
+                                          padding: EdgeInsets.only(
+                                            bottom: under,
+                                          ),
+                                          child: MediaQuery.removePadding(
+                                            context: context,
+                                            removeBottom: true,
+                                            child: _buildPage(i),
+                                          ),
+                                        ),
+                                )
+                              : const SizedBox.shrink(),
+                      ],
+                    );
+                  },
                 ),
               ),
             ),

@@ -44,8 +44,8 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: V2GalleryScreen()));
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('디자인 시스템'), findsOneWidget);
-    expect(find.text('홈'), findsOneWidget);
-    expect(find.text('더보기'), findsOneWidget);
+    expect(find.byTooltip('홈'), findsOneWidget);
+    expect(find.byTooltip('더보기'), findsOneWidget);
 
     // Scroll through the whole gallery so every section builds.
     final list = find.byType(Scrollable).first;
@@ -223,12 +223,15 @@ void main() {
         ),
       ),
     );
+    // Icons only on screen; each tab keeps its Korean name for screen
+    // readers and as a tooltip.
     for (final label in ['홈', '기록', '지도', '놀이', '더보기']) {
-      expect(find.text(label), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp('^$label, 탭')), findsOneWidget);
+      expect(find.byTooltip(label), findsOneWidget);
     }
     await _semanticTap(tester, find.bySemanticsLabel(RegExp('^지도')));
     expect(index, 2);
-    await tester.tap(find.text('더보기'));
+    await tester.tap(find.byKey(const Key('v2_tab_4')));
     expect(index, 4);
     handle.dispose();
   });
