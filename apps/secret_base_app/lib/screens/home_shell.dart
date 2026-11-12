@@ -152,7 +152,7 @@ class _HomeShellState extends State<HomeShell> {
   Widget build(BuildContext context) {
     return V2Theme(
       child: Scaffold(
-        backgroundColor: _index == 1 ? Colors.black : V2Colors.bg,
+        backgroundColor: V2Colors.bg,
         extendBody: true,
         body: Column(
           children: [
@@ -173,8 +173,7 @@ class _HomeShellState extends State<HomeShell> {
               child: SafeArea(
                 top: false,
                 bottom: false,
-                // The tab bar floats (extendBody). 기록 runs underneath it
-                // and lifts its own controls; other tabs stop above it.
+                // The tab bar floats (extendBody); pages stop above it.
                 child: Builder(
                   builder: (context) {
                     final under = MediaQuery.paddingOf(context).bottom;
@@ -185,18 +184,14 @@ class _HomeShellState extends State<HomeShell> {
                           _visited.contains(i)
                               ? TickerMode(
                                   enabled: i == _index,
-                                  child: i == 1
-                                      ? _buildPage(i)
-                                      : Padding(
-                                          padding: EdgeInsets.only(
-                                            bottom: under,
-                                          ),
-                                          child: MediaQuery.removePadding(
-                                            context: context,
-                                            removeBottom: true,
-                                            child: _buildPage(i),
-                                          ),
-                                        ),
+                                  child: Padding(
+                                    padding: EdgeInsets.only(bottom: under),
+                                    child: MediaQuery.removePadding(
+                                      context: context,
+                                      removeBottom: true,
+                                      child: _buildPage(i),
+                                    ),
+                                  ),
                                 )
                               : const SizedBox.shrink(),
                       ],
@@ -210,7 +205,6 @@ class _HomeShellState extends State<HomeShell> {
         bottomNavigationBar: V2BottomTabBar(
           currentIndex: _index,
           onTap: _select,
-          dark: _index == 1,
         ),
       ),
     );

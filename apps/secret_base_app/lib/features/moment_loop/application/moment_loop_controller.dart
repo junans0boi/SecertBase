@@ -167,6 +167,7 @@ class MomentLoopController extends ChangeNotifier {
                 mediaEditLocked: moment.mediaEditLocked,
                 todayMoment: moment.todayMoment,
                 reactions: reactions,
+                commentCount: moment.commentCount,
                 extra: moment.extra,
               )
             : moment;
@@ -237,6 +238,7 @@ class MomentLoopController extends ChangeNotifier {
         mediaEditLocked: moment.mediaEditLocked,
         todayMoment: moment.todayMoment,
         reactions: reactions,
+        commentCount: moment.commentCount,
         extra: moment.extra,
       );
     }).toList();

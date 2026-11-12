@@ -218,6 +218,7 @@ class HttpMomentLoopRepository implements MomentLoopRepository {
           raw['media_edit_locked'] == true || raw['media_edit_locked'] == 1,
       todayMoment: raw['today_moment'] == true || raw['today_moment'] == 1,
       reactions: _reactions(raw['session_reactions']),
+      commentCount: _int(raw['comment_count']) ?? 0,
       extra: raw,
     );
   }

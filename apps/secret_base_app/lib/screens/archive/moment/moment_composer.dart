@@ -17,12 +17,12 @@ import '../../../features/moment_loop/domain/moment.dart';
 import '../../../features/moment_loop/domain/moment_edit.dart';
 import '../../../features/moment_loop/domain/photo_date.dart';
 import '../../../v2/v2.dart';
-import '../map_screen.dart';
 import 'editor/editor_item.dart';
 import 'editor/moment_editor_page.dart';
 import 'moment_format.dart';
 import 'moment_media.dart';
-import 'moment_story_feed.dart' show MomentStartSource;
+import 'moment_place_picker.dart';
+import 'moment_days.dart' show MomentStartSource;
 
 /// One attachment in the composer: a new file or an existing post.
 class PickedMoment {
@@ -83,13 +83,6 @@ class _Place {
   const _Place({required this.id, required this.name});
 }
 
-class _PinRow {
-  final int id;
-  final String name;
-  final String? category;
-  const _PinRow(this.id, this.name, this.category);
-}
-
 enum _CaptureKind { photo, video }
 
 /// 기록 작성기: 촬영 · 갤러리 · 글만, 한 줄, 접힌 "더 보기".
@@ -118,6 +111,7 @@ class MomentComposerPage extends StatefulWidget {
     this.initialPinId,
     this.initialPinName,
     this.startSource = MomentStartSource.none,
+    this.initialDate,
     this.startPick,
     this.videoShrinker,
     this.probeDuration = probeVideoDuration,
@@ -127,6 +121,9 @@ class MomentComposerPage extends StatefulWidget {
   /// Opens the camera or the gallery right away (from 기록's
   /// "내 순간 올리기" sheet).
   final MomentStartSource startSource;
+
+  /// Files a new record under this day (a day's empty row).
+  final DateTime? initialDate;
 
   /// Files the user is already picking (web opens the album chooser inside
   /// the tap that led here; see `_openComposer`).
@@ -174,7 +171,12 @@ class _MomentComposerPageState extends State<MomentComposerPage> {
   @override
   void initState() {
     super.initState();
-    if (widget.startSource != MomentStartSource.none) {
+    if (widget.startSource == MomentStartSource.text) {
+      _textOnly = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _captionFocus.requestFocus();
+      });
+    } else if (widget.startSource != MomentStartSource.none) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         if (widget.startSource == MomentStartSource.camera) {
@@ -211,6 +213,12 @@ class _MomentComposerPageState extends State<MomentComposerPage> {
       }
     } else {
       _todayMoment = widget.startWithTodayMoment;
+      final day = widget.initialDate;
+      if (day != null) {
+        _date = dateOnly(day);
+        _dateTouched = true;
+        if (!_isToday) _todayMoment = false;
+      }
       if (widget.initialPinId != null) {
         _place = _Place(
           id: widget.initialPinId,
@@ -490,55 +498,19 @@ class _MomentComposerPageState extends State<MomentComposerPage> {
 
   // ── Location ───────────────────────────────────────────────────────────────
 
-  Future<List<_PinRow>?> _loadPins() async {
-    try {
-      final pins = await widget.controller.loadMapPins();
-      return pins.map((p) => _PinRow(p.id, p.name, p.category)).toList();
-    } catch (_) {
-      return null;
-    }
-  }
-
   Future<void> _pickPlace() async {
-    var pins = await _loadPins();
-    while (true) {
-      if (!mounted) return;
-      final result = await showV2Sheet<_PickResult>(
-        context,
-        title: '장소 붙이기',
-        subtitle: '비밀지도에 저장한 장소와 기록을 이어 줘요',
-        builder: (ctx) => _PlacePicker(pins: pins, selectedId: _place?.id),
-      );
-      if (!mounted || result == null) return;
-      if (result.retry) {
-        pins = await _loadPins();
-        continue;
-      }
-      if (result.openMap) {
-        final before = (pins ?? const <_PinRow>[]).map((p) => p.id).toSet();
-        await Navigator.of(context).push<void>(
-          MaterialPageRoute(
-            fullscreenDialog: true,
-            builder: (_) => const MapScreen(closeAsModal: true),
-          ),
-        );
-        if (!mounted) return;
-        pins = await _loadPins();
-        // A pin added on the map is picked automatically.
-        final fresh = (pins ?? const <_PinRow>[])
-            .where((p) => !before.contains(p.id))
-            .toList();
-        if (fresh.isNotEmpty) {
-          setState(
-            () => _place = _Place(id: fresh.last.id, name: fresh.last.name),
-          );
-          return;
-        }
-        continue;
-      }
-      setState(() => _place = result.place);
-      return;
-    }
+    final picked = await showMomentPlacePicker(
+      context,
+      controller: widget.controller,
+      selectedId: _place?.id,
+    );
+    if (!mounted || picked == null) return;
+    setState(() {
+      final place = picked.place;
+      _place = picked.cleared || place == null
+          ? null
+          : _Place(id: place.id, name: place.name);
+    });
   }
 
   // ── Date ───────────────────────────────────────────────────────────────────
@@ -1173,114 +1145,6 @@ class _MoreCard extends StatelessWidget {
           ),
         ),
         if (open) V2List(children: children),
-      ],
-    );
-  }
-}
-
-// ── Place picker ─────────────────────────────────────────────────────────────
-
-class _PickResult {
-  final _Place? place;
-  final bool openMap;
-  final bool retry;
-  const _PickResult.place(this.place) : openMap = false, retry = false;
-  const _PickResult.openMap() : place = null, openMap = true, retry = false;
-  const _PickResult.retry() : place = null, openMap = false, retry = true;
-}
-
-class _PlacePicker extends StatefulWidget {
-  final List<_PinRow>? pins;
-  final int? selectedId;
-  const _PlacePicker({required this.pins, required this.selectedId});
-
-  @override
-  State<_PlacePicker> createState() => _PlacePickerState();
-}
-
-class _PlacePickerState extends State<_PlacePicker> {
-  final _query = TextEditingController();
-
-  @override
-  void dispose() {
-    _query.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final pins = widget.pins;
-    if (pins == null) {
-      return V2ErrorState(
-        title: '장소를 불러오지 못했어요',
-        body: '연결을 확인하고 다시 시도해 주세요.',
-        onRetry: () => Navigator.pop(context, const _PickResult.retry()),
-      );
-    }
-    final q = _query.text.trim().toLowerCase();
-    final shown = q.isEmpty
-        ? pins
-        : pins
-              .where(
-                (p) =>
-                    p.name.toLowerCase().contains(q) ||
-                    (p.category ?? '').toLowerCase().contains(q),
-              )
-              .toList();
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (pins.isNotEmpty) ...[
-          V2TextField(
-            label: '장소 찾기',
-            hint: '저장한 장소 이름',
-            controller: _query,
-            prefixIcon: V2Icons.search,
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: V2Space.x3),
-        ],
-        if (pins.isEmpty)
-          V2EmptyState(
-            illustration: const V2SceneIllustration(V2Scene.map),
-            title: '저장한 장소가 아직 없어요',
-            body: '지도에서 장소를 추가하면 바로 붙여 드릴게요.',
-          )
-        else if (shown.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: V2Space.x6),
-            child: Center(child: Text('찾는 장소가 없어요', style: V2Text.cap)),
-          )
-        else
-          V2List(
-            children: [
-              for (final pin in shown)
-                V2ListTile(
-                  key: Key('moment_place_${pin.id}'),
-                  icon: V2Icons.location,
-                  tone: V2Tone.sage,
-                  title: pin.name,
-                  subtitle: pin.category,
-                  showChevron: false,
-                  trailing: pin.id == widget.selectedId
-                      ? Icon(V2Icons.ok, color: V2Colors.rose600)
-                      : null,
-                  onTap: () => Navigator.pop(
-                    context,
-                    _PickResult.place(_Place(id: pin.id, name: pin.name)),
-                  ),
-                ),
-            ],
-          ),
-        const SizedBox(height: V2Space.x3),
-        V2Button(
-          key: const Key('moment_place_add_on_map'),
-          label: '지도에서 새 장소 추가',
-          icon: V2Icons.add,
-          variant: V2ButtonVariant.soft,
-          onPressed: () => Navigator.pop(context, const _PickResult.openMap()),
-        ),
       ],
     );
   }

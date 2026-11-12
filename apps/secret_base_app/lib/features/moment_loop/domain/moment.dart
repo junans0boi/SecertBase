@@ -17,6 +17,9 @@ class Moment {
   final bool mediaEditLocked;
   final bool todayMoment;
   final List<MomentReaction> reactions;
+
+  /// Comments on this post (from the feed's `comment_count`; 0 if absent).
+  final int commentCount;
   final Map<String, dynamic> extra;
 
   const Moment({
@@ -36,6 +39,7 @@ class Moment {
     this.mediaEditLocked = false,
     this.todayMoment = false,
     this.reactions = const [],
+    this.commentCount = 0,
     this.extra = const {},
   });
 

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:image/image.dart' as img;
 import 'package:secret_base_app/features/moment_loop/application/upload_outbox.dart';
 import 'package:secret_base_app/features/moment_loop/domain/moment.dart';
 import 'package:secret_base_app/screens/archive/moment/moment_format.dart';
@@ -49,12 +50,64 @@ Future<void> _pump(
   }
 }
 
-String _today() => DateTime.now().toIso8601String().substring(0, 10);
-
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  testWidgets('save closes the composer within 500ms while upload is pending', (
+  Future<void> settle(WidgetTester tester) async {
+    for (var i = 0; i < 12; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+  }
+
+  String dayOf(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  Map<String, Object?> post(
+    int id,
+    int user,
+    String caption, {
+    DateTime? day,
+    int hour = 9,
+    int minute = 0,
+    bool locked = false,
+  }) {
+    final d = day ?? DateTime.now();
+    if (locked) {
+      return {
+        'id': id,
+        'user_id': user,
+        'taken_at': dayOf(d),
+        'today_locked': true,
+      };
+    }
+    return {
+      'id': id,
+      'user_id': user,
+      'media_type': 'text',
+      'caption': caption,
+      'taken_at': dayOf(d),
+      'captured_at': DateTime(
+        d.year,
+        d.month,
+        d.day,
+        hour,
+        minute,
+      ).toUtc().toIso8601String(),
+      'session_id': 's-$user-$id',
+      'position': 0,
+    };
+  }
+
+  MomentMedia jpeg(String name) => MomentMedia(
+    name: name,
+    bytes: Uint8List.fromList(img.encodeJpg(img.Image(width: 8, height: 6))),
+    isVideo: false,
+  );
+
+  testWidgets('a text record saves and closes while the upload is pending', (
     tester,
   ) async {
     final pending = Completer<http.Response>();
@@ -66,11 +119,16 @@ void main() {
     await _pump(tester, api, outbox: queue);
     await tester.tap(find.byKey(const Key('moment_add')));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).first, '기록 보존');
+    await tester.tap(find.byKey(const Key('moment_source_text')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('moment_caption_field')).first,
+      '기록 보존',
+    );
     await tester.tap(find.byKey(const Key('moment_save')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 499));
-    expect(find.text('새 순간'), findsNothing);
+    expect(find.byKey(const Key('moment_save')), findsNothing);
     expect(queue.drafts.single.caption, '기록 보존');
     pending.complete(
       _json({
@@ -82,261 +140,198 @@ void main() {
     expect(queue.drafts, isEmpty);
   });
 
-  testWidgets('empty 기록 opens on the "내 순간 올리기" page', (tester) async {
+  testWidgets('empty 기록 invites a first record', (tester) async {
     final api = MockClient((_) async => _json({'ok': true, 'posts': []}));
     await _pump(tester, api);
-    expect(find.text('기록'), findsWidgets);
-    expect(find.byKey(const Key('moment_today_cta')), findsOneWidget);
-    expect(find.text('내 순간 올리기'), findsOneWidget);
-    expect(find.text('카메라로 찍거나 앨범에서 골라요'), findsOneWidget);
-    expect(find.byTooltip('순간 남기기'), findsOneWidget);
+    expect(find.text('우리의 하루'), findsOneWidget);
+    expect(find.text('첫 기록을 남겨 볼까요?'), findsOneWidget);
+    expect(find.byTooltip('기록 남기기'), findsOneWidget);
   });
 
-  testWidgets(
-    'the upload button asks camera or album, album opens the picker',
-    (tester) async {
-      var picked = 0;
-      final api = MockClient((_) async => _json({'ok': true, 'posts': []}));
-      await _pump(
-        tester,
-        api,
-        mediaPicker: () async {
-          picked++;
-          return const [];
-        },
-      );
-      await tester.tap(find.byKey(const Key('moment_upload_cta')));
-      await tester.pumpAndSettle();
-      expect(find.text('카메라로 찍기'), findsOneWidget);
-      expect(find.text('앨범에서 고르기'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('moment_source_gallery')));
-      await tester.pumpAndSettle();
-      expect(find.text('새 순간'), findsOneWidget);
-      expect(picked, 1);
-    },
-  );
-
-  testWidgets('409 active_couple_required is shown as unpaired, not empty', (
+  testWidgets('+ asks camera, album or text; album opens the picker', (
     tester,
   ) async {
-    final api = MockClient(
-      (_) async => _json({'ok': false, 'code': 'active_couple_required'}, 409),
-    );
-    await _pump(tester, api);
-    expect(find.text('아직 연결되지 않았어요'), findsOneWidget);
-    expect(find.text('이번 주 첫 순간을 남겨 보세요'), findsNothing);
-  });
-
-  testWidgets('feed failure offers retry', (tester) async {
-    final api = MockClient((_) async => http.Response('boom', 500));
-    await _pump(tester, api);
-    expect(find.text('기록을 불러오지 못했어요'), findsWidgets);
-    expect(find.text('다시 시도'), findsWidgets);
-  });
-
-  testWidgets('a day page shows the post; 모아보기 jumps back to that day', (
-    tester,
-  ) async {
-    final api = MockClient(
-      (_) async => _json({
-        'ok': true,
-        'posts': [
-          {
-            'id': 42,
-            'user_id': 7,
-            'media_type': 'text',
-            'caption': 'group caption',
-            'taken_at': _today(),
-            'captured_at': DateTime.now().toUtc().toIso8601String(),
-            'session_id': 'grid-group',
-            'position': 0,
-          },
-        ],
-      }),
-    );
-    await _pump(tester, api);
-    // I posted today, so the feed opens on today's page, not the CTA.
-    expect(find.byKey(const Key('moment_today_cta')), findsNothing);
-    expect(find.text('group caption'), findsWidgets);
-    await tester.tap(find.byKey(const Key('moment_calendar_toggle')));
-    await tester.pump(const Duration(milliseconds: 200));
-    expect(find.byKey(const Key('moment_month_grid')), findsOneWidget);
-    expect(
-      find.text('${DateTime.now().month}월에 1일 남겼어요', findRichText: true),
-      findsOneWidget,
-    );
-    await tester.tap(find.text('한 장씩'));
-    await tester.pump(const Duration(milliseconds: 200));
-    expect(find.byKey(const Key('moment_month_grid')), findsNothing);
-    expect(find.text('group caption'), findsWidgets);
-  });
-
-  testWidgets('a day plays like stories: auto next, tap, hold to pause', (
-    tester,
-  ) async {
-    Map<String, Object> post(int id, int user, String caption, int minute) => {
-      'id': id,
-      'user_id': user,
-      'media_type': 'text',
-      'caption': caption,
-      'taken_at': _today(),
-      'captured_at': DateTime.now()
-          .copyWith(hour: 9, minute: minute)
-          .toUtc()
-          .toIso8601String(),
-      'session_id': 's-$user-$id',
-      'position': 0,
-    };
-    final api = MockClient(
-      (_) async => _json({
-        'ok': true,
-        'posts': [
-          post(1, 7, 'first', 1),
-          post(2, 7, 'second', 2),
-          post(3, 7, 'third', 3),
-          post(4, 8, 'partner one', 4),
-        ],
-      }),
-    );
-    await _pump(tester, api);
-    Finder item(int id) => find.byKey(ValueKey('story-item-$id'));
-    expect(item(1), findsOneWidget);
-
-    // Photos advance on their own after 5 seconds.
-    await tester.pump(const Duration(seconds: 5));
-    await tester.pump();
-    expect(item(2), findsOneWidget);
-
-    // Holding pauses the timer.
-    final tap = find.byKey(ValueKey('story_tap_${dayKey(DateTime.now())}'));
-    final gesture = await tester.startGesture(tester.getCenter(tap));
-    await tester.pump(const Duration(milliseconds: 600)); // long press
-    await tester.pump(const Duration(seconds: 6));
-    expect(item(2), findsOneWidget);
-    await gesture.up();
-    await tester.pump();
-
-    // Tap the right side for the next one, the left side to go back.
-    final box = tester.getRect(tap);
-    await tester.tapAt(Offset(box.right - 20, box.center.dy));
-    await tester.pump();
-    expect(item(3), findsOneWidget);
-    await tester.tapAt(Offset(box.left + 20, box.center.dy));
-    await tester.pump();
-    expect(item(2), findsOneWidget);
-
-    // After my last item come the partner's.
-    await tester.tapAt(Offset(box.right - 20, box.center.dy));
-    await tester.pump();
-    await tester.tapAt(Offset(box.right - 20, box.center.dy));
-    await tester.pump();
-    expect(item(4), findsOneWidget);
-  });
-
-  testWidgets('openComposer opens the composer with 오늘의 순간 on', (tester) async {
-    final posted = <Map<String, String>>[];
-    final api = _recordingApi(posted);
-    await _pump(tester, api, openComposer: true);
-    await tester.pumpAndSettle();
-    expect(find.text('새 순간'), findsOneWidget);
-    expect(find.text('촬영'), findsOneWidget);
-    expect(find.text('갤러리'), findsOneWidget);
-    expect(find.text('글만'), findsOneWidget);
-    expect(find.text('남기기 · 둘만 볼 수 있어요'), findsOneWidget);
-    await tester.enterText(find.byType(TextField).first, 'hello');
-    await tester.tap(find.byKey(const Key('moment_save')));
-    await tester.pumpAndSettle();
-    expect(posted.single['today_moment'], 'true');
-  });
-
-  testWidgets('turning 오늘의 순간 off omits today_moment', (tester) async {
-    final posted = <Map<String, String>>[];
-    final api = _recordingApi(posted);
-    await _pump(tester, api, openComposer: true);
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('moment_more_toggle')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.bySemanticsLabel('오늘의 순간으로 남기기'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).first, 'light one');
-    await tester.tap(find.byKey(const Key('moment_save')));
-    await tester.pumpAndSettle();
-    expect(posted, hasLength(1));
-    expect(posted.single.containsKey('today_moment'), isFalse);
-  });
-
-  testWidgets('empty caption without media explains what to do', (
-    tester,
-  ) async {
-    final api = MockClient((_) async => _json({'ok': true, 'posts': []}));
-    await _pump(tester, api, openComposer: true);
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('moment_save')));
-    await tester.pumpAndSettle();
-    expect(find.text('한 줄이나 사진을 남겨 주세요'), findsOneWidget);
-  });
-
-  testWidgets('composer lets the author reorder media before upload', (
-    tester,
-  ) async {
+    var picked = 0;
     final api = MockClient((_) async => _json({'ok': true, 'posts': []}));
     await _pump(
       tester,
       api,
-      openComposer: true,
-      mediaPicker: () async => [
-        MomentMedia(
-          name: 'first.mp4',
-          bytes: Uint8List.fromList([1]),
-          isVideo: true,
-          clientRequestId: 'first',
-        ),
-        MomentMedia(
-          name: 'second.mp4',
-          bytes: Uint8List.fromList([2]),
-          isVideo: true,
-          clientRequestId: 'second',
+      mediaPicker: () async {
+        picked++;
+        return const [];
+      },
+    );
+    await tester.tap(find.byKey(const Key('moment_add')));
+    await tester.pumpAndSettle();
+    expect(find.text('카메라로 찍기'), findsOneWidget);
+    expect(find.text('앨범에서 고르기'), findsOneWidget);
+    expect(find.text('글만 쓰기'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('moment_source_gallery')));
+    await tester.pumpAndSettle();
+    expect(picked, 1);
+  });
+
+  testWidgets('a day card has my row and the partner row; 달력 jumps back', (
+    tester,
+  ) async {
+    final api = MockClient(
+      (_) async => _json({
+        'ok': true,
+        'posts': [
+          post(42, 7, 'group caption', minute: 1),
+          post(43, 8, 'partner caption', minute: 2),
+        ],
+      }),
+    );
+    await _pump(tester, api);
+    final today = dayKey(DateTime.now());
+    expect(find.byKey(Key('moment_day_$today')), findsOneWidget);
+    expect(find.byKey(Key('moment_lane_me_$today')), findsOneWidget);
+    expect(find.byKey(Key('moment_lane_partner_$today')), findsOneWidget);
+    expect(find.byKey(const Key('moment_tile_42')), findsOneWidget);
+    expect(find.byKey(const Key('moment_tile_43')), findsOneWidget);
+    expect(find.text('group caption', findRichText: true), findsWidgets);
+
+    await tester.tap(find.byKey(const Key('moment_calendar_toggle')));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byKey(const Key('moment_month_grid')), findsOneWidget);
+    expect(
+      find.text('${DateTime.now().month}월에 1일 남겼어요 · 둘 다 남긴 날 1일'),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(Key('moment_day_cell_$today')));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byKey(const Key('moment_month_grid')), findsNothing);
+    expect(find.byKey(Key('moment_day_$today')), findsOneWidget);
+  });
+
+  testWidgets('filling my empty row files the record under that day', (
+    tester,
+  ) async {
+    final posted = <Map<String, String>>[];
+    final api = _recordingApi(
+      posted,
+      posts: [
+        post(
+          5,
+          8,
+          'partner only',
+          day: DateTime.now().subtract(const Duration(days: 3)),
         ),
       ],
     );
+    await _pump(tester, api);
+    final day = dateOnly(DateTime.now().subtract(const Duration(days: 3)));
+    await tester.tap(find.byKey(Key('moment_fill_${dayKey(day)}')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('moment_action_gallery')));
+    await tester.tap(find.byKey(const Key('moment_source_text')));
     await tester.pumpAndSettle();
-    final first = find.byKey(const Key('media_first'));
-    final second = find.byKey(const Key('media_second'));
-    final originalFirstX = tester.getTopLeft(first).dx;
-    final list = tester.widget<ReorderableListView>(
-      find.byKey(const Key('moment_media_reorder_list')),
+    await tester.enterText(
+      find.byKey(const Key('moment_caption_field')).first,
+      '그날 이야기',
     );
-    list.onReorderItem!(0, 1);
+    await tester.tap(find.byKey(const Key('moment_save')));
     await tester.pumpAndSettle();
-    expect(tester.getTopLeft(first).dx, greaterThan(originalFirstX));
-    expect(tester.getTopLeft(second).dx, lessThan(tester.getTopLeft(first).dx));
+    expect(posted.single['taken_at'], dayOf(day));
+    expect(posted.single.containsKey('today_moment'), isFalse);
   });
 
-  testWidgets('create page uploads with the chosen date, not today', (
+  testWidgets('a tile opens the whole day in time order', (tester) async {
+    final api = MockClient(
+      (_) async => _json({
+        'ok': true,
+        'posts': [
+          post(1, 7, 'first', minute: 1),
+          post(2, 8, 'second', minute: 2),
+          post(3, 7, 'third', minute: 3),
+        ],
+      }),
+    );
+    await _pump(tester, api);
+    await tester.tap(find.byKey(const Key('moment_tile_3')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('moment_viewer_pages')), findsOneWidget);
+    String who() =>
+        tester.widget<Text>(find.byKey(const Key('moment_viewer_who'))).data!;
+    expect(who(), startsWith('나 · 오전 9:03'));
+    await tester.tap(find.byKey(const Key('moment_viewer_thumb_1')));
+    await tester.pumpAndSettle();
+    expect(who(), contains('오전 9:02'));
+    expect(who(), isNot(startsWith('나 ')));
+    await tester.tap(find.byKey(const Key('moment_viewer_thumb_0')));
+    await tester.pumpAndSettle();
+    expect(who(), startsWith('나 · 오전 9:01'));
+    await tester.tap(find.byKey(const Key('moment_viewer_close')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('moment_viewer_pages')), findsNothing);
+  });
+
+  testWidgets("a partner's locked 오늘의 순간 says how to open it", (tester) async {
+    final api = MockClient(
+      (_) async => _json({
+        'ok': true,
+        'posts': [post(9, 8, '', locked: true)],
+      }),
+    );
+    await _pump(tester, api);
+    expect(find.text('내 순간을 올리면\n열려요'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('moment_tile_9')));
+    await tester.pump();
+    expect(find.textContaining('내 순간을 남기면'), findsOneWidget);
+  });
+
+  testWidgets('openComposer asks how to record', (tester) async {
+    final api = MockClient((_) async => _json({'ok': true, 'posts': []}));
+    await _pump(tester, api, openComposer: true);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('moment_source_camera')), findsOneWidget);
+    expect(find.byKey(const Key('moment_source_text')), findsOneWidget);
+  });
+
+  testWidgets('album → editor → 올리기 posts with the caption and 오늘의 순간', (
     tester,
   ) async {
     final posted = <Map<String, String>>[];
     final api = _recordingApi(posted);
-    await _pump(tester, api, openComposer: true);
+    await _pump(tester, api, mediaPicker: () async => [jpeg('a.jpg')]);
+    await tester.tap(find.byKey(const Key('moment_add')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('moment_more_toggle')));
+    await tester.tap(find.byKey(const Key('moment_source_gallery')));
+    await settle(tester);
+    expect(find.byKey(const Key('moment_post_submit')), findsOneWidget);
+    expect(find.byKey(const Key('moment_post_today')), findsOneWidget);
+    expect(find.textContaining('오늘'), findsWidgets);
+    await tester.enterText(
+      find.byKey(const Key('moment_post_caption')),
+      '한강 산책',
+    );
+    await tester.tap(find.byKey(const Key('moment_post_submit')));
+    await settle(tester);
+    expect(posted, hasLength(1));
+    expect(posted.single['taken_at'], dayOf(DateTime.now()));
+    expect(posted.single['caption'], '한강 산책');
+    expect(posted.single['today_moment'], 'true');
+  });
+
+  testWidgets('choosing 어제 drops 오늘의 순간 and posts yesterday', (tester) async {
+    final posted = <Map<String, String>>[];
+    final api = _recordingApi(posted);
+    await _pump(tester, api, mediaPicker: () async => [jpeg('a.jpg')]);
+    await tester.tap(find.byKey(const Key('moment_add')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('moment_date_tile')));
+    await tester.tap(find.byKey(const Key('moment_source_gallery')));
+    await settle(tester);
+    await tester.tap(find.byKey(const Key('moment_post_date')));
     await tester.pumpAndSettle();
-    final now = DateTime.now();
-    final pastDay = now.day == 1 ? 2 : 1;
-    await tester.tap(find.text('$pastDay').last);
-    await tester.tap(find.text('확인'));
+    final yesterday = dateOnly(
+      DateTime.now().subtract(const Duration(days: 1)),
+    );
+    await tester.tap(find.byKey(Key('moment_date_${dayKey(yesterday)}')));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).first, 'old day');
-    await tester.tap(find.byKey(const Key('moment_save')));
-    await tester.pumpAndSettle();
-    final expected =
-        '${now.year}-${now.month.toString().padLeft(2, '0')}-${pastDay.toString().padLeft(2, '0')}';
-    expect(posted.single['taken_at'], expected);
-    expect(posted.single['captured_at'], startsWith(expected));
+    expect(find.byKey(const Key('moment_post_today')), findsNothing);
+    await tester.tap(find.byKey(const Key('moment_post_submit')));
+    await settle(tester);
+    expect(posted.single['taken_at'], dayOf(yesterday));
     expect(posted.single.containsKey('today_moment'), isFalse);
   });
 
@@ -443,26 +438,30 @@ void main() {
   });
 }
 
-MockClient _recordingApi(List<Map<String, String>> posted) =>
-    MockClient((request) async {
-      if (request.method == 'POST') {
-        final body = String.fromCharCodes(request.bodyBytes);
-        final fields = <String, String>{};
-        for (final key in ['taken_at', 'captured_at', 'today_moment']) {
-          final m = RegExp('name="$key"\\r\\n\\r\\n([^\\r]*)').firstMatch(body);
-          if (m != null) fields[key] = m.group(1)!;
-        }
-        posted.add(fields);
-        return _json({
-          'ok': true,
-          'post': {
-            'id': 1,
-            'user_id': 7,
-            'media_type': 'text',
-            'taken_at': fields['taken_at'],
-            'captured_at': fields['captured_at'],
-          },
-        });
-      }
-      return _json({'ok': true, 'posts': [], 'pins': []});
+MockClient _recordingApi(
+  List<Map<String, String>> posted, {
+  List<Map<String, Object?>> posts = const [],
+}) => MockClient((request) async {
+  if (request.method == 'POST') {
+    final body = utf8.decode(request.bodyBytes, allowMalformed: true);
+    final fields = <String, String>{};
+    for (final key in ['taken_at', 'captured_at', 'today_moment', 'caption']) {
+      final m = RegExp(
+        'name="$key"\\r\\n(?:[^\\r]+\\r\\n)*\\r\\n([^\\r]*)',
+      ).firstMatch(body);
+      if (m != null) fields[key] = m.group(1)!;
+    }
+    posted.add(fields);
+    return _json({
+      'ok': true,
+      'post': {
+        'id': 1,
+        'user_id': 7,
+        'media_type': 'text',
+        'taken_at': fields['taken_at'],
+        'captured_at': fields['captured_at'],
+      },
     });
+  }
+  return _json({'ok': true, 'posts': posts, 'pins': []});
+});
