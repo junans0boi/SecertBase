@@ -341,19 +341,19 @@ void main() {
   });
 
   group('media limits', () {
-    test('video over 10 seconds is rejected with its own reason', () {
+    test('video over a minute is rejected with its own reason', () {
       final issue = momentMediaIssue(
         isVideo: true,
         bytes: 1000,
-        duration: const Duration(seconds: 12),
+        duration: const Duration(seconds: 62),
       );
       expect(issue, MomentMediaIssue.tooLong);
-      expect(momentMediaIssueLabel(issue!), '영상은 10초까지예요');
+      expect(momentMediaIssueLabel(issue!), '영상은 1분까지예요');
       expect(
         momentMediaIssue(
           isVideo: true,
           bytes: 1000,
-          duration: const Duration(seconds: 10),
+          duration: const Duration(seconds: 60),
         ),
         isNull,
       );
@@ -366,7 +366,7 @@ void main() {
     });
 
     test('server codes map to reasons the user can act on', () {
-      expect(momentFailureReason('clip_too_long'), '영상은 10초까지예요');
+      expect(momentFailureReason('clip_too_long'), '영상은 1분까지예요');
       expect(momentFailureNeedsEdit('clip_too_long'), isTrue);
       expect(momentFailureNeedsEdit('network_error'), isFalse);
     });

@@ -11,11 +11,54 @@ import 'package:image_picker/image_picker.dart';
 import 'package:secret_base_app/core/http/api_client.dart';
 import 'package:secret_base_app/features/moment_loop/application/moment_loop_controller.dart';
 import 'package:secret_base_app/features/moment_loop/data/moment_loop_repository.dart';
+import 'package:secret_base_app/features/moment_loop/data/video_shrinker.dart';
 import 'package:secret_base_app/features/moment_loop/domain/moment.dart';
 import 'package:secret_base_app/screens/archive/moment/moment_composer.dart';
+import 'package:secret_base_app/screens/archive/moment/moment_format.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'moment_loop_test_support.dart';
+
+class _FakeShrinker extends VideoShrinker {
+  _FakeShrinker({this.supported = true, this.waitForCancel = false});
+
+  @override
+  final bool supported;
+  final bool waitForCancel;
+  final calls = <String>[];
+  final _cancelled = Completer<void>();
+
+  @override
+  Future<Uint8List> shrink({
+    required String id,
+    required String path,
+    void Function(double progress)? onProgress,
+    int? startMs,
+    int? endMs,
+    int maxShortSide = 720,
+    int videoBitrate = 2500000,
+    int audioBitrate = 128000,
+  }) async {
+    calls.add(id);
+    onProgress?.call(0.5);
+    if (waitForCancel) {
+      await _cancelled.future;
+      throw const VideoShrinkException('cancelled');
+    }
+    return Uint8List(1000);
+  }
+
+  @override
+  void cancel(String id) {
+    if (!_cancelled.isCompleted) _cancelled.complete();
+  }
+}
+
+XFile _bigVideo() => XFile.fromData(
+  Uint8List(momentMaxBytes + 1),
+  name: 'big.mov',
+  mimeType: 'video/quicktime',
+);
 
 // "앨범에서 고르기" on the web opens the album chooser inside the user's tap
 // and hands the pending pick to the composer as `startPick`.
@@ -26,6 +69,7 @@ void main() {
     WidgetTester tester, {
     required Future<List<XFile>> startPick,
     Future<List<MomentMedia>> Function()? mediaPicker,
+    VideoShrinker? videoShrinker,
   }) async {
     tester.view.physicalSize = const Size(800, 1600);
     tester.view.devicePixelRatio = 1;
@@ -55,6 +99,7 @@ void main() {
           outbox: testOutbox(api),
           startPick: startPick,
           mediaPicker: mediaPicker,
+          videoShrinker: videoShrinker,
         ),
       ),
     );
@@ -103,5 +148,65 @@ void main() {
     await tester.pumpAndSettle();
     expect(picked, 1);
     expect(find.byKey(const Key('moment_media_reorder_list')), findsOneWidget);
+  });
+
+  group('videos over 30MB', () {
+    testWidgets('are shrunk on the device and attached', (tester) async {
+      final shrinker = _FakeShrinker();
+      await pumpComposer(
+        tester,
+        startPick: Future.value([_bigVideo()]),
+        videoShrinker: shrinker,
+      );
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pumpAndSettle();
+      expect(shrinker.calls, hasLength(1));
+      expect(find.byKey(const Key('moment_shrink_progress')), findsNothing);
+      expect(
+        find.byKey(const Key('moment_media_reorder_list')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('moment_media_issue')), findsNothing);
+    });
+
+    testWidgets('are refused with the 30MB reason when shrinking is '
+        'unsupported', (tester) async {
+      final shrinker = _FakeShrinker(supported: false);
+      await pumpComposer(
+        tester,
+        startPick: Future.value([_bigVideo()]),
+        videoShrinker: shrinker,
+      );
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pumpAndSettle();
+      expect(shrinker.calls, isEmpty);
+      expect(find.text('30MB 이하만 올릴 수 있어요'), findsOneWidget);
+      expect(find.byKey(const Key('moment_media_reorder_list')), findsNothing);
+    });
+
+    testWidgets('취소 stops shrinking and attaches nothing', (tester) async {
+      final shrinker = _FakeShrinker(waitForCancel: true);
+      await pumpComposer(
+        tester,
+        startPick: Future.value([_bigVideo()]),
+        videoShrinker: shrinker,
+      );
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const Key('moment_shrink_progress')), findsOneWidget);
+      expect(find.text('50%'), findsOneWidget);
+      await tester.tap(find.text('취소'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('moment_shrink_progress')), findsNothing);
+      expect(find.byKey(const Key('moment_media_reorder_list')), findsNothing);
+      expect(find.byKey(const Key('moment_media_issue')), findsNothing);
+    });
   });
 }
