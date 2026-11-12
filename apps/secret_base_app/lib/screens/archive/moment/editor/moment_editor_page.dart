@@ -465,6 +465,9 @@ class _MomentEditorPageState extends State<MomentEditorPage> {
           key: ValueKey('trim_$_index'),
           item: item,
           canTrim: widget.shrinker.supported,
+          onFrames: () {
+            if (mounted) setState(() {});
+          },
           loadFrames: widget.videoPreview,
           onChanged: () {
             setState(() {});

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:io' show File;
 
 import 'package:flutter/foundation.dart';
@@ -128,19 +129,31 @@ class VideoStageState extends State<VideoStage> {
                     ],
                   ),
                 )
-              : _Placeholder(failed: _failed || !widget.preview),
+              : _Placeholder(
+                  failed: _failed || !widget.preview,
+                  poster: widget.item.frames?.isNotEmpty == true
+                      ? widget.item.frames!.first
+                      : null,
+                ),
         ),
       ),
     );
   }
 }
 
+/// Shown until the preview can play. iOS Safari often will not load a
+/// video before the user taps it, so a filmstrip frame stands in.
 class _Placeholder extends StatelessWidget {
-  const _Placeholder({required this.failed});
+  const _Placeholder({required this.failed, this.poster});
   final bool failed;
+  final Uint8List? poster;
 
   @override
   Widget build(BuildContext context) {
+    final poster = this.poster;
+    if (poster != null) {
+      return Image.memory(poster, fit: BoxFit.contain, gaplessPlayback: true);
+    }
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -161,6 +174,7 @@ class VideoTrimBar extends StatefulWidget {
     super.key,
     required this.item,
     required this.onChanged,
+    this.onFrames,
     this.canTrim = true,
     this.loadFrames = true,
   });
@@ -169,6 +183,9 @@ class VideoTrimBar extends StatefulWidget {
 
   /// Called when a drag ends, so the preview can jump to the new start.
   final VoidCallback onChanged;
+
+  /// Called once filmstrip frames are in (the preview uses the first one).
+  final VoidCallback? onFrames;
 
   /// False when the device cannot cut clips (no on-device encoder).
   final bool canTrim;
@@ -210,6 +227,7 @@ class _VideoTrimBarState extends State<VideoTrimBar> {
     );
     if (!mounted) return;
     setState(() => widget.item.frames = frames);
+    widget.onFrames?.call();
   }
 
   Duration _at(double dx, double width) {
@@ -275,7 +293,7 @@ class _VideoTrimBarState extends State<VideoTrimBar> {
         LayoutBuilder(
           builder: (context, c) {
             final width = c.maxWidth - _handle * 2;
-            final total = v.duration.inMilliseconds.clamp(1, 1 << 40);
+            final total = math.max(1, v.duration.inMilliseconds);
             final left = v.start.inMilliseconds / total * width;
             final right = v.end.inMilliseconds / total * width;
             return SizedBox(

@@ -107,7 +107,9 @@
       const encodable = await mb.canEncodeVideo('avc', {
         width: outWidth,
         height: outHeight,
-        quality: new mb.Quality(videoBitrate),
+        // A bare number is a 0..1 quality level, not a bitrate: passing
+        // 2500000 made Safari report "cannot encode" and refuse every clip.
+        quality: new mb.Quality({ bitrate: videoBitrate }),
       });
       if (!encodable) throw fail('unsupported');
 
@@ -137,7 +139,7 @@
         // AAC is copied untouched; anything else is re-encoded to AAC.
         audio: async (track) => ((await track.getCodec()) === 'aac'
           ? { codec: 'aac' }
-          : { codec: 'aac', quality: new mb.Quality(audioBitrate) }),
+          : { codec: 'aac', quality: new mb.Quality({ bitrate: audioBitrate }) }),
         trim: Object.keys(trim).length ? trim : undefined,
         showWarnings: false,
       });
