@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>기록 탭 리디자인 목업</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#E7E5E1;color:#22201D;font-family:Pretendard,-apple-system,"Apple SD Gothic Neo",sans-serif;-webkit-font-smoothing:antialiased;word-break:keep-all}
+button{font:inherit;border:0;background:none;color:inherit;cursor:pointer}
+input{font:inherit}
+svg.i{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+:root{--acc:#C8462E;--accSoft:#FBEFEC;--ink:#191919;--sub:#6B6B70;--line:#ECECEF;--soft:#F4F4F6;--pt:#3D6FD8}
+
+/* page */
+.top{max-width:1960px;margin:0 auto;padding:32px 24px 4px}
+.top h1{font-size:24px;font-weight:800;letter-spacing:-.4px}
+.top p{color:#6B665F;font-size:14px;margin-top:6px;line-height:1.6;max-width:880px}
+.grid{max-width:1960px;margin:0 auto;padding:24px 24px 64px;display:flex;flex-wrap:wrap;gap:44px 36px;justify-content:center}
+.opt{width:360px}
+.opt h2{font-size:17px;font-weight:800;margin-top:22px;letter-spacing:-.2px}
+.opt h2 span{display:inline-grid;place-items:center;min-width:24px;height:24px;padding:0 6px;border-radius:7px;background:#22201D;color:#fff;font-size:13px;margin-right:8px;vertical-align:1px}
+.opt p{font-size:13.5px;color:#6B665F;line-height:1.6;margin-top:6px}
+.opt ul{font-size:13.5px;color:#6B665F;line-height:1.6;margin:6px 0 0 18px}
+
+/* phone */
+.phone{width:360px;height:780px;border-radius:46px;position:relative;overflow:hidden;box-shadow:0 0 0 9px #141414,0 28px 60px rgba(0,0,0,.28);isolation:isolate;background:#fff;color:var(--ink)}
+.phone.dark{background:#000;color:#fff}
+.sb{position:absolute;top:0;left:0;right:0;height:46px;display:flex;align-items:center;justify-content:space-between;padding:6px 28px 0 30px;font-size:15px;font-weight:600;z-index:40;pointer-events:none}
+.island{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:104px;height:30px;background:#000;border-radius:20px;z-index:41}
+.scr{position:absolute;inset:0;overflow-y:auto;padding:50px 0 110px;scrollbar-width:none}
+.scr::-webkit-scrollbar{display:none}
+
+/* floating pill tab bar */
+.pill{position:absolute;left:16px;right:16px;bottom:22px;height:60px;border-radius:30px;display:flex;align-items:center;padding:5px;z-index:30;background:rgba(255,255,255,.9);border:1px solid rgba(0,0,0,.06);box-shadow:0 8px 24px rgba(0,0,0,.15);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+.pill.dk{background:rgba(28,28,30,.85);border-color:rgba(255,255,255,.1)}
+.pill span{flex:1;height:50px;display:grid;place-items:center;border-radius:25px;color:rgba(25,25,25,.6)}
+.pill.dk span{color:rgba(255,255,255,.6)}
+.pill span.on{background:rgba(0,0,0,.07);color:var(--ink)}
+.pill.dk span.on{background:rgba(255,255,255,.16);color:#fff}
+.pill svg.i{width:25px;height:25px}
+
+/* photo stand-ins */
+.ph{position:relative;overflow:hidden;background:#999}
+.ph-a{background:radial-gradient(60% 40% at 70% 38%,rgba(255,236,190,.95),rgba(255,236,190,0) 70%),linear-gradient(180deg,#F3C9A3 0%,#E9967A 42%,#9C5B60 70%,#3B2A36 100%)}
+.ph-b{background:radial-gradient(45% 35% at 30% 30%,rgba(255,255,255,.9),rgba(255,255,255,0) 70%),linear-gradient(165deg,#DCE7EE 0%,#A9BED0 45%,#6E8299 75%,#3D4757 100%)}
+.ph-c{background:radial-gradient(70% 50% at 50% 0%,#F7F4EC,rgba(247,244,236,0) 70%),linear-gradient(180deg,#BFD9E4 0%,#7FB1C9 40%,#2F7FA0 62%,#E4D2B4 63%,#CDB590 100%)}
+.ph-d{background:radial-gradient(50% 50% at 40% 45%,#FBE7D0,rgba(251,231,208,0) 70%),linear-gradient(140deg,#5B4636,#2E241D)}
+.ph-e{background:radial-gradient(40% 30% at 50% 35%,#FFF6D8,rgba(255,246,216,0) 70%),linear-gradient(180deg,#9FC59A 0%,#5F9A6A 55%,#3E6B4E 100%)}
+.ph-f{background:radial-gradient(35% 25% at 65% 30%,#FFD7A8,rgba(255,215,168,0) 70%),linear-gradient(180deg,#1E2440 0%,#38325A 50%,#E0A84E 51%,#2A2235 100%)}
+.tag{position:absolute;left:12px;top:12px;padding:4px 10px;border-radius:12px;background:rgba(0,0,0,.45);color:#fff;font-size:12px}
+.vid:after{content:"";position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px;border-radius:50%;background:rgba(0,0,0,.4) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='white' d='M9 6.5v11l9-5.5z'/></svg>") center/26px no-repeat}
+
+.av{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;font-size:12.5px;font-weight:700;color:#fff;box-shadow:0 0 0 2px #fff;font-style:normal}
+.av.me{background:var(--acc)}.av.pt{background:var(--pt)}
+.av+.av{margin-left:-8px}
+.iconbtn{width:42px;height:42px;border-radius:21px;display:grid;place-items:center;background:var(--soft)}
+.iconbtn.acc{background:var(--acc);color:#fff}
+.head{display:flex;align-items:center;justify-content:space-between;padding:10px 16px 8px}
+.head h3{font-size:26px;font-weight:800;letter-spacing:-.5px}
+.head .r{display:flex;gap:8px}
+
+/* today strip (lock explained) */
+.today{margin:6px 16px 14px;padding:12px 14px;border-radius:16px;background:var(--accSoft);display:flex;align-items:center;gap:12px;width:calc(100% - 32px);text-align:left}
+.today .th{width:44px;height:44px;border-radius:12px;flex:none;display:grid;place-items:center;color:#fff}
+.today b{font-size:14px;display:block}
+.today small{font-size:12.5px;color:#8A3324;display:block;margin-top:2px}
+
+/* A feed */
+.card{padding-bottom:20px}
+.card .who{display:flex;align-items:center;gap:10px;padding:0 16px 10px}
+.card .who b{font-size:15px;display:block}
+.card .who small{font-size:12.5px;color:var(--sub)}
+.car{height:430px}
+.car .cnt{position:absolute;right:12px;top:12px;padding:3px 9px;border-radius:11px;background:rgba(0,0,0,.5);color:#fff;font-size:12px}
+.car .zl,.car .zr{position:absolute;top:0;bottom:0;width:38%}
+.car .zl{left:0}.car .zr{right:0}
+.dots{display:flex;justify-content:center;gap:5px;padding:10px 0 2px}
+.dots i{width:6px;height:6px;border-radius:3px;background:#D0D0D4}.dots i.on{background:var(--ink)}
+.acts{display:flex;gap:2px;padding:0 8px}
+.acts button{height:42px;padding:0 8px;display:flex;align-items:center;gap:6px;font-weight:700;font-size:14px}
+.acts .liked{color:var(--acc)}.acts .liked svg{fill:var(--acc)}
+.cap{margin:0 16px;font-size:14.5px;line-height:1.5}
+.rep{margin:4px 16px 0;font-size:13.5px;color:var(--sub)}
+
+/* B grid */
+.mon{display:flex;align-items:baseline;justify-content:space-between;padding:16px 16px 8px}
+.mon b{font-size:17px}.mon small{font-size:13px;color:var(--sub)}
+.cells{display:grid;grid-template-columns:repeat(3,1fr);gap:2px}
+.cell{aspect-ratio:1;position:relative}
+.cell .d{position:absolute;left:7px;bottom:6px;color:#fff;font-size:13px;font-weight:700;text-shadow:0 1px 3px rgba(0,0,0,.5)}
+.cell .n{position:absolute;right:6px;top:6px;padding:1px 6px;border-radius:8px;background:rgba(0,0,0,.45);color:#fff;font-size:11px}
+.cell .both{position:absolute;right:6px;bottom:6px;display:flex}
+.cell .both i{width:12px;height:12px;border-radius:50%;border:1.5px solid #fff}
+.cell .both i+i{margin-left:-4px}
+.viewer{position:absolute;inset:0;background:#000;color:#fff;z-index:35;display:none}
+.viewer.on{display:block}
+.viewer .ph{position:absolute;inset:0}
+.viewer .bars{position:absolute;top:52px;left:12px;right:12px;display:flex;gap:4px;z-index:2}
+.viewer .bars i{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.35)}.viewer .bars i.on{background:#fff}
+.viewer .vt{position:absolute;top:64px;left:12px;right:12px;display:flex;align-items:center;justify-content:space-between;z-index:2}
+.viewer .vb{position:absolute;left:16px;right:16px;bottom:30px;z-index:2}
+.viewer .zl,.viewer .zr{position:absolute;top:110px;bottom:120px;width:40%;z-index:1}
+.viewer .zl{left:0}.viewer .zr{right:0}
+.shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.45),transparent 22%,transparent 60%,rgba(0,0,0,.6))}
+
+/* C story */
+.st .ph{position:absolute;inset:0}
+.st .bars{position:absolute;top:96px;left:12px;right:12px;display:flex;gap:4px;z-index:3}
+.st .bars i{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.35);overflow:hidden}
+.st .bars i b{display:block;height:100%;width:0;background:#fff}
+.st .rings{position:absolute;top:44px;left:0;right:0;display:flex;gap:10px;padding:6px 14px;z-index:3;overflow-x:auto;scrollbar-width:none}
+.ring{width:42px;flex:none;text-align:center;font-size:10.5px;color:#fff}
+.ring i{display:block;width:42px;height:42px;border-radius:50%;border:2px solid rgba(255,255,255,.5);background-size:cover}
+.ring.on i{border-color:var(--acc)}
+.st .zl,.st .zr{position:absolute;top:150px;bottom:150px;width:40%;z-index:2}
+.st .zl{left:0}.st .zr{right:0}
+.hint{position:absolute;left:50%;top:44%;transform:translateX(-50%);padding:10px 14px;border-radius:14px;background:rgba(0,0,0,.6);color:#fff;font-size:13px;line-height:1.5;text-align:center;z-index:4;white-space:nowrap}
+.st .meta{position:absolute;left:16px;right:16px;bottom:96px;z-index:3}
+.st .ctl{position:absolute;right:14px;top:104px;z-index:3;display:flex;gap:6px}
+.st .ctl button{width:40px;height:40px;border-radius:20px;background:rgba(0,0,0,.35);display:grid;place-items:center;color:#fff}
+
+/* D upload */
+.step{position:absolute;inset:0;display:none}
+.step.on{display:block}
+.album{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;padding-top:4px}
+.album button{aspect-ratio:1;position:relative}
+.album .sel{position:absolute;right:6px;top:6px;width:22px;height:22px;border-radius:50%;border:2px solid #fff;background:rgba(0,0,0,.2);color:#fff;font-size:12px;font-weight:700;display:grid;place-items:center}
+.album .on .sel{background:var(--acc)}
+.album .dt{position:absolute;left:5px;bottom:4px;color:#fff;font-size:11px;font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,.6)}
+.bar{display:flex;align-items:center;justify-content:space-between;padding:8px 12px}
+.bar b{font-size:16px}
+.pbtn{height:40px;padding:0 16px;border-radius:20px;background:var(--acc);color:#fff;font-weight:700;font-size:14px}
+.pbtn:disabled{opacity:.4}
+.ed{background:#000;color:#fff}
+.ed .pv{margin:6px 16px 0;height:330px;border-radius:14px;position:relative}
+.tools{display:flex;justify-content:space-around;padding:12px 8px 4px}
+.tools button{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;color:#fff;min-width:56px}
+.form{margin:10px 16px 0;display:flex;flex-direction:column;gap:10px}
+.form input{width:100%;height:46px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:#fff;padding:0 14px;font-size:15px}
+.form input::placeholder{color:rgba(255,255,255,.5)}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{height:38px;padding:0 13px;border-radius:19px;background:rgba(255,255,255,.12);color:#fff;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:6px}
+.chip.hl{background:#fff;color:#111}
+.upbtn{position:absolute;left:16px;right:16px;bottom:28px;height:54px;border-radius:16px;background:var(--acc);color:#fff;font-size:16px;font-weight:800}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:#fff;color:var(--ink);border-radius:22px 22px 0 0;padding:10px 16px 26px;z-index:38;transform:translateY(100%);transition:transform .22s}
+.sheet.on{transform:none}
+.sheet .grab{width:38px;height:5px;border-radius:3px;background:#D6D6DA;margin:0 auto 12px}
+.sheet h4{font-size:17px;margin-bottom:12px}
+.qd{display:flex;flex-direction:column;gap:6px}
+.qd button{height:48px;border-radius:12px;background:var(--soft);text-align:left;padding:0 14px;font-size:15px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.qd button small{color:var(--sub);font-weight:500;font-size:12.5px}
+.qd button.on{background:var(--accSoft);color:#8A3324}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:12px;text-align:center;font-size:13px}
+.cal .w{color:var(--sub);font-size:11.5px;padding:4px 0}
+.cal button{height:36px;border-radius:18px;font-size:14px}
+.cal button.on{background:var(--acc);color:#fff;font-weight:700}
+.cal button.fut{color:#C8C8CC;cursor:default}
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.4);z-index:37;display:none}
+.scrim.on{display:block}
+.toast{position:absolute;left:16px;right:16px;top:110px;padding:14px 16px;border-radius:14px;background:#191919;color:#fff;font-size:14.5px;z-index:30}
+
+/* E lock (home) */
+.home .hd{padding:10px 18px 6px}
+.home .hd small{color:var(--sub);font-size:14px;font-weight:600}
+.home .hd h3{font-size:24px;font-weight:800;letter-spacing:-.4px;margin-top:2px}
+.tm{margin:12px 16px 0;border-radius:24px;overflow:hidden;position:relative;height:330px;color:#fff}
+.tm .half{position:absolute;top:0;bottom:0;width:50%}
+.tm .half.l{left:0}.tm .half.r{right:0}
+.tm .half .ph{position:absolute;inset:0}
+.tm .lab{position:absolute;left:12px;top:12px;font-size:12.5px;font-weight:700;padding:4px 10px;border-radius:12px;background:rgba(0,0,0,.4)}
+.tm .lockc{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:0 12px;font-size:13px;line-height:1.45}
+.tm .empty{position:absolute;inset:0;background:#2A2A2E;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;font-size:13px;text-align:center;padding:0 12px;line-height:1.45}
+.tm .foot{position:absolute;left:0;right:0;bottom:0;padding:16px;background:linear-gradient(180deg,transparent,rgba(0,0,0,.6))}
+.rows{margin:14px 16px 0}
+.row{display:flex;align-items:center;gap:12px;padding:12px 2px}
+.row .ic{width:42px;height:42px;border-radius:13px;background:var(--accSoft);color:var(--acc);display:grid;place-items:center}
+.row b{font-size:15px;display:block}.row small{font-size:13px;color:var(--sub)}
+.seg{display:inline-flex;background:#D6D3CE;border-radius:12px;padding:3px;margin-top:10px}
+.seg button{padding:7px 12px;border-radius:9px;font-size:13px;font-weight:600;color:#55504A}
+.seg button.on{background:#fff;color:#1d1b18;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+</style>
+</head>
+<body>
+<div class="top">
+  <h1>기록 탭 리디자인 — 첫 화면 3안 · 새 올리기 · 오늘의 순간</h1>
+  <p>방향: <b>자유롭게 기록을 쌓는 앨범</b>. 날짜는 내가 고른 날로(사진 찍은 날이 기본), 3일 전 일도 그날에 쌓여요. 올리기는 <b>고르기 → 편집 → 바로 올리기</b>. 하단바는 지금 배포된 떠 있는 캡슐이에요. 모든 화면은 눌러볼 수 있어요.</p>
+</div>
+
+<div class="grid">
+
+<!-- ═════════ A · 세로 피드 ═════════ -->
+<section class="opt">
+  <div class="phone" id="A">
+    <div class="sb"><span>9:41</span><span>●●● ▮</span></div><div class="island"></div>
+    <div class="scr">
+      <div class="head"><h3>기록</h3><div class="r">
+        <button class="iconbtn" aria-label="달력" onclick="go('B')"><svg class="i" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></button>
+        <button class="iconbtn acc" aria-label="올리기" onclick="go('D')"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+      </div></div>
+      <button class="today" onclick="go('E')"><span class="th ph ph-b"><svg class="i" viewBox="0 0 24 24" style="width:18px;height:18px"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span><span style="flex:1"><b>서윤이 오늘의 순간을 올렸어요</b><small>내 순간을 올리면 바로 열려요</small></span><svg class="i" viewBox="0 0 24 24" style="color:#8A3324"><path d="M9 6l6 6-6 6"/></svg></button>
+      <div id="feed"></div>
+    </div>
+    <nav class="pill" aria-label="탭"><span><svg class="i" viewBox="0 0 24 24"><path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-5H9v5H5a1 1 0 0 1-1-1z"/></svg></span><span class="on"><svg class="i" viewBox="0 0 24 24"><path d="M3 5.5C5.5 4.5 8.5 4.5 11 6v13c-2.5-1.5-5.5-1.5-8-.5zM13 6c2.5-1.5 5.5-1.5 8-.5v13c-2.5-1-5.5-1-8 .5z"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2zM9 4v14M15 6v14"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><path d="M7 8h10a4 4 0 0 1 4 4v1a3 3 0 0 1-5.4 1.8L14.5 13h-5l-1.1 1.8A3 3 0 0 1 3 13v-1a4 4 0 0 1 4-4z"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span></nav>
+  </div>
+  <h2><span>A</span>세로 피드 (인스타 피드형)</h2>
+  <ul><li>날짜별 카드가 위→아래로 쌓여요. 카드 안 사진은 좌우 탭으로 넘겨요.</li><li>하트·댓글·상대 한 줄 반응이 바로 보여서 "반응"이 살아요.</li><li>자동으로 넘어가지 않아 천천히 읽기 좋아요.</li></ul>
+</section>
+
+<!-- ═════════ B · 앨범 그리드 ═════════ -->
+<section class="opt">
+  <div class="phone" id="B">
+    <div class="sb"><span>9:41</span><span>●●● ▮</span></div><div class="island"></div>
+    <div class="scr">
+      <div class="head"><h3>기록</h3><div class="r">
+        <button class="iconbtn acc" aria-label="올리기" onclick="go('D')"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+      </div></div>
+      <button class="today" onclick="go('E')"><span class="th ph ph-b"><svg class="i" viewBox="0 0 24 24" style="width:18px;height:18px"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span><span style="flex:1"><b>서윤이 오늘의 순간을 올렸어요</b><small>내 순간을 올리면 바로 열려요</small></span></button>
+      <div id="gridB"></div>
+    </div>
+    <div class="viewer" id="viewerB">
+      <div class="ph" id="vbPh"></div><div class="shade"></div>
+      <div class="bars" id="vbBars"></div>
+      <div class="vt"><div style="display:flex;align-items:center;gap:8px"><i class="av me" id="vbAv">나</i><b id="vbDate" style="font-size:15px"></b></div><button class="iconbtn" style="background:rgba(0,0,0,.35);color:#fff" aria-label="닫기" onclick="closeB()"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      <button class="zl" aria-label="이전" onclick="stepB(-1)"></button><button class="zr" aria-label="다음" onclick="stepB(1)"></button>
+      <div class="vb"><p id="vbCap" style="font-size:15px;line-height:1.5"></p><div class="acts" style="padding:6px 0 0;margin-left:-8px"><button><svg class="i" viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>좋아요</button><button><svg class="i" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>댓글</button></div></div>
+    </div>
+    <nav class="pill" aria-label="탭"><span><svg class="i" viewBox="0 0 24 24"><path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-5H9v5H5a1 1 0 0 1-1-1z"/></svg></span><span class="on"><svg class="i" viewBox="0 0 24 24"><path d="M3 5.5C5.5 4.5 8.5 4.5 11 6v13c-2.5-1.5-5.5-1.5-8-.5zM13 6c2.5-1.5 5.5-1.5 8-.5v13c-2.5-1-5.5-1-8 .5z"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2zM9 4v14M15 6v14"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><path d="M7 8h10a4 4 0 0 1 4 4v1a3 3 0 0 1-5.4 1.8L14.5 13h-5l-1.1 1.8A3 3 0 0 1 3 13v-1a4 4 0 0 1 4-4z"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span></nav>
+  </div>
+  <h2><span>B</span>앨범 그리드</h2>
+  <ul><li>하루 = 한 칸. 월별로 3열 바둑판이라 한눈에 많이 보여요.</li><li>칸을 누르면 그날을 크게 보고 좌우로 넘겨요(자동 넘김 없음).</li><li>숫자 = 그날 장수, 점 두 개 = 둘 다 올린 날.</li></ul>
+</section>
+
+<!-- ═════════ C · 스토리 (개선) ═════════ -->
+<section class="opt">
+  <div class="phone dark st" id="C">
+    <div class="sb" style="color:#fff"><span>9:41</span><span>●●● ▮</span></div><div class="island"></div>
+    <div class="ph" id="cPh"></div><div class="shade"></div>
+    <div class="rings" id="cRings"></div>
+    <div class="bars" id="cBars"></div>
+    <div class="ctl"><button aria-label="재생/정지" onclick="toggleC()" id="cPlay"></button><button aria-label="모아보기" onclick="go('B')"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></button></div>
+    <button class="zl" aria-label="이전" onclick="stepC(-1)"></button><button class="zr" aria-label="다음" onclick="stepC(1)"></button>
+    <div class="hint" id="cHint">좌우를 눌러 넘기고<br>꾹 누르면 멈춰요</div>
+    <div class="meta"><small id="cDate" style="color:rgba(255,255,255,.75);font-size:13px"></small><p id="cCap" style="font-size:16px;font-weight:700;margin-top:4px"></p></div>
+    <nav class="pill dk" aria-label="탭"><span><svg class="i" viewBox="0 0 24 24"><path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-5H9v5H5a1 1 0 0 1-1-1z"/></svg></span><span class="on"><svg class="i" viewBox="0 0 24 24"><path d="M3 5.5C5.5 4.5 8.5 4.5 11 6v13c-2.5-1.5-5.5-1.5-8-.5zM13 6c2.5-1.5 5.5-1.5 8-.5v13c-2.5-1-5.5-1-8 .5z"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2zM9 4v14M15 6v14"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><path d="M7 8h10a4 4 0 0 1 4 4v1a3 3 0 0 1-5.4 1.8L14.5 13h-5l-1.1 1.8A3 3 0 0 1 3 13v-1a4 4 0 0 1 4-4z"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span></nav>
+  </div>
+  <h2><span>C</span>스토리 (지금 방식 + 개선)</h2>
+  <ul><li>지금처럼 하루씩 자동 재생. 처음에 "좌우 탭 · 꾹 눌러 멈춤"을 알려줘요.</li><li>재생/정지 버튼과 "모아보기"(B 그리드)로 바로 가는 버튼을 추가.</li><li>보는 재미는 크지만, 다시 찾아보기는 A·B보다 불편해요.</li></ul>
+</section>
+
+<!-- ═════════ D · 새 올리기 ═════════ -->
+<section class="opt">
+  <div class="phone" id="D">
+    <div class="sb"><span>9:41</span><span>●●● ▮</span></div><div class="island"></div>
+    <!-- step 1: pick -->
+    <div class="step on" id="d1" style="padding-top:50px">
+      <div class="bar"><button aria-label="닫기" onclick="resetD()"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button><b>앨범</b><button class="pbtn" id="dNext" disabled onclick="toEdit()">다음</button></div>
+      <p style="font-size:13px;color:var(--sub);padding:0 14px 8px">사진·영상 여러 개를 고를 수 있어요</p>
+      <div class="album" id="album"></div>
+    </div>
+    <!-- step 2: edit + post -->
+    <div class="step ed" id="d2" style="padding-top:50px">
+      <div class="bar"><button aria-label="뒤로" onclick="show('d1')" style="color:#fff"><svg class="i" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button><b id="edTitle" style="color:#fff">편집</b><span style="width:22px"></span></div>
+      <div class="pv ph" id="edPh"><span class="tag" id="edCount"></span></div>
+      <div class="tools">
+        <button><svg class="i" viewBox="0 0 24 24"><path d="M6 3v14h14M3 6h14v14"/></svg>자르기</button>
+        <button><svg class="i" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-3-6.2M20 4v5h-5"/></svg>회전</button>
+        <button><svg class="i" viewBox="0 0 24 24"><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/></svg>필터</button>
+        <button><svg class="i" viewBox="0 0 24 24"><path d="M5 6h14M12 6v13M9 19h6"/></svg>글자</button>
+      </div>
+      <div class="form">
+        <input id="cap" placeholder="한 줄 남기기 (선택)" aria-label="한 줄">
+        <div class="chips">
+          <button class="chip hl" onclick="openSheet()"><svg class="i" viewBox="0 0 24 24" style="width:17px;height:17px"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span id="dateLbl">11월 9일 · 사진 찍은 날</span></button>
+          <button class="chip"><svg class="i" viewBox="0 0 24 24" style="width:17px;height:17px"><path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11z"/><circle cx="12" cy="10" r="2"/></svg>장소</button>
+        </div>
+      </div>
+      <button class="upbtn" onclick="post()">올리기</button>
+      <div class="scrim" id="scrim" onclick="closeSheet()"></div>
+      <div class="sheet" id="sheet">
+        <div class="grab"></div>
+        <h4>어느 날의 기록인가요?</h4>
+        <div class="qd" id="qd"></div>
+        <div class="cal" id="cal"></div>
+      </div>
+    </div>
+    <!-- step 3: done -->
+    <div class="step" id="d3" style="padding-top:50px">
+      <div class="head"><h3>기록</h3></div>
+      <div class="toast" id="toast"></div>
+      <div style="margin-top:70px" id="d3card"></div>
+      <div style="padding:16px"><button class="pbtn" onclick="resetD()" style="width:100%;height:48px">처음부터 다시 해보기</button></div>
+    </div>
+  </div>
+  <h2><span>D</span>새 올리기: 고르기 → 편집 → 바로 올리기</h2>
+  <ul><li>편집 화면 아래에서 한 줄 쓰고 <b>올리기</b> 한 번이면 끝(캡션 화면 없음).</li><li><b>날짜 칩</b>: 사진 찍은 날이 기본. 눌러서 오늘·어제·그저께·달력으로 바꿔요. 3일 전 데이트도 그날에 쌓여요.</li><li>장소는 선택. 올린 뒤에도 고칠 수 있어요.</li></ul>
+</section>
+
+<!-- ═════════ E · 오늘의 순간 (홈) ═════════ -->
+<section class="opt">
+  <div class="phone home" id="E">
+    <div class="sb"><span>9:41</span><span>●●● ▮</span></div><div class="island"></div>
+    <div class="scr">
+      <div class="hd"><small>11월 12일 수요일 · D+412</small><h3>오늘의 순간</h3></div>
+      <div class="tm" id="tm"></div>
+      <div class="rows">
+        <div class="row"><span class="ic"><svg class="i" viewBox="0 0 24 24"><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/></svg></span><span><b>오늘의 운세</b><small>아직 안 봤어요</small></span></div>
+        <div class="row"><span class="ic"><svg class="i" viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg></span><span><b>500일까지 88일</b><small>12월 3일</small></span></div>
+      </div>
+    </div>
+    <nav class="pill" aria-label="탭"><span class="on"><svg class="i" viewBox="0 0 24 24"><path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-5H9v5H5a1 1 0 0 1-1-1z"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><path d="M3 5.5C5.5 4.5 8.5 4.5 11 6v13c-2.5-1.5-5.5-1.5-8-.5zM13 6c2.5-1.5 5.5-1.5 8-.5v13c-2.5-1-5.5-1-8 .5z"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2zM9 4v14M15 6v14"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><path d="M7 8h10a4 4 0 0 1 4 4v1a3 3 0 0 1-5.4 1.8L14.5 13h-5l-1.1 1.8A3 3 0 0 1 3 13v-1a4 4 0 0 1 4-4z"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span></nav>
+  </div>
+  <h2><span>E</span>오늘의 순간 잠금 (추천안)</h2>
+  <ul><li><b>잠금은 오늘의 순간에만</b> 남겨요(교환의 재미). 기록 탭에 올리는 일반 기록은 잠금 없이 바로 서로 보여요.</li><li>잠긴 칸에 이유를 그대로 써요: "내 순간을 올리면 서윤의 순간이 열려요".</li></ul>
+  <div class="seg" role="group" aria-label="상태"><button class="on" onclick="setE(0,this)">아무도 안 올림</button><button onclick="setE(1,this)">서윤만 올림</button><button onclick="setE(2,this)">둘 다 올림</button></div>
+</section>
+
+</div>
+
+<script>
+const $=(s,r=document)=>r.querySelector(s);
+const PH=['ph-a','ph-b','ph-c','ph-d','ph-e','ph-f'];
+const svgHeart='<svg class="i" viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>';
+const svgChat='<svg class="i" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>';
+const svgPlay='<svg class="i" viewBox="0 0 24 24" style="fill:#fff;stroke:none"><path d="M8 5v14l11-7z"/></svg>';
+const svgPause='<svg class="i" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg>';
+
+const DAYS=[
+ {date:'11월 9일 일요일',place:'성수동 · 사진 3장',who:'나',both:true,ph:[['ph-a','성수 카페'],['ph-b','서울숲'],['ph-f','한강 야경']],likes:3,com:2,cap:'창가 자리 햇살이 너무 좋았어',rep:'다음엔 저녁에 또 가자'},
+ {date:'11월 2일 일요일',place:'강릉 · 영상 1개 · 사진 1장',who:'서윤',both:true,ph:[['ph-c','강릉 바다',1],['ph-d','저녁']],likes:1,com:0,cap:'파도 소리 들려?',rep:''},
+ {date:'10월 28일 화요일',place:'CGV 용산',who:'나',both:false,ph:[['ph-d','영화관']],likes:0,com:1,cap:'오늘 영화 진짜 재밌었다',rep:''},
+];
+
+function go(id){document.getElementById(id).scrollIntoView({behavior:'smooth',block:'center',inline:'center'});const el=document.getElementById(id);el.animate([{boxShadow:'0 0 0 9px #141414,0 0 0 15px #C8462E'},{boxShadow:'0 0 0 9px #141414,0 28px 60px rgba(0,0,0,.28)'}],{duration:1200});}
+
+/* A feed */
+const feedState=DAYS.map(()=>({i:0,liked:false}));
+function renderFeed(){
+  $('#feed').innerHTML=DAYS.map((d,k)=>{const s=feedState[k];const p=d.ph[s.i];return `
+  <article class="card">
+    <div class="who"><span style="display:flex"><i class="av ${d.who==='나'?'me':'pt'}">${d.who==='나'?'나':'서'}</i>${d.both?`<i class="av ${d.who==='나'?'pt':'me'}">${d.who==='나'?'서':'나'}</i>`:''}</span><span style="flex:1"><b>${d.date}</b><small>${d.place}</small></span></div>
+    <div class="ph car ${p[0]} ${p[2]?'vid':''}"><span class="tag">${p[1]}</span>${d.ph.length>1?`<span class="cnt">${s.i+1}/${d.ph.length}</span>`:''}<button class="zl" aria-label="이전" onclick="slide(${k},-1)"></button><button class="zr" aria-label="다음" onclick="slide(${k},1)"></button></div>
+    ${d.ph.length>1?`<div class="dots">${d.ph.map((_,j)=>`<i class="${j===s.i?'on':''}"></i>`).join('')}</div>`:'<div style="height:8px"></div>'}
+    <div class="acts"><button class="${s.liked?'liked':''}" onclick="like(${k})">${svgHeart}${d.likes+(s.liked?1:0)}</button><button>${svgChat}${d.com}</button></div>
+    <p class="cap"><b>${d.who}</b> ${d.cap}</p>${d.rep?`<p class="rep">서윤 · ${d.rep}</p>`:''}
+  </article>`}).join('');
+}
+function slide(k,dir){const n=DAYS[k].ph.length;feedState[k].i=(feedState[k].i+dir+n)%n;renderFeed();}
+function like(k){feedState[k].liked=!feedState[k].liked;renderFeed();}
+renderFeed();
+
+/* B grid */
+const MONTHS=[
+ {name:'11월',sub:'6일 기록',cells:[[12,'ph-e',1,1],[9,'ph-a',3,1],[7,'ph-b',1,0],[5,'ph-f',2,1],[2,'ph-c',2,1],[1,'ph-d',1,0]]},
+ {name:'10월',sub:'5일 기록',cells:[[28,'ph-d',1,0],[25,'ph-a',4,1],[19,'ph-c',1,1],[14,'ph-e',2,0],[3,'ph-b',1,1]]},
+];
+function renderGrid(){
+  $('#gridB').innerHTML=MONTHS.map((m,mi)=>`<div class="mon"><b>${m.name}</b><small>${m.sub}</small></div><div class="cells">${m.cells.map((c,ci)=>`<button class="cell ph ${c[1]}" aria-label="${m.name} ${c[0]}일 보기" onclick="openB(${mi},${ci})"><span class="d">${c[0]}일</span>${c[2]>1?`<span class="n">${c[2]}</span>`:''}${c[3]?'<span class="both"><i style="background:#C8462E"></i><i style="background:#3D6FD8"></i></span>':''}</button>`).join('')}</div>`).join('');
+}
+let vb={m:0,c:0,i:0};
+function openB(m,c){vb={m,c,i:0};drawB();$('#viewerB').classList.add('on');}
+function closeB(){$('#viewerB').classList.remove('on');}
+function stepB(d){const c=MONTHS[vb.m].cells[vb.c];const n=c[2];vb.i=Math.max(0,Math.min(n-1,vb.i+d));drawB();}
+function drawB(){const m=MONTHS[vb.m],c=m.cells[vb.c];const cls=PH[(PH.indexOf(c[1])+vb.i)%PH.length];$('#vbPh').className='ph '+cls;$('#vbDate').textContent=`${m.name} ${c[0]}일`;$('#vbBars').innerHTML=Array.from({length:c[2]},(_,j)=>`<i class="${j<=vb.i?'on':''}"></i>`).join('');$('#vbCap').textContent=['그날 정말 좋았지','둘이 같이 찍은 사진','다음에 또 오자','여기 분위기 최고'][vb.i%4];}
+renderGrid();
+
+/* C story */
+const CS=[['ph-a','11월 9일 일요일','창가 자리 햇살이 너무 좋았어'],['ph-b','11월 9일 일요일','서울숲 산책'],['ph-f','11월 9일 일요일','한강 야경'],['ph-c','11월 2일 일요일','파도 소리 들려?']];
+let cI=0,cPlaying=true,cT=0,cTimer=null;
+function drawC(){const s=CS[cI];$('#cPh').className='ph '+s[0];$('#cDate').textContent=s[1];$('#cCap').textContent=s[2];
+  const same=CS.filter(x=>x[1]===s[1]);const idx=same.indexOf(s);$('#cBars').innerHTML=same.map((_,j)=>`<i><b style="width:${j<idx?100:(j===idx?cT:0)}%"></b></i>`).join('');
+  $('#cRings').innerHTML=[['오늘','ph-e'],['11/9','ph-a'],['11/7','ph-b'],['11/2','ph-c'],['10/28','ph-d'],['10/25','ph-a']].map((r,j)=>`<span class="ring ${(j===1&&cI<3)||(j===3&&cI===3)?'on':''}"><i class="ph ${r[1]}"></i>${r[0]}</span>`).join('');
+  $('#cPlay').innerHTML=cPlaying?svgPause:svgPlay;}
+function stepC(d){cI=(cI+d+CS.length)%CS.length;cT=0;$('#cHint').style.display='none';drawC();}
+function toggleC(){cPlaying=!cPlaying;$('#cHint').style.display='none';drawC();}
+cTimer=setInterval(()=>{if(!cPlaying)return;cT+=2;if(cT>=100){cT=0;cI=(cI+1)%CS.length;}drawC();},100);
+drawC();setTimeout(()=>{$('#cHint').style.display='none'},4500);
+
+/* D upload */
+const ALBUM=Array.from({length:20},(_,k)=>({cls:PH[k%6],date:['11/12','11/12','11/9','11/9','11/9','11/8','11/7','11/7','11/5','11/2','11/2','11/1','10/30','10/28','10/28','10/25','10/25','10/19','10/14','10/3'][k],vid:k===9}));
+let picked=[];
+function renderAlbum(){$('#album').innerHTML=ALBUM.map((a,k)=>{const n=picked.indexOf(k);return `<button class="ph ${a.cls} ${a.vid?'vid':''} ${n>=0?'on':''}" onclick="pick(${k})" aria-label="${a.date} 사진"><span class="sel">${n>=0?n+1:''}</span><span class="dt">${a.date}</span></button>`}).join('');const b=$('#dNext');b.disabled=!picked.length;b.textContent=picked.length?`다음 (${picked.length})`:'다음';}
+function pick(k){const n=picked.indexOf(k);n>=0?picked.splice(n,1):picked.push(k);renderAlbum();}
+function show(id){['d1','d2','d3'].forEach(s=>$('#'+s).classList.toggle('on',s===id));}
+let chosen=null;
+function toEdit(){const first=ALBUM[picked[0]];const [m,d]=first.date.split('/').map(Number);chosen={m,d,why:'사진 찍은 날'};$('#edPh').className='pv ph '+first.cls+(first.vid?' vid':'');$('#edCount').textContent=picked.length>1?`1/${picked.length} · 좌우로 넘겨 편집`:'편집';$('#edTitle').textContent=picked.length>1?`편집 1/${picked.length}`:'편집';drawDate();show('d2');}
+function drawDate(){$('#dateLbl').textContent=`${chosen.m}월 ${chosen.d}일 · ${chosen.why}`;}
+function openSheet(){const first=ALBUM[picked[0]];const [pm,pd]=first.date.split('/').map(Number);
+  const opts=[[11,12,'오늘'],[11,11,'어제'],[11,10,'그저께'],[pm,pd,'사진 찍은 날']];
+  $('#qd').innerHTML=opts.map(o=>`<button class="${chosen.m===o[0]&&chosen.d===o[1]?'on':''}" onclick="setDate(${o[0]},${o[1]},'${o[2]}')">${o[2]}<small>${o[0]}월 ${o[1]}일</small></button>`).join('');
+  const W=['일','월','화','수','목','금','토'];let html=W.map(w=>`<span class="w">${w}</span>`).join('');for(let i=0;i<6;i++)html+='<span></span>';
+  for(let d=1;d<=30;d++){const fut=d>12;html+=`<button class="${chosen.m===11&&chosen.d===d?'on':''} ${fut?'fut':''}" ${fut?'disabled':''} onclick="setDate(11,${d},'직접 고른 날')">${d}</button>`;}
+  $('#cal').innerHTML=html;$('#scrim').classList.add('on');$('#sheet').classList.add('on');}
+function closeSheet(){$('#scrim').classList.remove('on');$('#sheet').classList.remove('on');}
+function setDate(m,d,why){chosen={m,d,why};drawDate();closeSheet();}
+function post(){const cap=$('#cap').value.trim();$('#toast').textContent=`${chosen.m}월 ${chosen.d}일에 기록했어요 · ${picked.length}개`;
+  const first=ALBUM[picked[0]];$('#d3card').innerHTML=`<article class="card"><div class="who"><span style="display:flex"><i class="av me">나</i></span><span style="flex:1"><b>${chosen.m}월 ${chosen.d}일</b><small>방금 올림 · ${picked.length}개</small></span></div><div class="ph car ${first.cls}" style="height:300px"></div><p class="cap" style="margin-top:10px">${cap?`<b>나</b> ${cap.replace(/</g,'&lt;')}`:'<span style="color:#6B6B70">한 줄 없이 올렸어요</span>'}</p></article>`;show('d3');}
+function resetD(){picked=[];$('#cap').value='';renderAlbum();show('d1');}
+renderAlbum();
+
+/* E today moment */
+let eState=0;
+function drawE(){const me='<div class="half l"><div class="empty"><svg class="i" viewBox="0 0 24 24" style="width:30px;height:30px"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>아직 안 올렸어요<button class="pbtn" style="margin-top:4px" onclick="setE(2)">내 순간 올리기</button></div><span class="lab">나</span></div>';
+  const ptLocked='<div class="half r"><div class="ph ph-b" style="filter:blur(14px);transform:scale(1.2)"></div><div class="lockc"><svg class="i" viewBox="0 0 24 24" style="width:26px;height:26px"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><b style="font-size:14px">서윤이 올렸어요</b>내 순간을 올리면<br>서윤의 순간이 열려요</div><span class="lab">서윤</span></div>';
+  const ptEmpty='<div class="half r"><div class="empty" style="background:#34343A">서윤은 아직이에요<br><span style="opacity:.75">올리면 알려드릴게요</span></div><span class="lab">서윤</span></div>';
+  const meDone='<div class="half l"><div class="ph ph-e"></div><span class="lab">나</span></div>';
+  const ptOpen='<div class="half r"><div class="ph ph-b"></div><span class="lab">서윤</span></div>';
+  const foot=eState===2?'<div class="foot"><b style="font-size:16px">오늘의 순간이 열렸어요</b><div style="font-size:13px;opacity:.85;margin-top:2px">기록 탭 · 11월 12일에 함께 쌓였어요</div></div>':'';
+  $('#tm').innerHTML=(eState===2?meDone+ptOpen:eState===1?me+ptLocked:me+ptEmpty)+foot;
+  document.querySelectorAll('#E ~ .seg button, .opt .seg button').forEach((b,i)=>b.classList.toggle('on',i===eState));}
+function setE(s){eState=s;drawE();}
+drawE();
+</script>
+</body>
+</html>
