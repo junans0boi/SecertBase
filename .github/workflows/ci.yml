@@ -54,6 +54,10 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          # Pinned: stable 3.50 deprecates package:flutter/material.dart and
+          # cupertino.dart (moved to material_ui / cupertino_ui), which turns
+          # every screen into an analyze info. Bump after that migration.
+          flutter-version: '3.47.9'
           cache: true
           cache-key: "flutter-:os:-:channel:-:version:-:arch:-:hash:"
 

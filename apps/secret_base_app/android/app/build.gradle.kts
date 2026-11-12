@@ -113,6 +113,12 @@ android {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+
+    // On-device trim + 720p H.264/AAC conversion (VideoToolsPlugin.kt).
+    val media3Version = "1.11.1"
+    implementation("androidx.media3:media3-transformer:$media3Version")
+    implementation("androidx.media3:media3-effect:$media3Version")
+    implementation("androidx.media3:media3-common:$media3Version")
 }
 
 // FCM: only wire Firebase when the human has supplied google-services.json,

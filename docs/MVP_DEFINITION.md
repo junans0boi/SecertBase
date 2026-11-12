@@ -35,7 +35,7 @@ Features outside the MVP will remain preserved in source but disabled in both UI
 15. As a couple, we want Home shortcuts to recent MomentLoop, Secret Map, and public games, so that core actions are easy to reach.
 16. As a MomentLoop author, I want to create a text record, so that I can preserve a small daily moment.
 17. As a MomentLoop author, I want to attach photos, so that the record can preserve visual memories.
-18. As a MomentLoop author, I want to attach a Moment Clip of at most ten seconds, so that I can preserve a GIF-like moving moment.
+18. As a MomentLoop author, I want to attach a Moment Clip of at most one minute, so that I can preserve a moving moment. (Raised from ten seconds in 2026-11.)
 19. As a viewer, I want Moment Clips to loop silently by default, so that browsing the feed does not produce unexpected audio.
 20. As a viewer, I want to tap a Moment Clip to hear its sound, so that audio remains available by explicit choice.
 21. As a MomentLoop author, I want to edit my own record, so that I can correct its text, date, tags, or place.
@@ -96,7 +96,7 @@ Features outside the MVP will remain preserved in source but disabled in both UI
 - Socket.IO authenticates the JWT during connection or join. The server derives the active room and user identity; public RoomSecret and legacy shared-secret bypasses are removed.
 - MomentLoop is the public product term. Existing setlog route and storage names may remain internal compatibility names until a later migration.
 - MomentLoop supports author-scoped create, read, update, and delete. Couple feed reads include both active members; personal-history reads include only the authenticated author.
-- Moment Clip input is limited to 30 MB and ten seconds. Accepted video is normalized to a cross-browser 720p H.264/AAC MP4; invalid, oversized, or overlong input is rejected and partial files are cleaned up.
+- Moment Clip input is limited to 30 MB and one minute (60.5s with container slack). The app shrinks a video over 30 MB on the device (browser WebCodecs, Android Media3, iOS AVFoundation) to 720p H.264/AAC (~2.5 Mbps) before upload, and can trim it to a chosen range. The server normalizes to a cross-browser 720p H.264/AAC MP4, remuxing without re-encoding when the clip already is one, and gives up after 120s; invalid, oversized, or overlong input is rejected and partial files are cleaned up.
 - Secret Map reads exclude archived pins from the active map. Both active partners may edit shared fields; only the creator may request deletion.
 - Deleting a linked pin archives and anonymizes it as needed while retaining the MomentLoop relation. Deleting an unlinked pin removes it.
 - Secret Map rating is one shared Couple rating, not a per-user rating.
@@ -122,7 +122,7 @@ Features outside the MVP will remain preserved in source but disabled in both UI
 - Authentication tests cover missing, expired, forged, and wrong-user JWTs for profile, pairing, Couple, MomentLoop, Map, export, deletion, and Socket.IO.
 - Relationship tests cover concurrent requests, mutual crossing requests, acceptance races, active-Couple exclusivity, unilateral separation, same-pair reunion, D-day restoration, and multiple inactive histories.
 - Migration tests cover active Couple conversion, provable two-author orphan restoration, ambiguous orphan retention, idempotence, and rollback or safe failure.
-- MomentLoop tests cover text/photo/clip creation, ten-second and 30 MB limits, author-only update/delete, partner read-only access, personal-history filtering, media cleanup, and cross-Couple denial.
+- MomentLoop tests cover text/photo/clip creation, one-minute and 30 MB limits, author-only update/delete, partner read-only access, personal-history filtering, media cleanup, and cross-Couple denial.
 - Secret Map tests cover shared edits, creator-only deletion, linked-pin archival, unlinked hard deletion, shared rating, external-search failure fallback, and cross-Couple denial.
 - Account tests cover password confirmation, active-Couple deactivation, authored content deletion, map anonymization, tombstone privacy, export contents, and exclusion of partner-authored data.
 - Socket tests cover JWT join, inactive Couple denial, room spoofing denial, disabled game denial, two-player isolation, Yut restore, Bomb timer restore, and Rock-Paper-Scissors cancellation.

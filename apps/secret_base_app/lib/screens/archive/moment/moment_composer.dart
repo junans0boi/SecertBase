@@ -12,6 +12,7 @@ import '../../../features/moment_loop/application/upload_outbox.dart';
 import '../../../features/moment_loop/data/moment_image_compressor.dart';
 import '../../../features/moment_loop/data/media_upload_service.dart'
     show MomentLoopException;
+import '../../../features/moment_loop/data/video_shrinker.dart';
 import '../../../features/moment_loop/domain/moment.dart';
 import '../../../features/moment_loop/domain/moment_edit.dart';
 import '../../../features/moment_loop/domain/photo_date.dart';
@@ -19,6 +20,7 @@ import '../../../v2/v2.dart';
 import '../map_screen.dart';
 import 'moment_format.dart';
 import 'moment_media.dart';
+import 'moment_trim_page.dart';
 import 'moment_story_feed.dart' show MomentStartSource;
 
 /// One attachment in the composer: a new file or an existing post.
@@ -107,11 +109,24 @@ class MomentComposerPage extends StatefulWidget {
     this.initialPinId,
     this.initialPinName,
     this.startSource = MomentStartSource.none,
+    this.startPick,
+    this.videoShrinker,
+    this.probeDuration = probeVideoDuration,
   });
 
   /// Opens the camera or the gallery right away (from 기록's
   /// "내 순간 올리기" sheet).
   final MomentStartSource startSource;
+
+  /// Files the user is already picking (web opens the album chooser inside
+  /// the tap that led here; see `_openComposer`).
+  final Future<List<XFile>>? startPick;
+
+  /// Shrinks videos over 30MB before upload; defaults to the platform one.
+  final VideoShrinker? videoShrinker;
+
+  /// Reads a picked clip's length; injected in tests (no video plugin there).
+  final Future<Duration?> Function(XFile file) probeDuration;
 
   @override
   State<MomentComposerPage> createState() => _MomentComposerPageState();
@@ -121,6 +136,8 @@ class _MomentComposerPageState extends State<MomentComposerPage> {
   final _caption = TextEditingController();
   final _captionFocus = FocusNode();
   final _imagePicker = ImagePicker();
+  late final VideoShrinker _shrinker =
+      widget.videoShrinker ?? createVideoShrinker();
   late final List<PickedMoment> _media;
   _Place? _place;
   bool _saving = false;
@@ -154,6 +171,8 @@ class _MomentComposerPageState extends State<MomentComposerPage> {
         }
       });
     }
+    final startPick = widget.startPick;
+    if (startPick != null) unawaited(_takeStartPick(startPick));
     final initial = _initial;
     _media = widget.edit != null
         ? widget.edit!.items
@@ -235,6 +254,20 @@ class _MomentComposerPageState extends State<MomentComposerPage> {
     }
   }
 
+  // Deliberately not guarded by [_picking]: if the browser never answers,
+  // the composer's own camera/album buttons must keep working.
+  Future<void> _takeStartPick(Future<List<XFile>> pick) async {
+    try {
+      final files = await pick;
+      if (!mounted || files.isEmpty) return;
+      final remaining = momentMaxMedia - _media.length;
+      if (remaining <= 0) return;
+      await _ingest(files.take(remaining).toList(), again: _addFromGallery);
+    } catch (_) {
+      _toast('사진을 불러오지 못했어요. 다시 시도해 주세요.', tone: V2Tone.err);
+    }
+  }
+
   Future<void> _capture() async {
     if (_mediaLocked || _saving || _picking) return;
     if (_media.length >= momentMaxMedia) return;
@@ -254,7 +287,7 @@ class _MomentComposerPageState extends State<MomentComposerPage> {
             icon: V2Icons.video,
             tone: V2Tone.sky,
             title: '영상 찍기',
-            subtitle: '10초까지 담을 수 있어요',
+            subtitle: '1분까지 담을 수 있어요',
             onTap: () => Navigator.pop(ctx, _CaptureKind.video),
           ),
         ],
@@ -308,26 +341,54 @@ class _MomentComposerPageState extends State<MomentComposerPage> {
           isVideoName(file.name) ||
           isVideoName(file.path) ||
           (file.mimeType ?? '').startsWith('video/');
-      var bytes = await file.readAsBytes();
       if (video) {
-        final duration = await probeVideoDuration(file);
-        final problem = momentMediaIssue(
-          isVideo: true,
-          bytes: bytes.length,
-          duration: duration,
-        );
+        final duration = await widget.probeDuration(file);
+        final length = await file.length();
+        final tooBig = length > momentMaxBytes;
+        final tooLong =
+            momentMediaIssue(isVideo: true, bytes: 0, duration: duration) ==
+            MomentMediaIssue.tooLong;
+        // Over a minute: let the author keep a part of it (needs the
+        // shrinker, which also does the cutting). Otherwise refuse as before.
+        final problem = tooLong
+            ? (_shrinker.supported ? null : MomentMediaIssue.tooLong)
+            : (tooBig && !_shrinker.supported
+                  ? MomentMediaIssue.tooLarge
+                  : null);
         if (problem != null) {
           issue = (label: momentMediaIssueLabel(problem), again: again);
           continue;
         }
-        added.add(
-          PickedMoment(
-            name: file.name.isEmpty ? 'clip.mp4' : file.name,
-            bytes: bytes,
-            isVideo: true,
-          ),
-        );
+        MomentTrimRange? range;
+        if (tooLong) {
+          range = await _pickTrimRange(file, duration!);
+          if (range == null || !mounted) continue;
+        }
+        var name = file.name.isEmpty ? 'clip.mp4' : file.name;
+        final Uint8List bytes;
+        if (tooBig || range != null) {
+          final shrunk = await _shrinkVideo(file, range: range);
+          if (shrunk.bytes == null) {
+            if (shrunk.failure != null) {
+              issue = (label: shrunk.failure!, again: again);
+            }
+            continue;
+          }
+          bytes = shrunk.bytes!;
+          name = _mp4Name(name);
+          if (bytes.length > momentMaxBytes) {
+            issue = (
+              label: momentMediaIssueLabel(MomentMediaIssue.tooLarge),
+              again: again,
+            );
+            continue;
+          }
+        } else {
+          bytes = await file.readAsBytes();
+        }
+        added.add(PickedMoment(name: name, bytes: bytes, isVideo: true));
       } else {
+        var bytes = await file.readAsBytes();
         if (wantsSuggestion && suggested == null && added.isEmpty) {
           suggested = await exifCaptureDate(bytes);
         }
@@ -365,6 +426,95 @@ class _MomentComposerPageState extends State<MomentComposerPage> {
         if (suggested != today) _todayMoment = false;
       }
     });
+  }
+
+  /// Shrinks a video over 30MB with a progress dialog the user can cancel.
+  /// [failure] is null when the user cancelled (nothing to report).
+  Future<MomentTrimRange?> _pickTrimRange(XFile file, Duration duration) {
+    return Navigator.of(context).push<MomentTrimRange>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => MomentTrimPage(path: file.path, duration: duration),
+      ),
+    );
+  }
+
+  Future<({Uint8List? bytes, String? failure})> _shrinkVideo(
+    XFile file, {
+    MomentTrimRange? range,
+  }) async {
+    final id = UploadOutbox.newId();
+    final progress = ValueNotifier<double>(0);
+    var finished = false;
+    var cancelled = false;
+    final dialog = showV2Dialog<void>(
+      context,
+      title: '영상을 줄이는 중이에요',
+      message: range != null
+          ? '고른 부분만 720p로 저장해요. 화면을 켜 둔 채 잠시만 기다려 주세요.'
+          : '30MB가 넘어서 720p로 줄여서 올려요. 화면을 켜 둔 채 잠시만 기다려 주세요.',
+      barrierDismissible: false,
+      content: ValueListenableBuilder<double>(
+        valueListenable: progress,
+        builder: (context, value, _) => Column(
+          key: const Key('moment_shrink_progress'),
+          children: [
+            V2ProgressBar(value: value, semanticLabel: '영상 줄이는 중'),
+            const SizedBox(height: 8),
+            Text('${(value * 100).round()}%', style: V2Text.cap),
+          ],
+        ),
+      ),
+      actions: const [
+        V2DialogAction(label: '취소', variant: V2ButtonVariant.text),
+      ],
+    );
+    // Any close we did not do ourselves (취소, back) cancels the work.
+    unawaited(
+      dialog.whenComplete(() {
+        if (!finished) {
+          cancelled = true;
+          _shrinker.cancel(id);
+        }
+        progress.dispose();
+      }),
+    );
+    try {
+      final bytes = await _shrinker.shrink(
+        id: id,
+        path: file.path,
+        startMs: range?.startMs,
+        endMs: range?.endMs,
+        onProgress: (p) {
+          if (!finished && !cancelled) progress.value = p;
+        },
+      );
+      return cancelled
+          ? (bytes: null, failure: null)
+          : (bytes: bytes, failure: null);
+    } on VideoShrinkException catch (e) {
+      if (cancelled || e.cancelled) return (bytes: null, failure: null);
+      return (
+        bytes: null,
+        failure: e.code == 'unsupported'
+            ? '이 기기에서는 영상을 줄일 수 없어요. 30MB 이하로 올려 주세요'
+            : '영상을 줄이지 못했어요. 다시 시도해 주세요',
+      );
+    } catch (_) {
+      if (cancelled) return (bytes: null, failure: null);
+      return (bytes: null, failure: '영상을 줄이지 못했어요. 다시 시도해 주세요');
+    } finally {
+      final open = !cancelled && !finished;
+      finished = true;
+      if (open && mounted) Navigator.of(context, rootNavigator: true).pop();
+    }
+  }
+
+  String _mp4Name(String name) {
+    final stem = name.contains('.')
+        ? name.substring(0, name.lastIndexOf('.'))
+        : name;
+    return '${stem.isEmpty ? 'clip' : stem}.mp4';
   }
 
   String _jpegName(String name) {

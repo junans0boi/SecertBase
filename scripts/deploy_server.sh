@@ -70,6 +70,8 @@ fi
 
 sed -i.bak "s/flutter_bootstrap.js?v=[^']*/flutter_bootstrap.js?v=$BUILD_ID/" build/web/index.html
 rm -f build/web/index.html.bak
+sed -i.bak "s/moment_video.js?v=[^\"]*/moment_video.js?v=$BUILD_ID/" build/web/index.html
+rm -f build/web/index.html.bak
 sed -i.bak "s/\"main.dart.js\"/\"main.dart.js?v=$BUILD_ID\"/" build/web/flutter_bootstrap.js
 rm -f build/web/flutter_bootstrap.js.bak
 

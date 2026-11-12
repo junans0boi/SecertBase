@@ -3,7 +3,7 @@
 ## Current MVP
 
 The public MVP is the mobile-web Couple core: consent-based pairing, persistent
-separation/reunion, D-day, MomentLoop text/photo/10-second clips, Secret Map,
+separation/reunion, D-day, MomentLoop text/photo/1-minute clips, Secret Map,
 relationship understanding, and realtime games. REST and Socket identity come
 from JWT, and a user can have only one active Couple. Extended archive and game
 surfaces remain feature-gated while the five-tab shell stays focused on the

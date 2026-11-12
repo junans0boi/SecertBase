@@ -1,9 +1,10 @@
 import '../../../features/moment_loop/domain/moment.dart';
 
-/// Upload limits mirrored from the server (30MB, 10-second clips) so the
+/// Upload limits mirrored from the server (30MB, 60-second clips) so the
 /// composer can reject a file before it ever reaches the upload queue.
+/// Videos over 30MB are shrunk on the device first where that is supported.
 const momentMaxBytes = 30 * 1024 * 1024;
-const momentMaxVideo = Duration(seconds: 10);
+const momentMaxVideo = Duration(seconds: 60);
 const momentMaxMedia = 10;
 const momentCaptionMax = 100;
 
@@ -27,13 +28,13 @@ MomentMediaIssue? momentMediaIssue({
 
 String momentMediaIssueLabel(MomentMediaIssue issue) => switch (issue) {
   MomentMediaIssue.tooLarge => '30MB 이하만 올릴 수 있어요',
-  MomentMediaIssue.tooLong => '영상은 10초까지예요',
+  MomentMediaIssue.tooLong => '영상은 1분까지예요',
 };
 
 /// Server / outbox error code → reason the user can act on.
 String momentFailureReason(String? code) => switch (code) {
   'media_too_large' || 'file_too_large' => '30MB 이하만 올릴 수 있어요',
-  'clip_too_long' => '영상은 10초까지예요',
+  'clip_too_long' => '영상은 1분까지예요',
   'clip_duration_unreadable' => '영상 길이를 읽지 못했어요',
   'clip_conversion_failed' => '영상을 변환하지 못했어요',
   'invalid_media_type' || 'invalid_media_upload' => '올릴 수 없는 파일 형식이에요',

@@ -16,7 +16,7 @@ bool isVideoName(String name) {
 }
 
 /// Reads a clip's length on the device before upload. Returns null when the
-/// platform cannot tell (the server still enforces the 10-second rule).
+/// platform cannot tell (the server still enforces the one-minute rule).
 Future<Duration?> probeVideoDuration(XFile file) async {
   VideoPlayerController? controller;
   try {
