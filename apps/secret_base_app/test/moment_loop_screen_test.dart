@@ -359,6 +359,46 @@ void main() {
       );
     });
 
+    test('only cut, long or large clips are re-encoded on the device', () {
+      const mb = 1024 * 1024;
+      expect(
+        momentVideoNeedsConvert(
+          bytes: 12 * mb,
+          duration: const Duration(seconds: 40),
+          end: const Duration(seconds: 40),
+        ),
+        isFalse,
+      );
+      expect(
+        momentVideoNeedsConvert(
+          bytes: 45 * mb,
+          duration: const Duration(seconds: 25),
+        ),
+        isTrue,
+      );
+      expect(
+        momentVideoNeedsConvert(
+          bytes: 12 * mb,
+          duration: const Duration(seconds: 90),
+          end: const Duration(seconds: 60),
+        ),
+        isTrue,
+      );
+      expect(
+        momentVideoNeedsConvert(
+          bytes: 12 * mb,
+          duration: const Duration(seconds: 40),
+          start: const Duration(seconds: 5),
+          end: const Duration(seconds: 40),
+        ),
+        isTrue,
+      );
+      expect(
+        momentDefaultTrim(const Duration(seconds: 90)).end,
+        const Duration(seconds: 60),
+      );
+    });
+
     test('files over 30MB are rejected', () {
       final issue = momentMediaIssue(isVideo: false, bytes: momentMaxBytes + 1);
       expect(issue, MomentMediaIssue.tooLarge);

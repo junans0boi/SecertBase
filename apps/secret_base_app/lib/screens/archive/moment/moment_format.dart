@@ -8,7 +8,7 @@ const momentMaxVideo = Duration(seconds: 60);
 const momentMaxMedia = 10;
 const momentCaptionMax = 100;
 
-enum MomentMediaIssue { tooLarge, tooLong }
+enum MomentMediaIssue { tooLarge, tooLong, cannotShrink }
 
 /// Client-side check for one picked file. [duration] is null when the device
 /// could not read the clip length; the server still enforces the limit.
@@ -29,7 +29,39 @@ MomentMediaIssue? momentMediaIssue({
 String momentMediaIssueLabel(MomentMediaIssue issue) => switch (issue) {
   MomentMediaIssue.tooLarge => '30MB 이하만 올릴 수 있어요',
   MomentMediaIssue.tooLong => '영상은 1분까지예요',
+  MomentMediaIssue.cannotShrink => '이 기기에서는 영상을 줄일 수 없어요. 30MB 이하로 올려 주세요',
 };
+
+/// Slack for clip lengths read by different decoders.
+const _durationSlack = Duration(milliseconds: 400);
+
+/// Whether a video is longer than an upload may be.
+bool momentVideoTooLong(Duration? duration) =>
+    duration != null && duration > momentMaxVideo + _durationSlack;
+
+/// Default kept range for a picked clip: the whole clip, or its first minute.
+({Duration start, Duration end}) momentDefaultTrim(Duration duration) => (
+  start: Duration.zero,
+  end: duration > momentMaxVideo ? momentMaxVideo : duration,
+);
+
+/// Whether a picked video must be re-encoded on the device before upload:
+/// it was trimmed, is too long to send as is, or is over the size limit.
+/// Short, small, untouched clips go up as they are (the server normalizes).
+bool momentVideoNeedsConvert({
+  required int bytes,
+  Duration? duration,
+  Duration start = Duration.zero,
+  Duration? end,
+}) {
+  if (bytes > momentMaxBytes) return true;
+  if (momentVideoTooLong(duration)) return true;
+  if (start > _durationSlack) return true;
+  if (end != null && duration != null && end < duration - _durationSlack) {
+    return true;
+  }
+  return false;
+}
 
 /// Server / outbox error code → reason the user can act on.
 String momentFailureReason(String? code) => switch (code) {

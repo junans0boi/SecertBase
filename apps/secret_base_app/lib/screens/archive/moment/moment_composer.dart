@@ -18,9 +18,10 @@ import '../../../features/moment_loop/domain/moment_edit.dart';
 import '../../../features/moment_loop/domain/photo_date.dart';
 import '../../../v2/v2.dart';
 import '../map_screen.dart';
+import 'editor/editor_item.dart';
+import 'editor/moment_editor_page.dart';
 import 'moment_format.dart';
 import 'moment_media.dart';
-import 'moment_trim_page.dart';
 import 'moment_story_feed.dart' show MomentStartSource;
 
 /// One attachment in the composer: a new file or an existing post.
@@ -32,12 +33,20 @@ class PickedMoment {
   final String? clientRequestId;
   final String key;
 
+  /// What the editor started from (in memory only), for re-editing.
+  final EditorItem? source;
+
+  /// First frame for video tiles.
+  final Uint8List? thumb;
+
   PickedMoment({
     required this.name,
     required this.bytes,
     required this.isVideo,
     this.post,
     this.clientRequestId,
+    this.source,
+    this.thumb,
   }) : key = post != null
            ? 'post_${post.id}'
            : clientRequestId ?? UploadOutbox.newId();
@@ -112,6 +121,7 @@ class MomentComposerPage extends StatefulWidget {
     this.startPick,
     this.videoShrinker,
     this.probeDuration = probeVideoDuration,
+    this.editorVideoPreview = true,
   });
 
   /// Opens the camera or the gallery right away (from 기록's
@@ -127,6 +137,9 @@ class MomentComposerPage extends StatefulWidget {
 
   /// Reads a picked clip's length; injected in tests (no video plugin there).
   final Future<Duration?> Function(XFile file) probeDuration;
+
+  /// Video playback and filmstrips in the editor (off in widget tests).
+  final bool editorVideoPreview;
 
   @override
   State<MomentComposerPage> createState() => _MomentComposerPageState();
@@ -328,11 +341,14 @@ class _MomentComposerPageState extends State<MomentComposerPage> {
     }
   }
 
+  /// Reads what was picked, opens the editor, and adds what comes back.
+  /// Clips that need cutting or shrinking are refused up front when this
+  /// device has no encoder; the editor does the cutting and shrinking.
   Future<void> _ingest(
     List<XFile> files, {
     required Future<void> Function() again,
   }) async {
-    final added = <PickedMoment>[];
+    final items = <EditorItem>[];
     DateTime? suggested;
     final wantsSuggestion = _media.isEmpty && !_dateTouched;
     ({String label, Future<void> Function() again})? issue;
@@ -344,68 +360,40 @@ class _MomentComposerPageState extends State<MomentComposerPage> {
       if (video) {
         final duration = await widget.probeDuration(file);
         final length = await file.length();
-        final tooBig = length > momentMaxBytes;
-        final tooLong =
-            momentMediaIssue(isVideo: true, bytes: 0, duration: duration) ==
-            MomentMediaIssue.tooLong;
-        // Over a minute: let the author keep a part of it (needs the
-        // shrinker, which also does the cutting). Otherwise refuse as before.
-        final problem = tooLong
-            ? (_shrinker.supported ? null : MomentMediaIssue.tooLong)
-            : (tooBig && !_shrinker.supported
-                  ? MomentMediaIssue.tooLarge
-                  : null);
-        if (problem != null) {
-          issue = (label: momentMediaIssueLabel(problem), again: again);
-          continue;
-        }
-        MomentTrimRange? range;
-        if (tooLong) {
-          range = await _pickTrimRange(file, duration!);
-          if (range == null || !mounted) continue;
-        }
-        var name = file.name.isEmpty ? 'clip.mp4' : file.name;
-        final Uint8List bytes;
-        if (tooBig || range != null) {
-          final shrunk = await _shrinkVideo(file, range: range);
-          if (shrunk.bytes == null) {
-            if (shrunk.failure != null) {
-              issue = (label: shrunk.failure!, again: again);
-            }
+        if (!_shrinker.supported) {
+          final problem = momentVideoTooLong(duration)
+              ? MomentMediaIssue.tooLong
+              : length > momentMaxBytes
+              ? MomentMediaIssue.tooLarge
+              : null;
+          if (problem != null) {
+            issue = (label: momentMediaIssueLabel(problem), again: again);
             continue;
           }
-          bytes = shrunk.bytes!;
-          name = _mp4Name(name);
-          if (bytes.length > momentMaxBytes) {
-            issue = (
-              label: momentMediaIssueLabel(MomentMediaIssue.tooLarge),
-              again: again,
-            );
-            continue;
-          }
-        } else {
-          bytes = await file.readAsBytes();
         }
-        added.add(PickedMoment(name: name, bytes: bytes, isVideo: true));
-      } else {
-        var bytes = await file.readAsBytes();
-        if (wantsSuggestion && suggested == null && added.isEmpty) {
-          suggested = await exifCaptureDate(bytes);
-        }
-        bytes = compressMomentImage(bytes);
-        final problem = momentMediaIssue(isVideo: false, bytes: bytes.length);
-        if (problem != null) {
-          issue = (label: momentMediaIssueLabel(problem), again: again);
-          continue;
-        }
-        added.add(
-          PickedMoment(
-            name: _jpegName(file.name),
-            bytes: bytes,
-            isVideo: false,
+        items.add(
+          EditorItem.video(
+            file: file,
+            name: file.name.isEmpty ? 'clip.mp4' : file.name,
+            bytes: length,
+            duration: duration,
           ),
         );
+        continue;
       }
+      final raw = await file.readAsBytes();
+      if (wantsSuggestion && suggested == null && items.isEmpty) {
+        suggested = await exifCaptureDate(raw);
+      }
+      final bytes = compressMomentImage(raw);
+      final problem = momentMediaIssue(isVideo: false, bytes: bytes.length);
+      if (problem != null) {
+        issue = (label: momentMediaIssueLabel(problem), again: again);
+        continue;
+      }
+      items.add(
+        EditorItem.photo(file: file, name: _jpegName(file.name), photo: bytes),
+      );
     }
     if (wantsSuggestion && suggested == null && files.isNotEmpty) {
       try {
@@ -413,6 +401,25 @@ class _MomentComposerPageState extends State<MomentComposerPage> {
       } catch (_) {}
     }
     if (!mounted) return;
+    if (items.isEmpty) {
+      setState(() => _issue = issue);
+      return;
+    }
+    final outcome = await MomentEditorPage.open(
+      context,
+      items,
+      shrinker: _shrinker,
+      videoPreview: widget.editorVideoPreview,
+    );
+    if (!mounted) return;
+    if (outcome == null) {
+      if (issue != null) setState(() => _issue = issue);
+      return;
+    }
+    if (outcome.issue != null) {
+      issue = (label: outcome.issue!, again: again);
+    }
+    final added = outcome.media.map(_fromEdited).toList();
     setState(() {
       _issue = issue;
       final room = momentMaxMedia - _media.length;
@@ -428,93 +435,37 @@ class _MomentComposerPageState extends State<MomentComposerPage> {
     });
   }
 
-  /// Shrinks a video over 30MB with a progress dialog the user can cancel.
-  /// [failure] is null when the user cancelled (nothing to report).
-  Future<MomentTrimRange?> _pickTrimRange(XFile file, Duration duration) {
-    return Navigator.of(context).push<MomentTrimRange>(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (_) => MomentTrimPage(path: file.path, duration: duration),
-      ),
-    );
-  }
+  PickedMoment _fromEdited(EditedMedia m) => PickedMoment(
+    name: m.name,
+    bytes: m.bytes,
+    isVideo: m.item.isVideo,
+    source: m.item,
+    thumb: m.thumb,
+  );
 
-  Future<({Uint8List? bytes, String? failure})> _shrinkVideo(
-    XFile file, {
-    MomentTrimRange? range,
-  }) async {
-    final id = UploadOutbox.newId();
-    final progress = ValueNotifier<double>(0);
-    var finished = false;
-    var cancelled = false;
-    final dialog = showV2Dialog<void>(
+  /// Re-opens the editor for one tile (keeps its earlier edits).
+  Future<void> _reedit(int index) async {
+    if (_saving || _mediaLocked || index >= _media.length) return;
+    final source = _media[index].source;
+    if (source == null) return;
+    final outcome = await MomentEditorPage.open(
       context,
-      title: '영상을 줄이는 중이에요',
-      message: range != null
-          ? '고른 부분만 720p로 저장해요. 화면을 켜 둔 채 잠시만 기다려 주세요.'
-          : '30MB가 넘어서 720p로 줄여서 올려요. 화면을 켜 둔 채 잠시만 기다려 주세요.',
-      barrierDismissible: false,
-      content: ValueListenableBuilder<double>(
-        valueListenable: progress,
-        builder: (context, value, _) => Column(
-          key: const Key('moment_shrink_progress'),
-          children: [
-            V2ProgressBar(value: value, semanticLabel: '영상 줄이는 중'),
-            const SizedBox(height: 8),
-            Text('${(value * 100).round()}%', style: V2Text.cap),
-          ],
-        ),
-      ),
-      actions: const [
-        V2DialogAction(label: '취소', variant: V2ButtonVariant.text),
-      ],
+      [source],
+      shrinker: _shrinker,
+      videoPreview: widget.editorVideoPreview,
     );
-    // Any close we did not do ourselves (취소, back) cancels the work.
-    unawaited(
-      dialog.whenComplete(() {
-        if (!finished) {
-          cancelled = true;
-          _shrinker.cancel(id);
+    if (!mounted || outcome == null) return;
+    setState(() {
+      if (outcome.media.isEmpty) {
+        if (outcome.issue != null) {
+          _issue = (label: outcome.issue!, again: () => _reedit(index));
         }
-        progress.dispose();
-      }),
-    );
-    try {
-      final bytes = await _shrinker.shrink(
-        id: id,
-        path: file.path,
-        startMs: range?.startMs,
-        endMs: range?.endMs,
-        onProgress: (p) {
-          if (!finished && !cancelled) progress.value = p;
-        },
-      );
-      return cancelled
-          ? (bytes: null, failure: null)
-          : (bytes: bytes, failure: null);
-    } on VideoShrinkException catch (e) {
-      if (cancelled || e.cancelled) return (bytes: null, failure: null);
-      return (
-        bytes: null,
-        failure: e.code == 'unsupported'
-            ? '이 기기에서는 영상을 줄일 수 없어요. 30MB 이하로 올려 주세요'
-            : '영상을 줄이지 못했어요. 다시 시도해 주세요',
-      );
-    } catch (_) {
-      if (cancelled) return (bytes: null, failure: null);
-      return (bytes: null, failure: '영상을 줄이지 못했어요. 다시 시도해 주세요');
-    } finally {
-      final open = !cancelled && !finished;
-      finished = true;
-      if (open && mounted) Navigator.of(context, rootNavigator: true).pop();
-    }
-  }
-
-  String _mp4Name(String name) {
-    final stem = name.contains('.')
-        ? name.substring(0, name.lastIndexOf('.'))
-        : name;
-    return '${stem.isEmpty ? 'clip' : stem}.mp4';
+        return;
+      }
+      final i = _media.indexWhere((m) => identical(m.source, source));
+      if (i < 0) return;
+      _media[i] = _fromEdited(outcome.media.first);
+    });
   }
 
   String _jpegName(String name) {
@@ -756,6 +707,7 @@ class _MomentComposerPageState extends State<MomentComposerPage> {
                         canAdd: canAdd,
                         onReorder: _reorder,
                         onRemove: (i) => setState(() => _media.removeAt(i)),
+                        onEdit: (i) => unawaited(_reedit(i)),
                         onAddCapture: _capture,
                         onAddGallery: _addFromGallery,
                       ),
@@ -967,6 +919,7 @@ class _MediaStrip extends StatelessWidget {
   final bool canAdd;
   final void Function(int, int) onReorder;
   final void Function(int) onRemove;
+  final void Function(int) onEdit;
   final VoidCallback onAddCapture;
   final VoidCallback onAddGallery;
 
@@ -977,6 +930,7 @@ class _MediaStrip extends StatelessWidget {
     required this.canAdd,
     required this.onReorder,
     required this.onRemove,
+    required this.onEdit,
     required this.onAddCapture,
     required this.onAddGallery,
   });
@@ -1012,7 +966,9 @@ class _MediaStrip extends StatelessWidget {
                         Positioned.fill(
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(V2Radius.ctl),
-                            child: m.isVideo
+                            child: m.isVideo && m.thumb != null
+                                ? Image.memory(m.thumb!, fit: BoxFit.cover)
+                                : m.isVideo
                                 ? Container(
                                     color: p.soft2,
                                     child: Icon(V2Icons.video, color: p.sub),
@@ -1027,6 +983,55 @@ class _MediaStrip extends StatelessWidget {
                                 : Image.memory(m.bytes, fit: BoxFit.cover),
                           ),
                         ),
+                        if (!locked && m.source != null)
+                          Positioned.fill(
+                            child: Semantics(
+                              button: true,
+                              label: '이 ${m.isVideo ? '영상' : '사진'} 편집',
+                              onTap: saving ? null : () => onEdit(i),
+                              child: ExcludeSemantics(
+                                child: GestureDetector(
+                                  key: Key('moment_media_edit_$i'),
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: saving ? null : () => onEdit(i),
+                                  child: Align(
+                                    alignment: Alignment.bottomLeft,
+                                    child: Container(
+                                      margin: const EdgeInsets.all(6),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 7,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: V2Colors.scrim,
+                                        borderRadius: BorderRadius.circular(9),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            m.isVideo
+                                                ? Icons.content_cut_rounded
+                                                : V2Icons.edit,
+                                            size: 12,
+                                            color: Colors.white,
+                                          ),
+                                          const SizedBox(width: 3),
+                                          Text(
+                                            '편집',
+                                            style: V2Text.cap.copyWith(
+                                              color: Colors.white,
+                                              fontSize: 11,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                         if (!locked)
                           Positioned(
                             top: 0,
