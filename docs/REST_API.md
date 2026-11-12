@@ -561,7 +561,7 @@ multipart/form-data
 
 Fields:
 
-- `media`: optional file, max 30MB
+- `media`: optional file, max 30MB. Video must be at most 60s (`clip_too_long` otherwise); it is stored as a 720p H.264/AAC MP4, remuxed without re-encoding when it already is one, and conversion that takes over 120s fails with `clip_conversion_failed`.
 - user identity is derived from the JWT
 - `caption`: required for text-only posts
 - `tags`: JSON array string, optional
