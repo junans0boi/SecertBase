@@ -6,7 +6,9 @@ import 'package:flutter/material.dart';
 
 import '../../../../features/moment_loop/data/video_shrinker.dart';
 import '../../../../v2/v2.dart';
+import '../moment_date_sheet.dart';
 import '../moment_format.dart';
+import '../moment_place_picker.dart';
 import 'editor_item.dart';
 import 'photo_filters.dart';
 import 'photo_render.dart';
@@ -37,7 +39,35 @@ class EditorOutcome {
   /// Why some videos were left out (shown as a banner in the composer).
   final String? issue;
 
-  const EditorOutcome(this.media, {this.issue});
+  /// The caption, date and place chosen in post mode (null otherwise).
+  final MomentPostOptions? post;
+
+  const EditorOutcome(this.media, {this.issue, this.post});
+}
+
+/// Post mode: the editor itself takes the caption, date and place and its
+/// top button posts ("올리기"), so there is no separate caption screen.
+class MomentPostOptions {
+  MomentPostOptions({
+    required this.date,
+    required this.pickPlace,
+    this.photoDate,
+    this.todayMoment = false,
+    this.place,
+  });
+
+  DateTime date;
+
+  /// When the first photo was taken (EXIF), offered in the date sheet.
+  final DateTime? photoDate;
+  bool todayMoment;
+  MomentPlace? place;
+  String caption = '';
+
+  final Future<MomentPlacePick?> Function(BuildContext context, int? current)
+  pickPlace;
+
+  bool get isToday => dateOnly(date) == dateOnly(DateTime.now());
 }
 
 /// Instagram-style edit step between picking and the caption screen:
@@ -48,9 +78,13 @@ class MomentEditorPage extends StatefulWidget {
     required this.items,
     required this.shrinker,
     this.videoPreview = true,
+    this.post,
   });
 
   final List<EditorItem> items;
+
+  /// Post mode (caption, date, place, 올리기); null = plain edit step.
+  final MomentPostOptions? post;
 
   /// Cuts and shrinks clips on the device (web: WebCodecs, Android: Media3).
   final VideoShrinker shrinker;
@@ -63,6 +97,7 @@ class MomentEditorPage extends StatefulWidget {
     List<EditorItem> items, {
     required VideoShrinker shrinker,
     bool videoPreview = true,
+    MomentPostOptions? post,
   }) {
     return Navigator.of(context).push<EditorOutcome>(
       MaterialPageRoute(
@@ -71,6 +106,7 @@ class MomentEditorPage extends StatefulWidget {
           items: items,
           shrinker: shrinker,
           videoPreview: videoPreview,
+          post: post,
         ),
       ),
     );
@@ -82,6 +118,7 @@ class MomentEditorPage extends StatefulWidget {
 
 class _MomentEditorPageState extends State<MomentEditorPage> {
   final _pages = PageController();
+  final _caption = TextEditingController();
   final _images = <int, ui.Image>{};
   final _stageKeys = <int, GlobalKey<VideoStageState>>{};
   int _index = 0;
@@ -136,6 +173,7 @@ class _MomentEditorPageState extends State<MomentEditorPage> {
   @override
   void dispose() {
     _pages.dispose();
+    _caption.dispose();
     for (final image in _images.values) {
       image.dispose();
     }
@@ -297,7 +335,10 @@ class _MomentEditorPageState extends State<MomentEditorPage> {
       _job = null;
     }
     if (!mounted) return;
-    Navigator.of(context).pop(EditorOutcome(out, issue: issue));
+    widget.post?.caption = _caption.text.trim();
+    Navigator.of(
+      context,
+    ).pop(EditorOutcome(out, issue: issue, post: widget.post));
   }
 
   // ── Build ────────────────────────────────────────────────────────────────
@@ -334,6 +375,7 @@ class _MomentEditorPageState extends State<MomentEditorPage> {
                   ),
                   if (count > 1) _dots(count),
                   _toolbar(),
+                  if (widget.post != null) _postPanel(widget.post!),
                 ],
               ),
               if (_busy && _progress != null) _progressOverlay(),
@@ -366,7 +408,11 @@ class _MomentEditorPageState extends State<MomentEditorPage> {
             color: V2Colors.rose600,
             shape: const StadiumBorder(),
             child: InkWell(
-              key: const Key('moment_editor_next'),
+              key: Key(
+                widget.post != null
+                    ? 'moment_post_submit'
+                    : 'moment_editor_next',
+              ),
               customBorder: const StadiumBorder(),
               onTap: _busy ? null : _finish,
               child: ConstrainedBox(
@@ -387,7 +433,7 @@ class _MomentEditorPageState extends State<MomentEditorPage> {
                         )
                       else
                         Text(
-                          '다음',
+                          widget.post != null ? '올리기' : '다음',
                           style: V2Text.buttonSm.copyWith(
                             color: V2Colors.onPrimary,
                           ),
@@ -430,6 +476,96 @@ class _MomentEditorPageState extends State<MomentEditorPage> {
         onEditText: _addText,
       ),
     );
+  }
+
+  Widget _postPanel(MomentPostOptions post) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            key: const Key('moment_post_caption'),
+            controller: _caption,
+            maxLength: momentCaptionMax,
+            enabled: !_busy,
+            style: V2Text.body.copyWith(color: Colors.white),
+            cursorColor: Colors.white,
+            decoration: InputDecoration(
+              hintText: '한 줄 남기기 (선택)',
+              hintStyle: V2Text.body.copyWith(color: Colors.white54),
+              counterText: '',
+              filled: true,
+              fillColor: Colors.white.withValues(alpha: .08),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 12,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _PostChip(
+                key: const Key('moment_post_date'),
+                icon: V2Icons.calendar,
+                label: momentDateChipLabel(
+                  post.date,
+                  photoDate: post.photoDate,
+                ),
+                strong: true,
+                onTap: _busy ? null : () => _pickDate(post),
+              ),
+              _PostChip(
+                key: const Key('moment_post_place'),
+                icon: V2Icons.location,
+                label: post.place?.name ?? '장소',
+                strong: post.place != null,
+                onTap: _busy ? null : () => _pickPlace(post),
+              ),
+              if (post.isToday)
+                _PostChip(
+                  key: const Key('moment_post_today'),
+                  icon: V2Icons.sparkle,
+                  label: '오늘의 순간',
+                  strong: post.todayMoment,
+                  selected: post.todayMoment,
+                  onTap: _busy
+                      ? null
+                      : () => setState(
+                          () => post.todayMoment = !post.todayMoment,
+                        ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickDate(MomentPostOptions post) async {
+    final picked = await showMomentDateSheet(
+      context,
+      current: post.date,
+      photoDate: post.photoDate,
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      post.date = dateOnly(picked);
+      if (!post.isToday) post.todayMoment = false;
+    });
+  }
+
+  Future<void> _pickPlace(MomentPostOptions post) async {
+    final picked = await post.pickPlace(context, post.place?.id);
+    if (picked == null || !mounted) return;
+    setState(() => post.place = picked.cleared ? null : picked.place);
   }
 
   Widget _dots(int count) {
@@ -686,6 +822,62 @@ class _ToolButton extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(label, style: V2Text.cap.copyWith(color: Colors.white)),
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PostChip extends StatelessWidget {
+  const _PostChip({
+    super.key,
+    required this.icon,
+    required this.label,
+    this.strong = false,
+    this.selected = false,
+    this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool strong;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = selected ? Colors.black : Colors.white;
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: Material(
+        color: selected
+            ? Colors.white
+            : Colors.white.withValues(alpha: strong ? .18 : .1),
+        shape: const StadiumBorder(),
+        child: InkWell(
+          customBorder: const StadiumBorder(),
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 40),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 13),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 17, color: fg),
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: V2Text.buttonSm.copyWith(
+                      color: fg,
+                      fontWeight: strong ? FontWeight.w700 : FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

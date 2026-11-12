@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>기록 탭 콘셉트 3안</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=VT323&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#E7E5E1;color:#22201D;font-family:Pretendard,-apple-system,"Apple SD Gothic Neo",sans-serif;-webkit-font-smoothing:antialiased;word-break:keep-all}
+button{font:inherit;border:0;background:none;color:inherit;cursor:pointer;text-align:inherit}
+svg.i{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+:root{--acc:#C8462E;--me:#E8674A;--pt:#4C7BE0;--ink:#191919;--sub:#6B6B70}
+.top{max-width:1700px;margin:0 auto;padding:32px 24px 4px}
+.top h1{font-size:24px;font-weight:800;letter-spacing:-.4px}
+.top p{color:#6B665F;font-size:14px;margin-top:6px;line-height:1.6;max-width:900px}
+.concept{max-width:1700px;margin:30px auto 0;padding:0 24px}
+.concept>h2{font-size:20px;font-weight:800;letter-spacing:-.3px}
+.concept>h2 span{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:8px;background:#22201D;color:#fff;font-size:14px;margin-right:10px;vertical-align:2px}
+.concept>p{font-size:14px;color:#6B665F;line-height:1.6;margin-top:6px;max-width:900px}
+.row{display:flex;flex-wrap:wrap;gap:36px;margin-top:18px;padding-bottom:30px}
+.cap{width:360px;font-size:13px;color:#6B665F;margin-top:14px;line-height:1.55}
+.cap b{color:#22201D}
+
+/* phone */
+.phone{width:360px;height:780px;border-radius:46px;position:relative;overflow:hidden;box-shadow:0 0 0 9px #141414,0 28px 60px rgba(0,0,0,.28);isolation:isolate;background:#fff;color:var(--ink)}
+.sb{position:absolute;top:0;left:0;right:0;height:46px;display:flex;align-items:center;justify-content:space-between;padding:6px 28px 0 30px;font-size:15px;font-weight:600;z-index:40;pointer-events:none}
+.island{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:104px;height:30px;background:#000;border-radius:20px;z-index:41}
+.scr{position:absolute;inset:0;overflow-y:auto;padding:50px 0 110px;scrollbar-width:none}
+.scr::-webkit-scrollbar{display:none}
+.pill{position:absolute;left:16px;right:16px;bottom:22px;height:60px;border-radius:30px;display:flex;align-items:center;padding:5px;z-index:30;background:rgba(255,255,255,.9);border:1px solid rgba(0,0,0,.06);box-shadow:0 8px 24px rgba(0,0,0,.15);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+.pill span{flex:1;height:50px;display:grid;place-items:center;border-radius:25px;color:rgba(25,25,25,.55)}
+.pill span.on{background:rgba(0,0,0,.07);color:var(--ink)}
+.pill svg.i{width:25px;height:25px}
+.head{display:flex;align-items:center;justify-content:space-between;padding:10px 16px 6px}
+.head h3{font-size:26px;font-weight:800;letter-spacing:-.5px}
+.head .r{display:flex;gap:8px}
+.iconbtn{width:42px;height:42px;border-radius:21px;display:grid;place-items:center;background:#F4F4F6}
+.iconbtn.acc{background:var(--acc);color:#fff}
+.seg{display:flex;gap:6px;padding:4px 16px 10px}
+.seg button{height:34px;padding:0 14px;border-radius:17px;background:#F4F4F6;font-size:13.5px;font-weight:700;color:#55555A}
+.seg button.on{background:#191919;color:#fff}
+
+/* photo stand-ins */
+.ph{position:relative;overflow:hidden;background:#999}
+.ph-a{background:radial-gradient(60% 40% at 70% 38%,rgba(255,236,190,.95),rgba(255,236,190,0) 70%),linear-gradient(180deg,#F3C9A3 0%,#E9967A 42%,#9C5B60 70%,#3B2A36 100%)}
+.ph-b{background:radial-gradient(45% 35% at 30% 30%,rgba(255,255,255,.9),rgba(255,255,255,0) 70%),linear-gradient(165deg,#DCE7EE 0%,#A9BED0 45%,#6E8299 75%,#3D4757 100%)}
+.ph-c{background:radial-gradient(70% 50% at 50% 0%,#F7F4EC,rgba(247,244,236,0) 70%),linear-gradient(180deg,#BFD9E4 0%,#7FB1C9 40%,#2F7FA0 62%,#E4D2B4 63%,#CDB590 100%)}
+.ph-d{background:radial-gradient(50% 50% at 40% 45%,#FBE7D0,rgba(251,231,208,0) 70%),linear-gradient(140deg,#5B4636,#2E241D)}
+.ph-e{background:radial-gradient(40% 30% at 50% 35%,#FFF6D8,rgba(255,246,216,0) 70%),linear-gradient(180deg,#9FC59A 0%,#5F9A6A 55%,#3E6B4E 100%)}
+.ph-f{background:radial-gradient(35% 25% at 65% 30%,#FFD7A8,rgba(255,215,168,0) 70%),linear-gradient(180deg,#1E2440 0%,#38325A 50%,#E0A84E 51%,#2A2235 100%)}
+.ph-g{background:radial-gradient(40% 40% at 35% 60%,#FFE3EC,rgba(255,227,236,0) 70%),linear-gradient(180deg,#F6C6D3,#D78AA3 60%,#8E4F6B)}
+.vid:after{content:"";position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px;border-radius:50%;background:rgba(0,0,0,.4) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='white' d='M9 6.5v11l9-5.5z'/></svg>") center/22px no-repeat}
+.av{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;font-size:11px;font-weight:700;color:#fff;font-style:normal}
+.av.me{background:var(--me)}.av.pt{background:var(--pt)}
+
+/* ═══ 1 · 우리의 하루 (split) ═══ */
+.day1{margin:0 14px 18px}
+.day1 .dh{display:flex;align-items:baseline;justify-content:space-between;padding:0 2px 8px}
+.day1 .dh b{font-size:16px;letter-spacing:-.2px}
+.day1 .dh small{font-size:12.5px;color:var(--sub)}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:3px;height:250px;border-radius:20px;overflow:hidden;position:relative;width:100%}
+.split .half{position:relative}
+.split .half .who{position:absolute;left:10px;top:10px;display:flex;align-items:center;gap:6px;color:#fff;font-size:12px;font-weight:700;text-shadow:0 1px 3px rgba(0,0,0,.4)}
+.split .half .cnt{position:absolute;right:10px;top:10px;padding:2px 7px;border-radius:9px;background:rgba(0,0,0,.4);color:#fff;font-size:11px}
+.split .empty{background:repeating-linear-gradient(135deg,#F3F2F0 0 10px,#ECEAE6 10px 20px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#8A867F;font-size:12.5px;text-align:center;line-height:1.45}
+.split .playall{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);height:34px;padding:0 14px;border-radius:17px;background:rgba(255,255,255,.92);color:#191919;font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px;box-shadow:0 4px 12px rgba(0,0,0,.2)}
+.day1 .foot{display:flex;align-items:center;gap:12px;padding:8px 2px 0;font-size:13.5px}
+.day1 .foot .q{flex:1;color:#3A3A3D;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.day1 .foot button{display:flex;align-items:center;gap:4px;font-weight:700;color:#191919}
+.day1 .foot .liked{color:var(--acc)}.day1 .foot .liked svg{fill:var(--acc)}
+/* split month grid */
+.mon{display:flex;align-items:baseline;justify-content:space-between;padding:12px 16px 8px}
+.mon b{font-size:17px}.mon small{font-size:13px;color:var(--sub)}
+.wk{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;padding:0 12px;font-size:11px;color:var(--sub);text-align:center;margin-bottom:4px}
+.cal1{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;padding:0 12px}
+.c1{aspect-ratio:.72;border-radius:8px;overflow:hidden;position:relative;display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#F4F3F1}
+.c1 .x{position:relative}
+.c1 .n{position:absolute;left:4px;top:3px;font-size:11px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.55);z-index:1}
+.c1.none .n{color:#B8B4AD;text-shadow:none}
+.c1 .gap{background:#F1EFEC}
+.legend{display:flex;gap:14px;padding:12px 16px 0;font-size:12px;color:var(--sub)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+/* split player */
+.player{position:absolute;inset:0;background:#000;color:#fff;z-index:35;display:none}
+.player.on{display:block}
+.player .halves{position:absolute;top:96px;left:0;right:0;bottom:150px;display:grid;grid-template-columns:1fr 1fr;gap:3px}
+.player .halves .ph{border-radius:0}
+.player .halves .lbl{position:absolute;left:10px;bottom:10px;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700}
+.player .bars{position:absolute;top:56px;left:12px;right:12px;display:flex;gap:4px}
+.player .bars i{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.3);overflow:hidden}
+.player .bars i b{display:block;height:100%;width:0;background:#fff}
+.player .pt{position:absolute;top:66px;left:14px;right:14px;display:flex;align-items:center;justify-content:space-between}
+.player .pt b{font-size:15px}
+.player .pb{position:absolute;left:16px;right:16px;bottom:40px}
+.player .pb p{font-size:15px;line-height:1.5}
+.player .pb .ctl{display:flex;gap:10px;margin-top:12px}
+.player .pb .ctl button{height:40px;padding:0 14px;border-radius:20px;background:rgba(255,255,255,.14);display:flex;align-items:center;gap:6px;font-weight:700;font-size:13.5px}
+.player .x{position:absolute;right:12px;top:58px;width:40px;height:40px;border-radius:20px;background:rgba(255,255,255,.14);display:grid;place-items:center;z-index:2}
+
+/* ═══ 2 · 필름 ═══ */
+.film-bg{background:#F6F1E7}
+.stamp{position:absolute;right:10px;bottom:8px;font-family:VT323,monospace;font-size:22px;color:#FF8A2A;letter-spacing:1px;text-shadow:0 0 6px rgba(255,120,30,.6)}
+.frame{margin:0 16px 22px;background:#fff;padding:10px 10px 12px;border-radius:4px;box-shadow:0 6px 16px rgba(60,40,20,.12)}
+.frame .shot{height:300px;position:relative}
+.frame .ft{display:flex;align-items:center;justify-content:space-between;padding:10px 2px 0}
+.frame .ft b{font-size:15px}
+.frame .ft small{font-size:12.5px;color:#7B746A}
+.frame .strip{display:flex;gap:4px;margin-top:8px}
+.frame .strip button{flex:1;height:44px;border-radius:2px}
+.frame .strip button.on{outline:2px solid #191919;outline-offset:1px}
+.frame .cp{font-size:14px;margin-top:8px;line-height:1.5}
+.reel{margin:4px 0 14px;background:#1C1A18;padding:14px 0}
+.reel .t{color:#F2E6D0;font-size:14px;font-weight:700;padding:0 16px 8px;display:flex;justify-content:space-between}
+.reel .t small{color:#A79C8B;font-weight:500}
+.sprock{height:10px;background:radial-gradient(circle at 8px 5px,#E7DCC6 2.6px,transparent 3px) 0 0/16px 10px}
+.reel .cells{display:flex;gap:4px;overflow-x:auto;padding:6px 10px;scrollbar-width:none}
+.reel .cells::-webkit-scrollbar{display:none}
+.reel .cells button{flex:none;width:92px;height:122px;position:relative;border-radius:2px}
+.reel .cells .stamp{font-size:16px;right:5px;bottom:3px}
+.reel .cells .empty{background:#2A2724;display:grid;place-items:center;color:#6A6258;font-size:11px}
+
+/* ═══ 3 · 스크랩북 ═══ */
+.paper{background:#F4EBDD;background-image:radial-gradient(rgba(120,90,50,.06) 1px,transparent 1px);background-size:6px 6px}
+.hand{font-family:Gaegu,cursive}
+.spread{position:relative;height:620px;margin:0 6px}
+.pol{position:absolute;background:#fff;padding:8px 8px 30px;box-shadow:0 6px 14px rgba(70,50,20,.22);width:150px}
+.pol .ph{height:140px}
+.pol .note{position:absolute;left:8px;right:8px;bottom:5px;font-size:17px;color:#3A332B;line-height:1}
+.tape{position:absolute;width:62px;height:20px;background:rgba(240,214,160,.75);top:-9px;left:50%;margin-left:-31px;transform:rotate(-4deg)}
+.pin{position:absolute;top:-6px;left:50%;margin-left:-7px;width:14px;height:14px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#FF9C86,#C8462E);box-shadow:0 2px 3px rgba(0,0,0,.3)}
+.sticker{position:absolute;padding:6px 12px;border-radius:14px;font-size:18px;color:#fff;transform:rotate(-6deg)}
+.monthtab{display:flex;gap:8px;padding:4px 16px 8px;overflow-x:auto;scrollbar-width:none}
+.monthtab button{height:34px;padding:0 14px;border-radius:6px 6px 0 0;background:#E6D9C4;font-size:19px;color:#5A4E3E}
+.monthtab button.on{background:#fff;color:#22201D}
+.big{position:absolute;inset:0;background:rgba(40,30,20,.55);z-index:35;display:none;align-items:center;justify-content:center}
+.big.on{display:flex}
+.big .pol{position:relative;width:290px;transform:rotate(-1.5deg)}
+.big .pol .ph{height:300px}
+.big .pol .note{font-size:22px;bottom:6px}
+</style>
+</head>
+<body>
+<div class="top">
+  <h1>기록 탭 콘셉트 3안 — 구조는 A(피드) + B(그리드), 특색은 "우리 둘"</h1>
+  <p>세 콘셉트 모두 위에는 <b>피드 / 달력</b> 전환이 있고, 올리기와 날짜 칩은 지난 목업(D)과 같아요. 사진·카드·칸을 눌러보세요.</p>
+</div>
+
+<!-- ═══════════════ 1 ═══════════════ -->
+<section class="concept">
+  <h2><span>1</span>우리의 하루 — 나란히 보는 분할 카드 (셋로그 느낌)</h2>
+  <p>하루 카드가 <b>왼쪽 나 · 오른쪽 서윤</b>으로 나뉘어요. <b>하루 재생</b>을 누르면 둘의 사진·영상이 나란히 동시에 넘어가는 "우리의 하루 필름"이 돼요. 한쪽이 비면 그 반쪽이 "채워 주세요"로 남아요.</p>
+  <div class="row">
+    <div>
+      <div class="phone" id="p1a">
+        <div class="sb"><span>9:41</span><span>●●● ▮</span></div><div class="island"></div>
+        <div class="scr">
+          <div class="head"><h3>우리의 하루</h3><div class="r"><button class="iconbtn acc" aria-label="올리기"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div></div>
+          <div class="seg"><button class="on">피드</button><button onclick="document.getElementById('p1b').scrollIntoView({behavior:'smooth',block:'center',inline:'center'})">달력</button></div>
+          <div id="feed1"></div>
+        </div>
+        <div class="player" id="player1">
+          <div class="bars" id="pl1Bars"></div>
+          <div class="pt"><b id="pl1Date"></b></div>
+          <button class="x" aria-label="닫기" onclick="closeP1()"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+          <div class="halves"><div class="ph" id="pl1L"><span class="lbl"><i class="av me">나</i>나</span></div><div class="ph" id="pl1R"><span class="lbl"><i class="av pt">서</i>서윤</span></div></div>
+          <div class="pb"><p id="pl1Cap"></p><div class="ctl"><button onclick="toggleP1()" id="pl1Play"></button><button>♡ 좋아요</button></div></div>
+        </div>
+        <nav class="pill" aria-label="탭"><span><svg class="i" viewBox="0 0 24 24"><path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-5H9v5H5a1 1 0 0 1-1-1z"/></svg></span><span class="on"><svg class="i" viewBox="0 0 24 24"><path d="M3 5.5C5.5 4.5 8.5 4.5 11 6v13c-2.5-1.5-5.5-1.5-8-.5zM13 6c2.5-1.5 5.5-1.5 8-.5v13c-2.5-1-5.5-1-8 .5z"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2zM9 4v14M15 6v14"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><path d="M7 8h10a4 4 0 0 1 4 4v1a3 3 0 0 1-5.4 1.8L14.5 13h-5l-1.1 1.8A3 3 0 0 1 3 13v-1a4 4 0 0 1 4-4z"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span></nav>
+      </div>
+      <p class="cap"><b>피드:</b> 카드 하나 = 우리의 하루. 반쪽씩 각자의 대표 사진, 아래에 한 줄과 반응.</p>
+    </div>
+    <div>
+      <div class="phone" id="p1b">
+        <div class="sb"><span>9:41</span><span>●●● ▮</span></div><div class="island"></div>
+        <div class="scr">
+          <div class="head"><h3>우리의 하루</h3><div class="r"><button class="iconbtn acc" aria-label="올리기"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div></div>
+          <div class="seg"><button>피드</button><button class="on">달력</button></div>
+          <div id="cal1"></div>
+          <div class="legend"><span><i style="background:var(--me)"></i>나만</span><span><i style="background:var(--pt)"></i>서윤만</span><span><i style="background:linear-gradient(90deg,var(--me) 50%,var(--pt) 50%)"></i>둘 다</span></div>
+        </div>
+        <nav class="pill" aria-label="탭"><span><svg class="i" viewBox="0 0 24 24"><path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-5H9v5H5a1 1 0 0 1-1-1z"/></svg></span><span class="on"><svg class="i" viewBox="0 0 24 24"><path d="M3 5.5C5.5 4.5 8.5 4.5 11 6v13c-2.5-1.5-5.5-1.5-8-.5zM13 6c2.5-1.5 5.5-1.5 8-.5v13c-2.5-1-5.5-1-8 .5z"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2zM9 4v14M15 6v14"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><path d="M7 8h10a4 4 0 0 1 4 4v1a3 3 0 0 1-5.4 1.8L14.5 13h-5l-1.1 1.8A3 3 0 0 1 3 13v-1a4 4 0 0 1 4-4z"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span></nav>
+      </div>
+      <p class="cap"><b>달력:</b> 날짜 칸이 반으로 나뉘어 나·서윤 사진이 같이 보여요. 누르면 그날 피드로 이동.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 2 ═══════════════ -->
+<section class="concept">
+  <h2><span>2</span>필름 카메라 — 날짜 각인과 필름 프레임</h2>
+  <p>사진마다 <b>주황색 날짜 각인</b>(<span style="font-family:VT323;color:#FF8A2A;font-size:17px">'25 11 09</span>)이 찍히고, 하루는 인화 사진 한 장처럼, 한 달은 <b>필름 롤</b>처럼 보여요. 날짜를 자유롭게 정하는 기능과 잘 맞아요.</p>
+  <div class="row">
+    <div>
+      <div class="phone film-bg" id="p2a">
+        <div class="sb"><span>9:41</span><span>●●● ▮</span></div><div class="island"></div>
+        <div class="scr film-bg">
+          <div class="head"><h3>기록</h3><div class="r"><button class="iconbtn acc" aria-label="올리기"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div></div>
+          <div class="seg"><button class="on">피드</button><button onclick="document.getElementById('p2b').scrollIntoView({behavior:'smooth',block:'center',inline:'center'})">필름 롤</button></div>
+          <div id="feed2"></div>
+        </div>
+        <nav class="pill" aria-label="탭"><span><svg class="i" viewBox="0 0 24 24"><path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-5H9v5H5a1 1 0 0 1-1-1z"/></svg></span><span class="on"><svg class="i" viewBox="0 0 24 24"><path d="M3 5.5C5.5 4.5 8.5 4.5 11 6v13c-2.5-1.5-5.5-1.5-8-.5zM13 6c2.5-1.5 5.5-1.5 8-.5v13c-2.5-1-5.5-1-8 .5z"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2zM9 4v14M15 6v14"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><path d="M7 8h10a4 4 0 0 1 4 4v1a3 3 0 0 1-5.4 1.8L14.5 13h-5l-1.1 1.8A3 3 0 0 1 3 13v-1a4 4 0 0 1 4-4z"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span></nav>
+      </div>
+      <p class="cap"><b>피드:</b> 하루 = 인화 사진 한 장. 아래 작은 컷을 누르면 큰 사진이 바뀌어요.</p>
+    </div>
+    <div>
+      <div class="phone film-bg" id="p2b">
+        <div class="sb"><span>9:41</span><span>●●● ▮</span></div><div class="island"></div>
+        <div class="scr film-bg">
+          <div class="head"><h3>기록</h3><div class="r"><button class="iconbtn acc" aria-label="올리기"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div></div>
+          <div class="seg"><button>피드</button><button class="on">필름 롤</button></div>
+          <div id="reel2"></div>
+        </div>
+        <nav class="pill" aria-label="탭"><span><svg class="i" viewBox="0 0 24 24"><path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-5H9v5H5a1 1 0 0 1-1-1z"/></svg></span><span class="on"><svg class="i" viewBox="0 0 24 24"><path d="M3 5.5C5.5 4.5 8.5 4.5 11 6v13c-2.5-1.5-5.5-1.5-8-.5zM13 6c2.5-1.5 5.5-1.5 8-.5v13c-2.5-1-5.5-1-8 .5z"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2zM9 4v14M15 6v14"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><path d="M7 8h10a4 4 0 0 1 4 4v1a3 3 0 0 1-5.4 1.8L14.5 13h-5l-1.1 1.8A3 3 0 0 1 3 13v-1a4 4 0 0 1 4-4z"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span></nav>
+      </div>
+      <p class="cap"><b>필름 롤:</b> 한 달 = 필름 한 롤, 옆으로 넘겨요. 빈 컷은 "안 찍은 날".</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 3 ═══════════════ -->
+<section class="concept">
+  <h2><span>3</span>비밀기지 벽 — 스크랩북</h2>
+  <p>한 달이 <b>스크랩북 한 페이지</b>예요. 사진은 테이프와 핀으로 붙인 폴라로이드, 날짜와 한 줄은 손글씨 느낌. 사진을 누르면 크게 봐요.</p>
+  <div class="row">
+    <div>
+      <div class="phone paper" id="p3a">
+        <div class="sb"><span>9:41</span><span>●●● ▮</span></div><div class="island"></div>
+        <div class="scr paper">
+          <div class="head"><h3 class="hand" style="font-size:34px;font-weight:700">우리의 기지</h3><div class="r"><button class="iconbtn acc" aria-label="올리기"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div></div>
+          <div class="monthtab hand" id="tabs3"></div>
+          <div class="spread hand" id="spread3"></div>
+        </div>
+        <div class="big" id="big3" onclick="this.classList.remove('on')"><div class="pol hand"><span class="tape"></span><div class="ph" id="big3ph"></div><span class="note" id="big3n"></span></div></div>
+        <nav class="pill" aria-label="탭"><span><svg class="i" viewBox="0 0 24 24"><path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-5H9v5H5a1 1 0 0 1-1-1z"/></svg></span><span class="on"><svg class="i" viewBox="0 0 24 24"><path d="M3 5.5C5.5 4.5 8.5 4.5 11 6v13c-2.5-1.5-5.5-1.5-8-.5zM13 6c2.5-1.5 5.5-1.5 8-.5v13c-2.5-1-5.5-1-8 .5z"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2zM9 4v14M15 6v14"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><path d="M7 8h10a4 4 0 0 1 4 4v1a3 3 0 0 1-5.4 1.8L14.5 13h-5l-1.1 1.8A3 3 0 0 1 3 13v-1a4 4 0 0 1 4-4z"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span></nav>
+      </div>
+      <p class="cap"><b>한 페이지 = 한 달.</b> 위 월 탭으로 넘겨요. 감성은 가장 강하지만 사진이 많아지면 한눈에 보기 어려워요.</p>
+    </div>
+  </div>
+</section>
+
+<script>
+const $=(s)=>document.querySelector(s);
+const svgHeart='<svg class="i" viewBox="0 0 24 24" style="width:20px;height:20px"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>';
+const svgPlay='<svg class="i" viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor;stroke:none"><path d="M8 5v14l11-7z"/></svg>';
+const svgPause='<svg class="i" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M9 5v14M15 5v14"/></svg>';
+
+const DAYS=[
+ {d:'11월 9일 일요일',s:"'25 11 09",place:'성수동',me:['ph-a','ph-e','ph-f'],pt:['ph-b','ph-g'],cap:'창가 자리 햇살이 너무 좋았어',likes:3},
+ {d:'11월 7일 금요일',s:"'25 11 07",place:'퇴근길',me:['ph-d'],pt:[],cap:'오늘은 나 혼자 야근…',likes:0},
+ {d:'11월 2일 일요일',s:"'25 11 02",place:'강릉',me:['ph-c'],pt:['ph-c','ph-f'],cap:'파도 소리 들려?',likes:1,vid:true},
+];
+
+/* 1 · split feed */
+const liked1={};
+function renderFeed1(){
+  $('#feed1').innerHTML=DAYS.map((x,k)=>{
+    const half=(arr,who,av,name)=>arr.length?`<div class="half ph ${arr[0]} ${x.vid&&who==='pt'?'vid':''}"><span class="who"><i class="av ${av}">${name[0]}</i>${name}</span>${arr.length>1?`<span class="cnt">${arr.length}</span>`:''}</div>`:`<div class="half empty"><svg class="i" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>${name==='서윤'?'서윤의 하루를<br>기다려요':'내 하루를<br>채워 주세요'}</div>`;
+    return `<article class="day1"><div class="dh"><b>${x.d}</b><small>${x.place}</small></div>
+      <div class="split">${half(x.me,'me','me','나')}${half(x.pt,'pt','pt','서윤')}${x.me.length+x.pt.length>1?`<button class="playall" onclick="openP1(${k})">${svgPlay}하루 재생</button>`:''}</div>
+      <div class="foot"><span class="q">${x.cap}</span><button class="${liked1[k]?'liked':''}" onclick="liked1[${k}]=!liked1[${k}];renderFeed1()">${svgHeart}${x.likes+(liked1[k]?1:0)}</button></div></article>`;
+  }).join('');
+}
+let p1={k:0,t:0,playing:true};
+function openP1(k){p1={k,t:0,playing:true};$('#player1').classList.add('on');drawP1();}
+function closeP1(){$('#player1').classList.remove('on');}
+function toggleP1(){p1.playing=!p1.playing;drawP1();}
+function drawP1(){const x=DAYS[p1.k];const n=Math.max(x.me.length,x.pt.length);const step=Math.min(n-1,Math.floor(p1.t/100));
+  $('#pl1Date').textContent=x.d;$('#pl1Cap').textContent=x.cap;
+  $('#pl1L').className='ph '+(x.me[step%x.me.length]||'');$('#pl1R').className='ph '+(x.pt.length?x.pt[step%x.pt.length]:'');
+  if(!x.pt.length)$('#pl1R').style.background='#222';else $('#pl1R').style.background='';
+  $('#pl1Bars').innerHTML=Array.from({length:n},(_,j)=>`<i><b style="width:${j<step?100:j===step?(p1.t%100):0}%"></b></i>`).join('');
+  $('#pl1Play').innerHTML=(p1.playing?svgPause+'멈춤':svgPlay+'재생');}
+setInterval(()=>{if(!$('#player1').classList.contains('on')||!p1.playing)return;const x=DAYS[p1.k];const n=Math.max(x.me.length,x.pt.length);p1.t+=2;if(p1.t>=n*100)p1.t=0;drawP1();},60);
+renderFeed1();
+
+function renderCal1(){
+  const data={2:['ph-c','ph-c'],3:['ph-e',null],5:[null,'ph-g'],7:['ph-d',null],9:['ph-a','ph-b'],11:['ph-f','ph-e'],12:[null,'ph-b']};
+  let h='<div class="mon"><b>2025년 11월</b><small>둘 다 남긴 날 3일</small></div><div class="wk">'+['일','월','화','수','목','금','토'].map(w=>`<span>${w}</span>`).join('')+'</div><div class="cal1">';
+  for(let i=0;i<6;i++)h+='<span></span>';
+  for(let d=1;d<=30;d++){const v=data[d];if(!v){h+=`<div class="c1 none"><span class="n">${d}</span></div>`;continue;}
+    h+=`<button class="c1" onclick="document.getElementById('p1a').scrollIntoView({behavior:'smooth',block:'center',inline:'center'})" aria-label="11월 ${d}일"><span class="n">${d}</span><span class="x ${v[0]?'ph '+v[0]:'gap'}"></span><span class="x ${v[1]?'ph '+v[1]:'gap'}"></span></button>`;}
+  h+='</div>';$('#cal1').innerHTML=h;
+}
+renderCal1();
+
+/* 2 · film */
+const pick2={};
+function renderFeed2(){
+  $('#feed2').innerHTML=DAYS.map((x,k)=>{const all=[...x.me,...x.pt];const i=pick2[k]||0;return `<article class="frame"><div class="shot ph ${all[i]}"><span class="stamp">${x.s}</span></div>
+    ${all.length>1?`<div class="strip">${all.map((c,j)=>`<button class="ph ${c} ${j===i?'on':''}" aria-label="${j+1}번째 사진" onclick="pick2[${k}]=${j};renderFeed2()"></button>`).join('')}</div>`:''}
+    <div class="ft"><b>${x.d}</b><small>${x.place} · ${all.length}컷</small></div><p class="cp">${x.cap}</p></article>`}).join('');
+}
+renderFeed2();
+function renderReel2(){
+  const rolls=[{m:'11월 롤',sub:'12컷 중 7컷',cells:[['ph-c',"'25 11 02"],['ph-e',"'25 11 03"],[null,'11/04'],['ph-g',"'25 11 05"],[null,'11/06'],['ph-d',"'25 11 07"],['ph-a',"'25 11 09"],['ph-f',"'25 11 11"],['ph-b',"'25 11 12"]]},
+    {m:'10월 롤',sub:'31컷 중 5컷',cells:[['ph-b',"'25 10 03"],['ph-e',"'25 10 14"],['ph-c',"'25 10 19"],['ph-a',"'25 10 25"],['ph-d',"'25 10 28"]]}];
+  $('#reel2').innerHTML=rolls.map(r=>`<div class="reel"><div class="t">${r.m}<small>${r.sub}</small></div><div class="sprock"></div><div class="cells">${r.cells.map(c=>c[0]?`<button class="ph ${c[0]}"><span class="stamp">${c[1]}</span></button>`:`<button class="empty">${c[1]}<br>안 찍은 날</button>`).join('')}</div><div class="sprock"></div></div>`).join('');
+}
+renderReel2();
+
+/* 3 · scrapbook */
+const PAGES={
+ '11월':[{ph:'ph-a',n:'11/9 성수 카페 ☀',x:14,y:10,r:-6,t:'tape'},{ph:'ph-b',n:'서윤 · 서울숲',x:180,y:40,r:5,t:'pin'},{ph:'ph-c',n:'11/2 강릉 바다',x:30,y:250,r:4,t:'pin'},{ph:'ph-f',n:'한강 야경',x:186,y:275,r:-4,t:'tape'},{ph:'ph-d',n:'11/7 야근…',x:96,y:470,r:-2,t:'tape'}],
+ '10월':[{ph:'ph-e',n:'10/14 피크닉',x:20,y:20,r:4,t:'pin'},{ph:'ph-g',n:'꽃 선물 💐',x:182,y:60,r:-5,t:'tape'},{ph:'ph-d',n:'10/28 영화',x:60,y:290,r:-3,t:'tape'}],
+ '9월':[{ph:'ph-c',n:'9/21 제주',x:90,y:60,r:-4,t:'tape'}]};
+let page3='11월';
+function renderPage3(){
+  $('#tabs3').innerHTML=Object.keys(PAGES).map(m=>`<button class="${m===page3?'on':''}" onclick="page3='${m}';renderPage3()">${m}</button>`).join('');
+  $('#spread3').innerHTML=PAGES[page3].map((p,i)=>`<button class="pol" style="left:${p.x}px;top:${p.y}px;transform:rotate(${p.r}deg)" onclick="openBig3('${p.ph}','${p.n}')"><span class="${p.t}"></span><div class="ph ${p.ph}"></div><span class="note">${p.n}</span></button>`).join('')+
+   (page3==='11월'?'<span class="sticker" style="left:220px;top:470px;background:#E8674A">D+412</span><span class="sticker" style="left:30px;top:600px;background:#4C7BE0;transform:rotate(5deg)">둘 다 남긴 날 3일</span>':'');
+}
+function openBig3(ph,n){$('#big3ph').className='ph '+ph;$('#big3n').textContent=n;$('#big3').classList.add('on');}
+renderPage3();
+</script>
+</body>
+</html>

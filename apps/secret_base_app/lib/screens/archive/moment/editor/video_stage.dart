@@ -10,6 +10,7 @@ import '../../../../features/moment_loop/data/video_frames.dart';
 import '../../../../v2/v2.dart';
 import '../moment_format.dart';
 import 'editor_item.dart';
+import 'native_video_preview.dart';
 
 /// Video page of the editor: preview looping inside the kept range.
 class VideoStage extends StatefulWidget {
@@ -34,13 +35,24 @@ class VideoStage extends StatefulWidget {
 
 class VideoStageState extends State<VideoStage> {
   VideoPlayerController? _controller;
+
+  /// Web: the browser's own player (see [nativeVideoPreview]).
+  NativeVideoController? _native;
   bool _failed = false;
   bool _paused = false;
 
   @override
   void initState() {
     super.initState();
-    if (widget.preview) unawaited(_open());
+    if (!widget.preview) return;
+    if (nativeVideoPreviewAvailable) {
+      final v = widget.item.video;
+      _native = NativeVideoController()
+        ..start = v?.start ?? Duration.zero
+        ..end = v?.end ?? Duration.zero;
+      return;
+    }
+    unawaited(_open());
   }
 
   Future<void> _open() async {
@@ -73,6 +85,12 @@ class VideoStageState extends State<VideoStage> {
 
   /// Jumps to the kept range's start (after the range changed).
   Future<void> seekToStart({bool play = false}) async {
+    final native = _native;
+    if (native != null) {
+      final v = widget.item.video;
+      native.setRange(v?.start ?? Duration.zero, v?.end ?? Duration.zero);
+      return;
+    }
     final c = _controller;
     if (c == null || !c.value.isInitialized) return;
     await c.seekTo(widget.item.video?.start ?? Duration.zero);
@@ -83,6 +101,7 @@ class VideoStageState extends State<VideoStage> {
   void didUpdateWidget(covariant VideoStage oldWidget) {
     super.didUpdateWidget(oldWidget);
     final old = oldWidget;
+    if (!widget.active && old.active) _native?.pause();
     final c = _controller;
     if (c == null || !c.value.isInitialized) return;
     if (widget.active && !old.active && !_paused) unawaited(c.play());
@@ -91,6 +110,7 @@ class VideoStageState extends State<VideoStage> {
 
   @override
   void dispose() {
+    _native?.dispose();
     _controller?.removeListener(_loop);
     unawaited(_controller?.dispose());
     super.dispose();
@@ -98,6 +118,32 @@ class VideoStageState extends State<VideoStage> {
 
   @override
   Widget build(BuildContext context) {
+    final native = _native;
+    if (native != null) {
+      return Semantics(
+        label: '영상 미리보기',
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            nativeVideoPreview(url: widget.item.file.path, controller: native),
+            IgnorePointer(
+              child: ValueListenableBuilder<bool>(
+                valueListenable: native.paused,
+                builder: (context, paused, _) => paused
+                    ? const Center(
+                        child: Icon(
+                          Icons.play_circle_fill_rounded,
+                          color: Colors.white70,
+                          size: 72,
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     final c = _controller;
     final ready = c != null && c.value.isInitialized && !_failed;
     return Semantics(
@@ -152,7 +198,9 @@ class _Placeholder extends StatelessWidget {
   Widget build(BuildContext context) {
     final poster = this.poster;
     if (poster != null) {
-      return Image.memory(poster, fit: BoxFit.contain, gaplessPlayback: true);
+      return SizedBox.expand(
+        child: Image.memory(poster, fit: BoxFit.contain, gaplessPlayback: true),
+      );
     }
     return Column(
       mainAxisSize: MainAxisSize.min,

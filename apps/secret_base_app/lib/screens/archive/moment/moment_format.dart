@@ -67,6 +67,7 @@ bool momentVideoNeedsConvert({
 String momentFailureReason(String? code) => switch (code) {
   'media_too_large' || 'file_too_large' => '30MB 이하만 올릴 수 있어요',
   'clip_too_long' => '영상은 1분까지예요',
+  'moment_future_date' => '미래 날짜로는 남길 수 없어요',
   'clip_duration_unreadable' => '영상 길이를 읽지 못했어요',
   'clip_conversion_failed' => '영상을 변환하지 못했어요',
   'invalid_media_type' || 'invalid_media_upload' => '올릴 수 없는 파일 형식이에요',
@@ -90,6 +91,7 @@ bool momentFailureNeedsEdit(String? code) => switch (code) {
   'media_too_large' ||
   'file_too_large' ||
   'clip_too_long' ||
+  'moment_future_date' ||
   'clip_duration_unreadable' ||
   'clip_conversion_failed' ||
   'invalid_media_type' ||

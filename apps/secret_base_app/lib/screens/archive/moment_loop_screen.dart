@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:image_picker/image_picker.dart';
 
 import '../../core/auth_service.dart';
 import '../../core/http/api_client.dart';
@@ -19,10 +18,15 @@ import 'moment/moment_composer.dart';
 import 'moment/moment_detail.dart';
 import 'moment/moment_feed.dart';
 import 'moment/moment_format.dart';
+import 'moment/moment_day_feed.dart';
+import 'moment/moment_day_viewer.dart';
+import 'moment/moment_days.dart';
+import 'moment/moment_place_picker.dart';
+import 'moment/moment_post_flow.dart';
 import 'moment/moment_sheets.dart';
-import 'moment/moment_story_feed.dart';
 
-/// 기록 (2.1): 하루 한 장 피드 + 스토리 줄 + "내 순간 올리기", 모아보기 달력, 작성기.
+/// 기록 · 우리의 하루: day cards (my row + the partner's row), a split
+/// calendar, a day viewer, and pick → edit → post.
 class MomentLoopScreen extends StatefulWidget {
   final http.Client? client;
   final String? baseUrl;
@@ -71,7 +75,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
   late final UploadOutbox _outbox;
   TodayApi? _todayApi;
 
-  /// 모아보기(달력) instead of the one-day-per-page feed.
+  /// 달력 instead of the day feed.
   bool _calendar = false;
 
   /// Day the feed should scroll to next (calendar pick, after posting).
@@ -143,7 +147,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     unawaited(_loadPosts());
     if (widget.openComposer && widget.initialDraftId == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(_openComposer());
+        if (mounted) unawaited(_compose());
       });
     }
   }
@@ -252,38 +256,63 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
 
   // ── Composer / drafts ──────────────────────────────────────────────────────
 
-  Future<void> _openComposer({
-    bool todayMoment = true,
-    MomentStartSource source = MomentStartSource.none,
+  /// A new record. Without [source] it first asks camera / album / text.
+  /// [date] files it under that day (a day's empty row, 오늘의 순간).
+  Future<void> _compose({
+    DateTime? date,
+    bool todayMoment = false,
+    MomentStartSource? source,
   }) async {
-    Future<List<XFile>>? albumPick;
-    if (kIsWeb &&
-        source == MomentStartSource.gallery &&
-        widget.mediaPicker == null) {
-      // Mobile browsers open a file chooser only inside the user's own tap.
-      // Waiting until the composer is on screen loses that tap: the chooser
-      // never opens and its future never completes, which used to leave the
-      // composer's camera/album buttons stuck. So open it right here, still
-      // inside the "앨범에서 고르기" tap, and hand the result over.
-      albumPick = ImagePicker().pickMultipleMedia(limit: momentMaxMedia);
-      source = MomentStartSource.none;
-    }
-    final created = await Navigator.of(context).push<Object?>(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (_) => MomentComposerPage(
-          controller: _controller,
-          outbox: _outbox,
-          mediaPicker: widget.mediaPicker,
-          startWithTodayMoment: todayMoment,
-          startSource: source,
-          startPick: albumPick,
-          initialPinId: widget.initialPinId,
-          initialPinName: widget.initialPinName,
-        ),
-      ),
+    source ??= await showMomentSourceSheet(
+      context,
+      title: todayMoment ? '오늘의 순간 올리기' : '기록 남기기',
     );
-    if (!mounted || created is! DateTime) return;
+    if (source == null || !mounted) return;
+    // Mobile browsers open a file chooser only inside the user's own tap,
+    // so the album is opened right here, before anything else awaits.
+    final picked =
+        kIsWeb &&
+            source == MomentStartSource.gallery &&
+            widget.mediaPicker == null
+        ? MomentPostFlow.pickAlbum()
+        : null;
+    final DateTime? created;
+    if (source == MomentStartSource.text) {
+      created = await Navigator.of(context).push<DateTime>(
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) => MomentComposerPage(
+            controller: _controller,
+            outbox: _outbox,
+            mediaPicker: widget.mediaPicker,
+            startWithTodayMoment: todayMoment,
+            startSource: MomentStartSource.text,
+            initialDate: date,
+            initialPinId: widget.initialPinId,
+            initialPinName: widget.initialPinName,
+          ),
+        ),
+      );
+    } else {
+      created = await MomentPostFlow.start(
+        context,
+        controller: _controller,
+        outbox: _outbox,
+        source: source,
+        picked: picked,
+        mediaPicker: widget.mediaPicker,
+        date: date,
+        todayMoment: todayMoment,
+        hasTodayMoment: _today?.myMoment != null,
+        place: widget.initialPinId == null
+            ? null
+            : MomentPlace(
+                id: widget.initialPinId,
+                name: widget.initialPinName ?? '연결한 장소',
+              ),
+      );
+    }
+    if (!mounted || created == null) return;
     _showDate(created);
     _resumeUploads();
     await _loadPosts();
@@ -429,6 +458,31 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
     );
   }
 
+  Future<void> _openDay(MomentDayPage page, Moment start) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => V2Theme(
+          child: MomentDayViewer(
+            controller: _controller,
+            day: page.day,
+            baseUrl: _baseUrl,
+            myUserId: _userId,
+            partnerName: _partnerName,
+            initialPostId: start.id,
+            onComments: _openComments,
+            onMore: (post) => _openDetail(
+              _controller.state.moments
+                  .where((m) => m.sessionKey == post.sessionKey)
+                  .toList()
+                ..sort((a, b) => a.position.compareTo(b.position)),
+              initialPostId: post.id,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<bool> _deleteMoment(Moment post) async {
     try {
       await _controller.deleteMoment(post.id);
@@ -444,16 +498,6 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
   }
 
   // ── Build ──────────────────────────────────────────────────────────────
-
-  Future<void> _heart(Moment post) async {
-    try {
-      await _controller.toggleReaction(sessionId: post.sessionKey, emoji: '❤️');
-    } catch (_) {
-      if (mounted) {
-        showV2Snack(context, '하트를 보내지 못했어요', tone: V2Tone.err);
-      }
-    }
-  }
 
   Future<void> _openComments(Moment post) async {
     if (post.todayLocked && post.userId != _userId) {
@@ -515,18 +559,7 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
       );
     }
 
-    final me = _userId;
-    final pages = buildMomentDayPages(state.moments, me);
-    final todayKey = dayKey(dateOnly(DateTime.now()));
-    final todayPage = pages.where((pg) => dayKey(pg.day) == todayKey);
-    final postedToday = todayPage.isNotEmpty && todayPage.first.hasMine;
-    final partnerToday = todayPage.isNotEmpty && todayPage.first.hasTheirs
-        ? todayPage.first.theirs.first
-        : null;
-    // When I have not posted, today's page is the "내 순간 올리기" page.
-    final feedPages = postedToday
-        ? pages
-        : pages.where((pg) => dayKey(pg.day) != todayKey).toList();
+    final pages = buildMomentDayPages(state.moments, _userId);
 
     final drafts = _outbox.drafts;
     Widget? banner;
@@ -550,37 +583,27 @@ class _MomentLoopScreenState extends State<MomentLoopScreen> {
             );
     }
 
-    final body = _calendar
-        ? MomentMonthGrid(
-            pages: pages,
-            baseUrl: _baseUrl,
-            myUserId: me,
-            todayOpen: postedToday,
-            onShowFeed: () => setState(() => _calendar = false),
-            onPickDay: _showDate,
-          )
-        : MomentStoryFeed(
-            pages: feedPages,
-            showTodayCta: !postedToday,
-            partnerPostedToday:
-                partnerToday != null || (_today?.hasPartnerMoment ?? false),
-            partnerTodayMoment: partnerToday,
-            baseUrl: _baseUrl,
-            myUserId: me,
-            myName: _myName,
-            partnerName: _partnerName,
-            onCompose: (source) => _openComposer(source: source),
-            onOpenGroup: _openDetail,
-            onHeart: _heart,
-            onComments: _openComments,
-            onShowCalendar: () => setState(() => _calendar = true),
-            banner: banner == null ? null : V2Theme(child: banner),
-            jumpTo: _jumpTo,
-          );
+    final body = MomentDayFeed(
+      pages: pages,
+      baseUrl: _baseUrl,
+      myName: _myName,
+      partnerName: _partnerName,
+      calendar: _calendar,
+      onCalendar: (on) => setState(() => _calendar = on),
+      onCompose: ({DateTime? date, bool todayMoment = false}) =>
+          unawaited(_compose(date: date, todayMoment: todayMoment)),
+      onOpenDay: (page, start) => unawaited(_openDay(page, start)),
+      onLocked: () => showV2Snack(context, '내 순간을 남기면 $_partnerName의 순간이 열려요'),
+      today: _today,
+      banner: banner,
+      jumpTo: _jumpTo,
+    );
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0C0C0E),
-      body: RefreshIndicator(onRefresh: _refresh, child: body),
+    return V2Theme(
+      child: Scaffold(
+        backgroundColor: p.bg,
+        body: RefreshIndicator(onRefresh: _refresh, child: body),
+      ),
     );
   }
 }
