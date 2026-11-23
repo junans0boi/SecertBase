@@ -12,8 +12,11 @@ export const REQUIRED_SCHEMA = Object.freeze({
   map_pins: ['media_url'],
   setlog_reactions: [],
   device_tokens: ['token', 'revoked_at'],
+  couple_notes: [
+    'couple_id', 'sender_id', 'body', 'open_at', 'delivered_at', 'read_at', 'deleted_at', 'client_request_id',
+  ],
   notification_prefs: [
-    'partner_moment', 'today_loop', 'game_invite',
+    'partner_moment', 'today_loop', 'game_invite', 'partner_note',
     'quiet_hours_enabled', 'quiet_start', 'quiet_end', 'reveal_hour',
   ],
 });

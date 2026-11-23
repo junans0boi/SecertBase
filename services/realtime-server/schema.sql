@@ -350,4 +350,24 @@ CREATE TABLE IF NOT EXISTS two_answer_responses (
   PRIMARY KEY (id),
   UNIQUE KEY uniq_two_answer_user (two_answer_id, user_id),
   KEY idx_two_answer_responses_couple (couple_id, two_answer_id)
+-- 쪽지 (migrations/0052_notes.sql)
+CREATE TABLE IF NOT EXISTS couple_notes (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  couple_id INT NOT NULL,
+  sender_id INT NOT NULL,
+  body TEXT NOT NULL,
+  media_url TEXT NULL,
+  map_pin_id INT NULL,
+  setlog_post_id INT NULL,
+  open_at DATETIME NULL,
+  delivered_at DATETIME NULL,
+  read_at DATETIME NULL,
+  reaction VARCHAR(16) NULL,
+  deleted_at DATETIME NULL,
+  client_request_id VARCHAR(64) COLLATE utf8mb4_bin NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_couple_notes_couple_id (couple_id, id),
+  KEY idx_couple_notes_due (delivered_at, open_at),
+  UNIQUE KEY uq_couple_notes_sender_req (sender_id, client_request_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

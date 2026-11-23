@@ -52,7 +52,7 @@ test('prefs default to all on, and PUT validates booleans', async () => {
   }, async (base) => {
     const got = await (await fetch(`${base}/notification-prefs`)).json();
     assert.deepEqual(got.prefs, {
-      partner_moment: true, today_loop: true, game_invite: true,
+      partner_moment: true, today_loop: true, game_invite: true, partner_note: true,
       quiet_hours_enabled: true, quiet_start: '22:00', quiet_end: '08:00', reveal_hour: 21,
     });
     assert.equal((await call(base, 'PUT', '/notification-prefs', { today_loop: false })).status, 200);
@@ -75,7 +75,7 @@ test('partial preference updates round trip clock settings and preserve other fi
     })).status, 200);
     assert.equal((await call(base, 'PUT', '/notification-prefs', { game_invite: false })).status, 200);
     assert.deepEqual((await (await fetch(`${base}/notification-prefs`)).json()).prefs, {
-      partner_moment: false, today_loop: true, game_invite: false,
+      partner_moment: false, today_loop: true, game_invite: false, partner_note: true,
       quiet_hours_enabled: false, quiet_start: '23:30', quiet_end: '07:15', reveal_hour: 20,
     });
     for (const patch of [{ quiet_start: '24:00' }, { quiet_end: '8:00' }, { reveal_hour: 24 },

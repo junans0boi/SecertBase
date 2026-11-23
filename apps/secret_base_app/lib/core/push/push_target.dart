@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 
 final pendingPushTarget = ValueNotifier<PushTarget?>(null);
@@ -25,6 +26,7 @@ class PushTarget {
       'today_loop',
       'game_invite',
       'moment_draft',
+      'notes',
     ].contains(screen)) {
       return null;
     }
