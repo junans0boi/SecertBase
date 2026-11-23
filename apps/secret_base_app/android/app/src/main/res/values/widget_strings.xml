@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_dday_label">기지 위젯 · D-day</string>
+    <string name="widget_today_label">기지 위젯 · 오늘 상태</string>
+    <string name="widget_dday_description">함께한 날과 다음 기념일까지 남은 날을 보여 줘요.</string>
+    <string name="widget_today_description">마주 열기, 오늘의 루프, 쪽지 수만 간단히 보여 줘요. 내용은 보이지 않아요.</string>
+    <string name="widget_dday_caption">함께한 날</string>
+    <string name="widget_empty_title">비밀기지</string>
+    <string name="widget_empty_hint">앱을 열어 연결을 확인해 주세요</string>
+    <string name="widget_today">오늘</string>
+    <string name="widget_days_left">%1$d일 남음</string>
+    <string name="widget_days_left_preview">100일 · 12일 남음</string>
+    <string name="widget_row_qa">마주 열기</string>
+    <string name="widget_row_loop">오늘의 루프</string>
+    <string name="widget_row_notes">쪽지</string>
+    <string name="widget_qa_my_turn">내 차례</string>
+    <string name="widget_qa_waiting">기다리는 중</string>
+    <string name="widget_qa_open">열렸어요</string>
+    <string name="widget_loop_open">공개됨</string>
+    <string name="widget_loop_closed">아직 닫혀 있어요</string>
+    <string name="widget_notes_none">없음</string>
+    <string name="widget_notes_count">%1$d개 안 읽음</string>
+    <string name="widget_unknown">앱에서 확인</string>
+</resources>

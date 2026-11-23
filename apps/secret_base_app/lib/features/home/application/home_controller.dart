@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../base_widget/base_widget_service.dart';
 import '../data/home_overview_repository.dart';
 import '../domain/home_overview.dart';
 
@@ -34,6 +35,7 @@ class HomeController extends ChangeNotifier {
     try {
       final data = await repository.fetch();
       if (version != _requestVersion) return;
+      BaseWidgetService.instance.onHome(data);
       _setState(
         HomeState(
           status: data.failedSections.isEmpty
