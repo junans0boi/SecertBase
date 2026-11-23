@@ -84,7 +84,10 @@ test('Notes: Couple isolation, scheduled opening, idempotency, references, delet
       assert.equal((await A('/notes', 'POST', { body: 'p', map_pin_id: otherPin })).status, 404);
 
       // 읽음·반응·삭제
-      assert.equal((await (await B('/notes/read', 'POST', { last_read_id: locked.id })).json()).unread_count, 0);
+      // locked.id 까지만 읽으면 그 뒤에 온 장소 쪽지(열려 있음)는 아직 읽지 않은 상태다.
+      assert.equal((await (await B('/notes/read', 'POST', { last_read_id: locked.id })).json()).unread_count, 1);
+      const newest = (await (await B('/notes')).json()).notes[0].id;
+      assert.equal((await (await B('/notes/read', 'POST', { last_read_id: newest })).json()).unread_count, 0);
       const mine = (await (await A('/notes')).json()).notes.find((n) => n.id === note.id);
       assert.ok(mine.read_at);
       assert.equal((await B(`/notes/${note.id}/reaction`, 'POST', { emoji: '😊' })).status, 200);
