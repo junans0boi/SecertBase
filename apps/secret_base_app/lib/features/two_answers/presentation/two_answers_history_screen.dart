@@ -118,15 +118,29 @@ class _TwoAnswersHistoryScreenState extends State<TwoAnswersHistoryScreen> {
                         child: V2Card(
                           variant: V2CardVariant.soft,
                           onTap: () => _answerLate(card),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          semanticLabel:
+                              '${card.businessDate}, ${card.question}, 답하기',
+                          child: Row(
                             children: [
-                              Text(
-                                card.businessDate,
-                                style: V2Text.cap.copyWith(color: p.sub),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      card.businessDate,
+                                      style: V2Text.cap.copyWith(color: p.sub),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(V2Text.keepAll(card.question)),
+                                  ],
+                                ),
                               ),
-                              const SizedBox(height: 2),
-                              Text(V2Text.keepAll(card.question)),
+                              const SizedBox(width: V2Space.x2),
+                              Text(
+                                '답하기',
+                                style: V2Text.cap.copyWith(color: p.primary),
+                              ),
+                              Icon(V2Icons.chevron, color: p.sub, size: 20),
                             ],
                           ),
                         ),

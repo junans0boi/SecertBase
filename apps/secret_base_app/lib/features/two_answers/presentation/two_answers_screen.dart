@@ -232,7 +232,9 @@ class _TwoAnswersScreenState extends State<TwoAnswersScreen> {
           icon: V2Icons.lock,
         )
       else if (card.partnerAnswered)
-        V2Banner(message: '상대가 먼저 답했어요. 나도 답하면 함께 열려요.', icon: V2Icons.heart),
+        V2Banner(message: '상대가 먼저 답했어요. 나도 답하면 함께 열려요.', icon: V2Icons.heart)
+      else
+        V2Banner(message: '둘 다 답해야 서로의 답이 열려요', icon: V2Icons.lock),
       const SizedBox(height: V2Space.x4),
       V2TextField(
         label: '내 답변',

@@ -175,6 +175,15 @@ void main() {
   });
 
   group('answer screen', () {
+    testWidgets('a fresh question says both must answer to open', (
+      tester,
+    ) async {
+      final repo = _FakeRepo(_card(TwoAnswerStatus.myTurn));
+      await tester.pumpWidget(_wrap(TwoAnswersScreen(repository: repo)));
+      await tester.pumpAndSettle();
+      expect(find.text('둘 다 답해야 서로의 답이 열려요'), findsOneWidget);
+    });
+
     testWidgets(
       'submitting an answer moves to waiting and keeps partner hidden',
       (tester) async {
@@ -263,6 +272,9 @@ void main() {
         expect(find.textContaining('상대 옛답'), findsOneWidget);
         expect(find.text('아직 답하지 않은 질문'), findsOneWidget);
         expect(find.textContaining('놓쳤'), findsNothing);
+        // 놓친 질문 카드는 눌러서 답하는 버튼임이 보여야 한다.
+        expect(find.text('답하기'), findsOneWidget);
+        expect(find.bySemanticsLabel(RegExp('답하기')), findsWidgets);
 
         await tester.tap(_q.first);
         await tester.pumpAndSettle();
