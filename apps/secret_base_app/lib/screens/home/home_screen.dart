@@ -671,7 +671,7 @@ class _HomeScreenState extends State<HomeScreen> {
             : '오늘의 순간을\n남겨 볼까요?',
         sub: partnerFirst
             ? '나도 한 장 남기면 둘의 사진이 열려요'
-            : '${josa(_partnerName, '와', '과')} 서로의 오늘을 바꿔 봐요',
+            : swapTodaySub(_partnerName),
         action: partnerFirst ? '나도 남기기' : '오늘의 순간 남기기',
         actionIcon: V2Icons.camera,
         onAction: _offline ? null : _createMoment,

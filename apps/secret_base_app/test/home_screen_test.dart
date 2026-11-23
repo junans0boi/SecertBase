@@ -80,6 +80,11 @@ void _tall(WidgetTester tester) {
 }
 
 void main() {
+  test('swapTodaySub picks 와/과 by the final consonant', () {
+    expect(swapTodaySub('바다'), '바다와 서로의 오늘을 바꿔 봐요');
+    expect(swapTodaySub('하늘'), '하늘과 서로의 오늘을 바꿔 봐요');
+  });
+
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   testWidgets('home: date, 함께한 날, next day, one focus card, quiet rows', (

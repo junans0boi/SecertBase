@@ -13,7 +13,7 @@ const STYLE = `
 body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#14121f;color:#f4f1ff;font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",sans-serif}
 main{max-width:360px;padding:32px 24px;text-align:center}
 h1{font-size:24px;margin:0 0 12px}
-p{line-height:1.6;color:#cfc9e8;margin:0 0 16px}
+p{line-height:1.6;color:#cfc9e8;margin:0 0 16px;word-break:keep-all}
 a.btn{display:block;padding:14px 16px;border-radius:14px;background:#8b7cf6;color:#fff;font-weight:700;text-decoration:none}
 small{display:block;margin-top:20px;color:#9a93bd;line-height:1.5}
 `;

@@ -86,3 +86,15 @@ test('assetlinks.json ignores malformed fingerprints', async () => {
     assert.deepEqual(await (await fetch(`${base}/.well-known/assetlinks.json`)).json(), []);
   });
 });
+
+test('landing paragraphs do not break Korean words mid-word and the CSP still matches the style', async () => {
+  const { createHash } = await import('node:crypto');
+  await withApp({}, async base => {
+    const res = await fetch(`${base}/i/ABC234`);
+    const html = await res.text();
+    assert.match(html, /word-break:keep-all/);
+    const style = html.match(/<style>([\s\S]*?)<\/style>/)[1];
+    const hash = createHash('sha256').update(style).digest('base64');
+    assert.ok(res.headers.get('content-security-policy').includes(`'sha256-${hash}'`));
+  });
+});

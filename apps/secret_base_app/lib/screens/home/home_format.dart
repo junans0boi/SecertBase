@@ -14,6 +14,10 @@ String josa(String word, String withBatchim, String withoutBatchim) {
   return '$word${hasBatchim ? withBatchim : withoutBatchim}';
 }
 
+/// 홈 순간 카드 보조 문구. "와/과"는 받침 있을 때 "과" (josa의 인자 순서: 받침 있음, 받침 없음).
+String swapTodaySub(String partnerName) =>
+    '${josa(partnerName, '과', '와')} 서로의 오늘을 바꿔 봐요';
+
 /// Local calendar day (time stripped).
 DateTime dayOf(DateTime value) => DateTime(value.year, value.month, value.day);
 
