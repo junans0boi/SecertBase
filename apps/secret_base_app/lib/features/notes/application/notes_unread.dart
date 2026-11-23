@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../../core/auth_service.dart';
+import '../../base_widget/base_widget_service.dart';
 import '../data/notes_repository.dart';
 import 'notes_events.dart';
 
@@ -35,6 +36,7 @@ class NotesUnread extends ChangeNotifier {
               note['mine'] != true &&
               note['status'] == 'visible') {
             count += 1;
+            BaseWidgetService.instance.onUnread(count);
             _notify();
           }
         } else if (event == 'note:deleted') {
@@ -50,6 +52,7 @@ class NotesUnread extends ChangeNotifier {
     if (repo == null) return;
     try {
       count = await repo.unreadCount();
+      BaseWidgetService.instance.onUnread(count);
       _notify();
     } catch (_) {
       // 점은 보조 표시이므로 실패하면 이전 값을 유지한다.

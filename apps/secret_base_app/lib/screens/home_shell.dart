@@ -8,7 +8,10 @@ import '../core/push/push_game_route.dart';
 import '../core/push/push_today_route.dart';
 import '../core/auth_service.dart';
 import '../core/socket_service.dart';
+import '../features/base_widget/base_widget_service.dart';
 import '../features/notes/application/notes_unread.dart';
+import '../features/two_answers/data/two_answers_repository.dart';
+import '../features/two_answers/presentation/two_answers_screen.dart';
 import '../features/notes/presentation/notes_screen.dart';
 import '../core/today_api.dart';
 import '../core/server_config.dart';
@@ -57,6 +60,10 @@ class _HomeShellState extends State<HomeShell> {
   @override
   void initState() {
     super.initState();
+    BaseWidgetService.instance
+      ..enable()
+      ..refreshers.add(_notesUnread.refresh)
+      ..listenForLaunches();
     _notesUnread.start();
     _probe();
     _probeTimer = Timer.periodic(widget.probeInterval, (_) => _probe());
@@ -68,6 +75,7 @@ class _HomeShellState extends State<HomeShell> {
   void dispose() {
     _probeTimer?.cancel();
     _offlineNotifier.dispose();
+    BaseWidgetService.instance.refreshers.remove(_notesUnread.refresh);
     _notesUnread.dispose();
     pendingPushTarget.removeListener(_schedulePush);
     super.dispose();
@@ -140,6 +148,13 @@ class _HomeShellState extends State<HomeShell> {
         }
       case 'notes':
         page = const NotesScreen();
+      case 'two_answers':
+        page = TwoAnswersScreen(
+          repository: HttpTwoAnswersRepository(
+            baseUrl: auth.baseUrl,
+            token: auth.token!,
+          ),
+        );
       case 'game_invite':
         if (target.roomCode == null ||
             target.roomCode == SocketService().roomCode) {

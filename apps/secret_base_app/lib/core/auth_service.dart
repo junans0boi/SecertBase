@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../features/base_widget/base_widget_service.dart';
 import 'http/api_client.dart';
 import 'http/api_exception.dart';
 import 'server_config.dart';
@@ -367,6 +368,7 @@ class AuthService extends ChangeNotifier {
     try {
       await beforeLogout?.call();
     } catch (_) {}
+    unawaited(BaseWidgetService.instance.clear());
     _token = null;
     _user = null;
     _googleError = null;
@@ -483,6 +485,7 @@ class AuthService extends ChangeNotifier {
     if (_token == null || _user == null) return false;
     try {
       await _apiClient.deleteJson('/api/user/partner');
+      unawaited(BaseWidgetService.instance.clear());
       await getProfile();
       return true;
     } catch (e) {

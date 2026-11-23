@@ -7,6 +7,7 @@ import '../../core/fortune_api.dart';
 import '../../core/push/push_platform.dart';
 import '../../core/push/push_service.dart';
 import '../../core/today_api.dart';
+import '../../features/base_widget/base_widget_service.dart';
 import '../../features/home/application/home_controller.dart';
 import '../../features/home/data/home_overview_repository.dart';
 import '../../features/home/domain/home_overview.dart';
@@ -198,6 +199,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (repo == null) return;
     try {
       final card = await repo.today();
+      BaseWidgetService.instance.onTwoAnswer(card);
       if (mounted) setState(() => _twoAnswer = card);
     } catch (_) {
       // 카드는 보조 진입점이라 실패하면 조용히 숨긴다.
