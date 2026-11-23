@@ -12,6 +12,7 @@ import {
 import { query } from "./db.js";
 import { redis } from "./redis.js";
 import { notifier } from "./modules/notifications/index.js";
+import { attachNotesRealtime } from "./modules/notes/realtime.js";
 import { transferGameReward, getBalance, getEquippedStats, getEquippedItemsInfo } from "./wallet-engine.js";
 import { isValidLobbyOption, normalizeLobbyOptions } from "./lobby-options.js";
 import { grantXp, updateMissionProgress } from "./level-engine.js";
@@ -876,6 +877,7 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
   };
 
   installSocketAuthentication(io, config.JWT_SECRET, resolveSocketSession);
+  attachNotesRealtime(io);
   io.on("connection", (socket) => {
     installHandlerSafetyNet(socket, console, (event, args) => {
       const gameType = afkGameTypeForEvent(event, args[0]);

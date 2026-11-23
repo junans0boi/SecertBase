@@ -10,6 +10,8 @@ import '../../core/today_api.dart';
 import '../../features/home/application/home_controller.dart';
 import '../../features/home/data/home_overview_repository.dart';
 import '../../features/home/domain/home_overview.dart';
+import '../../features/notes/application/notes_unread.dart';
+import '../../features/notes/presentation/notes_entry_button.dart';
 import '../../v2/v2.dart';
 import '../auth/partner_screen.dart';
 import '../relationship/fortune_screen.dart';
@@ -31,6 +33,10 @@ class HomeScreen extends StatefulWidget {
   final RelationshipAssessmentStatus? relationshipStatus;
   final Future<TodayState> Function()? todayStateLoader;
   final HomeController? controller;
+
+  /// 쪽지 진입(읽지 않은 수 점). 둘 다 주어졌을 때만 헤더에 보인다.
+  final NotesUnread? notesUnread;
+  final VoidCallback? onOpenNotes;
 
   /// True while the shell knows the device is offline.
   final ValueListenable<bool>? offline;
@@ -58,6 +64,8 @@ class HomeScreen extends StatefulWidget {
     this.relationshipStatus,
     this.todayStateLoader,
     this.controller,
+    this.notesUnread,
+    this.onOpenNotes,
     this.offline,
     this.notificationsBlocked,
     this.claimableRewards,
@@ -503,6 +511,11 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
+        if (widget.notesUnread != null && widget.onOpenNotes != null)
+          NotesEntryButton(
+            unread: widget.notesUnread!,
+            onOpen: widget.onOpenNotes!,
+          ),
         const SizedBox(width: V2Space.x3),
         Padding(
           padding: const EdgeInsets.only(top: 2),

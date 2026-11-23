@@ -62,6 +62,7 @@ export const USER_DATA_PURGE = [
   { table: 'relationship_tarot_contents', where: ['user_id'] },
   { table: 'relationship_explanation_generations', where: ['requester_user_id'] },
   // Moments and map.
+  { table: 'couple_notes', where: ['sender_id'] },
   { table: 'setlog_comments', where: ['user_id'] },
   { table: 'setlog_reactions', where: ['user_id'] },
   { table: 'today_moments', where: ['user_id'] },
@@ -96,6 +97,7 @@ export const USER_DATA_PURGE = [
 export const USER_MEDIA_COLUMNS = [
   { table: 'album_photos', column: 'photo_url', userColumn: 'user_id' },
   { table: 'map_pin_reviews', column: 'media_url', userColumn: 'user_id' },
+  { table: 'couple_notes', column: 'media_url', userColumn: 'sender_id' },
 ];
 
 const IGNORABLE_PURGE_ERRORS = new Set(['ER_NO_SUCH_TABLE', 'ER_BAD_FIELD_ERROR']);

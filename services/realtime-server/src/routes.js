@@ -76,6 +76,10 @@ import {
 import { createMomentLoopRepository } from './modules/moment-loop/repository.js';
 import { momentLoopPolicy } from './modules/moment-loop/domain.js';
 import { notifier } from './modules/notifications/index.js';
+import { NotesService } from './modules/notes/application.js';
+import { createNotesRouter } from './modules/notes/http-router.js';
+import { createNotesRepository } from './modules/notes/repository.js';
+import { publishNotesEvent } from './modules/notes/realtime.js';
 import { createNotificationRouter } from './modules/notifications/http-router.js';
 import path from 'path';
 import fs from 'fs';
@@ -597,6 +601,23 @@ const momentService = MomentLoopService({
   }),
 });
 router.use(createNotificationRouter({ queryFn: query }));
+// 쪽지: 사진은 MomentLoop 업로드 스토어를 재사용한다. 전송은 사용자당 분당 상한이 있다.
+export const notesService = NotesService({
+  repository: createNotesRepository({ queryFn: query }),
+  media: momentUploadStore,
+  notifier,
+  publish: publishNotesEvent,
+});
+router.use(createNotesRouter({
+  service: notesService,
+  uploadStore: momentUploadStore,
+  sendLimiter: createRateLimiter({
+    windowMs: 60_000,
+    max: 20,
+    keyFn: (req) => (req.auth?.userId ? `notes:send:user:${req.auth.userId}` : null),
+    enabled: config.NODE_ENV !== 'test',
+  }),
+}));
 router.use(createMomentLoopRouter({
   service: momentService,
   uploadStore: momentUploadStore,

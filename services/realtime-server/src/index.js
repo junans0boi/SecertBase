@@ -1,6 +1,6 @@
 import { config } from './config.js';
 import { redis } from './redis.js';
-import apiRoutes from './routes.js';
+import apiRoutes, { notesService } from './routes.js';
 import { registerSocketHandlers } from './socket.js';
 import { createRealtimeServer } from './app/create-realtime-server.js';
 import { assertSchemaReady } from './schema-readiness.js';
@@ -9,6 +9,7 @@ import { query } from './db.js';
 import { businessDate } from './business-date.js';
 import { notifier } from './modules/notifications/index.js';
 import { startTodayLoopScheduler } from './modules/notifications/notifier.js';
+import { startNotesScheduler } from './modules/notes/scheduler.js';
 
 // 개별 요청 실패가 프로세스 전체를 종료시키지 않도록 마지막 방어선을 둔다.
 process.on('unhandledRejection', (reason) => {
@@ -28,6 +29,7 @@ const realtime = createRealtimeServer({
 await assertSchemaReady();
 
 startTodayLoopScheduler({ cron, queryFn: query, redis, notifier, businessDate });
+startNotesScheduler({ cron, service: notesService });
 
 realtime.httpServer.listen(config.PORT, () => {
   console.log(`Secret Base realtime server listening on :${config.PORT}`);

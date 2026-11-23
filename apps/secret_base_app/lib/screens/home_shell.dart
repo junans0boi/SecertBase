@@ -8,6 +8,8 @@ import '../core/push/push_game_route.dart';
 import '../core/push/push_today_route.dart';
 import '../core/auth_service.dart';
 import '../core/socket_service.dart';
+import '../features/notes/application/notes_unread.dart';
+import '../features/notes/presentation/notes_screen.dart';
 import '../core/today_api.dart';
 import '../core/server_config.dart';
 import 'arcade/arcade_screen.dart';
@@ -50,10 +52,12 @@ class _HomeShellState extends State<HomeShell> {
   bool _offline = false;
   final ValueNotifier<bool> _offlineNotifier = ValueNotifier(false);
   Timer? _probeTimer;
+  late final NotesUnread _notesUnread = NotesUnread.forAuth(AuthService());
 
   @override
   void initState() {
     super.initState();
+    _notesUnread.start();
     _probe();
     _probeTimer = Timer.periodic(widget.probeInterval, (_) => _probe());
     pendingPushTarget.addListener(_schedulePush);
@@ -64,6 +68,7 @@ class _HomeShellState extends State<HomeShell> {
   void dispose() {
     _probeTimer?.cancel();
     _offlineNotifier.dispose();
+    _notesUnread.dispose();
     pendingPushTarget.removeListener(_schedulePush);
     super.dispose();
   }
@@ -84,6 +89,8 @@ class _HomeShellState extends State<HomeShell> {
     0 => HomeScreen(
       onNavigate: _handleHomeNavigation,
       offline: _offlineNotifier,
+      notesUnread: _notesUnread,
+      onOpenNotes: _openNotes,
     ),
     1 => MomentLoopScreen(
       onGoPairing: () => Navigator.of(
@@ -94,6 +101,13 @@ class _HomeShellState extends State<HomeShell> {
     3 => const ArcadeScreen(),
     _ => SettingsScreen(onNavigate: _handleHomeNavigation),
   };
+
+  Future<void> _openNotes() async {
+    await Navigator.of(
+      context,
+    ).push<void>(MaterialPageRoute(builder: (_) => const NotesScreen()));
+    _notesUnread.refresh();
+  }
 
   void _schedulePush() {
     if (!mounted || pendingPushTarget.value == null) return;
@@ -124,6 +138,8 @@ class _HomeShellState extends State<HomeShell> {
             api: TodayApi(baseUrl: auth.baseUrl, token: auth.token!),
           );
         }
+      case 'notes':
+        page = const NotesScreen();
       case 'game_invite':
         if (target.roomCode == null ||
             target.roomCode == SocketService().roomCode) {
