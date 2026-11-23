@@ -168,10 +168,7 @@ class _PartnerScreenState extends State<PartnerScreen> {
   Future<void> _shareInvite(String code) async {
     try {
       await SharePlus.instance.share(
-        ShareParams(
-          text: _inviteText(code),
-          subject: '기지 초대장',
-        ),
+        ShareParams(text: _inviteText(code), subject: '기지 초대장'),
       );
     } catch (_) {
       if (mounted) {

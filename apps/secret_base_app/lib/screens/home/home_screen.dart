@@ -10,6 +10,7 @@ import '../../core/today_api.dart';
 import '../../features/home/application/home_controller.dart';
 import '../../features/home/data/home_overview_repository.dart';
 import '../../features/home/domain/home_overview.dart';
+import '../../features/two_answers/application/two_answers_events.dart';
 import '../../features/two_answers/data/two_answers_repository.dart';
 import '../../features/two_answers/domain/two_answer.dart';
 import '../../features/two_answers/presentation/two_answers_card.dart';
@@ -64,6 +65,7 @@ class HomeScreen extends StatefulWidget {
 
   /// 마주 열기 데이터 소스 (기본: 서버 API, 로그인 전이면 카드를 숨긴다).
   final TwoAnswersRepository? twoAnswersRepository;
+  final TwoAnswersEventSource? twoAnswersEvents;
 
   const HomeScreen({
     super.key,
@@ -81,6 +83,7 @@ class HomeScreen extends StatefulWidget {
     this.fortuneSeen,
     this.fortuneHeadline,
     this.twoAnswersRepository,
+    this.twoAnswersEvents,
   });
 
   @override
@@ -208,7 +211,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final repo = _twoRepo;
     if (repo == null) return;
     await Navigator.of(context).push<void>(
-      MaterialPageRoute(builder: (_) => TwoAnswersScreen(repository: repo)),
+      MaterialPageRoute(
+        builder: (_) =>
+            TwoAnswersScreen(repository: repo, events: widget.twoAnswersEvents),
+      ),
     );
     _loadTwoAnswers();
   }
@@ -439,7 +445,14 @@ class _HomeScreenState extends State<HomeScreen> {
           _focus(),
           const SizedBox(height: V2Space.x2),
           if (_twoAnswer != null) ...[
-            TwoAnswersHomeCard(card: _twoAnswer!, onTap: _openTwoAnswers),
+            TwoAnswersRefresher(
+              events: widget.twoAnswersEvents,
+              onRefresh: _loadTwoAnswers,
+              child: TwoAnswersHomeCard(
+                card: _twoAnswer!,
+                onTap: _openTwoAnswers,
+              ),
+            ),
             const SizedBox(height: V2Space.x2),
           ],
           ..._rows(),

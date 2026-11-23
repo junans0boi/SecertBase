@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:secret_base_app/features/two_answers/application/two_answers_events.dart';
 import 'package:secret_base_app/features/two_answers/data/two_answers_repository.dart';
 import 'package:secret_base_app/features/two_answers/domain/two_answer.dart';
 import 'package:secret_base_app/features/two_answers/presentation/two_answers_card.dart';
@@ -115,6 +116,61 @@ void main() {
     testWidgets('a broken streak shows no streak text at all', (tester) async {
       await pump(tester, _card(TwoAnswerStatus.myTurn));
       expect(find.textContaining('연속'), findsNothing);
+    });
+  });
+
+  group('live refresh', () {
+    testWidgets(
+      'the waiting side sees the seal open when the partner answers (socket event)',
+      (tester) async {
+        VoidCallback? fire;
+        var unsubscribed = false;
+        final repo = _FakeRepo(_card(TwoAnswerStatus.waiting, mine: '내 답'));
+        await tester.pumpWidget(
+          _wrap(
+            TwoAnswersScreen(
+              repository: repo,
+              events: (cb) {
+                fire = cb;
+                return () => unsubscribed = true;
+              },
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('상대 답변'), findsNothing);
+
+        repo.current = _card(
+          TwoAnswerStatus.open,
+          mine: '내 답',
+          partner: '상대의 비밀',
+          partnerAnswered: true,
+        );
+        fire!();
+        await tester.pumpAndSettle();
+        expect(find.text('상대의 비밀'), findsOneWidget);
+
+        await tester.pumpWidget(const SizedBox());
+        expect(unsubscribed, isTrue);
+      },
+    );
+
+    testWidgets('returning to the foreground refetches the home card', (
+      tester,
+    ) async {
+      var fetches = 0;
+      await tester.pumpWidget(
+        _wrap(
+          TwoAnswersRefresher(
+            events: (_) => () {},
+            onRefresh: () => fetches++,
+            child: const SizedBox(),
+          ),
+        ),
+      );
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      expect(fetches, 1);
     });
   });
 

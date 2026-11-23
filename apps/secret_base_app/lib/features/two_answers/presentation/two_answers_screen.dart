@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../v2/v2.dart';
+import '../application/two_answers_events.dart';
 import '../data/two_answers_repository.dart';
 import '../domain/two_answer.dart';
 import 'two_answers_history_screen.dart';
@@ -10,8 +11,9 @@ const twoAnswersMaxLength = 500;
 /// 마주 열기: 오늘의 질문에 답하고, 둘 다 답하면 봉인이 풀려 서로의 답을 본다.
 class TwoAnswersScreen extends StatefulWidget {
   final TwoAnswersRepository repository;
+  final TwoAnswersEventSource? events;
 
-  const TwoAnswersScreen({super.key, required this.repository});
+  const TwoAnswersScreen({super.key, required this.repository, this.events});
 
   @override
   State<TwoAnswersScreen> createState() => _TwoAnswersScreenState();
@@ -58,6 +60,21 @@ class _TwoAnswersScreenState extends State<TwoAnswersScreen> {
           _failed = true;
         });
       }
+    }
+  }
+
+  /// 소켓 이벤트·포그라운드 복귀: 스피너 없이 다시 조회한다. 입력 중인 글은 지우지 않는다.
+  Future<void> _refresh() async {
+    if (_loading || _saving) return;
+    try {
+      final card = await widget.repository.today();
+      if (!mounted) return;
+      setState(() {
+        _card = card;
+        if (_text.text.isEmpty) _text.text = card.myBody ?? '';
+      });
+    } catch (_) {
+      // 조용히 넘어간다. 다음 이벤트나 복귀 때 다시 시도한다.
     }
   }
 
@@ -119,6 +136,14 @@ class _TwoAnswersScreenState extends State<TwoAnswersScreen> {
   @override
   Widget build(BuildContext context) {
     final p = V2Palette.of(context);
+    return TwoAnswersRefresher(
+      events: widget.events,
+      onRefresh: _refresh,
+      child: _scaffold(p),
+    );
+  }
+
+  Widget _scaffold(V2Palette p) {
     return Scaffold(
       backgroundColor: p.bg,
       appBar: V2Header(
