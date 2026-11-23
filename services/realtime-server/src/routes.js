@@ -78,6 +78,8 @@ import { momentLoopPolicy } from './modules/moment-loop/domain.js';
 import { notifier } from './modules/notifications/index.js';
 import { TwoAnswersService } from './modules/two-answers/application.js';
 import { createTwoAnswersRouter } from './modules/two-answers/http-router.js';
+import { DatePlanService } from './modules/date-plan/application.js';
+import { createDatePlanRouter } from './modules/date-plan/http-router.js';
 import { NotesService } from './modules/notes/application.js';
 import { createNotesRouter } from './modules/notes/http-router.js';
 import { createNotesRepository } from './modules/notes/repository.js';
@@ -606,6 +608,7 @@ router.use(createNotificationRouter({ queryFn: query }));
 router.use(createTwoAnswersRouter({
   service: TwoAnswersService({ queryFn: query, transactionFn: transaction }),
 }));
+router.use(createDatePlanRouter({ service: DatePlanService({ queryFn: query }) }));
 // 쪽지: 사진은 MomentLoop 업로드 스토어를 재사용한다. 전송은 사용자당 분당 상한이 있다.
 export const notesService = NotesService({
   repository: createNotesRepository({ queryFn: query }),

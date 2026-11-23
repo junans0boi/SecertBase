@@ -10,6 +10,11 @@ import '../../core/today_api.dart';
 import '../../features/home/application/home_controller.dart';
 import '../../features/home/data/home_overview_repository.dart';
 import '../../features/home/domain/home_overview.dart';
+import '../../features/date_plan/data/date_plan_repository.dart';
+import '../../features/date_plan/domain/date_plan.dart';
+import '../../features/date_plan/presentation/date_plan_format.dart';
+import '../../features/date_plan/presentation/date_plan_home_card.dart';
+import '../../features/date_plan/presentation/date_plan_routes.dart';
 import '../../features/two_answers/data/two_answers_repository.dart';
 import '../../features/two_answers/domain/two_answer.dart';
 import '../../features/two_answers/presentation/two_answers_card.dart';
@@ -65,6 +70,9 @@ class HomeScreen extends StatefulWidget {
   /// 마주 열기 데이터 소스 (기본: 서버 API, 로그인 전이면 카드를 숨긴다).
   final TwoAnswersRepository? twoAnswersRepository;
 
+  /// 데이트 계획 데이터 소스 (기본: 서버 API, 로그인 전이면 카드를 숨긴다).
+  final DatePlanRepository? datePlanRepository;
+
   const HomeScreen({
     super.key,
     required this.onNavigate,
@@ -81,6 +89,7 @@ class HomeScreen extends StatefulWidget {
     this.fortuneSeen,
     this.fortuneHeadline,
     this.twoAnswersRepository,
+    this.datePlanRepository,
   });
 
   @override
@@ -101,6 +110,9 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _fortuneHeadline;
   TwoAnswerCard? _twoAnswer;
   TwoAnswersRepository? _twoAnswersRepo;
+  DatePlanRepository? _datePlanRepo;
+  bool _datePlansLoaded = false;
+  DatePlan? _nextDatePlan;
 
   /// "나중에" on the focus card, for this visit only.
   bool _momentLater = false;
@@ -166,6 +178,8 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_ownsController) _controller.dispose();
     final httpRepo = _twoAnswersRepo;
     if (httpRepo is HttpTwoAnswersRepository) httpRepo.close();
+    final planRepo = _datePlanRepo;
+    if (planRepo is HttpDatePlanRepository) planRepo.close();
     super.dispose();
   }
 
@@ -180,6 +194,53 @@ class _HomeScreenState extends State<HomeScreen> {
     final headline = await (widget.fortuneHeadline ?? _defaultHeadline)();
     if (mounted) setState(() => _fortuneHeadline = headline);
     _loadTwoAnswers();
+    _loadDatePlans();
+  }
+
+  DatePlanRepository? get _planRepo {
+    final given = widget.datePlanRepository;
+    if (given != null) return given;
+    final token = _auth.token;
+    if (token == null) return null;
+    return _datePlanRepo ??= HttpDatePlanRepository(
+      baseUrl: _auth.baseUrl,
+      token: token,
+    );
+  }
+
+  Future<void> _loadDatePlans() async {
+    final repo = _planRepo;
+    if (repo == null) return;
+    try {
+      final page = await repo.list(upcoming: true);
+      if (!mounted) return;
+      setState(() {
+        _datePlansLoaded = true;
+        _nextDatePlan = page.plans.isEmpty ? null : page.plans.first;
+      });
+    } catch (_) {
+      // 카드는 보조 진입점이라 실패하면 조용히 숨긴다.
+    }
+  }
+
+  /// 같은 날짜의 기념일 이름(서버가 알려 주는 다음 기념일 기준).
+  Map<String, String> get _anniversaryByDate {
+    final next = _couple?.nextAnniversary;
+    if (next == null || next.daysUntil < 0) return const {};
+    final now = DateTime.now();
+    final day = DateTime(now.year, now.month, now.day + next.daysUntil);
+    return {ymd(day): next.label};
+  }
+
+  Future<void> _openDatePlans() async {
+    final repo = _planRepo;
+    if (repo == null) return;
+    await openDatePlansScreen(
+      context,
+      repository: repo,
+      anniversaries: _anniversaryByDate,
+    );
+    _loadDatePlans();
   }
 
   TwoAnswersRepository? get _twoRepo {
@@ -440,6 +501,17 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: V2Space.x2),
           if (_twoAnswer != null) ...[
             TwoAnswersHomeCard(card: _twoAnswer!, onTap: _openTwoAnswers),
+            const SizedBox(height: V2Space.x2),
+          ],
+          if (_datePlansLoaded) ...[
+            DatePlanHomeCard(
+              next: _nextDatePlan,
+              today: DateTime.now(),
+              anniversaryLabel: _nextDatePlan == null
+                  ? null
+                  : _anniversaryByDate[_nextDatePlan!.planDate],
+              onTap: _openDatePlans,
+            ),
             const SizedBox(height: V2Space.x2),
           ],
           ..._rows(),
