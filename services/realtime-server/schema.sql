@@ -371,3 +371,22 @@ CREATE TABLE IF NOT EXISTS couple_notes (
   KEY idx_couple_notes_due (delivered_at, open_at),
   UNIQUE KEY uq_couple_notes_sender_req (sender_id, client_request_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 데이트 계획 (migrations/0053_date_plans.sql)
+CREATE TABLE IF NOT EXISTS date_plans (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  couple_id INT NOT NULL,
+  created_by INT NOT NULL,
+  plan_date DATE NOT NULL,
+  plan_time TIME NULL,
+  title VARCHAR(80) NOT NULL,
+  memo VARCHAR(500) NULL,
+  map_pin_id INT NULL,
+  completed_at DATETIME NULL,
+  completed_by INT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_date_plans_couple_date (couple_id, plan_date),
+  KEY idx_date_plans_pin (map_pin_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

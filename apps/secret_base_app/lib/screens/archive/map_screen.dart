@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../features/date_plan/presentation/date_plan_launcher.dart';
 import '../../core/afterglow_api.dart';
 import '../../core/auth_service.dart';
 import '../../core/upload_image.dart';
@@ -41,11 +42,15 @@ class MapScreen extends StatefulWidget {
   /// Test seam; production uses the ambient HTTP client.
   final http.Client? client;
 
+  /// 데이트 계획의 "다녀왔어요"에서 들어올 때: 이 핀의 애프터글로우로 바로 이어진다.
+  final int? afterglowPinId;
+
   const MapScreen({
     super.key,
     this.closeAsModal = false,
     this.collectionFirst = false,
     this.client,
+    this.afterglowPinId,
   });
 
   @override
@@ -90,8 +95,24 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void initState() {
     super.initState();
-    unawaited(_load());
+    unawaited(_load().then((_) => _openAfterglowFromPlan()));
     unawaited(_loadPartner());
+  }
+
+  /// 데이트 계획에서 넘어온 핀: 위시면 다녀온 곳으로 바꾸며 여운을, 아니면 여운 남기기를 연다.
+  Future<void> _openAfterglowFromPlan() async {
+    final wanted = widget.afterglowPinId;
+    if (wanted == null || !mounted) return;
+    for (final pin in _pins) {
+      if (placeIntForMap(pin['id']) != wanted) continue;
+      if (pinStatus(pin) == 'wishlist') {
+        await _markVisited(pin);
+      } else {
+        await _contributeFor(pin);
+      }
+      return;
+    }
+    _toast('연결된 장소를 찾지 못했어요', tone: V2Tone.err);
   }
 
   @override
@@ -427,6 +448,17 @@ class _MapScreenState extends State<MapScreen> {
         onWriteNote: _writeNote,
       ),
       actions: [
+        if (!visited)
+          V2Button(
+            key: const Key('map_cta_plan_date'),
+            label: '이 날 가요',
+            icon: V2Icons.calendar,
+            variant: V2ButtonVariant.ghost,
+            onPressed: () {
+              _closeSheet();
+              unawaited(_planDate(pin));
+            },
+          ),
         if (visited)
           directions
         else
@@ -448,6 +480,17 @@ class _MapScreenState extends State<MapScreen> {
           ),
       ],
     );
+  }
+
+  Future<void> _planDate(Map<String, dynamic> pin) async {
+    final pinId = placeIntForMap(pin['id']);
+    if (pinId == null) return;
+    final plan = await openDatePlanFromPin(
+      context,
+      pinId: pinId,
+      pinTitle: '${pin['place_name'] ?? ''}',
+    );
+    if (plan != null) _toast('데이트 계획에 담았어요');
   }
 
   void _leaveMoment(Map<String, dynamic> pin) {
