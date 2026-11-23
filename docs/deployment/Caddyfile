@@ -2,7 +2,7 @@ secretbase.cloud, secertbase.kro.kr {
 	root * /var/www/secretbase
 	encode zstd gzip
 
-	@backend path /api/* /uploads/* /health /socket.io/*
+	@backend path /api/* /uploads/* /health /socket.io/* /i/* /.well-known/assetlinks.json
 	handle @backend {
 		reverse_proxy 127.0.0.1:4100
 	}
@@ -20,7 +20,7 @@ test.secertbase.kro.kr {
 	root * /var/www/secretbase-test
 	encode zstd gzip
 
-	@backend path /api/* /uploads/* /health /socket.io/*
+	@backend path /api/* /uploads/* /health /socket.io/* /i/* /.well-known/assetlinks.json
 	handle @backend {
 		reverse_proxy 127.0.0.1:4100
 	}

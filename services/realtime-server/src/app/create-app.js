@@ -4,6 +4,7 @@ import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { setUploadResponseHeaders } from '../shared/upload-safety.js';
 import { thumbHandler } from '../shared/upload-thumbs.js';
+import { registerBaseInvite } from './base-invite.js';
 
 const legalWebRoot = fileURLToPath(new URL('../../../../apps/secret_base_app/web/', import.meta.url));
 
@@ -46,6 +47,7 @@ export function createApp({
     });
   }
   app.use('/legal', express.static(`${legalWebRoot}/legal`));
+  registerBaseInvite(app, config);
 
   if (config.UPLOADS_ROOT) {
     // Small WebP copies for lists and thumbnails (made on first request).

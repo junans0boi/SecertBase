@@ -365,7 +365,7 @@ void main() {
       expect(find.text('내 코드를 상대에게 보내 주세요'), findsOneWidget);
       expect(find.text('K7M2QX'), findsWidgets);
       expect(find.textContaining('민지님이 비밀기지에 초대했어요'), findsOneWidget);
-      expect(find.text('초대 보내기'), findsOneWidget);
+      expect(find.text('초대장 보내기'), findsOneWidget);
       expect(find.textContaining('user_code'), findsNothing);
       await teardown(tester);
     });

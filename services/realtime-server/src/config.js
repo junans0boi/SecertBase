@@ -52,6 +52,9 @@ const schema = z.object({
   MAIL_WEBHOOK_TOKEN: z.string().optional().default(""),
   MAIL_FROM: z.string().optional().default(""),
   APP_PUBLIC_URL: z.string().url().optional().default("https://secretbase.cloud"),
+  // Android App Links 검증용 서명 인증서 SHA-256(쉼표 구분). 비우면 assetlinks.json은 빈 배열.
+  ANDROID_APP_LINK_SHA256: z.string().optional().default(""),
+  ANDROID_PACKAGE_NAME: z.string().optional().default("com.secretbase.secret_base_app"),
   KAKAO_REST_API_KEY: z.string().optional().default(""),
   NAVER_SEARCH_CLIENT_ID: z.string().optional().default(""),
   NAVER_SEARCH_CLIENT_SECRET: z.string().optional().default(""),

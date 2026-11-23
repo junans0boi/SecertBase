@@ -11,6 +11,9 @@ import 'package:flutter/semantics.dart';
 import 'core/socket_service.dart';
 import 'core/auth_service.dart';
 import 'core/yut_audio.dart';
+import 'features/base_invite/invite_confirm_screen.dart';
+import 'features/base_invite/invite_link.dart';
+import 'features/base_invite/pending_invite.dart';
 import 'screens/auth/auth_parts.dart';
 import 'screens/auth/connecting_screen.dart';
 import 'screens/auth/google_signup_screen.dart';
@@ -42,6 +45,8 @@ Future<void> main() async {
   // Guarded: without Firebase config push is silently disabled.
   auth.beforeLogout = PushService.instance.revoke;
   unawaited(PushService.instance.start());
+  // 기지 초대장 링크(https/앱 스킴)를 받아 코드를 보존한다. 요청은 확인 화면에서만 보낸다.
+  unawaited(PendingInvite.instance.start());
 
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
@@ -88,6 +93,7 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
     _socket.addListener(_rebuild);
     V2ThemeController.instance.addListener(_onThemeChanged);
     _auth.addListener(_onAuthChanged);
+    PendingInvite.instance.addListener(_onAuthChanged);
     // 알림 권한은 연결 축하 화면의 안내 시트를 거쳐서만 묻는다.
     PushService.instance.deferPermissionPrompt = true;
 
@@ -102,6 +108,7 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
     _socket.removeListener(_rebuild);
     V2ThemeController.instance.removeListener(_onThemeChanged);
     _auth.removeListener(_onAuthChanged);
+    PendingInvite.instance.removeListener(_onAuthChanged);
     super.dispose();
   }
 
@@ -120,6 +127,10 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
         _onboardingSeen = true;
         unawaited(markOnboardingSeen());
       }
+    }
+    if (_inviteRoute() == InviteRoute.discard) {
+      // 이미 연결된 사용자에게는 초대장이 필요 없다.
+      unawaited(PendingInvite.instance.clear());
     }
     _rebuild();
     if (_auth.user?['ReunionNoticePending'] == true &&
@@ -158,6 +169,13 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
       _autoConnect();
     }
   }
+
+  InviteRoute _inviteRoute() => resolveInviteRoute(
+    pendingCode: PendingInvite.instance.code,
+    loggedIn: _auth.token != null,
+    signupRequired: _auth.signupRequired,
+    paired: _auth.user?['PartnerCode'] != null,
+  );
 
   Future<void> _showReunionNotice() async {
     final dialogContext = _navigatorKey.currentContext;
@@ -253,6 +271,15 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
 
     // 3. Check Partner Pairing
     if (_auth.user?['PartnerCode'] == null) {
+      final inviteCode = PendingInvite.instance.code;
+      if (inviteCode != null && _inviteRoute() == InviteRoute.confirm) {
+        return InviteConfirmScreen(
+          key: ValueKey('invite-$inviteCode'),
+          code: inviteCode,
+          onSend: _auth.requestPairing,
+          onDone: () => unawaited(PendingInvite.instance.clear()),
+        );
+      }
       return const PartnerScreen(key: ValueKey('partner'));
     }
 

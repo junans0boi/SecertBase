@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/auth_service.dart';
+import '../../features/base_invite/invite_link.dart';
 import '../../v2/v2.dart';
 import '../archive/personal_history_screen.dart';
 import 'account_menu.dart';
@@ -160,6 +162,25 @@ class _PartnerScreenState extends State<PartnerScreen> {
       await _loadRequests();
     } else {
       showV2Snack(context, '요청을 처리하지 못했어요. 다시 시도해 주세요.', tone: V2Tone.err);
+    }
+  }
+
+  Future<void> _shareInvite(String code) async {
+    try {
+      await SharePlus.instance.share(
+        ShareParams(
+          text: buildInviteShareText(nickname: _myName, code: code),
+          subject: '기지 초대장',
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        showV2Snack(
+          context,
+          '공유 창을 열지 못했어요. 문구 복사를 이용해 주세요.',
+          tone: V2Tone.err,
+        );
+      }
     }
   }
 
@@ -325,8 +346,13 @@ class _PartnerScreenState extends State<PartnerScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           V2Button(
-            label: '초대 보내기',
+            label: '초대장 보내기',
             icon: V2Icons.share,
+            onPressed: () => _shareInvite(_myCode!),
+          ),
+          V2Button(
+            label: '코드·문구 복사하기',
+            variant: V2ButtonVariant.text,
             onPressed: () => _openInviteSheet(_myCode!),
           ),
           V2Button(

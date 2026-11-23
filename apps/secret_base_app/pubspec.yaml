@@ -60,6 +60,8 @@ dependencies:
   package_info_plus: ^9.0.1
   video_thumbnail: ^0.5.3
   maplibre: ^0.3.5
+  app_links: ^7.2.2
+  share_plus: ^12.0.2
 
 dev_dependencies:
   flutter_test:
