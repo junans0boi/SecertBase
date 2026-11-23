@@ -30,6 +30,7 @@ export function TwoAnswersService({
   queryFn = defaultQuery,
   transactionFn = defaultTransaction,
   now = () => new Date(),
+  publish = () => {},
 } = {}) {
   const requireCouple = async (actor) => {
     const couple = await resolveActiveCouple(actor.userId, queryFn);
@@ -124,7 +125,7 @@ export function TwoAnswersService({
 
   const saveResponse = async (scope, question, rawBody, isLate) => {
     const body = normalizeAnswerBody(rawBody);
-    await transactionFn(async (connection) => {
+    const total = await transactionFn(async (connection) => {
       const [locked] = await connection.execute(
         'SELECT id FROM two_answers WHERE id = ? AND couple_id = ? FOR UPDATE',
         [question.id, scope.coupleId],
@@ -141,7 +142,27 @@ export function TwoAnswersService({
          ON DUPLICATE KEY UPDATE body = VALUES(body)`,
         [question.id, scope.coupleId, scope.userId, body, isLate ? 1 : 0],
       );
+      const [after] = await connection.execute(
+        'SELECT COUNT(*) AS total FROM two_answer_responses WHERE two_answer_id = ?',
+        [question.id],
+      );
+      return Number(after[0].total);
     });
+    // 본문 없는 상태 이벤트만, 활성 Couple 상대에게. 실패해도 답변 저장은 영향받지 않는다.
+    try {
+      const couple = await resolveActiveCouple(scope.userId, queryFn);
+      const partnerId = couple
+        ? [Number(couple.User1Id), Number(couple.User2Id)].find((id) => id !== scope.userId)
+        : null;
+      if (partnerId) {
+        publish(partnerId, 'two-answers:updated', {
+          question_id: Number(question.id),
+          state: total >= 2 ? 'open' : 'partner_answered',
+        });
+      }
+    } catch (error) {
+      console.error('[two-answers] publish failed:', error?.message);
+    }
   };
 
   return {

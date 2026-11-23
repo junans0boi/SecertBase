@@ -604,7 +604,7 @@ const momentService = MomentLoopService({
 });
 router.use(createNotificationRouter({ queryFn: query }));
 router.use(createTwoAnswersRouter({
-  service: TwoAnswersService({ queryFn: query, transactionFn: transaction }),
+  service: TwoAnswersService({ queryFn: query, transactionFn: transaction, publish: publishNotesEvent }),
 }));
 // 쪽지: 사진은 MomentLoop 업로드 스토어를 재사용한다. 전송은 사용자당 분당 상한이 있다.
 export const notesService = NotesService({
