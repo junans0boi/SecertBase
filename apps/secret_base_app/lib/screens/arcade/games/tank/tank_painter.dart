@@ -48,6 +48,9 @@ class TankScene {
   /// 끌어서 조준하는 중인 손가락 위치(화면 좌표).
   final Offset? dragPoint;
 
+  /// 슬링샷 가상 고정점(화면 좌표). 손가락에서 고무줄이 이 점으로 이어진다.
+  final Offset? dragAnchor;
+
   /// HUD·조작부가 가리는 위·아래 높이(미니맵·화면 밖 표시 위치 계산용).
   final double insetTop;
   final double insetBottom;
@@ -73,6 +76,7 @@ class TankScene {
     this.myName = '나',
     this.oppName = '상대',
     this.dragPoint,
+    this.dragAnchor,
     this.insetTop = 0,
     this.insetBottom = 0,
     this.showGuides = false,
@@ -137,7 +141,7 @@ class TankBattlefieldPainter extends CustomPainter {
     if (pb != null) _playback(canvas, pb, look, terrain);
     _popups(canvas, pb);
     _weather(canvas, size, look);
-    _dragGuide(canvas);
+    _dragGuide(canvas, size);
     canvas.restore();
 
     if (pb != null) {
@@ -988,12 +992,12 @@ class TankBattlefieldPainter extends CustomPainter {
   void _aimGuide(Canvas canvas) {
     final pts = s.preview;
     if (pts.length >= 2) {
-      final shadow = Paint()..color = Colors.black.withValues(alpha: 0.25);
+      final shadow = Paint()..color = Colors.black.withValues(alpha: 0.4);
       final dot = Paint();
       for (int i = 1; i < pts.length; i += 2) {
-        final fade = 1.0 - (i / pts.length) * 0.8;
+        final fade = 1.0 - (i / pts.length) * 0.55;
         final pt = v.toScreen(pts[i].dx, pts[i].dy);
-        final r = math.max(1.8, v.scale * 0.24) * (0.7 + fade * 0.5);
+        final r = math.max(2.6, v.scale * 0.32) * (0.7 + fade * 0.5);
         canvas.drawCircle(pt.translate(0.8, 1), r, shadow);
         dot.color = Colors.white.withValues(alpha: 0.9 * fade);
         canvas.drawCircle(pt, r, dot);
@@ -1046,26 +1050,75 @@ class TankBattlefieldPainter extends CustomPainter {
     canvas.drawPath(head, Paint()..color = TankUi.gold);
   }
 
-  void _dragGuide(Canvas canvas) {
+  void _dragGuide(Canvas canvas, Size size) {
     final d = s.dragPoint;
     final turret = _myTurret();
     if (d == null || turret == null) return;
-    canvas.drawLine(
-      turret,
-      d,
-      Paint()
-        ..strokeWidth = 1.5
-        ..color = Colors.white.withValues(alpha: 0.5),
-    );
+    final a = s.dragAnchor;
+    // 고무줄: 가상 고정점 → 손가락. 궤적은 반대쪽에 그려진다.
+    if (a != null) {
+      canvas.drawLine(
+        a,
+        d,
+        Paint()
+          ..strokeWidth = 3
+          ..strokeCap = StrokeCap.round
+          ..color = TankUi.gold.withValues(alpha: 0.55),
+      );
+      canvas.drawCircle(
+        a,
+        5,
+        Paint()..color = Colors.white.withValues(alpha: 0.7),
+      );
+    }
     canvas.drawCircle(
       d,
-      16,
+      22,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2
+        ..strokeWidth = 2.5
         ..color = TankUi.gold,
     );
-    canvas.drawCircle(d, 4, Paint()..color = TankUi.gold);
+    canvas.drawCircle(d, 5, Paint()..color = TankUi.gold);
+    _aimReadout(canvas, size, d);
+  }
+
+  /// 각도·파워 수치를 손가락 반대편 위쪽에 크게 띄운다(손에 가려지지 않게).
+  void _aimReadout(Canvas canvas, Size size, Offset finger) {
+    final tp = TextPainter(
+      text: TextSpan(
+        children: [
+          TextSpan(
+            text: '${s.myAngle.round()}°',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 34,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          TextSpan(
+            text: '   파워 ${s.myPower.round()}',
+            style: TextStyle(
+              color: TankUi.gold,
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final w = tp.width + 24, h = tp.height + 10;
+    // 손가락이 왼쪽이면 라벨은 오른쪽, 위쪽 여백(HUD 아래)에 둔다.
+    final left = finger.dx < size.width / 2;
+    final x = left ? size.width - w - 12 : 12.0;
+    final y = s.insetTop + 8;
+    final r = RRect.fromRectAndRadius(
+      Rect.fromLTWH(x, y, w, h),
+      const Radius.circular(12),
+    );
+    canvas.drawRRect(r, Paint()..color = Colors.black.withValues(alpha: 0.55));
+    tp.paint(canvas, Offset(x + 12, y + 5));
   }
 
   // ── 재생: 발사·포탄·폭발 ───────────────────────────────────────────────────

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
+import 'tank_aim.dart';
 import 'tank_camera.dart';
 import 'tank_painter.dart';
 import 'tank_playback.dart';
@@ -200,19 +201,35 @@ class _TankBattlefieldState extends State<TankBattlefield>
     return Offset((a.dx + b.dx) / 2, math.min(a.dy, b.dy) - 2);
   }
 
-  void _dragTo(Offset local, TankView view) {
-    final players = (widget.state['players'] as List?) ?? const [];
-    if (widget.myIndex >= players.length) return;
-    final me = _playerPos(players, widget.myIndex);
-    final turret = view.toScreen(me.dx, me.dy + 0.5 - 1.9);
-    final d = local - turret;
-    var angle = math.atan2(-d.dy, d.dx) * 180 / math.pi;
-    if (angle < 0) angle = d.dx >= 0 ? 0.0 : 180.0;
-    final reach = math.max(80.0, math.min(_size.width, _size.height) * 0.42);
-    final power = (d.distance / reach * 100).clamp(1.0, 100.0);
-    widget.onAim?.call(angle.roundToDouble(), power.roundToDouble());
+  /// 손가락이 닿은 곳에서 [aim]의 당김 벡터만큼 떨어진 가상 고정점.
+  /// 손가락을 움직이면 고정점에서 멀어진 만큼(반대 방향으로) 발사각·파워가 정해진다.
+  Offset? _anchor;
+
+  void _beginAim(Offset local) {
+    _anchor = TankAim.anchorFor(
+      local,
+      angle: widget.myAngle,
+      power: widget.myPower,
+      reach: _reach,
+    );
     setState(() => _drag = local);
   }
+
+  double get _reach => TankAim.reach(_size);
+
+  void _dragTo(Offset local) {
+    final players = (widget.state['players'] as List?) ?? const [];
+    if (widget.myIndex >= players.length) return;
+    final anchor = _anchor ?? local;
+    final r = TankAim.fromPull(anchor - local, _reach);
+    widget.onAim?.call(r.angle, r.power);
+    setState(() => _drag = local);
+  }
+
+  void _endAim() => setState(() {
+    _drag = null;
+    _anchor = null;
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -223,12 +240,8 @@ class _TankBattlefieldState extends State<TankBattlefield>
         final pb = widget.playback;
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onPanStart: widget.canAim
-              ? (d) => _dragTo(d.localPosition, view)
-              : null,
-          onPanUpdate: widget.canAim
-              ? (d) => _dragTo(d.localPosition, view)
-              : null,
+          onPanStart: widget.canAim ? (d) => _beginAim(d.localPosition) : null,
+          onPanUpdate: widget.canAim ? (d) => _dragTo(d.localPosition) : null,
           onTapUp: widget.onMinimapTap == null
               ? null
               : (d) {
@@ -240,8 +253,8 @@ class _TankBattlefieldState extends State<TankBattlefield>
                     widget.onMinimapTap!();
                   }
                 },
-          onPanEnd: (_) => setState(() => _drag = null),
-          onPanCancel: () => setState(() => _drag = null),
+          onPanEnd: (_) => _endAim(),
+          onPanCancel: _endAim,
           child: CustomPaint(
             size: _size,
             painter: TankBattlefieldPainter(
@@ -263,6 +276,7 @@ class _TankBattlefieldState extends State<TankBattlefield>
                 myName: widget.myName,
                 oppName: widget.oppName,
                 dragPoint: widget.canAim ? _drag : null,
+                dragAnchor: widget.canAim ? _anchor : null,
                 insetTop: widget.insetTop,
                 insetBottom: widget.insetBottom,
                 showGuides: widget.showGuides,
