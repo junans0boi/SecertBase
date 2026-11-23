@@ -16,7 +16,7 @@ export const REQUIRED_SCHEMA = Object.freeze({
     'couple_id', 'sender_id', 'body', 'open_at', 'delivered_at', 'read_at', 'deleted_at', 'client_request_id',
   ],
   notification_prefs: [
-    'partner_moment', 'today_loop', 'game_invite', 'partner_note',
+    'partner_moment', 'today_loop', 'game_invite', 'partner_note', 'anniversary_eve', 'two_answers_waiting',
     'quiet_hours_enabled', 'quiet_start', 'quiet_end', 'reveal_hour',
   ],
 });

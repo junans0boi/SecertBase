@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import '../core/push/push_service.dart';
 import '../core/push/push_game_route.dart';
 import '../core/push/push_today_route.dart';
+import '../core/push/push_reminder_route.dart';
 import '../core/auth_service.dart';
 import '../core/socket_service.dart';
 import '../features/base_widget/base_widget_service.dart';
@@ -148,12 +149,11 @@ class _HomeShellState extends State<HomeShell> {
         }
       case 'notes':
         page = const NotesScreen();
-      case 'two_answers':
-        page = TwoAnswersScreen(
-          repository: HttpTwoAnswersRepository(
-            baseUrl: auth.baseUrl,
-            token: auth.token!,
-          ),
+      case 'anniversary' || 'two_answers':
+        page = pushReminderPage(
+          target,
+          baseUrl: auth.baseUrl,
+          token: auth.token,
         );
       case 'game_invite':
         if (target.roomCode == null ||

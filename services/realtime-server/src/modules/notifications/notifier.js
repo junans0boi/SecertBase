@@ -3,7 +3,8 @@
 import { randomUUID } from 'node:crypto';
 import { PREF_FIELDS, notificationPrefs, inQuietHours, kstMinute } from './preferences.js';
 
-export const NOTIFICATION_TYPES = Object.freeze(['partner_moment', 'today_loop', 'game_invite', 'partner_note']);
+export const NOTIFICATION_TYPES = Object.freeze(['partner_moment', 'today_loop', 'game_invite', 'partner_note',
+  'anniversary_eve', 'two_answers_waiting']);
 
 // Bodies are deliberately generic: no place names, captions, or other sensitive content.
 export const MESSAGES = Object.freeze({
@@ -12,6 +13,9 @@ export const MESSAGES = Object.freeze({
   game_invite: { title: 'Secret Base', body: '상대방이 게임에 초대했어요.', screen: 'game_invite' },
   // 쪽지 본문은 푸시에 싣지 않는다(고정 문구, 데이터 필드 없음).
   partner_note: { title: 'Secret Base', body: '쪽지가 도착했어요', screen: 'notes' },
+  // 기념일 D-1 / 마주 열기: 라벨·답변 본문 없이 고정 문구만.
+  anniversary_eve: { title: 'Secret Base', body: '내일은 우리의 기념일이에요', screen: 'anniversary' },
+  two_answers_waiting: { title: 'Secret Base', body: '상대방이 오늘의 질문에 답했어요', screen: 'two_answers' },
 });
 
 const validUserId = (id) => Number.isSafeInteger(id) && id > 0;
@@ -20,6 +24,8 @@ const DATA_FIELDS = Object.freeze({
   today_loop: ['business_date'],
   game_invite: ['game_type', 'room_code'],
   partner_note: [],
+  anniversary_eve: [],
+  two_answers_waiting: [],
 });
 
 function payload(type, extraData) {

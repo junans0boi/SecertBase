@@ -3,6 +3,8 @@ export const DEFAULT_PREFS = Object.freeze({
   today_loop: true,
   game_invite: true,
   partner_note: true,
+  anniversary_eve: true,
+  two_answers_waiting: true,
   quiet_hours_enabled: true,
   quiet_start: '22:00',
   quiet_end: '08:00',
@@ -10,7 +12,8 @@ export const DEFAULT_PREFS = Object.freeze({
 });
 
 export const PREF_FIELDS = Object.freeze(Object.keys(DEFAULT_PREFS));
-const BOOLEAN_FIELDS = new Set(['partner_moment', 'today_loop', 'game_invite', 'partner_note', 'quiet_hours_enabled']);
+const BOOLEAN_FIELDS = new Set(['partner_moment', 'today_loop', 'game_invite', 'partner_note',
+  'anniversary_eve', 'two_answers_waiting', 'quiet_hours_enabled']);
 const CLOCK_TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 
 export function notificationPrefs(row = {}) {

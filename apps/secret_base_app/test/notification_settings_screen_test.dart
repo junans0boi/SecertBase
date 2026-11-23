@@ -197,4 +197,54 @@ void main() {
     expect(put.url.path, '/api/notification-prefs');
     expect(jsonDecode(put.body), {'today_loop': false});
   });
+
+  testWidgets('reminder toggles (쪽지, 기념일 전날, 마주 열기) save by key', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(900, 2800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final puts = <Map<String, dynamic>>[];
+    final api = ApiClient(
+      baseUrl: 'http://x.test',
+      tokenProvider: () => 'jwt',
+      client: MockClient((request) async {
+        if (request.method == 'PUT') {
+          puts.add(jsonDecode(request.body) as Map<String, dynamic>);
+          return http.Response('{"ok":true}', 200);
+        }
+        return http.Response(
+          '{"prefs":{"partner_note":true,"anniversary_eve":true,"two_answers_waiting":false}}',
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }),
+    );
+    await tester.pumpWidget(
+      MaterialApp(home: NotificationSettingsScreen(apiClient: api)),
+    );
+    await tester.pumpAndSettle();
+
+    V2Toggle toggle(String key) =>
+        tester.widget<V2Toggle>(find.byKey(ValueKey('pref_$key')));
+    expect(toggle('partner_note').value, isTrue);
+    expect(toggle('anniversary_eve').value, isTrue);
+    expect(toggle('two_answers_waiting').value, isFalse);
+    // 푸시 본문에 사적 내용이 실리지 않는다는 안내가 보인다.
+    expect(find.textContaining('내용은 알림에 담기지 않아요'), findsOneWidget);
+
+    for (final key in [
+      'partner_note',
+      'anniversary_eve',
+      'two_answers_waiting',
+    ]) {
+      await tester.tap(find.byKey(ValueKey('pref_$key')));
+      await tester.pumpAndSettle();
+    }
+    expect(puts, [
+      {'partner_note': false},
+      {'anniversary_eve': false},
+      {'two_answers_waiting': true},
+    ]);
+  });
 }
