@@ -11,6 +11,9 @@ const kNotificationPrefDefaults = <String, Object>{
   'partner_moment': true,
   'today_loop': true,
   'game_invite': true,
+  'partner_note': true,
+  'anniversary_eve': true,
+  'two_answers_waiting': true,
   'quiet_hours_enabled': true,
   'quiet_start': '22:00',
   'quiet_end': '08:00',
@@ -31,6 +34,9 @@ String notificationSummary(Map<String, dynamic> prefs) {
     'partner_moment',
     'today_loop',
     'game_invite',
+    'partner_note',
+    'anniversary_eve',
+    'two_answers_waiting',
   ].any((k) => prefs[k] == true);
   if (!anyOn) return '모든 알림을 껐어요';
   if (prefs['quiet_hours_enabled'] == true) {
@@ -225,6 +231,27 @@ class _NotificationSettingsScreenState
         V2Tone.sky,
         V2Icons.play,
       ),
+      (
+        'partner_note',
+        '쪽지',
+        '${withSubjectParticle(partner)} 쪽지를 보내면 알려 드려요',
+        V2Tone.peach,
+        V2Icons.mail,
+      ),
+      (
+        'anniversary_eve',
+        '기념일 전날',
+        '기념일 하루 전 오전에 알려 드려요',
+        V2Tone.rose,
+        V2Icons.heart,
+      ),
+      (
+        'two_answers_waiting',
+        '마주 열기',
+        '${withSubjectParticle(partner)} 오늘의 질문에 먼저 답하면 하루 한 번 알려 드려요',
+        V2Tone.lilac,
+        V2Icons.sparkle,
+      ),
     ];
 
     Widget toggle(String key, String label, {bool enabled = true}) => V2Toggle(
@@ -330,7 +357,7 @@ class _NotificationSettingsScreenState
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
           child: Text(
-            '방해금지 중에 생긴 소식은 알림 없이 앱 안에만 쌓여요. 오늘의 기록 공개 알림은 끝나는 시간 뒤에 보내 드려요.',
+            '쪽지·답변·장소 같은 내용은 알림에 담기지 않아요. 방해금지 중에 생긴 소식은 알림 없이 앱 안에만 쌓여요. 오늘의 기록 공개 알림은 끝나는 시간 뒤에 보내 드려요.',
             style: V2Text.cap,
           ),
         ),

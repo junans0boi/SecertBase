@@ -121,6 +121,7 @@ test('JWT token registration/reassignment/revocation, preferences, and partner F
       await h.request(2, 'PUT', '/notification-prefs', { game_invite: false });
       assert.deepEqual((await (await h.request(2, 'GET', '/notification-prefs')).json()).prefs, {
         partner_moment: false, today_loop: true, game_invite: false, partner_note: true,
+      anniversary_eve: true, two_answers_waiting: true,
         quiet_hours_enabled: false, quiet_start: '23:30', quiet_end: '07:15', reveal_hour: 20,
       });
       assert.equal((await notifier.notifyPartner(1, 'partner_moment')).skipped, 'pref_off');

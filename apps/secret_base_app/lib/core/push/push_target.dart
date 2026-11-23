@@ -27,6 +27,8 @@ class PushTarget {
       'game_invite',
       'moment_draft',
       'notes',
+      'anniversary',
+      'two_answers',
     ].contains(screen)) {
       return null;
     }

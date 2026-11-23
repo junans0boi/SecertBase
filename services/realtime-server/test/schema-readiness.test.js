@@ -34,6 +34,8 @@ const schemaRows = {
     { TABLE_NAME: 'notification_prefs', COLUMN_NAME: 'today_loop' },
     { TABLE_NAME: 'notification_prefs', COLUMN_NAME: 'game_invite' },
     { TABLE_NAME: 'notification_prefs', COLUMN_NAME: 'partner_note' },
+    { TABLE_NAME: 'notification_prefs', COLUMN_NAME: 'anniversary_eve' },
+    { TABLE_NAME: 'notification_prefs', COLUMN_NAME: 'two_answers_waiting' },
     { TABLE_NAME: 'notification_prefs', COLUMN_NAME: 'quiet_hours_enabled' },
     { TABLE_NAME: 'notification_prefs', COLUMN_NAME: 'quiet_start' },
     { TABLE_NAME: 'notification_prefs', COLUMN_NAME: 'quiet_end' },

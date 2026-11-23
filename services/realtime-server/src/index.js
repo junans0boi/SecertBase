@@ -9,6 +9,7 @@ import { query } from './db.js';
 import { businessDate } from './business-date.js';
 import { notifier } from './modules/notifications/index.js';
 import { startTodayLoopScheduler } from './modules/notifications/notifier.js';
+import { startReminderScheduler } from './modules/notifications/reminders.js';
 import { startNotesScheduler } from './modules/notes/scheduler.js';
 
 // 개별 요청 실패가 프로세스 전체를 종료시키지 않도록 마지막 방어선을 둔다.
@@ -29,6 +30,7 @@ const realtime = createRealtimeServer({
 await assertSchemaReady();
 
 startTodayLoopScheduler({ cron, queryFn: query, redis, notifier, businessDate });
+startReminderScheduler({ cron, queryFn: query, redis, notifier });
 startNotesScheduler({ cron, service: notesService });
 
 realtime.httpServer.listen(config.PORT, () => {
