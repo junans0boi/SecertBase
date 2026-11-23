@@ -169,7 +169,7 @@ class _PartnerScreenState extends State<PartnerScreen> {
     try {
       await SharePlus.instance.share(
         ShareParams(
-          text: buildInviteShareText(nickname: _myName, code: code),
+          text: _inviteText(code),
           subject: '기지 초대장',
         ),
       );
@@ -205,8 +205,9 @@ class _PartnerScreenState extends State<PartnerScreen> {
     return value is String && value.trim().isNotEmpty ? value.trim() : null;
   }
 
+  /// 공유 시트·웹 폴백 시트·미리보기가 모두 같은 문구를 쓴다.
   String _inviteText(String code) =>
-      '$_myName님이 비밀기지에 초대했어요 💌\n비밀기지 앱에서 코드 $code 를 입력해 주세요.';
+      buildInviteShareText(nickname: _myName, code: code);
 
   List<Map<String, dynamic>> get _pendingReceived =>
       _received.where((e) => e['status'] == 'pending').toList();

@@ -364,7 +364,8 @@ void main() {
       await pumpPartner(tester);
       expect(find.text('내 코드를 상대에게 보내 주세요'), findsOneWidget);
       expect(find.text('K7M2QX'), findsWidgets);
-      expect(find.textContaining('민지님이 비밀기지에 초대했어요'), findsOneWidget);
+      expect(find.textContaining('민지님이 비밀기지 기지 초대장을 보냈어요'), findsOneWidget);
+      expect(find.textContaining('https://secretbase.cloud/i/K7M2QX'), findsOneWidget);
       expect(find.text('초대장 보내기'), findsOneWidget);
       expect(find.textContaining('user_code'), findsNothing);
       await teardown(tester);
