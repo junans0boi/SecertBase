@@ -177,6 +177,25 @@ class _NotesScreenState extends State<NotesScreen> with WidgetsBindingObserver {
     );
   }
 
+  Future<bool?> _confirmDelete() => showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('이 쪽지를 지울까요?'),
+      content: const Text('지우면 상대 화면에서도 내용이 사라지고, 되돌릴 수 없어요.'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: const Text('취소'),
+        ),
+        TextButton(
+          key: const ValueKey('confirm-delete'),
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: const Text('지우기'),
+        ),
+      ],
+    ),
+  );
+
   Future<void> _showActions(Note note) async {
     if (note.status != NoteStatus.visible) return;
     await showModalBottomSheet<void>(
@@ -214,6 +233,8 @@ class _NotesScreenState extends State<NotesScreen> with WidgetsBindingObserver {
                 title: const Text('쪽지 지우기'),
                 onTap: () async {
                   Navigator.pop(sheetContext);
+                  final confirmed = await _confirmDelete();
+                  if (confirmed != true || !mounted) return;
                   final ok = await _controller.delete(note);
                   if (!ok && mounted) {
                     showV2Snack(context, '지우지 못했어요', tone: V2Tone.err);
@@ -236,12 +257,7 @@ class _NotesScreenState extends State<NotesScreen> with WidgetsBindingObserver {
           onRetry: () => _controller.retry(pending.clientRequestId),
           onDiscard: () => _controller.discardPending(pending.clientRequestId),
         ),
-      for (final note in _controller.notes.reversed)
-        _NoteBubble(
-          note: note,
-          now: _now,
-          onLongPress: () => _showActions(note),
-        ),
+      ..._noteItems(),
     ];
     return V2Theme(
       child: Scaffold(
@@ -255,6 +271,35 @@ class _NotesScreenState extends State<NotesScreen> with WidgetsBindingObserver {
         ),
       ),
     );
+  }
+
+  /// 최신이 앞(reverse 목록). 날짜가 바뀌는 곳에 구분선을 넣고,
+  /// "읽음"은 읽힌 내 쪽지 중 가장 마지막 것에만 붙인다.
+  List<Widget> _noteItems() {
+    final ordered = _controller.notes; // 오래된 것 → 최신
+    final lastReadMine = ordered.lastWhere(
+      (n) => n.mine && n.status == NoteStatus.visible && n.isRead,
+      orElse: () => const Note(id: -1, mine: false, status: NoteStatus.deleted),
+    );
+    final widgets = <Widget>[];
+    DateTime? prevDay;
+    for (final note in ordered) {
+      final at = note.createdAt?.toLocal();
+      if (at != null) {
+        final day = DateTime(at.year, at.month, at.day);
+        if (prevDay != day) widgets.add(_DayDivider(label: formatNoteDay(at)));
+        prevDay = day;
+      }
+      widgets.add(
+        _NoteBubble(
+          note: note,
+          now: _now,
+          showRead: note.id == lastReadMine.id,
+          onLongPress: () => _showActions(note),
+        ),
+      );
+    }
+    return widgets.reversed.toList();
   }
 
   Widget _list(List<Widget> items, V2Palette p) {
@@ -422,10 +467,12 @@ class _StagedChip extends StatelessWidget {
 class _NoteBubble extends StatelessWidget {
   final Note note;
   final DateTime now;
+  final bool showRead;
   final VoidCallback onLongPress;
   const _NoteBubble({
     required this.note,
     required this.now,
+    required this.showRead,
     required this.onLongPress,
   });
 
@@ -537,19 +584,39 @@ class _NoteBubble extends StatelessWidget {
               ),
             ),
             if (note.status == NoteStatus.visible &&
-                (note.reaction != null || (mine && note.isRead)))
+                (note.reaction != null ||
+                    (mine && showRead) ||
+                    note.createdAt != null))
               Padding(
                 padding: const EdgeInsets.only(top: 2),
                 child: Text(
                   [
                     if (note.reaction != null) note.reaction!,
-                    if (mine && note.isRead) '읽음',
+                    if (mine && showRead) '읽음',
+                    if (note.createdAt != null)
+                      formatNoteClock(note.createdAt!),
                   ].join(' '),
                   style: V2Text.cap.copyWith(color: p.muted),
                 ),
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _DayDivider extends StatelessWidget {
+  final String label;
+  const _DayDivider({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = V2Palette.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: V2Space.x3),
+      child: Center(
+        child: Text(label, style: V2Text.cap.copyWith(color: p.muted)),
       ),
     );
   }

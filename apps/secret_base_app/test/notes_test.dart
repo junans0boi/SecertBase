@@ -21,6 +21,7 @@ Note _note(
   String? body,
   DateTime? openAt,
   DateTime? readAt,
+  DateTime? createdAt,
   String? reaction,
 }) => Note(
   id: id,
@@ -29,6 +30,7 @@ Note _note(
   body: status == NoteStatus.visible ? (body ?? '쪽지 $id') : null,
   openAt: openAt,
   readAt: readAt,
+  createdAt: createdAt,
   reaction: reaction,
 );
 
@@ -473,7 +475,7 @@ void main() {
       expect(find.text('❤️'), findsOneWidget);
     });
 
-    testWidgets('long press on my note deletes it', (tester) async {
+    testWidgets('deleting my note asks for confirmation first', (tester) async {
       final repo = _FakeRepo(notes: [_note(1, mine: true, body: '지울래')]);
       await tester.pumpWidget(_screen(NotesController(repository: repo)));
       await tester.pumpAndSettle();
@@ -481,8 +483,66 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('delete-note')));
       await tester.pumpAndSettle();
+      expect(repo.deleted, isEmpty);
+      expect(find.text('이 쪽지를 지울까요?'), findsOneWidget);
+
+      await tester.tap(find.text('취소'));
+      await tester.pumpAndSettle();
+      expect(repo.deleted, isEmpty);
+      expect(find.text('지울래'), findsOneWidget);
+
+      await tester.longPress(find.text('지울래'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('delete-note')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('confirm-delete')));
+      await tester.pumpAndSettle();
       expect(repo.deleted, [1]);
       expect(find.text('삭제된 쪽지'), findsOneWidget);
+    });
+
+    testWidgets('읽음 appears only on the latest read note of mine', (
+      tester,
+    ) async {
+      final at = DateTime(2026, 11, 23, 15, 20);
+      final repo = _FakeRepo(
+        notes: [
+          _note(1, mine: true, body: '하나', readAt: at),
+          _note(2, mine: true, body: '둘', readAt: at),
+          _note(3, mine: true, body: '셋'),
+        ],
+      );
+      await tester.pumpWidget(_screen(NotesController(repository: repo)));
+      await tester.pumpAndSettle();
+      expect(find.text('읽음'), findsOneWidget);
+    });
+
+    testWidgets('bubbles show the time and a date divider between days', (
+      tester,
+    ) async {
+      final repo = _FakeRepo(
+        notes: [
+          _note(1, body: '어제 쪽지', createdAt: DateTime(2026, 11, 22, 9, 5)),
+          _note(
+            2,
+            mine: true,
+            body: '오늘 쪽지',
+            createdAt: DateTime(2026, 11, 23, 15, 20),
+          ),
+          _note(
+            3,
+            mine: true,
+            body: '오늘 또',
+            createdAt: DateTime(2026, 11, 23, 15, 21),
+          ),
+        ],
+      );
+      await tester.pumpWidget(_screen(NotesController(repository: repo)));
+      await tester.pumpAndSettle();
+      expect(find.text('오전 9:05'), findsOneWidget);
+      expect(find.text('오후 3:20'), findsOneWidget);
+      expect(find.text('11월 22일'), findsOneWidget);
+      expect(find.text('11월 23일'), findsOneWidget);
     });
   });
 
