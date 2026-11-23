@@ -6,10 +6,16 @@ import '../../../core/http/api_exception.dart';
 import '../data/notes_repository.dart';
 import '../domain/note.dart';
 
-String newClientRequestId() {
-  final r = Random.secure();
-  return 'n${DateTime.now().microsecondsSinceEpoch}-${r.nextInt(1 << 32).toRadixString(36)}';
+/// dart2js에서는 `1 << 32`가 0이라 Random.nextInt가 RangeError를 던진다.
+/// 웹에서도 안전한 상수(2^32)를 쓴다.
+const int kRandomSuffixBound = 0x100000000;
+
+String newClientRequestId({Random? random}) {
+  final r = random ?? Random.secure();
+  return 'n${DateTime.now().microsecondsSinceEpoch}-${r.nextInt(kRandomSuffixBound).toRadixString(36)}';
 }
+
+int _fallbackSeq = 0;
 
 /// 쪽지 대화 상태. 보내기는 먼저 큐에 넣고(client_request_id 고정) 네트워크 실패 시
 /// 그대로 남겨 두었다가 다시 보낸다. 서버가 같은 id를 한 번만 만든다.
@@ -141,9 +147,29 @@ class NotesController extends ChangeNotifier {
         setlogPostId == null) {
       return;
     }
+    String id;
+    try {
+      id = requestId();
+    } catch (_) {
+      // id 생성이 실패해도 글을 잃지 않는다: 대체 id로 큐에 넣고 실패 말풍선을 남긴다.
+      id = 'n${now().microsecondsSinceEpoch}-f${_fallbackSeq++}';
+      _pending.add(
+        PendingNote(
+          clientRequestId: id,
+          body: text,
+          openAt: openAt,
+          photo: photo,
+          mapPinId: mapPinId,
+          setlogPostId: setlogPostId,
+          failed: true,
+        ),
+      );
+      _notify();
+      return;
+    }
     _pending.add(
       PendingNote(
-        clientRequestId: requestId(),
+        clientRequestId: id,
         body: text,
         openAt: openAt,
         photo: photo,

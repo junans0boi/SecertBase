@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,6 +31,21 @@ Note _note(
   readAt: readAt,
   reaction: reaction,
 );
+
+class _RecordingRandom implements Random {
+  final List<int> bounds;
+  _RecordingRandom(this.bounds);
+  @override
+  int nextInt(int max) {
+    bounds.add(max);
+    return max - 1;
+  }
+
+  @override
+  bool nextBool() => false;
+  @override
+  double nextDouble() => 0;
+}
 
 class _FakeRepo implements NotesRepository {
   List<Note> notes;
@@ -153,6 +169,40 @@ void main() {
         await c.flushPending();
         expect(c.pending, isEmpty);
         expect(repo.sent.single.clientRequestId, 'req-1');
+        expect(c.notes.single.body, '안녕');
+      },
+    );
+
+    test('newClientRequestId uses only web-safe (<= 2^32) random bounds', () {
+      final bounds = <int>[];
+      final id = newClientRequestId(random: _RecordingRandom(bounds));
+      expect(bounds, isNotEmpty);
+      // dart2js: `1 << 32` is 0 and Random.nextInt requires 0 < max <= 2^32.
+      for (final b in bounds) {
+        expect(b, greaterThan(0));
+        expect(b, lessThanOrEqualTo(0x100000000));
+      }
+      expect(id, startsWith('n'));
+    });
+
+    test(
+      'a throwing id generator leaves a failed bubble, not silence',
+      () async {
+        final repo = _FakeRepo();
+        var n = 0;
+        final c = NotesController(
+          repository: repo,
+          requestId: () {
+            if (n++ == 0) throw RangeError('max must be in range');
+            return 'req-$n';
+          },
+        );
+        await c.send('안녕');
+        expect(c.pending, hasLength(1));
+        expect(c.pending.single.body, '안녕');
+        expect(c.pending.single.failed, isTrue);
+        await c.retry(c.pending.single.clientRequestId);
+        expect(c.pending, isEmpty);
         expect(c.notes.single.body, '안녕');
       },
     );
