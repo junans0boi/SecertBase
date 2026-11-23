@@ -10,6 +10,10 @@ import '../../core/today_api.dart';
 import '../../features/home/application/home_controller.dart';
 import '../../features/home/data/home_overview_repository.dart';
 import '../../features/home/domain/home_overview.dart';
+import '../../features/two_answers/data/two_answers_repository.dart';
+import '../../features/two_answers/domain/two_answer.dart';
+import '../../features/two_answers/presentation/two_answers_card.dart';
+import '../../features/two_answers/presentation/two_answers_screen.dart';
 import '../../v2/v2.dart';
 import '../auth/partner_screen.dart';
 import '../relationship/fortune_screen.dart';
@@ -52,6 +56,9 @@ class HomeScreen extends StatefulWidget {
   /// One-line title of today's fortune, or null (defaults to the API).
   final Future<String?> Function()? fortuneHeadline;
 
+  /// 마주 열기 데이터 소스 (기본: 서버 API, 로그인 전이면 카드를 숨긴다).
+  final TwoAnswersRepository? twoAnswersRepository;
+
   const HomeScreen({
     super.key,
     required this.onNavigate,
@@ -65,6 +72,7 @@ class HomeScreen extends StatefulWidget {
     this.poke,
     this.fortuneSeen,
     this.fortuneHeadline,
+    this.twoAnswersRepository,
   });
 
   @override
@@ -83,6 +91,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _savingStart = false;
   bool _fortuneSeen = false;
   String? _fortuneHeadline;
+  TwoAnswerCard? _twoAnswer;
+  TwoAnswersRepository? _twoAnswersRepo;
 
   /// "나중에" on the focus card, for this visit only.
   bool _momentLater = false;
@@ -146,6 +156,8 @@ class _HomeScreenState extends State<HomeScreen> {
     widget.offline?.removeListener(_onOfflineChanged);
     _controller.removeListener(_onControllerChanged);
     if (_ownsController) _controller.dispose();
+    final httpRepo = _twoAnswersRepo;
+    if (httpRepo is HttpTwoAnswersRepository) httpRepo.close();
     super.dispose();
   }
 
@@ -159,6 +171,38 @@ class _HomeScreenState extends State<HomeScreen> {
     });
     final headline = await (widget.fortuneHeadline ?? _defaultHeadline)();
     if (mounted) setState(() => _fortuneHeadline = headline);
+    _loadTwoAnswers();
+  }
+
+  TwoAnswersRepository? get _twoRepo {
+    final given = widget.twoAnswersRepository;
+    if (given != null) return given;
+    final token = _auth.token;
+    if (token == null) return null;
+    return _twoAnswersRepo ??= HttpTwoAnswersRepository(
+      baseUrl: _auth.baseUrl,
+      token: token,
+    );
+  }
+
+  Future<void> _loadTwoAnswers() async {
+    final repo = _twoRepo;
+    if (repo == null) return;
+    try {
+      final card = await repo.today();
+      if (mounted) setState(() => _twoAnswer = card);
+    } catch (_) {
+      // 카드는 보조 진입점이라 실패하면 조용히 숨긴다.
+    }
+  }
+
+  Future<void> _openTwoAnswers() async {
+    final repo = _twoRepo;
+    if (repo == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => TwoAnswersScreen(repository: repo)),
+    );
+    _loadTwoAnswers();
   }
 
   Future<String?> _defaultHeadline() async {
@@ -386,6 +430,10 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 22),
           _focus(),
           const SizedBox(height: V2Space.x2),
+          if (_twoAnswer != null) ...[
+            TwoAnswersHomeCard(card: _twoAnswer!, onTap: _openTwoAnswers),
+            const SizedBox(height: V2Space.x2),
+          ],
           ..._rows(),
           if (_showChecklist) ...[
             const SizedBox(height: V2Space.x4),

@@ -72,6 +72,7 @@ export const USER_DATA_PURGE = [
   { table: 'private_reflections', where: ['user_id'] },
   { table: 'question_answers', where: ['user_id'] },
   { table: 'couple_balance_answers', where: ['user_id'] },
+  { table: 'two_answer_responses', where: ['user_id'] },
   { table: 'album_photos', where: ['user_id'] },
   { table: 'daily_engagement_actions', where: ['user_id'] },
   // Devices and notifications.

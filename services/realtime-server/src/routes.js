@@ -76,6 +76,8 @@ import {
 import { createMomentLoopRepository } from './modules/moment-loop/repository.js';
 import { momentLoopPolicy } from './modules/moment-loop/domain.js';
 import { notifier } from './modules/notifications/index.js';
+import { TwoAnswersService } from './modules/two-answers/application.js';
+import { createTwoAnswersRouter } from './modules/two-answers/http-router.js';
 import { createNotificationRouter } from './modules/notifications/http-router.js';
 import path from 'path';
 import fs from 'fs';
@@ -597,6 +599,9 @@ const momentService = MomentLoopService({
   }),
 });
 router.use(createNotificationRouter({ queryFn: query }));
+router.use(createTwoAnswersRouter({
+  service: TwoAnswersService({ queryFn: query, transactionFn: transaction }),
+}));
 router.use(createMomentLoopRouter({
   service: momentService,
   uploadStore: momentUploadStore,
