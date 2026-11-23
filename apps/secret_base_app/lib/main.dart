@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'core/app_info.dart';
+import 'core/app_locale.dart';
 import 'core/push/push_service.dart';
 import 'core/push/local_notification_service.dart';
 import 'features/moment_loop/application/upload_outbox.dart';
@@ -227,6 +228,9 @@ class _SecretBaseAppState extends State<SecretBaseApp> {
     return MaterialApp(
       navigatorKey: _navigatorKey,
       title: '비밀기지',
+      locale: kAppLocale,
+      supportedLocales: kAppSupportedLocales,
+      localizationsDelegates: kAppLocalizationsDelegates,
       debugShowCheckedModeBanner: false,
       // 2.0 is the whole app's theme (games included). Game screens keep
       // their own explicit per-game styling on top of it.
