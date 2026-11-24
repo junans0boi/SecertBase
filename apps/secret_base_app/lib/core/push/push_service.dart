@@ -1,6 +1,8 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../http/api_client.dart';
 import 'push_platform.dart';
 import 'push_target.dart';

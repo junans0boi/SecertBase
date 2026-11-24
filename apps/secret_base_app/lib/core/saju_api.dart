@@ -2,6 +2,9 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'http/api_client.dart';
+import 'http/api_exception.dart';
+
 enum SajuStatus { ready, limited, requiresProfile, unsupportedRange }
 
 enum SajuMode { complete, limited }
@@ -115,46 +118,41 @@ class SajuApiException implements Exception {
 class SajuApi {
   final String baseUrl;
   final String token;
-  final http.Client _client;
+  final ApiClient _api;
 
-  SajuApi({required this.baseUrl, required this.token, http.Client? client})
-    : _client = client ?? http.Client();
+  SajuApi({
+    required this.baseUrl,
+    required this.token,
+    http.Client? client,
+    void Function()? onUnauthorized,
+  }) : _api = ApiClient(
+         baseUrl: baseUrl,
+         tokenProvider: () => token,
+         client: client,
+         onUnauthorized: onUnauthorized,
+       );
 
-  void close() => _client.close();
+  void close() => _api.close();
 
-  Future<SajuResult> fetch() async {
+  Future<SajuResult> fetch() => _call('GET');
+
+  Future<SajuResult> calculate({required SajuMode mode}) =>
+      _call('POST', body: {'mode': _modeToJson(mode)});
+
+  Future<SajuResult> _call(String method, {Object? body}) async {
     try {
-      final response = await _client.get(
-        _endpoint,
-        headers: {'Authorization': 'Bearer $token'},
+      final response = await _api.sendRaw(
+        method,
+        '/api/relationship/saju',
+        body: body,
       );
       return SajuResult.fromJson(_successfulBody(response));
-    } on http.ClientException {
-      throw const SajuApiException('network_error');
+    } on ApiException catch (error) {
+      throw SajuApiException(error.code);
     } on FormatException {
       throw const SajuApiException('invalid_response');
     }
   }
-
-  Future<SajuResult> calculate({required SajuMode mode}) async {
-    try {
-      final response = await _client.post(
-        _endpoint,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({'mode': _modeToJson(mode)}),
-      );
-      return SajuResult.fromJson(_successfulBody(response));
-    } on http.ClientException {
-      throw const SajuApiException('network_error');
-    } on FormatException {
-      throw const SajuApiException('invalid_response');
-    }
-  }
-
-  Uri get _endpoint => Uri.parse('$baseUrl/api/relationship/saju');
 
   Map<String, dynamic> _successfulBody(http.Response response) {
     Map<String, dynamic>? body;

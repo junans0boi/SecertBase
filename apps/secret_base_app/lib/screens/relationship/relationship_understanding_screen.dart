@@ -162,7 +162,11 @@ class _RelationshipUnderstandingScreenState
     _tarotApi =
         widget.tarotApi ??
         (_ownsTarotApi
-            ? TarotApi(baseUrl: auth.baseUrl, token: auth.token ?? '')
+            ? TarotApi(
+                baseUrl: auth.baseUrl,
+                token: auth.token ?? '',
+                onUnauthorized: auth.handleUnauthorized,
+              )
             : null);
     _hasActiveCouple =
         widget.hasActiveCouple ??
@@ -358,7 +362,11 @@ class _RelationshipUnderstandingScreenState
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => TarotScreen(
-          api: TarotApi(baseUrl: _auth.baseUrl, token: _auth.token ?? ''),
+          api: TarotApi(
+            baseUrl: _auth.baseUrl,
+            token: _auth.token ?? '',
+            onUnauthorized: _auth.handleUnauthorized,
+          ),
           relationshipFirst: _we,
         ),
       ),
@@ -368,7 +376,11 @@ class _RelationshipUnderstandingScreenState
 
   void _openSaju() => _push(
     SajuScreen(
-      api: SajuApi(baseUrl: _auth.baseUrl, token: _auth.token ?? ''),
+      api: SajuApi(
+        baseUrl: _auth.baseUrl,
+        token: _auth.token ?? '',
+        onUnauthorized: _auth.handleUnauthorized,
+      ),
       relationshipFirst: _we,
     ),
   );
@@ -398,7 +410,11 @@ class _RelationshipUnderstandingScreenState
 
   void _openCounseling({required bool shared}) => _push(
     RelationshipCounselingScreen(
-      api: CounselingApi(baseUrl: _auth.baseUrl, token: _auth.token ?? ''),
+      api: CounselingApi(
+        baseUrl: _auth.baseUrl,
+        token: _auth.token ?? '',
+        onUnauthorized: _auth.handleUnauthorized,
+      ),
       shared: shared,
       onOpenPartner: () => openPartnerConnection(context),
     ),

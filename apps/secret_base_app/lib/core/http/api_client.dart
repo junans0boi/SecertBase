@@ -105,6 +105,39 @@ class ApiClient {
     }
   }
 
+  /// 응답 본문을 호출자가 직접 해석해야 하는 클라이언트용. 타임아웃·인증 헤더·401 처리는
+  /// 다른 요청과 같고, 상태 코드와 상관없이 [http.Response]를 돌려준다.
+  /// 시간 초과와 네트워크 실패는 [ApiException]('timeout' / 'network_error')으로 던진다.
+  Future<http.Response> sendRaw(
+    String method,
+    String path, {
+    Object? body,
+    Map<String, String>? headers,
+  }) async {
+    final request = http.Request(method, _buildUri(path));
+    request.headers.addAll(_requestHeaders(headers, hasJsonBody: body != null));
+    if (body != null) request.body = jsonEncode(body);
+    try {
+      final response = await _sendWithTimeout(request, _timeout);
+      if (response.statusCode == 401) _onUnauthorized?.call();
+      return response;
+    } on TimeoutException catch (error) {
+      throw ApiException(
+        statusCode: null,
+        code: 'timeout',
+        message: 'Network request timed out',
+        cause: error,
+      );
+    } on Object catch (error) {
+      throw ApiException(
+        statusCode: null,
+        code: 'network_error',
+        message: 'Network request failed',
+        cause: error,
+      );
+    }
+  }
+
   Uri buildUri(String path) => _buildUri(path);
 
   void close() {

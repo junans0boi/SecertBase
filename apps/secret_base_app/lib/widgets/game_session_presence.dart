@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../core/socket_service.dart';
 
 /// Wraps a game screen to emit game:session:enter on mount and game:session:leave

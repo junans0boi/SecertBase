@@ -2,6 +2,9 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'http/api_client.dart';
+import 'http/api_exception.dart';
+
 class TarotCard {
   final String key;
   final String title;
@@ -111,52 +114,44 @@ class TarotApiException implements Exception {
 class TarotApi {
   final String baseUrl;
   final String token;
-  final http.Client _client;
+  final ApiClient _api;
 
-  TarotApi({required this.baseUrl, required this.token, http.Client? client})
-    : _client = client ?? http.Client();
+  TarotApi({
+    required this.baseUrl,
+    required this.token,
+    http.Client? client,
+    void Function()? onUnauthorized,
+  }) : _api = ApiClient(
+         baseUrl: baseUrl,
+         tokenProvider: () => token,
+         client: client,
+         onUnauthorized: onUnauthorized,
+       );
 
-  void close() => _client.close();
+  void close() => _api.close();
 
-  Future<TarotToday> fetchToday() async {
-    try {
-      final response = await _client.get(
-        _endpoint,
-        headers: {'Authorization': 'Bearer $token'},
-      );
-      return TarotToday.fromJson(_successfulBody(response));
-    } on http.ClientException {
-      throw const TarotApiException('network_error');
-    } on FormatException {
-      throw const TarotApiException('invalid_response');
-    }
-  }
+  Future<TarotToday> fetchToday() =>
+      _call('GET', '/api/relationship/tarot/today');
 
   Future<TarotToday> drawToday({
     required String scope,
     required String cardKey,
-  }) async {
+  }) => _call(
+    'POST',
+    '/api/relationship/tarot/today/draw',
+    body: {'scope': scope, 'cardKey': cardKey},
+  );
+
+  Future<TarotToday> _call(String method, String path, {Object? body}) async {
     try {
-      final response = await _client.post(
-        _drawEndpoint,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({'scope': scope, 'cardKey': cardKey}),
-      );
+      final response = await _api.sendRaw(method, path, body: body);
       return TarotToday.fromJson(_successfulBody(response));
-    } on http.ClientException {
-      throw const TarotApiException('network_error');
+    } on ApiException catch (error) {
+      throw TarotApiException(error.code);
     } on FormatException {
       throw const TarotApiException('invalid_response');
     }
   }
-
-  Uri get _endpoint => Uri.parse('$baseUrl/api/relationship/tarot/today');
-
-  Uri get _drawEndpoint =>
-      Uri.parse('$baseUrl/api/relationship/tarot/today/draw');
 
   Map<String, dynamic> _successfulBody(http.Response response) {
     Map<String, dynamic>? body;

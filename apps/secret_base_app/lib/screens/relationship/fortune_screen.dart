@@ -108,7 +108,11 @@ class _RelationshipFortuneScreenState extends State<RelationshipFortuneScreen> {
     Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => RelationshipCounselingScreen(
-          api: CounselingApi(baseUrl: auth.baseUrl, token: auth.token ?? ''),
+          api: CounselingApi(
+            baseUrl: auth.baseUrl,
+            token: auth.token ?? '',
+            onUnauthorized: auth.handleUnauthorized,
+          ),
           shared: false,
         ),
       ),

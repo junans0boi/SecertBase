@@ -44,7 +44,12 @@ class _TarotScreenState extends State<TarotScreen> {
     _ownsApi = widget.api == null;
     final auth = AuthService();
     _api =
-        widget.api ?? TarotApi(baseUrl: auth.baseUrl, token: auth.token ?? '');
+        widget.api ??
+        TarotApi(
+          baseUrl: auth.baseUrl,
+          token: auth.token ?? '',
+          onUnauthorized: auth.handleUnauthorized,
+        );
     _load();
   }
 

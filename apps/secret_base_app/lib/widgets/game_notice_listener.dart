@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../core/socket_service.dart';
 
 /// 서버가 게임 동작을 거부했을 때(SocketService.gameNotice) 짧은 안내를 띄운다.

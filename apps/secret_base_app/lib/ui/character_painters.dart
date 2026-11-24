@@ -1,5 +1,7 @@
 import 'dart:math';
+
 import 'package:flutter/material.dart';
+
 import '../core/marble_characters.dart';
 
 // ─── CharacterBust 위젯 ────────────────────────────────────────────────────

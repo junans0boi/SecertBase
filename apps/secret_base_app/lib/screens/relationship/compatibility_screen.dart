@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../core/compatibility_api.dart';
+
 import 'package:secret_base_app/v2/v2.dart';
+
 import '../auth/partner_screen.dart';
 
 Widget _compatibilityRestrictedState(BuildContext context) => Column(

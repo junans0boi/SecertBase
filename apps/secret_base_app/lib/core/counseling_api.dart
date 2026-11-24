@@ -2,6 +2,9 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'http/api_client.dart';
+import 'http/api_exception.dart';
+
 import 'mindcare_api.dart' show SafetyResources;
 
 class CounselingMessage {
@@ -155,15 +158,21 @@ class CounselingApiException implements Exception {
 class CounselingApi {
   final String baseUrl;
   final String token;
-  final http.Client _client;
+  final ApiClient _api;
 
   CounselingApi({
     required this.baseUrl,
     required this.token,
     http.Client? client,
-  }) : _client = client ?? http.Client();
+    void Function()? onUnauthorized,
+  }) : _api = ApiClient(
+         baseUrl: baseUrl,
+         tokenProvider: () => token,
+         client: client,
+         onUnauthorized: onUnauthorized,
+       );
 
-  void close() => _client.close();
+  void close() => _api.close();
 
   Future<CounselingConversation> createSession({
     required bool shared,
@@ -241,7 +250,7 @@ class CounselingApi {
   Future<List<CounselingInsight>> fetchInsights() async {
     final body = await _request(
       'GET',
-      '$baseUrl/api/relationship/counseling/private/insights',
+      '/api/relationship/counseling/private/insights',
     );
     final insights = body['insights'] as List? ?? const [];
     return insights
@@ -254,35 +263,19 @@ class CounselingApi {
   }
 
   Future<void> revokeInsight(int id) async {
-    await _request(
-      'POST',
-      '$baseUrl/api/relationship/counseling/insights/$id/revoke',
-    );
+    await _request('POST', '/api/relationship/counseling/insights/$id/revoke');
   }
 
-  Uri _sessionsEndpoint(bool shared) => Uri.parse(
-    '$baseUrl/api/relationship/counseling/${shared ? 'shared' : 'private'}/sessions',
-  );
+  String _sessionsEndpoint(bool shared) =>
+      '/api/relationship/counseling/${shared ? 'shared' : 'private'}/sessions';
 
   Future<Map<String, dynamic>> _request(
     String method,
-    Object endpoint, {
+    String path, {
     Map<String, dynamic>? body,
   }) async {
     try {
-      final uri = endpoint is Uri ? endpoint : Uri.parse('$endpoint');
-      final headers = {
-        'Authorization': 'Bearer $token',
-        if (body != null) 'Content-Type': 'application/json',
-      };
-      final response = switch (method) {
-        'POST' => await _client.post(
-          uri,
-          headers: headers,
-          body: body == null ? null : jsonEncode(body),
-        ),
-        _ => await _client.get(uri, headers: headers),
-      };
+      final response = await _api.sendRaw(method, path, body: body);
       Map<String, dynamic>? decoded;
       try {
         final json = jsonDecode(response.body);
@@ -298,8 +291,8 @@ class CounselingApi {
         );
       }
       return decoded!;
-    } on http.ClientException {
-      throw const CounselingApiException('network_error');
+    } on ApiException catch (error) {
+      throw CounselingApiException(error.code);
     }
   }
 }

@@ -42,7 +42,12 @@ class _SajuScreenState extends State<SajuScreen> {
     _ownsApi = widget.api == null;
     final auth = AuthService();
     _api =
-        widget.api ?? SajuApi(baseUrl: auth.baseUrl, token: auth.token ?? '');
+        widget.api ??
+        SajuApi(
+          baseUrl: auth.baseUrl,
+          token: auth.token ?? '',
+          onUnauthorized: auth.handleUnauthorized,
+        );
     _load();
   }
 

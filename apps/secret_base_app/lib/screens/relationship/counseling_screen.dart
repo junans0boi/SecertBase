@@ -52,7 +52,11 @@ class _RelationshipCounselingScreenState
     final auth = AuthService();
     _api =
         widget.api ??
-        CounselingApi(baseUrl: auth.baseUrl, token: auth.token ?? '');
+        CounselingApi(
+          baseUrl: auth.baseUrl,
+          token: auth.token ?? '',
+          onUnauthorized: auth.handleUnauthorized,
+        );
     _locationProvider =
         widget.locationProvider ??
         const PlatformSafetyLocationProvider(allowPrompt: false);

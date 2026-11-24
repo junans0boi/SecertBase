@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'dart:async';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../features/base_widget/base_widget_service.dart';
 import 'http/api_client.dart';
 import 'http/api_exception.dart';
@@ -60,6 +62,9 @@ class AuthService extends ChangeNotifier {
     _loggingOut = true;
     unawaited(logout().whenComplete(() => _loggingOut = false));
   }
+
+  /// 별도 HTTP 클라이언트(타로·사주·상담)가 401을 받았을 때 같은 로그아웃 경로를 쓰게 한다.
+  void handleUnauthorized() => _handleUnauthorized();
 
   String get baseUrl => serverBaseUrl;
   ApiClient get apiClient => _apiClient;

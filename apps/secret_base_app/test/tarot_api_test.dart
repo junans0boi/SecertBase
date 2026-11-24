@@ -130,4 +130,52 @@ void main() {
     expect(jsonDecode(captured.body), {'scope': 'user', 'cardKey': 'the_star'});
     expect(result.personal?.card?.title, '별');
   });
+
+  test(
+    'a 401 runs the unauthorized hook and surfaces the server reason',
+    () async {
+      var unauthorized = 0;
+      final api = TarotApi(
+        baseUrl: 'https://secretbase.example',
+        token: 'expired',
+        onUnauthorized: () => unauthorized++,
+        client: MockClient(
+          (_) async => http.Response(
+            jsonEncode({'ok': false, 'reason': 'unauthorized'}),
+            401,
+          ),
+        ),
+      );
+
+      await expectLater(
+        api.fetchToday(),
+        throwsA(
+          isA<TarotApiException>().having(
+            (e) => e.reason,
+            'reason',
+            'unauthorized',
+          ),
+        ),
+      );
+      expect(unauthorized, 1);
+    },
+  );
+
+  test('a dropped connection becomes network_error', () async {
+    final api = TarotApi(
+      baseUrl: 'https://secretbase.example',
+      token: 't',
+      client: MockClient((_) async => throw http.ClientException('down')),
+    );
+    await expectLater(
+      api.fetchToday(),
+      throwsA(
+        isA<TarotApiException>().having(
+          (e) => e.reason,
+          'reason',
+          'network_error',
+        ),
+      ),
+    );
+  });
 }
