@@ -151,7 +151,8 @@ abstract final class MomentPostFlow {
       date: day,
       photoDate: photoDate,
       place: place,
-      todayMoment: day == today && (todayMoment || !hasTodayMoment),
+      // 오늘의 순간은 사용자가 켠 경우에만 된다. 오늘 첫 기록이라고 자동으로 올리지 않는다.
+      todayMoment: day == today && todayMoment,
       pickPlace: (ctx, current) => showMomentPlacePicker(
         ctx,
         controller: controller,

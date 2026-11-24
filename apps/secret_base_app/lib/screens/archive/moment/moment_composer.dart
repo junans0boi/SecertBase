@@ -107,7 +107,7 @@ class MomentComposerPage extends StatefulWidget {
     this.edit,
     this.draftId,
     this.mediaPicker,
-    this.startWithTodayMoment = true,
+    this.startWithTodayMoment = false,
     this.initialPinId,
     this.initialPinName,
     this.startSource = MomentStartSource.none,
@@ -152,7 +152,7 @@ class _MomentComposerPageState extends State<MomentComposerPage> {
   _Place? _place;
   bool _saving = false;
   bool _picking = false;
-  bool _todayMoment = true;
+  bool _todayMoment = false;
   bool _moreOpen = false;
   bool _textOnly = false;
   String? _captionError;

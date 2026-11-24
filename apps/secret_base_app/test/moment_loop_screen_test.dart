@@ -288,6 +288,21 @@ void main() {
     expect(find.byKey(const Key('moment_source_text')), findsOneWidget);
   });
 
+  testWidgets('체크 없이 올리면 오늘의 순간이 아니다', (tester) async {
+    final posted = <Map<String, String>>[];
+    final api = _recordingApi(posted);
+    await _pump(tester, api, mediaPicker: () async => [jpeg('a.jpg')]);
+    await tester.tap(find.byKey(const Key('moment_add')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('moment_source_gallery')));
+    await settle(tester);
+    await tester.tap(find.byKey(const Key('moment_post_submit')));
+    await settle(tester);
+    expect(posted, hasLength(1));
+    expect(posted.single['taken_at'], dayOf(DateTime.now()));
+    expect(posted.single.containsKey('today_moment'), isFalse);
+  });
+
   testWidgets('album → editor → 올리기 posts with the caption and 오늘의 순간', (
     tester,
   ) async {
@@ -301,6 +316,8 @@ void main() {
     expect(find.byKey(const Key('moment_post_submit')), findsOneWidget);
     expect(find.byKey(const Key('moment_post_today')), findsOneWidget);
     expect(find.textContaining('오늘'), findsWidgets);
+    await tester.tap(find.byKey(const Key('moment_post_today')));
+    await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('moment_post_caption')),
       '한강 산책',
