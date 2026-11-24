@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -9,56 +9,10 @@ import { createIntegrationEnvironment } from '../src/integration-environment.js'
 
 const adminUrl = process.env.TEST_DATABASE_ADMIN_URL;
 const redisUrl = process.env.TEST_REDIS_URL;
-const canonicalMigrations = [
-  '0001_initial_schema.sql',
-  '0002_runtime_schema_repairs.sql',
-  '0003_pairing_requests.sql',
-  '0004_couple_lifecycle.sql',
-  '0005_map_pin_archival.sql',
-  '0006_wallet_system.sql',
-  '0007_game_results.sql',
-  '0008_shop.sql',
-  '0009_repair_shop_catalog_encoding.sql',
-  '0010_today_moments.sql',
-  '0011_today_loop_views.sql',
-  '0012_afterglow.sql',
-  '0013_map_pin_reviews.sql',
-  '0014_shop_v2.sql',
-  '0015_level_missions.sql',
-  '0016_milestone_rewards.sql',
-  '0017_shop_v3.sql',
-  '0018_item_catalog_v2.sql',
-  '0019_backdo_bonus.sql',
-  '0020_activate_all_items.sql',
-  '0021_marble_characters.sql',
-  '0022_wallet_transaction_idempotency.sql',
-  '0023_user_birth_profile.sql',
-  '0024_relationship_assessment_catalog.sql',
-  '0025_relationship_assessment_attempts.sql',
-  '0026_relationship_assessment_results.sql',
-  '0027_relationship_couple_attempt_scope.sql',
-  '0028_relationship_couple_assessment_results.sql',
-  '0029_relationship_compatibility_analyses.sql',
-  '0030_relationship_personal_compatibility_analyses.sql',
-  '0031_relationship_couple_compatibility_analyses.sql',
-  '0032_relationship_explanation_generations.sql',
-  '0033_relationship_fortunes.sql',
-  '0034_relationship_counseling.sql',
-  '0035_relationship_saju.sql',
-  '0036_relationship_saju_couple_results.sql',
-  '0037_relationship_tarot_contents.sql',
-  '0038_relationship_mindcare.sql',
-  '0039_relationship_tarot_user_selection.sql',
-  '0040_moment_loop_reactions.sql',
-  '0041_user_deletion_tombstones.sql',
-  '0042_map_pin_media_url.sql',
-  '0043_push_notifications.sql',
-  '0044_moment_loop_order_and_requests.sql',
-  '0045_notification_delivery_settings.sql',
-  '0046_moment_comments.sql',
-  '0047_anniversaries.sql',
-  '0048_game_results_draws.sql',
-];
+// 목록을 하드코딩하면 마이그레이션이 추가될 때마다 테스트가 깨진다. 디렉터리를 순서대로 읽는다.
+const canonicalMigrations = (await readdir(new URL('../migrations/', import.meta.url)))
+  .filter((name) => /^\d{4}_.+\.sql$/.test(name))
+  .sort();
 
 const runMigrationCli = (environment, command, extraArgs = [], extraEnv = {}) =>
   spawnSync(process.execPath, ['scripts/migrate.js', command, '--json', ...extraArgs], {
