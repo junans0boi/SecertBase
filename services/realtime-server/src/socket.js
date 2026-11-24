@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { createSocketRateLimiter, profileEmojiSchema } from "./shared/socket-guards.js";
 import { randomUUID } from "node:crypto";
 import { MARBLE_CHARACTER_IDS } from "./marble-characters.js";
 import { config } from "./config.js";
@@ -103,11 +104,11 @@ function withBowlingFrames(gameState) {
 }
 
 const joinSchema = z.object({
-  profileEmoji: z.string().min(1).max(16).optional(),
+  profileEmoji: profileEmojiSchema.optional(),
 });
 
 const profileSchema = z.object({
-  profileEmoji: z.string().min(1).max(16),
+  profileEmoji: profileEmojiSchema,
 });
 
 const gameTypes = [
@@ -2479,10 +2480,12 @@ export const registerSocketHandlers = (io, { timerApi = { setTimeout, clearTimeo
       }); // withRoomLock
     });
 
+    const allowHeart = createSocketRateLimiter({ limit: 10, windowMs: 10_000 });
     socket.on("heart:send", (_, ackRaw) => {
       const ack = typeof ackRaw === "function" ? ackRaw : () => {};
       const { roomCode, userId } = socket.data;
       if (!roomCode) return ack({ ok: false });
+      if (!allowHeart()) return ack({ ok: false, reason: "rate_limited" });
       socket.to(roomCode).emit("heart:received", { from: userId });
       ack({ ok: true });
     });

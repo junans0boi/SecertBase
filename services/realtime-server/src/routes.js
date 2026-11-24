@@ -7375,11 +7375,24 @@ const calculateAndStoreRelationshipSaju = async ({ couple, mode }) => {
   const relationMode = mode === 'limited' || firstState.status !== 'ready' || secondState.status !== 'ready'
     ? 'limited'
     : 'complete';
-  const result = buildRelationshipSaju({
-    firstProfile,
-    secondProfile,
-    mode: relationMode,
-  });
+  let result;
+  try {
+    result = buildRelationshipSaju({
+      firstProfile,
+      secondProfile,
+      mode: relationMode,
+    });
+  } catch (error) {
+    // 파트너 출생 정보가 없거나 범위 밖이어도 개인 결과는 돌려준다. 응답으로 파트너의
+    // 프로필 유무를 드러내지 않도록 커플이 없을 때와 같은 null을 쓴다.
+    if (
+      error?.code === 'relationship_saju_profile_incomplete'
+      || error?.code === 'relationship_saju_unsupported_range'
+    ) {
+      return null;
+    }
+    throw error;
+  }
   const fingerprint = fingerprintSajuPair(firstProfile, secondProfile);
   return saveRelationshipSaju({
     coupleId: Number(couple.CoupleId),

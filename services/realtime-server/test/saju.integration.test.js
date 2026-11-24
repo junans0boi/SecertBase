@@ -166,3 +166,44 @@ test(
     }
   },
 );
+
+test(
+  'Saju keeps the personal result when the partner has no birth profile and does not reveal that',
+  { skip: !adminUrl || !redisUrl },
+  async () => {
+    const server = await createApiTestServer({ adminUrl, redisUrl });
+    try {
+      const alice = await registerAndLogin(server, 'saju-solo-a');
+      const bob = await registerAndLogin(server, 'saju-solo-b');
+      await pair(server, alice, bob);
+      const profile = await server.request('/relationship/birth-profile', {
+        token: alice.token,
+        method: 'PATCH',
+        body: {
+          calendarType: 'solar',
+          birthDate: '1995-03-16',
+          lunarLeapMonth: false,
+          birthTime: '07:30',
+          timezone: 'Asia/Seoul',
+          birthPlace: '서울특별시',
+        },
+      });
+      assert.equal(profile.status, 200, await profile.text());
+      // 파트너는 출생 정보가 전혀 없는 상태(가입 시 생일도 비움).
+      const { query } = await import('../src/db.js');
+      await query(
+        "UPDATE Users SET BirthTimezone = '' WHERE UserCode = ?",
+        [bob.userCode],
+      );
+
+      const response = await server.request('/relationship/saju', { token: alice.token });
+      const body = await response.json();
+      assert.equal(response.status, 200, JSON.stringify(body));
+      assert.equal(body.ok, true);
+      assert.ok(body.personal);
+      assert.equal(body.relationship, null);
+    } finally {
+      await server.close();
+    }
+  },
+);
