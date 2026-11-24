@@ -104,6 +104,8 @@ import {
   USER_DATA_PURGE,
   USER_MEDIA_COLUMNS,
   purgeUserData,
+  COUPLE_DATA_PURGE,
+  purgeCoupleData,
 } from '../src/account-deletion.js';
 
 const migrationsDir = new URL('../migrations/', import.meta.url);
@@ -179,5 +181,40 @@ test('purgeUserData skips a missing table but rethrows real errors', async () =>
   await assert.rejects(
     purgeUserData({ execute: async () => { throw deadlock; } }, 1),
     /deadlock/,
+  );
+});
+
+test('COUPLE_DATA_PURGE only names tables and couple_id columns that exist in the migrations', () => {
+  for (const { table, column } of COUPLE_DATA_PURGE) {
+    const columns = schema.get(table.toLowerCase());
+    assert.ok(columns, `table ${table} is not created by any migration`);
+    assert.ok(columns.has(column.toLowerCase()), `${table}.${column} does not exist`);
+  }
+  const tables = COUPLE_DATA_PURGE.map((entry) => entry.table);
+  assert.ok(
+    tables.indexOf('two_answer_responses') < tables.indexOf('two_answers'),
+    'answers must be deleted before their question rows',
+  );
+  assert.equal(tables.includes('premium_subscriptions'), false, 'payment records are retained');
+  assert.equal(tables.includes('Couples'), false, 'the Couples row stays as an inactive tombstone');
+});
+
+test('purgeCoupleData deletes by couple id and skips only missing tables', async () => {
+  const calls = [];
+  const missing = Object.assign(new Error('no table'), { code: 'ER_NO_SUCH_TABLE' });
+  const skipped = await purgeCoupleData(
+    {
+      execute: async (sql, params) => {
+        calls.push({ sql, params });
+        if (sql.includes('wish_tickets')) throw missing;
+      },
+    },
+    7,
+  );
+  assert.equal(calls.length, COUPLE_DATA_PURGE.length);
+  assert.ok(calls.every((c) => c.params.length === 1 && c.params[0] === 7));
+  assert.deepEqual(skipped, ['wish_tickets']);
+  await assert.rejects(
+    purgeCoupleData({ execute: async () => { throw Object.assign(new Error('x'), { code: 'ER_LOCK' }); } }, 1),
   );
 });

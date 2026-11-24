@@ -54,3 +54,10 @@
 ## Out of scope
 
 - 모든 게임 코드와 게임 문서.
+
+## Third round (2026-11-24): decisions applied
+
+- `/capsules`: 레거시로 유지, mvp에서 계속 차단. `couple_id` 스키마 변경은 하지 않는다.
+- 탈퇴 정책: 한 사람만 탈퇴하면 커플 공유 기록은 남은 파트너를 위해 유지한다. 두 사람이 모두 탈퇴하면(분리·종료된 커플 포함) `COUPLE_DATA_PURGE`의 커플 단위 기록을 지운다. `Couples` 행은 비활성 tombstone으로 남는다. 결제 기록(`premium_subscriptions`)은 탈퇴 사용자 행이 이미 개인정보 없는 tombstone이라 익명 상태로 보존한다. 보존 기간 이후 파기는 별도 운영 절차(미구현).
+- 앱: 타로·사주·상담 클라이언트를 `ApiClient`로 전환(타임아웃, 인증 헤더, 401 시 로그아웃). 나머지 `core/*_api.dart`(afterglow, assessment_*, birth_profile, compatibility, fortune, mindcare, today)는 같은 방식(`ApiClient.sendRaw`)으로 순차 전환 예정.
+- 후순위: MomentLoop 주 단위 조회, 이미지 압축 백그라운드 처리.

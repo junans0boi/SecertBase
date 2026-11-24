@@ -94,6 +94,75 @@ export const USER_DATA_PURGE = [
   { table: 'PairingRequests', where: ['SenderUserId', 'RecipientUserId'] },
 ];
 
+/**
+ * 커플 단위 공유 기록. 두 사람이 모두 탈퇴해 더 이상 볼 사람이 없을 때 지운다(정책 2026-11).
+ * 한 사람만 탈퇴한 동안에는 남은 파트너가 볼 수 있도록 유지한다.
+ * Couples 행 자체는 다른 테이블이 참조하므로 비활성 상태로 남긴다.
+ * 결제 기록(premium_subscriptions)은 여기에 없다: 탈퇴한 사용자 행은 이미 개인정보가 지워진
+ * tombstone이라 결제 기록은 익명 상태로 보존된다(보존 기간이 지난 뒤의 파기는 별도 운영 절차).
+ */
+export const COUPLE_DATA_PURGE = [
+  { table: 'relationship_counseling_sessions', column: 'couple_id' },
+  { table: 'relationship_shareable_insights', column: 'couple_id' },
+  { table: 'relationship_couple_assessment_results', column: 'couple_id' },
+  { table: 'relationship_compatibility_analyses', column: 'couple_id' },
+  { table: 'relationship_personal_compatibility_analyses', column: 'couple_id' },
+  { table: 'relationship_couple_compatibility_analyses', column: 'couple_id' },
+  { table: 'relationship_explanation_generations', column: 'couple_id' },
+  { table: 'relationship_fortune_contents', column: 'couple_id' },
+  { table: 'relationship_saju_couple_results', column: 'couple_id' },
+  { table: 'relationship_tarot_contents', column: 'couple_id' },
+  { table: 'two_answer_responses', column: 'couple_id' },
+  { table: 'two_answers', column: 'couple_id' },
+  { table: 'couple_notes', column: 'couple_id' },
+  { table: 'date_plans', column: 'couple_id' },
+  { table: 'anniversaries', column: 'couple_id' },
+  { table: 'setlog_comments', column: 'couple_id' },
+  { table: 'setlog_reactions', column: 'couple_id' },
+  { table: 'today_loop_views', column: 'couple_id' },
+  { table: 'today_moments', column: 'couple_id' },
+  { table: 'afterglow_visits', column: 'couple_id' },
+  { table: 'daily_engagement_actions', column: 'couple_id' },
+  { table: 'daily_engagement_days', column: 'couple_id' },
+  { table: 'couple_mission_instances', column: 'couple_id' },
+  { table: 'couple_streaks', column: 'couple_id' },
+  { table: 'couple_timeline_events', column: 'couple_id' },
+  { table: 'milestone_claims', column: 'couple_id' },
+  { table: 'wish_tickets', column: 'couple_id' },
+  { table: 'date_coupons', column: 'couple_id' },
+  { table: 'game_results', column: 'couple_id' },
+  { table: 'notification_events', column: 'couple_id' },
+];
+
+/**
+ * 탈퇴하는 사용자가 속했던 모든 커플(활성·분리·종료) 중 상대도 이미 탈퇴한 커플 id.
+ */
+export async function findFullyAbandonedCoupleIds(queryFn, userId) {
+  const result = await queryFn(
+    `SELECT c.CoupleId
+     FROM Couples c
+     JOIN Users other ON other.UserId = IF(c.User1Id = ?, c.User2Id, c.User1Id)
+     WHERE (c.User1Id = ? OR c.User2Id = ?) AND other.IsDeleted = 1`,
+    [userId, userId, userId],
+  );
+  return result.rows.map((row) => Number(row.CoupleId));
+}
+
+/** 커플 단위 기록을 지운다. 트랜잭션 안에서 호출하고, 없는 테이블은 건너뛴다. */
+export async function purgeCoupleData(conn, coupleId, onSkip = () => {}) {
+  const skipped = [];
+  for (const { table, column } of COUPLE_DATA_PURGE) {
+    try {
+      await conn.execute(`DELETE FROM ${table} WHERE ${column} = ?`, [coupleId]);
+    } catch (error) {
+      if (!IGNORABLE_PURGE_ERRORS.has(error?.code)) throw error;
+      skipped.push(table);
+      onSkip(table, error);
+    }
+  }
+  return skipped;
+}
+
 /** Tables whose rows reference uploaded files that must be removed from disk. */
 export const USER_MEDIA_COLUMNS = [
   { table: 'album_photos', column: 'photo_url', userColumn: 'user_id' },

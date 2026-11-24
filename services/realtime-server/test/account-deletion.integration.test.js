@@ -122,3 +122,54 @@ test(
     }
   },
 );
+
+test(
+  'shared couple records survive the first deletion and are erased once both partners are gone',
+  { skip: !adminUrl || !redisUrl },
+  async () => {
+    const server = await createApiTestServer({ adminUrl, redisUrl });
+    const db = await mysql.createConnection(server.environment.databaseUrl);
+    try {
+      const first = await createUser(server, 'bothgone-a');
+      const second = await createUser(server, 'bothgone-b');
+      await pair(server, first, second);
+      const [[couple]] = await db.query(
+        'SELECT CoupleId FROM Couples WHERE User1Id IN (?, ?) AND User2Id IN (?, ?)',
+        [first.userId, second.userId, first.userId, second.userId],
+      );
+      const coupleId = couple.CoupleId;
+      await db.query(
+        "INSERT INTO date_plans (couple_id, created_by, plan_date, title) VALUES (?, ?, '2026-12-24', '크리스마스 데이트')",
+        [coupleId, first.userId],
+      );
+      await db.query(
+        "INSERT INTO two_answers (couple_id, business_date, question_id, category, question_text) VALUES (?, '2026-11-24', 'q1', 'daily', '질문')",
+        [coupleId],
+      );
+      const plans = () => count(db, 'SELECT COUNT(*) AS n FROM date_plans WHERE couple_id = ?', [coupleId]);
+      const answers = () => count(db, 'SELECT COUNT(*) AS n FROM two_answers WHERE couple_id = ?', [coupleId]);
+
+      const firstDelete = await server.request('/user', {
+        token: first.token, method: 'DELETE', body: { password: 'password123' },
+      });
+      assert.equal(firstDelete.status, 200, await firstDelete.text());
+      assert.equal(await plans(), 1, 'the remaining partner still owns the shared records');
+      assert.equal(await answers(), 1);
+
+      const secondDelete = await server.request('/user', {
+        token: second.token, method: 'DELETE', body: { password: 'password123' },
+      });
+      assert.equal(secondDelete.status, 200, await secondDelete.text());
+      assert.equal(await plans(), 0, 'nobody is left to see the shared records');
+      assert.equal(await answers(), 0);
+      assert.equal(
+        await count(db, 'SELECT COUNT(*) AS n FROM Couples WHERE CoupleId = ?', [coupleId]),
+        1,
+        'the Couples row stays as an inactive tombstone',
+      );
+    } finally {
+      await db.end();
+      await server.close();
+    }
+  },
+);

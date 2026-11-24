@@ -22,6 +22,8 @@ import {
   classifyPinsForDeletion,
   collectMediaPaths,
   purgeUserData,
+  purgeCoupleData,
+  findFullyAbandonedCoupleIds,
   USER_MEDIA_COLUMNS,
 } from './account-deletion.js';
 import { businessDate } from './business-date.js';
@@ -3308,6 +3310,8 @@ router.delete('/user', async (req, res) => {
     );
     const couple = coupleRes.rows[0] ?? null;
     const partnerId = partnerIdForCouple(couple, userId);
+    // 상대가 이미 탈퇴한 커플(분리·종료 포함): 둘 다 떠났으니 공유 기록도 함께 지운다.
+    const abandonedCoupleIds = await findFullyAbandonedCoupleIds(query, userId);
 
     // 2. setlog_posts 목록 수집 (미디어 파일 경로 확보)
     const setlogRes = await query(
@@ -3379,6 +3383,12 @@ router.delete('/user', async (req, res) => {
       await purgeUserData(conn, userId, (table, error) => {
         console.error(`[API] /user DELETE purge skipped ${table}:`, error.message);
       });
+
+      for (const coupleId of abandonedCoupleIds) {
+        await purgeCoupleData(conn, coupleId, (table, error) => {
+          console.error(`[API] /user DELETE couple purge skipped ${table}:`, error.message);
+        });
+      }
 
       // map_pins 처리
       if (toAnonymize.length > 0) {
