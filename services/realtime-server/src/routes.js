@@ -7491,7 +7491,7 @@ const readStoredTarot = async ({ userId = null, coupleId = null, date }) => {
   const scopeColumn = userId == null ? 'couple_id' : 'user_id';
   const scopeId = userId == null ? coupleId : userId;
   const result = await query(
-    `SELECT result_json, selected_by_user
+    `SELECT result_json, selected_by_user, card_key
      FROM relationship_tarot_contents
      WHERE ${scopeColumn} = ? AND content_date = ? AND catalog_version = ?
      LIMIT 1`,
@@ -7539,6 +7539,13 @@ const saveSelectedTarot = async ({ userId = null, coupleId = null, date, cardKey
   const stored = await readStoredTarot({ userId, coupleId, date });
   if (!stored) throw new Error('tarot_storage_failed');
   if (Number(stored.selected_by_user) !== 1) throw new Error('tarot_storage_failed');
+  // 동시에 뽑아 진 쪽은 자기가 고른 카드가 아닌 이긴 쪽 카드를 받게 된다. 200으로 돌려주지 않고 409로 알린다.
+  if (stored.card_key !== result.card.key) {
+    const error = new Error('tarot_already_drawn');
+    error.code = 'tarot_already_drawn';
+    error.status = 409;
+    throw error;
+  }
   return tarotPayload(stored, { scope, date });
 };
 
@@ -8552,7 +8559,14 @@ router.get('/relationship/counseling/shared/insights', async (req, res) => {
   try {
     const couple = await getActiveCoupleRow(req.auth.userId);
     if (!couple) return res.json({ ok: true, insights: [] });
-    const insights = await getApprovedInsights(couple.CoupleId);
+    const approved = await getApprovedInsights(couple.CoupleId);
+    // 상대의 비공개 상담 세션 id와 작성자 id는 공유 응답에 내보내지 않는다.
+    const insights = approved.map(({ id, insightText, createdAt, creatorUserId }) => ({
+      id,
+      insightText,
+      createdAt,
+      mine: creatorUserId === Number(req.auth.userId),
+    }));
     return res.json({ ok: true, insights });
   } catch (error) {
     console.error('[API] shared insights GET error:', error);
